@@ -74,6 +74,14 @@ enum BotActions {
   Attack = "attack",
   FightSpider = "fight spider",
   GatherWood = "gather wood",
+  Unstack = "unstack",
+  DefendSelf = "defend self",
+  AvoidEnemies = "avoid enemies",
+  EquipBestWeapon = "equip best weapon",
+  GoToPosition = "go to position",
+  GoToNearestBlock = "go to nearest block",
+  UseDoor = "use door",
+  GoToBed = "go to bed",
 }
 
 // Define tools for ChatGPT
@@ -102,6 +110,50 @@ const AttackParameters = z.object({
   type: z.string().describe("The type of entity to attack."),
 });
 
+const DefendSelfParameters = z.object({
+  range: z
+    .number()
+    .describe("The range within which to detect and defend against enemies."),
+});
+
+const AvoidEnemiesParameters = z.object({
+  distance: z.number().describe("The distance to maintain from enemies."),
+});
+
+const EquipBestWeaponParameters = z.object({});
+
+const GoToPositionParameters = z.object({
+  x: z.number().describe("The x-coordinate to move to."),
+  y: z.number().describe("The y-coordinate to move to."),
+  z: z.number().describe("The z-coordinate to move to."),
+  minDistance: z
+    .number()
+    .default(2)
+    .describe("The minimum distance to reach the target position."),
+});
+
+const GoToNearestBlockParameters = z.object({
+  blockType: z.string().describe("The type of block to search for."),
+  minDistance: z
+    .number()
+    .default(2)
+    .describe("The minimum distance to reach the block."),
+  range: z.number().default(64).describe("The search range for the block."),
+});
+
+const UseDoorParameters = z.object({
+  doorPos: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+    })
+    .optional()
+    .describe("The position of the door to use."),
+});
+
+const GoToBedParameters = z.object({});
+
 const tools = [
   zodFunction({
     name: BotActions.GoToPlayer,
@@ -117,6 +169,28 @@ const tools = [
     parameters: CollectBlocksParameters,
   }),
   zodFunction({ name: BotActions.Attack, parameters: AttackParameters }),
+  zodFunction({
+    name: BotActions.DefendSelf,
+    parameters: DefendSelfParameters,
+  }),
+  zodFunction({
+    name: BotActions.AvoidEnemies,
+    parameters: AvoidEnemiesParameters,
+  }),
+  zodFunction({
+    name: BotActions.EquipBestWeapon,
+    parameters: EquipBestWeaponParameters,
+  }),
+  zodFunction({
+    name: BotActions.GoToPosition,
+    parameters: GoToPositionParameters,
+  }),
+  zodFunction({
+    name: BotActions.GoToNearestBlock,
+    parameters: GoToNearestBlockParameters,
+  }),
+  zodFunction({ name: BotActions.UseDoor, parameters: UseDoorParameters }),
+  zodFunction({ name: BotActions.GoToBed, parameters: GoToBedParameters }),
 ];
 
 // Event: Bot spawned
@@ -148,7 +222,16 @@ bot.on("chat", async (username, message) => {
   if (toolCall) {
     switch (toolCall.name) {
       case BotActions.GoToPlayer: {
-        const parsedArguments = GoToPlayerParameters.parse(toolCall.arguments);
+        let parsedArguments;
+        try {
+          parsedArguments = GoToPlayerParameters.parse(
+            JSON.parse(toolCall.arguments)
+          );
+        } catch (error) {
+          bot.chat("Failed to parse arguments.");
+          console.error(error);
+          return;
+        }
         const { player_name, closeness } = parsedArguments;
         bot.chat(
           `Heading towards ${player_name}, getting ${closeness} blocks close.`
@@ -331,7 +414,16 @@ function performAction(action: string) {
         maxDistance: 32,
       });
       if (woodBlock) {
-        bot.dig(woodBlock);
+        bot.pathfinder.setGoal(
+          new goals.GoalBlock(
+            woodBlock.position.x,
+            woodBlock.position.y,
+            woodBlock.position.z
+          )
+        );
+        bot.once("goal_reached", () => {
+          bot.dig(woodBlock);
+        });
       } else {
         bot.chat("No wood blocks found nearby.");
       }
