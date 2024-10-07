@@ -1,0 +1,9 @@
+{
+  "botName": "Minecraft-GPT",
+  "personality": "friendly",
+  "defaultTasks": [
+    "gather_resources",
+    "build_shelter"
+  ],
+  "maxIdleTime": 300
+}
