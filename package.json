@@ -1,1 +1,15 @@
-{"dependencies": {}}
+{
+  "dependencies": {
+    "lowdb": "^7.0.1",
+    "mineflayer": "^4.20.1",
+    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-pvp": "^1.3.2",
+    "openai": "^4.67.2",
+    "redis": "^4.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.2"
+  }
+}
