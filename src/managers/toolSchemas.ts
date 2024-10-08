@@ -46,17 +46,14 @@ export const GoToPositionParameters = z.object({
   z: z.number().describe("The z-coordinate to move to."),
   minDistance: z
     .number()
-    .default(2)
+    .optional()
     .describe("The minimum distance to reach the target position."),
 });
 
 export const GoToNearestBlockParameters = z.object({
   blockType: z.string().describe("The type of block to search for."),
-  minDistance: z
-    .number()
-    .default(2)
-    .describe("The minimum distance to reach the block."),
-  range: z.number().default(64).describe("The search range for the block."),
+  minDistance: z.number().describe("The minimum distance to reach the block."),
+  range: z.number().describe("The search range for the block."),
 });
 
 export const UseDoorParameters = z.object({
