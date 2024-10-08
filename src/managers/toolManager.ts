@@ -14,6 +14,7 @@ import {
   GoToNearestBlockParameters,
   UseDoorParameters,
   GoToBedParameters,
+  HuntingParameters,
 } from "./toolSchemas";
 import { BotActions } from "./actionTypes";
 import { bot } from "../index";
@@ -57,6 +58,7 @@ export const tools = [
   }),
   zodFunction({ name: BotActions.UseDoor, parameters: UseDoorParameters }),
   zodFunction({ name: BotActions.GoToBed, parameters: GoToBedParameters }),
+  zodFunction({ name: BotActions.Hunting, parameters: HuntingParameters }),
 ];
 
 // Centralized function to execute a tool action
@@ -83,7 +85,14 @@ export async function executeTool(action: string, args: any) {
       }
       const targetPlayer = bot.players[player_name]?.entity;
       if (targetPlayer) {
-        bot.pathfinder.setGoal(new goals.GoalFollow(targetPlayer, closeness));
+        bot.pathfinder.setGoal(
+          new goals.GoalNear(
+            targetPlayer.position.x,
+            targetPlayer.position.y,
+            targetPlayer.position.z,
+            closeness
+          )
+        );
         bot.chat(
           `Heading towards ${player_name}, getting ${closeness} blocks close.`
         );
@@ -208,6 +217,38 @@ export async function executeTool(action: string, args: any) {
         bot.chat(`Attacking ${type}!`);
       } else {
         bot.chat(`No ${type} entities found nearby.`);
+      }
+      break;
+    }
+    case BotActions.Hunting: {
+      const huntable = bot.nearestEntity((entity) => entity.type === "mob");
+      if (huntable) {
+        bot.pvp.attack(huntable);
+        bot.chat(`Hunting ${huntable.name}!`);
+      } else {
+        bot.chat(`No huntable animals nearby.`);
+      }
+      break;
+    }
+    case BotActions.DefendSelf: {
+      const { range } = DefendSelfParameters.safeParse(args).success
+        ? DefendSelfParameters.parse(args)
+        : {};
+      if (!range) {
+        console.error(`Missing parameters for DefendSelf: range is undefined.`);
+        return;
+      }
+      const hostileEntity = bot.nearestEntity(
+        (entity) => entity.type === "mob" && entity.mobType === "hostile"
+      );
+      if (
+        hostileEntity &&
+        hostileEntity.position.distanceTo(bot.entity.position) <= range
+      ) {
+        bot.pvp.attack(hostileEntity);
+        bot.chat(`Defending myself against ${hostileEntity.name}!`);
+      } else {
+        bot.chat(`No hostile entities within range.`);
       }
       break;
     }

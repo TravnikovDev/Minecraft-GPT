@@ -67,4 +67,6 @@ export const UseDoorParameters = z.object({
     .describe("The position of the door to use."),
 });
 
+export const HuntingParameters = z.object({});
+
 export const GoToBedParameters = z.object({});

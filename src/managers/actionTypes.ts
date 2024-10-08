@@ -10,6 +10,7 @@ enum BotActions {
   FightSpider = "fightSpider",
   GatherWood = "gatherWood",
   DefendSelf = "defendSelf",
+  Hunting = "hunting",
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",
   GoToPosition = "goToPosition",

@@ -55,6 +55,11 @@ export async function executeActions() {
   const actions = await getAllActions();
   console.log("Executing actions in queue:", actions);
 
+  if (actions.length === 0) {
+    console.log("No actions in queue.");
+    return;
+  }
+
   actions.sort((a, b) => a.priority - b.priority);
   for (const action of actions) {
     try {
