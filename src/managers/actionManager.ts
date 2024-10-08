@@ -9,6 +9,7 @@ import { z } from "zod";
 // Define action validation schema
 const actionSchema = z.object({
   action: z.nativeEnum(BotActions),
+  args: z.any(),
   priority: z.number().min(1).max(10),
 });
 
@@ -22,7 +23,7 @@ export async function addActionToQueue(
     // Validate action and priority before adding to queue
     actionSchema.parse({ action, priority });
     const actionId = uuidv4();
-    await addAction(actionId, action, priority);
+    await addAction(actionId, action, args, priority);
     console.log(`Added action ${action} with priority ${priority} to queue.`);
   } catch (error) {
     console.error("Error adding action to queue:", error);
@@ -52,12 +53,20 @@ async function processAction(actionId: string, action: BotActions, args: any) {
 // Execute Actions in Queue
 export async function executeActions() {
   const actions = await getAllActions();
+  console.log("Executing actions in queue:", actions);
+
   actions.sort((a, b) => a.priority - b.priority);
   for (const action of actions) {
-    console.log(
-      `Executing action ${action.action} with priority ${action.priority}`
-    );
-    await processAction(action.id, action.action as BotActions, {});
+    try {
+      console.log(
+        `Executing action ${action.action} with priority ${action.priority}`
+      );
+      console.log("Action args:", action.args);
+      console.log(action);
+      await processAction(action.id, action.action as BotActions, action.args);
+    } catch (error) {
+      console.error("Error executing actions:", error);
+    }
   }
 }
 

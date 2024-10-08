@@ -61,9 +61,26 @@ export const tools = [
 
 // Centralized function to execute a tool action
 export async function executeTool(action: string, args: any) {
+  console.log(`Executing tool action ${action} with args:`, args);
+
+  // Validate that args contain the expected properties
+  if (!args) {
+    console.error(`Error: Arguments for action ${action} are undefined.`);
+    return;
+  }
+
   switch (action) {
     case BotActions.GoToPlayer: {
-      const { player_name, closeness } = GoToPlayerParameters.parse(args);
+      const { player_name, closeness } = GoToPlayerParameters.safeParse(args)
+        .success
+        ? GoToPlayerParameters.parse(args)
+        : {};
+      if (!player_name || !closeness) {
+        console.error(
+          `Missing parameters for GoToPlayer: player_name or closeness is undefined.`
+        );
+        return;
+      }
       const targetPlayer = bot.players[player_name]?.entity;
       if (targetPlayer) {
         bot.pathfinder.setGoal(new goals.GoalFollow(targetPlayer, closeness));
@@ -76,7 +93,17 @@ export async function executeTool(action: string, args: any) {
       break;
     }
     case BotActions.FollowPlayer: {
-      const { player_name, follow_dist } = FollowPlayerParameters.parse(args);
+      const { player_name, follow_dist } = FollowPlayerParameters.safeParse(
+        args
+      ).success
+        ? FollowPlayerParameters.parse(args)
+        : {};
+      if (!player_name || !follow_dist) {
+        console.error(
+          `Missing parameters for FollowPlayer: player_name or follow_dist is undefined.`
+        );
+        return;
+      }
       const targetPlayer = bot.players[player_name]?.entity;
       if (targetPlayer) {
         bot.pathfinder.setGoal(new goals.GoalFollow(targetPlayer, follow_dist));
@@ -89,7 +116,17 @@ export async function executeTool(action: string, args: any) {
       break;
     }
     case BotActions.GoToBlock: {
-      const { type, closeness, search_range } = GoToBlockParameters.parse(args);
+      const { type, closeness, search_range } = GoToBlockParameters.safeParse(
+        args
+      ).success
+        ? GoToBlockParameters.parse(args)
+        : {};
+      if (!type || !closeness || !search_range) {
+        console.error(
+          `Missing parameters for GoToBlock: type, closeness, or search_range is undefined.`
+        );
+        return;
+      }
       const block = bot.findBlock({
         matching: (block) => block.name === type,
         maxDistance: search_range,
@@ -111,7 +148,15 @@ export async function executeTool(action: string, args: any) {
       break;
     }
     case BotActions.CollectBlocks: {
-      const { type, num } = CollectBlocksParameters.parse(args);
+      const { type, num } = CollectBlocksParameters.safeParse(args).success
+        ? CollectBlocksParameters.parse(args)
+        : {};
+      if (!type || !num) {
+        console.error(
+          `Missing parameters for CollectBlocks: type or num is undefined.`
+        );
+        return;
+      }
       let collected = 0;
       const timeout = 30000; // 30 seconds timeout
       const listener = (block: { name: any }) => {
@@ -148,7 +193,13 @@ export async function executeTool(action: string, args: any) {
       break;
     }
     case BotActions.Attack: {
-      const { type } = AttackParameters.parse(args);
+      const { type } = AttackParameters.safeParse(args).success
+        ? AttackParameters.parse(args)
+        : {};
+      if (!type) {
+        console.error(`Missing parameters for Attack: type is undefined.`);
+        return;
+      }
       const targetEntity = bot.nearestEntity(
         (entity) => entity.name === type && entity.type === "mob"
       );

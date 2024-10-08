@@ -9,6 +9,7 @@ import { z } from "zod";
 const ActionSchema = z.object({
   id: z.string(),
   action: z.string(),
+  args: z.any(),
   priority: z.number(),
 });
 
@@ -62,10 +63,16 @@ export async function saveDb() {
 }
 
 // Add Action to Database
-export async function addAction(id: string, action: string, priority: number) {
+export async function addAction(
+  id: string,
+  action: string,
+  args: any,
+  priority: number
+) {
   try {
-    const newAction = { id, action, priority };
+    const newAction = { id, action, args, priority };
     const parsedAction = ActionSchema.safeParse(newAction);
+    console.log("ParsedAction: ", parsedAction);
     if (!parsedAction.success) {
       throw new Error("Action validation failed");
     }

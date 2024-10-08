@@ -19,4 +19,9 @@ enum BotActions {
   Unstack = "unstack",
 }
 
-export { BotActions };
+// Type guard to check if a value is a valid BotActions
+function isBotAction(action: string): action is BotActions {
+  return Object.values(BotActions).includes(action as BotActions);
+}
+
+export { BotActions, isBotAction };
