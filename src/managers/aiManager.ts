@@ -1,12 +1,12 @@
 // Path: src/managers/aiManager.ts
 
 import OpenAI from "openai";
-import { tools } from "./toolManager";
 import { OPENAI_API_KEY } from "../config/env";
 import { v4 as uuidv4 } from "uuid";
 import { addActionToQueue } from "./actionManager";
 import { bot } from "..";
-import { BotActions, isBotAction } from "./actionTypes";
+import { isBotAction } from "./actionTypes";
+import { tools } from "./toolSchemas";
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -143,11 +143,11 @@ export async function initiateActionFromAI(
         return true;
       } else {
         console.error(`Invalid action: ${toolAction.action}`);
-        return false;
       }
     } else {
       console.error("Failed to create tool action from tool call.");
-      return false;
     }
   }
+
+  return false;
 }

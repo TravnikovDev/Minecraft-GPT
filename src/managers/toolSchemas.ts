@@ -1,6 +1,8 @@
 // Path: src/managers/toolSchemas.ts
 
+import { zodFunction } from "openai/helpers/zod";
 import { z } from "zod";
+import { BotActions } from "./actionTypes";
 
 // Define the Zod schemas for each bot action
 export const GoToPlayerParameters = z.object({
@@ -70,3 +72,44 @@ export const UseDoorParameters = z.object({
 export const HuntingParameters = z.object({});
 
 export const GoToBedParameters = z.object({});
+
+// Defining tools to use in conjunction with OpenAI's zodFunction for action handling
+export const tools = [
+  zodFunction({
+    name: BotActions.GoToPlayer,
+    parameters: GoToPlayerParameters,
+  }),
+  zodFunction({
+    name: BotActions.FollowPlayer,
+    parameters: FollowPlayerParameters,
+  }),
+  zodFunction({ name: BotActions.GoToBlock, parameters: GoToBlockParameters }),
+  zodFunction({
+    name: BotActions.CollectBlocks,
+    parameters: CollectBlocksParameters,
+  }),
+  zodFunction({ name: BotActions.Attack, parameters: AttackParameters }),
+  zodFunction({
+    name: BotActions.DefendSelf,
+    parameters: DefendSelfParameters,
+  }),
+  zodFunction({
+    name: BotActions.AvoidEnemies,
+    parameters: AvoidEnemiesParameters,
+  }),
+  zodFunction({
+    name: BotActions.EquipBestWeapon,
+    parameters: EquipBestWeaponParameters,
+  }),
+  zodFunction({
+    name: BotActions.GoToPosition,
+    parameters: GoToPositionParameters,
+  }),
+  zodFunction({
+    name: BotActions.GoToNearestBlock,
+    parameters: GoToNearestBlockParameters,
+  }),
+  zodFunction({ name: BotActions.UseDoor, parameters: UseDoorParameters }),
+  zodFunction({ name: BotActions.GoToBed, parameters: GoToBedParameters }),
+  zodFunction({ name: BotActions.Hunting, parameters: HuntingParameters }),
+];
