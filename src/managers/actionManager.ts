@@ -1,7 +1,7 @@
 // Path: src/managers/actionManager.ts
 
+import { BotActions } from "../actions/types";
 import { addAction, removeAction, getAllActions } from "./persistenceManager";
-import { BotActions } from "./actionTypes";
 import { executeTool } from "./toolManager";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";

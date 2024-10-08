@@ -5,8 +5,8 @@ import { OPENAI_API_KEY } from "../config/env";
 import { v4 as uuidv4 } from "uuid";
 import { addActionToQueue } from "./actionManager";
 import { bot } from "..";
-import { isBotAction } from "./actionTypes";
-import { tools } from "./toolSchemas";
+import { tools } from "../actions/registry";
+import { isBotAction } from "../actions/types";
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });

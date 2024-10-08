@@ -10,6 +10,7 @@ import { pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
+import { plugin as toolPlugin } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 
 // Load environment variables
@@ -31,6 +32,7 @@ bot.loadPlugin(pvp);
 bot.loadPlugin(collectBlock);
 bot.loadPlugin(autoEat);
 bot.loadPlugin(armorManager);
+bot.loadPlugin(toolPlugin);
 
 // Event: Bot spawned
 bot.once("spawn", () => {

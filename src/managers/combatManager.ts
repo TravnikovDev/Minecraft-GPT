@@ -3,8 +3,8 @@
 import { bot } from "../index";
 import { plugin as pvp } from "mineflayer-pvp";
 import { Entity } from "prismarine-entity";
-import { Item } from "prismarine-item";
 import { z } from "zod";
+import { getAttackDamage } from "../utils/utility";
 
 // Load PVP plugin
 bot.loadPlugin(pvp);
@@ -15,35 +15,8 @@ const combatParametersSchema = z.object({
   range: z
     .number()
     .optional()
-    .default(16)
     .describe("Range within which to find the entity."),
 });
-
-function getAttackDamage(item: Item): number {
-  // Define attack damage values for different weapons
-  const attackDamageMap: { [key: string]: number } = {
-    wooden_sword: 4,
-    stone_sword: 5,
-    iron_sword: 6,
-    diamond_sword: 7,
-    netherite_sword: 8,
-    wooden_axe: 3,
-    stone_axe: 4,
-    iron_axe: 5,
-    diamond_axe: 6,
-    netherite_axe: 7,
-    wooden_pickaxe: 2,
-    stone_pickaxe: 3,
-    iron_pickaxe: 4,
-    diamond_pickaxe: 5,
-    netherite_pickaxe: 6,
-    wooden_shovel: 1,
-    stone_shovel: 2,
-    iron_shovel: 3,
-    netherite_shovel: 5,
-  };
-  return attackDamageMap[item.name] || 0;
-}
 
 // Attack a Specific Entity by Type
 export async function attackEntity(

@@ -6,17 +6,13 @@ enum BotActions {
   FollowPlayer = "followPlayer",
   GoToBlock = "goToBlock",
   CollectBlocks = "collectBlocks",
-  Attack = "attack",
-  FightSpider = "fightSpider",
-  GatherWood = "gatherWood",
+  AttackNearest = "attackNearest",
   DefendSelf = "defendSelf",
   Hunting = "hunting",
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",
   GoToPosition = "goToPosition",
   GoToNearestBlock = "goToNearestBlock",
-  UseDoor = "useDoor",
-  GoToBed = "goToBed",
   Unstack = "unstack",
 }
 

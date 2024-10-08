@@ -1,7 +1,6 @@
 // Path: src/managers/resourceManager.ts
 
 import { bot } from "../index";
-import { BotActions } from "./actionTypes";
 import { z } from "zod";
 import { goals } from "mineflayer-pathfinder";
 
