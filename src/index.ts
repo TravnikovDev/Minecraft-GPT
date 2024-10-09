@@ -6,7 +6,7 @@ import { loadDb } from "./managers/persistenceManager";
 import { executeActions } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
-import { pathfinder } from "mineflayer-pathfinder";
+import { Movements, pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
@@ -37,6 +37,12 @@ bot.loadPlugin(armorManager);
 // Event: Bot spawned
 bot.once("spawn", () => {
   bot.chat("Hello world! Minecraft-gpt at your service!");
+
+  const defaultMove = new Movements(bot);
+
+  defaultMove.allow1by1towers = false; // Do not build 1x1 towers when going up
+  defaultMove.canDig = false; // Disable breaking of blocks when pathing
+  bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
 });
 
 // Event: Player chat interaction

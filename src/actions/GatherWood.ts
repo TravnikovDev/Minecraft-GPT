@@ -4,7 +4,7 @@ import { bot } from "../index";
 import { BotActions } from "./types";
 import { goals } from "mineflayer-pathfinder";
 import { z } from "zod";
-import { Vec3 } from "vec3";
+import * as world from "../utils/world";
 
 // Define parameters for the GatherWood action
 export const parameters = z.object({
@@ -12,8 +12,6 @@ export const parameters = z.object({
     .number()
     .describe("The maximum distance to search for wood blocks."),
 });
-
-let isGatheringWood = false; // Lock mechanism to prevent multiple concurrent GatherWood actions
 
 // Implement the GatherWood action
 export async function execute(args: any) {
@@ -26,68 +24,43 @@ export async function execute(args: any) {
     return;
   }
 
-  if (isGatheringWood) {
-    console.log("Already gathering wood, skipping this action.");
-    return;
-  }
-
-  isGatheringWood = true;
-
   const { maxDistance } = parsed.data;
 
   try {
     bot.chat("Heading out to gather wood.");
-    let woodBlock = bot.findBlock({
+    const woodBlock = bot.findBlock({
       matching: (block) => block.name.includes("log"),
       maxDistance,
     });
 
     if (woodBlock) {
-      await gatherStackOfLogs(woodBlock.position);
+      bot.pathfinder.setGoal(
+        new goals.GoalBlock(
+          woodBlock.position.x,
+          woodBlock.position.y,
+          woodBlock.position.z
+        ),
+        true
+      );
+
+      bot.once("goal_reached", async () => {
+        try {
+          const nearbyWoodBlocks = world.getNearestBlocks(bot, ["log"], 7);
+          console.log("Nearby wood blocks:", nearbyWoodBlocks);
+          for (const block of nearbyWoodBlocks) {
+            await bot.dig(block);
+            await new Promise((resolve) => setTimeout(resolve, 1000)); // Add delay to simulate gathering
+          }
+          bot.chat("Wood gathered successfully!");
+        } catch (digError) {
+          console.error("Failed to dig the wood block:", digError);
+          bot.chat("Failed to gather the wood block.");
+        }
+      });
     } else {
       bot.chat("No wood blocks found nearby.");
     }
   } catch (error) {
     console.error("Error executing GatherWood action:", error);
-  } finally {
-    isGatheringWood = false;
-  }
-}
-
-// Helper function to gather a stack of logs
-async function gatherStackOfLogs(startPosition: Vec3) {
-  let currentPosition = startPosition;
-  const startTime = Date.now();
-  const timeout = 30000; // 30 seconds timeout to avoid getting stuck
-
-  while (true) {
-    if (Date.now() - startTime > timeout) {
-      bot.chat("I got stuck trying to gather wood.");
-      break;
-    }
-
-    const block = bot.blockAt(currentPosition);
-    if (block && block.name.includes("log")) {
-      try {
-        bot.pathfinder.setGoal(
-          new goals.GoalBlock(
-            currentPosition.x,
-            currentPosition.y,
-            currentPosition.z
-          )
-        );
-        await new Promise((resolve) => bot.once("goal_reached", resolve));
-        await bot.dig(block);
-        bot.chat("Wood block gathered successfully!");
-        currentPosition = currentPosition.offset(0, 1, 0); // Move up to the next log in the stack
-      } catch (digError) {
-        console.error("Failed to dig the wood block:", digError);
-        bot.chat("Failed to gather the wood block.");
-        break;
-      }
-    } else {
-      bot.chat("No more wood blocks in the stack.");
-      break;
-    }
   }
 }
