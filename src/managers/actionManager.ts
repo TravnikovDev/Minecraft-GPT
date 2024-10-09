@@ -51,8 +51,6 @@ export async function executeActions() {
       console.log(
         `- Executing action ${action.action} with priority ${action.priority}`
       );
-      console.log("Action args:", action.args);
-      console.log(action);
       await processAction(action);
     } catch (error) {
       console.error("Error executing actions:", error);

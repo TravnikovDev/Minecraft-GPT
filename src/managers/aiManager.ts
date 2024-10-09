@@ -102,7 +102,7 @@ export async function executeToolCall(
     try {
       if (toolArgs) {
         const parsedArgs = JSON.parse(toolArgs);
-        console.log(`Executing tool: ${name} with arguments:`, parsedArgs);
+        // console.log(`Executing tool: ${name} with arguments:`, parsedArgs);
         return { action: name, arguments: parsedArgs };
       } else {
         console.error("Tool arguments are missing or undefined.");

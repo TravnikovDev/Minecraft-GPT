@@ -16,6 +16,7 @@ import * as Unstack from "./Unstack";
 import * as EquipBestWeapon from "./EquipBestWeapon";
 import * as GoToPosition from "./GoToPosition";
 import * as GoToNearestBlock from "./GoToNearestBlock";
+import * as GatherWood from "./GatherWood";
 
 type ActionModule = {
   parameters: any;
@@ -36,6 +37,7 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.GoToPosition]: GoToPosition,
   [BotActions.GoToNearestBlock]: GoToNearestBlock,
   [BotActions.Unstack]: Unstack,
+  [BotActions.GatherWood]: GatherWood,
 };
 
 // Extracting tools for use with validation (zodFunction)

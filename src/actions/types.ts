@@ -14,6 +14,7 @@ enum BotActions {
   GoToPosition = "goToPosition",
   GoToNearestBlock = "goToNearestBlock",
   Unstack = "unstack",
+  GatherWood = "gatherWood",
 }
 
 // Type guard to check if a value is a valid BotActions

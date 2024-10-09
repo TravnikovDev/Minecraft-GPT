@@ -22,16 +22,10 @@ export const botLevels: ProgressLevel[] = [
         actions: [
           {
             id: "action1",
-            action: BotActions.GoToNearestBlock,
+            action: BotActions.GatherWood,
             priority: 5,
-            args: { blockType: "wood", minDistance: 2, range: 64 },
+            args: { maxDistance: 32 },
           },
-          //   {
-          //     id: "action2",
-          //     action: BotActions.CollectBlocks,
-          //     priority: 5,
-          //     args: { blockType: "wood", num: 32 },
-          //   },
         ],
         id: "wood_1",
         status: "pending",
