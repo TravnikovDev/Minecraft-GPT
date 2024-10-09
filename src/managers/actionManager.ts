@@ -4,14 +4,10 @@ import { BotActions } from "../actions/types";
 import { addAction, removeAction, getAllActions } from "./persistenceManager";
 import { executeTool } from "./toolManager";
 import { v4 as uuidv4 } from "uuid";
-import { z } from "zod";
-
-// Define action validation schema
-const actionSchema = z.object({
-  action: z.nativeEnum(BotActions),
-  args: z.any(),
-  priority: z.number().min(1).max(10),
-});
+import { addTask } from "./taskManager";
+import { BotProgress } from "./botProgress";
+import { botLevels } from "../progress/botLevels";
+import { ActionSchema } from "../schemas/mainSchemas";
 
 // Add Action to Queue
 export async function addActionToQueue(
@@ -21,9 +17,9 @@ export async function addActionToQueue(
 ) {
   try {
     // Validate action and priority before adding to queue
-    actionSchema.parse({ action, priority });
+    ActionSchema.parse({ action, priority });
     const actionId = uuidv4();
-    await addAction(actionId, action, args, priority);
+    await addAction({ id: actionId, action, args, priority });
     console.log(`Added action ${action} with priority ${priority} to queue.`);
   } catch (error) {
     console.error("Error adding action to queue:", error);
@@ -56,7 +52,8 @@ export async function executeActions() {
   console.log("Executing actions in queue:", actions);
 
   if (actions.length === 0) {
-    console.log("No actions in queue.");
+    console.log("No actions in queue. Attempting idle tasks...");
+    await handleIdleState();
     return;
   }
 
@@ -85,5 +82,32 @@ export async function addActionFromEvent(
     await addActionToQueue(action, priority, args);
   } catch (error) {
     console.error("Error adding action from event:", error);
+  }
+}
+
+// Handle Idle State by assigning tasks based on bot progress
+async function handleIdleState() {
+  const botProgress = new BotProgress();
+  const currentLevel = botProgress.getCurrentLevel();
+  console.log(`Bot is idle. Assigning tasks for level ${currentLevel}...`);
+
+  const nextLevelConfig = botLevels.find(
+    (level) => level.level === currentLevel
+  );
+  if (nextLevelConfig) {
+    console.log(
+      `Assigning tasks for level ${currentLevel}:`,
+      nextLevelConfig.requiredTasks
+    );
+    for (const task of nextLevelConfig.requiredTasks) {
+      try {
+        await addTask(task.name, task.actions);
+      } catch (error) {
+        console.error(
+          `Error assigning task ${task.name} for idle state:`,
+          error
+        );
+      }
+    }
   }
 }

@@ -4,35 +4,12 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import { resolve } from "path";
 import { z } from "zod";
-
-// Define Zod schemas for database validation
-const ActionSchema = z.object({
-  id: z.string(),
-  action: z.string(),
-  args: z.any(),
-
-  priority: z.number(),
-});
-
-const LoreSchema = z.object({
-  events: z.array(z.string()),
-});
-
-const InventoryItemSchema = z.object({
-  name: z.string(),
-  count: z.number().min(0),
-});
-
-const InventorySchema = z.array(InventoryItemSchema);
-
-const DbSchema = z.object({
-  actions: z.array(ActionSchema),
-  lore: LoreSchema.optional(),
-  inventory: InventorySchema.optional(),
-});
-
-// Define the database schema type
-type DbSchemaType = z.infer<typeof DbSchema>;
+import { ActionType, DbSchemaType } from "../schemas/types";
+import {
+  ActionSchema,
+  DbSchema,
+  InventorySchema,
+} from "../schemas/mainSchemas";
 
 // Database Setup
 const dbPath = resolve("db.json");
@@ -73,14 +50,8 @@ export async function saveDb() {
 }
 
 // Add Action to Database
-export async function addAction(
-  id: string,
-  action: string,
-  args: any,
-  priority: number
-) {
+export async function addAction(newAction: ActionType) {
   try {
-    const newAction = { id, action, args, priority };
     const parsedAction = ActionSchema.safeParse(newAction);
     if (!parsedAction.success) {
       throw new Error("Action validation failed");

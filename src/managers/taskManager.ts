@@ -2,27 +2,17 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { addActionToQueue } from "./actionManager";
-import { BotActions } from "../actions/types";
 import { getAllActions } from "./persistenceManager";
-
-// Define Task Schema
-type Task = {
-  id: string;
-  name: string;
-  actions: { action: BotActions; priority: number; args: any }[];
-  status: "pending" | "in_progress" | "completed";
-};
+import { BotTasks } from "../tasks/types";
+import { ActionType, TaskType } from "../schemas/types";
 
 // Task List
-const tasks: Task[] = [];
+const tasks: TaskType[] = [];
 
 // Add Task to the Task List
-export async function addTask(
-  name: string,
-  actions: { action: BotActions; priority: number; args: any }[]
-) {
+export async function addTask(name: BotTasks, actions: ActionType[]) {
   const taskId = uuidv4();
-  const newTask: Task = {
+  const newTask: TaskType = {
     id: taskId,
     name,
     actions,
@@ -31,10 +21,12 @@ export async function addTask(
   tasks.push(newTask);
   await addActionsToQueueFromTask(newTask);
   console.log(`Task '${name}' added with ${actions.length} actions.`);
+
+  return taskId;
 }
 
 // Add Actions from Task to Queue
-async function addActionsToQueueFromTask(task: Task) {
+async function addActionsToQueueFromTask(task: TaskType) {
   for (const action of task.actions) {
     await addActionToQueue(action.action, action.priority, action.args);
   }
@@ -42,7 +34,7 @@ async function addActionsToQueueFromTask(task: Task) {
 }
 
 // Check Task Completion Status
-export function checkTaskCompletion(taskId: string) {
+export function checkTaskCompletion(taskId: TaskType["id"]) {
   const task = tasks.find((t) => t.id === taskId);
   if (!task) {
     console.error(`Task with ID ${taskId} not found.`);

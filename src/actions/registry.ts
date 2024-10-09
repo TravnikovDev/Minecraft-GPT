@@ -39,7 +39,7 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
 };
 
 // Extracting tools for use with validation (zodFunction)
-export const tools = Object.entries(actionRegistry).map(
+export const availableActions = Object.entries(actionRegistry).map(
   ([actionName, action]) =>
     zodFunction({
       name: actionName,

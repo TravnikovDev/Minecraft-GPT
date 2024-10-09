@@ -1,7 +1,10 @@
 // Path: src/managers/toolManager.ts
 
-import { tools, actionRegistry } from "../actions/registry";
+import { availableActions, actionRegistry } from "../actions/registry";
 import { BotActions } from "../actions/types";
+import { availableTasks } from "../tasks/registry";
+
+const tools = [...availableActions, ...availableTasks];
 
 // Export tools to be used with OpenAI for validation purposes
 export { tools };

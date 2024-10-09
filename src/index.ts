@@ -10,7 +10,7 @@ import { pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
-import { plugin as toolPlugin } from "mineflayer-tool";
+import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 
 // Load environment variables
@@ -31,8 +31,8 @@ bot.loadPlugin(pathfinder);
 bot.loadPlugin(pvp);
 bot.loadPlugin(collectBlock);
 bot.loadPlugin(autoEat);
+bot.loadPlugin(tool);
 bot.loadPlugin(armorManager);
-bot.loadPlugin(toolPlugin);
 
 // Event: Bot spawned
 bot.once("spawn", () => {
@@ -52,4 +52,4 @@ bot.on("chat", async (username, message) => {
 // Idle behavior: Always keep the bot busy
 setInterval(async () => {
   await executeActions();
-}, 5000);
+}, 10000);

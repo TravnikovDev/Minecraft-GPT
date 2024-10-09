@@ -45,7 +45,7 @@ export async function execute(args: any) {
     return;
   }
 
-  const { blockType, minDistance, range } = parsed.data;
+  const { blockType, minDistance, range = 50 } = parsed.data;
   const MAX_RANGE = 512;
   let searchRange = range;
   if (range > MAX_RANGE) {

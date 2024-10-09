@@ -1,4 +1,4 @@
-// Path: src/managers/actionTypes.ts
+// Path: src/actions/types.ts
 
 // Define an enum for available bot actions
 enum BotActions {
