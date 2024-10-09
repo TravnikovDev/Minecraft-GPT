@@ -1,47 +1,35 @@
 // Path: src/managers/actionManager.ts
 
-import { BotActions } from "../actions/types";
-import { addAction, removeAction, getAllActions } from "./persistenceManager";
+import {
+  removeAction,
+  getAllActions,
+  addActionToQueue,
+} from "./persistenceManager";
 import { executeTool } from "./toolManager";
-import { v4 as uuidv4 } from "uuid";
 import { addTask } from "./taskManager";
 import { BotProgress } from "./botProgress";
 import { botLevels } from "../progress/botLevels";
-import { ActionSchema } from "../schemas/mainSchemas";
-
-// Add Action to Queue
-export async function addActionToQueue(
-  action: BotActions,
-  priority: number,
-  args: any
-) {
-  try {
-    // Validate action and priority before adding to queue
-    ActionSchema.parse({ action, priority });
-    const actionId = uuidv4();
-    await addAction({ id: actionId, action, args, priority });
-    console.log(`Added action ${action} with priority ${priority} to queue.`);
-  } catch (error) {
-    console.error("Error adding action to queue:", error);
-  }
-}
+import { ActionType } from "../schemas/types";
 
 // Process an Action
-async function processAction(actionId: string, action: BotActions, args: any) {
+async function processAction(nextAction: ActionType) {
   try {
-    await executeTool(action, args);
+    await executeTool(nextAction.action, nextAction.args);
   } catch (error) {
-    console.error(`Error executing action ${action}:`, error);
+    console.error(`Error executing action ${nextAction.action}:`, error);
     // Fallback mechanism: re-add action to the queue with lower priority for retry
-    await addActionToQueue(action, 10, args);
+    await addActionToQueue(nextAction);
     console.log(
-      `Re-added action ${action} to queue with lower priority for retry.`
+      `Re-added action ${nextAction.action} to queue with lower priority for retry.`
     );
   } finally {
     try {
-      await removeAction(actionId);
+      await removeAction(nextAction.id);
     } catch (error) {
-      console.error(`Error removing action ${actionId} from queue:`, error);
+      console.error(
+        `Error removing action ${nextAction.id} from queue:`,
+        error
+      );
     }
   }
 }
@@ -49,10 +37,10 @@ async function processAction(actionId: string, action: BotActions, args: any) {
 // Execute Actions in Queue
 export async function executeActions() {
   const actions = await getAllActions();
-  console.log("Executing actions in queue:", actions);
+  console.log("- Executing actions in queue:", actions);
 
   if (actions.length === 0) {
-    console.log("No actions in queue. Attempting idle tasks...");
+    console.log("- No actions in queue. Attempting idle tasks...");
     await handleIdleState();
     return;
   }
@@ -61,11 +49,11 @@ export async function executeActions() {
   for (const action of actions) {
     try {
       console.log(
-        `Executing action ${action.action} with priority ${action.priority}`
+        `- Executing action ${action.action} with priority ${action.priority}`
       );
       console.log("Action args:", action.args);
       console.log(action);
-      await processAction(action.id, action.action as BotActions, action.args);
+      await processAction(action);
     } catch (error) {
       console.error("Error executing actions:", error);
     }
@@ -73,13 +61,9 @@ export async function executeActions() {
 }
 
 // Add Action Based on Event
-export async function addActionFromEvent(
-  action: BotActions,
-  priority: number,
-  args: any = {}
-) {
+export async function addActionFromEvent(action: ActionType) {
   try {
-    await addActionToQueue(action, priority, args);
+    await addActionToQueue(action);
   } catch (error) {
     console.error("Error adding action from event:", error);
   }
@@ -89,7 +73,7 @@ export async function addActionFromEvent(
 async function handleIdleState() {
   const botProgress = new BotProgress();
   const currentLevel = botProgress.getCurrentLevel();
-  console.log(`Bot is idle. Assigning tasks for level ${currentLevel}...`);
+  console.log(`! Bot is idle. Assigning tasks for level ${currentLevel}...`);
 
   const nextLevelConfig = botLevels.find(
     (level) => level.level === currentLevel
@@ -101,7 +85,7 @@ async function handleIdleState() {
     );
     for (const task of nextLevelConfig.requiredTasks) {
       try {
-        await addTask(task.name, task.actions);
+        await addTask(task);
       } catch (error) {
         console.error(
           `Error assigning task ${task.name} for idle state:`,

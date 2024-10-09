@@ -1,5 +1,5 @@
 import { BotActions } from "../actions/types";
-import { Task } from "../managers/taskManager";
+import { TaskType } from "../schemas/types";
 import { BotTasks } from "../tasks/types";
 
 // Bot Progress Levels
@@ -7,7 +7,7 @@ interface ProgressLevel {
   level: number;
   description: string;
   requiredItems: { name: string; count: number }[]; // Items needed to unlock the next level
-  requiredTasks: Task[]; // List of task names that need to be completed for the next level
+  requiredTasks: TaskType[]; // List of task names that need to be completed for the next level
 }
 
 // Levels Definition
@@ -21,15 +21,17 @@ export const botLevels: ProgressLevel[] = [
         name: BotTasks.CollectWood,
         actions: [
           {
+            id: "action1",
             action: BotActions.GoToNearestBlock,
             priority: 5,
-            args: { type: "wood", closeness: 2, search_range: 64 },
+            args: { blockType: "wood", minDistance: 2, range: 64 },
           },
-          {
-            action: BotActions.CollectBlocks,
-            priority: 5,
-            args: { type: "wood", num: 20 },
-          },
+          //   {
+          //     id: "action2",
+          //     action: BotActions.CollectBlocks,
+          //     priority: 5,
+          //     args: { blockType: "wood", num: 32 },
+          //   },
         ],
         id: "wood_1",
         status: "pending",

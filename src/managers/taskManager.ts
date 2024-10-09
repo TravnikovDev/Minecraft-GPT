@@ -1,36 +1,39 @@
 // Path: src/managers/taskManager.ts
 
-import { v4 as uuidv4 } from "uuid";
-import { addActionToQueue } from "./actionManager";
-import { getAllActions } from "./persistenceManager";
-import { BotTasks } from "../tasks/types";
-import { ActionType, TaskType } from "../schemas/types";
+import { addActionToQueue, getAllActions } from "./persistenceManager";
+import { TaskType } from "../schemas/types";
 
 // Task List
 const tasks: TaskType[] = [];
 
 // Add Task to the Task List
-export async function addTask(name: BotTasks, actions: ActionType[]) {
-  const taskId = uuidv4();
-  const newTask: TaskType = {
-    id: taskId,
-    name,
-    actions,
-    status: "pending",
-  };
+export async function addTask(newTask: TaskType): Promise<TaskType["id"]> {
   tasks.push(newTask);
-  await addActionsToQueueFromTask(newTask);
-  console.log(`Task '${name}' added with ${actions.length} actions.`);
+  await addActionsToQueueFromTask(newTask.actions);
+  console.log(
+    `Task '${newTask.name}' added with ${newTask.actions.length} actions.`
+  );
 
-  return taskId;
+  return newTask.id;
+}
+
+// Add Multiple Tasks to the Task List
+export async function addManyTasks(
+  newTasks: TaskType[]
+): Promise<TaskType["id"][]> {
+  const taskIds = [];
+  for (const task of newTasks) {
+    const taskId = await addTask(task);
+    taskIds.push(taskId);
+  }
+  return taskIds;
 }
 
 // Add Actions from Task to Queue
-async function addActionsToQueueFromTask(task: TaskType) {
-  for (const action of task.actions) {
-    await addActionToQueue(action.action, action.priority, action.args);
+async function addActionsToQueueFromTask(actions: TaskType["actions"]) {
+  for (const action of actions) {
+    await addActionToQueue(action);
   }
-  task.status = "in_progress";
 }
 
 // Check Task Completion Status

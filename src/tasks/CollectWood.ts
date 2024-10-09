@@ -4,6 +4,7 @@ import { addTask } from "../managers/taskManager";
 import { BotActions } from "../actions/types";
 import { z } from "zod";
 import { BotTasks } from "./types";
+import { v4 } from "uuid";
 
 // Define parameters for the CollectWood task
 export const parameters = z.object({
@@ -44,7 +45,12 @@ export async function execute(args: any) {
     ];
 
     // Add task to the task manager
-    await addTask(BotTasks.CollectWood, actions);
+    await addTask({
+      status: "pending",
+      id: v4(),
+      name: BotTasks.CollectWood,
+      actions: actions,
+    });
     console.log(`Task 'CollectWood' added with ${actions.length} actions.`);
   } catch (error) {
     console.error("Error executing CollectWood task:", error);

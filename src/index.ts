@@ -52,4 +52,4 @@ bot.on("chat", async (username, message) => {
 // Idle behavior: Always keep the bot busy
 setInterval(async () => {
   await executeActions();
-}, 10000);
+}, 5000);

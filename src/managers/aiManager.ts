@@ -3,10 +3,10 @@
 import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
 import { v4 as uuidv4 } from "uuid";
-import { addActionToQueue } from "./actionManager";
 import { bot } from "..";
 import { isBotAction } from "../actions/types";
 import { tools } from "./toolManager";
+import { addActionToQueue } from "./persistenceManager";
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -138,7 +138,13 @@ export async function initiateActionFromAI(
           }, with args: ${JSON.stringify(toolAction.arguments)}`
         );
         // Add the parsed action to the queue with priority 3
-        await addActionToQueue(toolAction.action, 3, toolAction.arguments);
+        await addActionToQueue({
+          action: toolAction.action,
+          id: actionId,
+          priority: 3,
+          args: toolAction.arguments,
+        });
+        // toolAction.action, 3, toolAction.arguments);
 
         return true;
       } else {

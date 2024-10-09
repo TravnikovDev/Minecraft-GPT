@@ -1,6 +1,6 @@
 // Path: src/managers/botProgress.ts
 
-import { addTask, checkTaskCompletion, Task } from "./taskManager";
+import { addTask, checkTaskCompletion } from "./taskManager";
 import { getInventory } from "./persistenceManager";
 import { botLevels } from "../progress/botLevels";
 
@@ -28,8 +28,8 @@ export class BotProgress {
     );
 
     // Check if required tasks are completed
-    const hasCompletedTasks = currentLevelConfig.requiredTasks.every(
-      (taskName) => checkTaskCompletion(taskName)
+    const hasCompletedTasks = currentLevelConfig.requiredTasks.every((task) =>
+      checkTaskCompletion(task.id)
     );
 
     if (hasRequiredItems && hasCompletedTasks) {
@@ -46,7 +46,7 @@ export class BotProgress {
       if (nextLevelConfig) {
         for (const task of nextLevelConfig.requiredTasks) {
           try {
-            await addTask(task, []);
+            await addTask(task);
           } catch (error) {
             console.error(`Error adding task ${task}:`, error);
           }

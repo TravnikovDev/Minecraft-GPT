@@ -50,11 +50,16 @@ export async function saveDb() {
 }
 
 // Add Action to Database
-export async function addAction(newAction: ActionType) {
+export async function addActionToQueue(newAction: ActionType) {
   try {
+    console.log("Adding action to queue:", newAction);
     const parsedAction = ActionSchema.safeParse(newAction);
     if (!parsedAction.success) {
-      throw new Error("Action validation failed");
+      throw new Error("Action validation failed: " + parsedAction.error);
+    } else {
+      console.log(
+        `- Adding action ${parsedAction.data.action} with priority ${parsedAction.data.priority} to queue.`
+      );
     }
     db.data?.actions.push(parsedAction.data);
     await saveDb();
