@@ -10,6 +10,7 @@ const ActionSchema = z.object({
   id: z.string(),
   action: z.string(),
   args: z.any(),
+
   priority: z.number(),
 });
 
@@ -17,9 +18,17 @@ const LoreSchema = z.object({
   events: z.array(z.string()),
 });
 
+const InventoryItemSchema = z.object({
+  name: z.string(),
+  count: z.number().min(0),
+});
+
+const InventorySchema = z.array(InventoryItemSchema);
+
 const DbSchema = z.object({
   actions: z.array(ActionSchema),
   lore: LoreSchema.optional(),
+  inventory: InventorySchema.optional(),
 });
 
 // Define the database schema type
@@ -31,13 +40,14 @@ const adapter = new JSONFile<DbSchemaType>(dbPath);
 const db = new Low<DbSchemaType>(adapter, {
   actions: [],
   lore: { events: [] },
+  inventory: [],
 });
 
 // Load Database
 export async function loadDb() {
   try {
     await db.read();
-    db.data ||= { actions: [], lore: { events: [] } };
+    db.data ||= { actions: [], lore: { events: [] }, inventory: [] };
     const parsedData = DbSchema.safeParse(db.data);
     if (!parsedData.success) {
       throw new Error("Database validation failed");
@@ -72,7 +82,6 @@ export async function addAction(
   try {
     const newAction = { id, action, args, priority };
     const parsedAction = ActionSchema.safeParse(newAction);
-    console.log("ParsedAction: ", parsedAction);
     if (!parsedAction.success) {
       throw new Error("Action validation failed");
     }
@@ -117,4 +126,27 @@ export async function addLoreEvent(event: string) {
 // Get All Lore Events from Database
 export function getAllLoreEvents() {
   return db.data?.lore?.events || [];
+}
+
+// Sync Inventory with Database
+export async function syncInventory(
+  inventory: { name: string; count: number }[]
+) {
+  try {
+    const parsedInventory = InventorySchema.safeParse(inventory);
+    if (!parsedInventory.success) {
+      throw new Error("Inventory validation failed");
+    }
+    if (db.data) {
+      db.data.inventory = parsedInventory.data;
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error syncing inventory to database:", error);
+  }
+}
+
+// Get Inventory
+export function getInventory() {
+  return db.data?.inventory || [];
 }
