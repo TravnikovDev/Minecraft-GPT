@@ -1,5 +1,7 @@
 // Path: src/tasks/CollectWood.ts
 
+// AN EXAMPLE OF A TASK IMPLEMENTATION !!!
+
 import { addTask } from "../managers/taskManager";
 import { BotActions } from "../actions/types";
 import { z } from "zod";

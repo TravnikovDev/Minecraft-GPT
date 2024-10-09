@@ -41,7 +41,7 @@ export async function executeActions() {
 
   if (actions.length === 0) {
     console.log("- No actions in queue. Attempting idle tasks...");
-    await handleIdleState();
+    // await handleIdleState();
     return;
   }
 
