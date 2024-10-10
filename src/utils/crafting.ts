@@ -21,8 +21,6 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
   );
   let recipes = bot.recipesFor(gameData.getItemId(itemName), null, 1, null);
 
-  console.log("craftRecipe", recipes, craftingTable);
-
   if (!recipes || recipes.length === 0) {
     // Look for crafting table
     if (!craftingTable) {

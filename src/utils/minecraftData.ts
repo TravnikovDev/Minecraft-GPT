@@ -96,7 +96,6 @@ export function getItemName(itemId: number): string {
 
 export function getBlockId(blockName: string): number {
   console.log(`getBlockId: ${blockName}`);
-  console.log(gameData.blocksByName[blockName]);
   const block = gameData.blocksByName?.[blockName];
   return block?.id || 0;
 }

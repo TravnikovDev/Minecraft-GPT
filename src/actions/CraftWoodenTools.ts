@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { craftRecipe } from "../utils/crafting";
+import { addActionToQueue } from "../managers/persistenceManager";
+import { BotActions } from "./types";
 
 // Define parameters for CraftWoodenTools action
 export const parameters = z.object({
@@ -71,6 +73,12 @@ export async function execute(args: any) {
 
     if (logsCount < logsNeeded) {
       console.log("Bot: Not enough logs to craft the required planks.");
+      addActionToQueue({
+        id: "gatherWood-" + logsNeeded,
+        action: BotActions.GatherWood,
+        priority: 7,
+        args: { maxDistance: 100, num: logsNeeded },
+      });
       return;
     }
     await craftRecipe("oak_planks", requiredPlanks);
@@ -90,10 +98,10 @@ export async function execute(args: any) {
   }
 
   // Craft each tool
-  await craftRecipe("wooden_pickaxe", toolCount.pickaxe);
-  await craftRecipe("wooden_axe", toolCount.axe);
-  await craftRecipe("wooden_sword", toolCount.sword);
-  await craftRecipe("wooden_shovel", toolCount.shovel);
+  toolCount.pickaxe && (await craftRecipe("wooden_pickaxe", toolCount.pickaxe));
+  toolCount.axe && (await craftRecipe("wooden_axe", toolCount.axe));
+  toolCount.sword && (await craftRecipe("wooden_sword", toolCount.sword));
+  toolCount.shovel && (await craftRecipe("wooden_shovel", toolCount.shovel));
 
   console.log("Bot: All basic wooden tools have been crafted!");
 }

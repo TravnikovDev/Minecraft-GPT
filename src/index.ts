@@ -2,7 +2,7 @@
 
 import mineflayer from "mineflayer";
 import { config } from "dotenv";
-import { loadDb } from "./managers/persistenceManager";
+import { addActionToQueue, loadDb } from "./managers/persistenceManager";
 import { executeActions } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
@@ -12,6 +12,7 @@ import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
+import { BotActions } from "./actions/types";
 
 // Load environment variables
 config();
@@ -50,6 +51,23 @@ bot.on("chat", async (username, message) => {
   if (username === bot.username) return;
 
   initiateActionFromAI(username, message);
+});
+
+bot.on("health", () => {
+  addActionToQueue({
+    id: "defend-self",
+    action: BotActions.DefendSelf,
+    priority: 9,
+    args: { range: 25 },
+  });
+});
+
+bot.on("respawn", () => {
+  addActionToQueue({
+    id: "respawn",
+    action: BotActions.GoToPlayer,
+    priority: 10,
+  });
 });
 
 // Idle behavior: Always keep the bot busy

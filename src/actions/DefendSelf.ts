@@ -50,7 +50,9 @@ function isHostile(entity: Entity): boolean {
     "Enderman",
     "Witch",
   ];
-  return entity.mobType !== undefined && hostileMobs.includes(entity.mobType);
+  return (
+    entity.displayName !== undefined && hostileMobs.includes(entity.displayName)
+  );
 }
 
 // Function to equip the highest attack damage item

@@ -58,15 +58,6 @@ export async function executeActions() {
   }
 }
 
-// Add Action Based on Event
-export async function addActionFromEvent(action: ActionType) {
-  try {
-    await addActionToQueue(action);
-  } catch (error) {
-    console.error("Error adding action from event:", error);
-  }
-}
-
 // Handle Idle State by assigning tasks based on bot progress
 async function handleIdleState() {
   const botProgress = new BotProgress();
