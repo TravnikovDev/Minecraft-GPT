@@ -1,10 +1,11 @@
 // Path: src/actions/GatherWood.ts
 
 import { bot } from "../index";
-import { goals } from "mineflayer-pathfinder";
 import { z } from "zod";
 import * as world from "../utils/world";
 import { pickupNearbyItems } from "../utils/worldInteraction";
+import { goToPosition } from "../utils/movement";
+import { __actionsDelay } from "../utils/utility";
 
 // Define parameters for the GatherWood action
 export const parameters = z.object({
@@ -37,7 +38,7 @@ export async function execute(args: any) {
         .reduce((acc, item) => acc + item.count, 0);
 
       if (logsCount >= (num || 10)) {
-        bot.chat("Wood gathering complete!");
+        bot.chat(`Wood gathering complete! I have ${logsCount} logs.`);
         return;
       }
 
@@ -47,18 +48,13 @@ export async function execute(args: any) {
       });
 
       if (woodBlock) {
-        bot.pathfinder.setGoal(
-          new goals.GoalNear(
-            woodBlock.position.x,
-            woodBlock.position.y,
-            woodBlock.position.z,
-            2
-          )
+        const destination = await goToPosition(
+          woodBlock.position.x,
+          woodBlock.position.y,
+          woodBlock.position.z
         );
 
-        bot.once("goal_reached", async () => {
-          console.log("Reached the wood block.");
-
+        if (destination) {
           try {
             await bot.pathfinder.stop();
 
@@ -79,14 +75,14 @@ export async function execute(args: any) {
               console.log(`Digging the wood block at ${block.position}.`);
               await bot.dig(block);
               await pickupNearbyItems(bot);
-              await new Promise((resolve) => setTimeout(resolve, 2500)); // Add delay to simulate gathering
+              await __actionsDelay(); // Add delay to simulate gathering
             }
             gatherWood(); // Repeat the process
           } catch (digError) {
             console.error("Failed to dig the wood block:", digError);
             gatherWood();
           }
-        });
+        }
       } else {
         bot.chat("No wood blocks found nearby.");
       }
@@ -96,10 +92,4 @@ export async function execute(args: any) {
   } catch (error) {
     console.error("Error executing GatherWood action:", error);
   }
-}
-function Vec3(arg0: {
-  woodBlock: import("prismarine-block").Block;
-  "": any;
-}): import("vec3").Vec3 {
-  throw new Error("Function not implemented.");
 }

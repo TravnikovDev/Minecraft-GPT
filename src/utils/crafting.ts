@@ -23,10 +23,30 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
 
   if (!recipes || recipes.length === 0) {
     // Look for crafting table
-    if (!craftingTable) {
-      // Try to place crafting table
-      const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
-      if (hasTable) {
+    if (!recipes || recipes.length === 0) {
+      if (!craftingTable) {
+        const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
+        if (!hasTable) {
+          try {
+            const craftingTableRecipe = bot.recipesFor(
+              bot.registry.itemsByName["crafting_table"].id,
+              null,
+              1,
+              null
+            )[0];
+            if (craftingTableRecipe) {
+              await bot.craft(craftingTableRecipe, 1);
+              console.log("Bot: Crafted a crafting table.");
+            }
+          } catch (err) {
+            console.log(
+              `Failed to make and place a crafting table: ${
+                (err as Error).message
+              }`
+            );
+            return false;
+          }
+        }
         const pos = world.getNearestFreeSpace(bot, 1, 6);
         if (pos) {
           await placeBlock("crafting_table", pos.x, pos.y, pos.z);
@@ -41,28 +61,16 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
           "crafting_table",
           craftingTableRange
         );
-        if (craftingTable) {
-          recipes = bot.recipesFor(
-            gameData.getItemId(itemName),
-            null,
-            1,
-            craftingTable
-          );
-          placedTable = true;
-        }
-      } else {
-        console.log(
-          `You either do not have enough resources to craft ${itemName} or it requires a crafting table.`
-        );
-        return false;
+        placedTable = !!craftingTable;
       }
-    } else {
-      recipes = bot.recipesFor(
-        gameData.getItemId(itemName),
-        null,
-        1,
-        craftingTable
-      );
+      if (craftingTable) {
+        recipes = bot.recipesFor(
+          gameData.getItemId(itemName),
+          null,
+          1,
+          craftingTable
+        );
+      }
     }
   }
 

@@ -12,7 +12,7 @@ export function log(message: string, sendToChat = false): void {
 }
 
 // Utility function to introduce a delay
-export async function delay(ms: number): Promise<void> {
+export async function __actionsDelay(ms = 2500): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

@@ -61,7 +61,7 @@ export async function placeBlock(
     console.log(
       `${targetBlock.name} is in the way at ${targetBlock.position}.`
     );
-    const removed = await breakBlockAt(bot, x, y, z);
+    const removed = await breakBlockAt(x, y, z);
     if (!removed) {
       console.log(
         `Cannot place ${blockType} at ${targetBlock.position}: block in the way.`
@@ -150,7 +150,6 @@ export async function placeBlock(
   // Move closer if too far
   if (bot.entity.position.distanceTo(targetBlock.position) > 4.5) {
     await goToPosition(
-      bot,
       targetBlock.position.x,
       targetBlock.position.y,
       targetBlock.position.z,
@@ -196,7 +195,7 @@ export async function breakBlockAt(
   }
   if (block.name !== "air" && block.name !== "water" && block.name !== "lava") {
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
-      await goToPosition(bot, x, y, z, 4);
+      await goToPosition(x, y, z);
     }
     if (bot.game.gameMode !== "creative") {
       await bot.tool.equipForBlock(block);
@@ -207,8 +206,7 @@ export async function breakBlockAt(
       }
     }
     await bot.dig(block, true);
-    log(
-      bot,
+    console.log(
       `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(
         1
       )}, z:${z.toFixed(1)}.`
@@ -371,7 +369,7 @@ export async function tillAndSow(
   }
   // Move closer if too far
   if (bot.entity.position.distanceTo(block.position) > 4.5) {
-    await goToPosition(bot, x, y, z, 4);
+    await goToPosition(x, y, z, 4);
   }
   if (block.name !== "farmland") {
     const hoe = bot.inventory.items().find((item) => item.name.includes("hoe"));
@@ -421,7 +419,7 @@ export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
       new pf.goals.GoalFollow(nearestItem, 0.8),
       () => {}
     );
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     const prev = nearestItem;
     nearestItem = getNearestItem(bot);
     if (prev === nearestItem) {

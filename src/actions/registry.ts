@@ -18,6 +18,11 @@ import * as GoToPosition from "./GoToPosition";
 import * as GoToNearestBlock from "./GoToNearestBlock";
 import * as GatherWood from "./GatherWood";
 import * as CraftWoodenTools from "./CraftWoodenTools";
+import * as RandomMovement from "./RandomMovement";
+import * as EvaluateBaseLocation from "./EvaluateBaseLocation";
+import * as SetBaseLocation from "./SetBaseLocation";
+import * as SetBasement from "./SetBasement";
+import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
 
 type ActionModule = {
   parameters: any;
@@ -40,6 +45,11 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.Unstack]: Unstack,
   [BotActions.GatherWood]: GatherWood,
   [BotActions.CraftWoodenTools]: CraftWoodenTools,
+  [BotActions.RandomMovement]: RandomMovement,
+  [BotActions.EvaluateBaseLocation]: EvaluateBaseLocation,
+  [BotActions.SetBaseLocation]: SetBaseLocation,
+  [BotActions.SetBasement]: SetBasement,
+  [BotActions.DigDiagonalTunnel]: DigDiagonalTunnel,
 };
 
 // Extracting tools for use with validation (zodFunction)

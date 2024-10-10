@@ -16,6 +16,11 @@ enum BotActions {
   Unstack = "unstack",
   GatherWood = "gatherWood",
   CraftWoodenTools = "craftWoodenTools",
+  RandomMovement = "randomMovement",
+  EvaluateBaseLocation = "evaluateBaseLocation",
+  SetBaseLocation = "setBaseLocation",
+  SetBasement = "setBasement",
+  DigDiagonalTunnel = "digDiagonalTunnel",
 }
 
 // Type guard to check if a value is a valid BotActions
