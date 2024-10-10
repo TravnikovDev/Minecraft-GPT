@@ -15,6 +15,7 @@ export const parameters = z.object({
       sword: z.number(),
       shovel: z.number(),
     })
+    .optional()
     .describe("The number of each tool to craft."),
 });
 
@@ -29,7 +30,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { toolCount } = parsed.data;
+  let { toolCount } = parsed.data;
+  // Default values for toolCount
+  toolCount = toolCount || { pickaxe: 3, axe: 2, sword: 1, shovel: 1 };
 
   // Check for sufficient materials
   const requiredPlanks =

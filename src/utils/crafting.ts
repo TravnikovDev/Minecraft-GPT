@@ -20,57 +20,53 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
     craftingTableRange
   );
   let recipes = bot.recipesFor(gameData.getItemId(itemName), null, 1, null);
+  const pos = world.getNearestFreeSpace(bot, 1, 6);
+  const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
 
+  // Look for crafting table
   if (!recipes || recipes.length === 0) {
-    // Look for crafting table
-    if (!recipes || recipes.length === 0) {
-      if (!craftingTable) {
-        const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
-        if (!hasTable) {
-          try {
-            const craftingTableRecipe = bot.recipesFor(
-              bot.registry.itemsByName["crafting_table"].id,
-              null,
-              1,
-              null
-            )[0];
-            if (craftingTableRecipe) {
-              await bot.craft(craftingTableRecipe, 1);
-              console.log("Bot: Crafted a crafting table.");
-            }
-          } catch (err) {
-            console.log(
-              `Failed to make and place a crafting table: ${
-                (err as Error).message
-              }`
-            );
-            return false;
+    if (!craftingTable) {
+      if (!hasTable) {
+        try {
+          const craftingTableRecipe = bot.recipesFor(
+            bot.registry.itemsByName["crafting_table"].id,
+            null,
+            1,
+            null
+          )[0];
+          if (craftingTableRecipe) {
+            await bot.craft(craftingTableRecipe, 1);
           }
-        }
-        const pos = world.getNearestFreeSpace(bot, 1, 6);
-        if (pos) {
-          await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-        } else {
+        } catch (err) {
           console.log(
-            "No suitable position found to place the crafting table."
+            `Failed to make and place a crafting table: ${
+              (err as Error).message
+            }`
           );
           return false;
         }
-        craftingTable = world.getNearestBlock(
-          bot,
-          "crafting_table",
-          craftingTableRange
-        );
-        placedTable = !!craftingTable;
       }
-      if (craftingTable) {
-        recipes = bot.recipesFor(
-          gameData.getItemId(itemName),
-          null,
-          1,
-          craftingTable
-        );
+      console.log("Positioning crafting table...", pos?.x, pos?.y, pos?.z);
+      if (pos) {
+        await placeBlock("crafting_table", pos.x, pos.y, pos.z);
+      } else {
+        console.log("No suitable position found to place the crafting table.");
+        return false;
       }
+      craftingTable = world.getNearestBlock(
+        bot,
+        "crafting_table",
+        craftingTableRange
+      );
+      placedTable = !!craftingTable;
+    }
+    if (craftingTable) {
+      recipes = bot.recipesFor(
+        gameData.getItemId(itemName),
+        null,
+        1,
+        craftingTable
+      );
     }
   }
 

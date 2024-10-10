@@ -50,6 +50,7 @@ bot.once("spawn", () => {
 bot.on("chat", async (username, message) => {
   if (username === bot.username) return;
 
+  await bot.pathfinder.stop();
   initiateActionFromAI(username, message);
 });
 
