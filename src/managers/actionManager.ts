@@ -37,7 +37,7 @@ async function processAction(nextAction: ActionType) {
 // Execute Actions in Queue
 export async function executeActions() {
   const actions = await getAllActions();
-  console.log("- Executing actions in queue:", actions);
+  console.log("- Executing actions in queue...");
 
   if (actions.length === 0) {
     console.log("- No actions in queue. Attempting idle tasks...");

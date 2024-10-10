@@ -33,7 +33,8 @@ export async function execute(args: any) {
         targetPlayer.position.y,
         targetPlayer.position.z,
         closeness
-      )
+      ),
+      true
     );
     bot.chat(
       `Heading towards ${player_name}, getting ${closeness} blocks close.`

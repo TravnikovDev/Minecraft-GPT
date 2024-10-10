@@ -19,6 +19,8 @@ Here are some example commands you can understand and how to respond:
 - 'Go to player John': Use the GoToPlayer tool with player_name as John.
 - 'Defend yourself': Use the DefendSelf tool.
 - 'Stop': Use the StopMovement or StopCombat tool.
+- 'Make an wooden sword', 'Do you have any tools?', 'Make basic tools', 'Make a woden axe', 'Craft wooden pickaxe': 
+Use the CraftWoodenTools tool with 'sword' as the toolType. Default values are 2 for each tool.
 Important: 
 - Minimal distance for most of action is 25 blocks.
 

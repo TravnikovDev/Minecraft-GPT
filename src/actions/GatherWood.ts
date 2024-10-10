@@ -49,7 +49,7 @@ export async function execute(args: any) {
           console.log("Nearby wood blocks:", nearbyWoodBlocks);
           for (const block of nearbyWoodBlocks) {
             await bot.dig(block);
-            await new Promise((resolve) => setTimeout(resolve, 1000)); // Add delay to simulate gathering
+            await new Promise((resolve) => setTimeout(resolve, 2500)); // Add delay to simulate gathering
           }
           bot.chat("Wood gathered successfully!");
         } catch (digError) {

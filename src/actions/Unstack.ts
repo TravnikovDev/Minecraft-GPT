@@ -4,7 +4,7 @@ import { z } from "zod";
 import { BotActions } from "./types";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
-import { moveAway } from "../managers/movementManager";
+import { moveAway } from "../utils/movement";
 
 // Define parameters for the Unstack action
 export const parameters = z.object({

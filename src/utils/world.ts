@@ -1,3 +1,5 @@
+// src/utils/world.ts
+
 import { Block } from "prismarine-block";
 import { Movements, goals } from "mineflayer-pathfinder";
 import * as gameData from "./minecraftData";

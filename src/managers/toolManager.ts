@@ -11,7 +11,7 @@ export { tools };
 
 // Centralized function to execute a tool action
 export async function executeTool(action: string, args: any) {
-  console.log(`Executing tool action ${action} with args:`, args);
+  console.log(`Executing tool action ${action}`);
 
   // Validate that args contain the expected properties
   if (!args) {

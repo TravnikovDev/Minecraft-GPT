@@ -52,7 +52,7 @@ export async function saveDb() {
 // Add Action to Database
 export async function addActionToQueue(newAction: ActionType) {
   try {
-    console.log("Adding action to queue:", newAction);
+    console.log("Adding action to queue:", newAction.action);
     const parsedAction = ActionSchema.safeParse(newAction);
     if (!parsedAction.success) {
       throw new Error("Action validation failed: " + parsedAction.error);

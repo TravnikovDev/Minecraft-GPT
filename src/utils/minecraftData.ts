@@ -1,3 +1,5 @@
+// src/utils/minecraftData.ts
+
 import minecraftData, {
   Biome,
   ShapedRecipe,
@@ -95,8 +97,8 @@ export function getItemName(itemId: number): string {
 export function getBlockId(blockName: string): number {
   console.log(`getBlockId: ${blockName}`);
   console.log(gameData.blocksByName[blockName]);
-  const block = gameData.blocksByName[blockName];
-  return block.id || 0;
+  const block = gameData.blocksByName?.[blockName];
+  return block?.id || 0;
 }
 
 export function getBlockName(blockId: number): string {

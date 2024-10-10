@@ -2,7 +2,7 @@ import { Bot } from "mineflayer";
 import { z } from "zod";
 import { BotActions } from "./types";
 import { bot } from "../index";
-import { goToPosition } from "../managers/movementManager";
+import { goToPosition } from "../utils/movement";
 
 // Define parameters for the GoToBlock action
 export const parameters = z.object({
@@ -65,10 +65,10 @@ export async function execute(args: any) {
   }
 
   console.log(`Found ${blockType} at ${block.position}.`);
-  await goToPosition({
-    x: block.position.x,
-    y: block.position.y,
-    z: block.position.z,
-    minDistance: minDistance,
-  });
+  await goToPosition(
+    block.position.x,
+    block.position.y,
+    block.position.z,
+    minDistance
+  );
 }
