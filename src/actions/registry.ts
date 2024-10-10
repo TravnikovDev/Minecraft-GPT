@@ -23,6 +23,7 @@ import * as EvaluateBaseLocation from "./EvaluateBaseLocation";
 import * as SetBaseLocation from "./SetBaseLocation";
 import * as SetBasement from "./SetBasement";
 import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
+import * as PickupNearbyItems from "./PickupNearbyItems";
 
 type ActionModule = {
   parameters: any;
@@ -50,6 +51,7 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.SetBaseLocation]: SetBaseLocation,
   [BotActions.SetBasement]: SetBasement,
   [BotActions.DigDiagonalTunnel]: DigDiagonalTunnel,
+  [BotActions.PickupNearbyItems]: PickupNearbyItems,
 };
 
 // Extracting tools for use with validation (zodFunction)

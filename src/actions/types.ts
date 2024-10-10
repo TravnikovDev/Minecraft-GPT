@@ -21,6 +21,7 @@ enum BotActions {
   SetBaseLocation = "setBaseLocation",
   SetBasement = "setBasement",
   DigDiagonalTunnel = "digDiagonalTunnel",
+  PickupNearbyItems = "pickupNearbyItems",
 }
 
 // Type guard to check if a value is a valid BotActions

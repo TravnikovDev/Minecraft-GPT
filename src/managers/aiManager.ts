@@ -18,6 +18,11 @@ Here are some example commands you can understand and how to respond:
 - 'Gather wood': Use the GatherWood tool with '50' as the maxDistance.
 - 'Go to player John': Use the GoToPlayer tool with player_name as John.
 - 'Defend yourself': Use the DefendSelf tool.
+- 'Let's have a walk', 'Go somewhere else' or 'Go away': Use the RandomMovement tool.
+- 'Find a place for house/camp/hut/base': Use the EvaluateBaseLocation tool.
+- 'Lets build base here', 'Good place for base', 'Nice place to live': Use the SetBaseLocation tool.
+- 'Build a basement': Use the SetBasement tool.
+- 'Please build a tunnel', 'Let's mine', 'Build a mine': Use the DigDiagonalTunnel tool.
 - 'Stop': Use the StopMovement or StopCombat tool.
 - 'Make an wooden sword', 'Do you have any tools?', 'Make basic tools', 'Make a woden axe', 'Craft wooden pickaxe': 
 Use the CraftWoodenTools tool with 'sword' as the toolType. Default values are 2 for each tool.
