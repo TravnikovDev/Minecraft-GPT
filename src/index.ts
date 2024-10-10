@@ -49,10 +49,7 @@ bot.once("spawn", () => {
 bot.on("chat", async (username, message) => {
   if (username === bot.username) return;
 
-  const action = await initiateActionFromAI(username, message);
-  if (action) {
-    await executeActions();
-  }
+  initiateActionFromAI(username, message);
 });
 
 // Idle behavior: Always keep the bot busy

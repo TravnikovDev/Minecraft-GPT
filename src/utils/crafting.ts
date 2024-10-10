@@ -13,19 +13,18 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
 
   // Get recipes that don't require a crafting table
+  const craftingTableRange = 32;
+  let craftingTable = world.getNearestBlock(
+    bot,
+    "crafting_table",
+    craftingTableRange
+  );
   let recipes = bot.recipesFor(gameData.getItemId(itemName), null, 1, null);
-  let craftingTable;
 
   console.log("craftRecipe", recipes, craftingTable);
 
-  const craftingTableRange = 32;
   if (!recipes || recipes.length === 0) {
     // Look for crafting table
-    craftingTable = world.getNearestBlock(
-      bot,
-      "crafting_table",
-      craftingTableRange
-    );
     if (!craftingTable) {
       // Try to place crafting table
       const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
@@ -68,6 +67,7 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
       );
     }
   }
+
   if (!recipes || recipes.length === 0) {
     console.log(`You do not have the resources to craft a ${itemName}.`);
     if (placedTable) {

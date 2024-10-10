@@ -124,13 +124,8 @@ export async function executeToolCall(
 export async function initiateActionFromAI(
   username: string,
   message: string
-): Promise<boolean> {
+): Promise<void> {
   const { response, toolCall } = await handleOpenAIResponse(username, message);
-
-  if (response) {
-    bot.chat(response); // Send response to the game
-    return true;
-  }
 
   if (toolCall) {
     const toolAction = await executeToolCall(toolCall);
@@ -151,8 +146,6 @@ export async function initiateActionFromAI(
           args: toolAction.arguments,
         });
         // toolAction.action, 3, toolAction.arguments);
-
-        return true;
       } else {
         console.error(`Invalid action: ${toolAction.action}`);
       }
@@ -161,5 +154,7 @@ export async function initiateActionFromAI(
     }
   }
 
-  return false;
+  if (response) {
+    bot.chat(response); // Send response to the game
+  }
 }
