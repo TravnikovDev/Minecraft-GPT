@@ -10,10 +10,10 @@ import { BotActions } from "./types";
 export const parameters = z.object({
   toolCount: z
     .object({
-      pickaxe: z.number(),
-      axe: z.number(),
-      sword: z.number(),
-      shovel: z.number(),
+      pickaxe: z.number().optional(),
+      axe: z.number().optional(),
+      sword: z.number().optional(),
+      shovel: z.number().optional(),
     })
     .optional()
     .describe("The number of each tool to craft."),
@@ -34,77 +34,172 @@ export async function execute(args: any) {
   // Default values for toolCount
   toolCount = toolCount || { pickaxe: 3, axe: 2, sword: 1, shovel: 1 };
 
-  // Check for sufficient materials
-  const requiredPlanks =
-    12 *
-    Number(
-      toolCount.axe + toolCount.pickaxe + toolCount.shovel + toolCount.sword
-    ); // Minimum planks required for tools and crafting table
-  const requiredSticks =
-    8 *
-    Number(
-      toolCount.axe + toolCount.pickaxe + toolCount.shovel + toolCount.sword
-    ); // Minimum sticks required for tools
+  // Check existing tools in inventory and adjust toolCount
+  const existingToolCounts = {
+    pickaxe: 0,
+    axe: 0,
+    sword: 0,
+    shovel: 0,
+  };
 
-  const planksCount = await bot.inventory
+  bot.inventory.items().forEach((item) => {
+    if (item.name === "wooden_pickaxe") {
+      existingToolCounts.pickaxe += item.count;
+    } else if (item.name === "wooden_axe") {
+      existingToolCounts.axe += item.count;
+    } else if (item.name === "wooden_sword") {
+      existingToolCounts.sword += item.count;
+    } else if (item.name === "wooden_shovel") {
+      existingToolCounts.shovel += item.count;
+    }
+  });
+
+  // Adjust the toolCount based on existing tools
+  toolCount.pickaxe = Math.max(
+    0,
+    (toolCount.pickaxe || 0) - existingToolCounts.pickaxe
+  );
+  toolCount.axe = Math.max(0, (toolCount.axe || 0) - existingToolCounts.axe);
+  toolCount.sword = Math.max(
+    0,
+    (toolCount.sword || 0) - existingToolCounts.sword
+  );
+  toolCount.shovel = Math.max(
+    0,
+    (toolCount.shovel || 0) - existingToolCounts.shovel
+  );
+
+  // If no tools need to be crafted, exit
+  if (
+    toolCount.pickaxe === 0 &&
+    toolCount.axe === 0 &&
+    toolCount.sword === 0 &&
+    toolCount.shovel === 0
+  ) {
+    console.log("Bot: Already have all the required tools.");
+    return;
+  }
+
+  // Calculate required materials based on adjusted toolCount
+  const requiredPlanks =
+    toolCount.pickaxe * 3 +
+    toolCount.axe * 3 +
+    toolCount.shovel * 1 +
+    toolCount.sword * 2;
+
+  const requiredSticks =
+    toolCount.pickaxe * 2 +
+    toolCount.axe * 2 +
+    toolCount.shovel * 2 +
+    toolCount.sword * 1;
+
+  // Additional planks needed for sticks
+  const planksNeededForSticks = Math.ceil(requiredSticks / 4) * 2; // Each 2 planks crafts 4 sticks
+  const totalPlanksNeeded = requiredPlanks + planksNeededForSticks;
+
+  // Check for existing materials
+  let planksCount = bot.inventory
     .items()
-    .filter((item) => item.name.includes("plank"))
+    .filter((item) => item.name.includes("planks"))
     .reduce((acc, item) => acc + item.count, 0);
-  const sticksCount = await bot.inventory
+
+  let sticksCount = bot.inventory
     .items()
     .filter((item) => item.name.includes("stick"))
     .reduce((acc, item) => acc + item.count, 0);
 
   console.log(
     "Required planks:",
-    requiredPlanks,
-    " and sticks:",
+    totalPlanksNeeded,
+    "and sticks:",
     requiredSticks
   );
   console.log("Planks count:", planksCount);
   console.log("Sticks count:", sticksCount);
 
-  // Check for sufficient materials and craft if needed
-  if (planksCount < requiredPlanks) {
-    const logsCount = await bot.inventory
+  // Check if we need to craft more planks
+  if (planksCount < totalPlanksNeeded) {
+    const planksShortage = totalPlanksNeeded - planksCount;
+
+    // Check for logs to craft planks
+    const logsCount = bot.inventory
       .items()
       .filter((item) => item.name.includes("log"))
       .reduce((acc, item) => acc + item.count, 0);
-    const logsNeeded = Math.ceil((requiredPlanks - planksCount) / 4); // 1 log crafts 4 planks
+    const logsNeeded = Math.ceil(planksShortage / 4); // 1 log crafts 4 planks
 
     console.log("Logs count:", logsCount, " and logs needed:", logsNeeded);
 
     if (logsCount < logsNeeded) {
       console.log("Bot: Not enough logs to craft the required planks.");
       addActionToQueue({
-        id: "gatherWood-" + logsNeeded,
+        id: "gatherWood-" + (logsNeeded - logsCount),
         action: BotActions.GatherWood,
         priority: 7,
-        args: { maxDistance: 100, num: logsNeeded },
+        args: { maxDistance: 100, num: logsNeeded - logsCount },
       });
       return;
     }
-    await craftRecipe("oak_planks", requiredPlanks);
+
+    await craftRecipe("oak_planks", planksShortage);
+    planksCount += planksShortage;
   }
 
+  // Now we should have enough planks
+  // Check if we need to craft sticks
   if (sticksCount < requiredSticks) {
-    const planksNeededForSticks = Math.ceil((requiredSticks - sticksCount) / 4); // 2 planks craft 4 sticks
-    const newPlanksCount = await bot.inventory
-      .items()
-      .filter((item) => item.name.includes("plank"))
-      .reduce((acc, item) => acc + item.count, 0);
-    if (newPlanksCount < planksNeededForSticks) {
-      console.log("Bot: Not enough planks to craft the required sticks.");
-      return;
+    const sticksShortage = requiredSticks - sticksCount;
+    const planksAvailableForSticks = planksCount - requiredPlanks;
+
+    const planksNeededForSticks = Math.ceil(sticksShortage / 4) * 2;
+
+    if (planksAvailableForSticks < planksNeededForSticks) {
+      const additionalPlanksNeeded =
+        planksNeededForSticks - planksAvailableForSticks;
+
+      // Check for logs to craft additional planks
+      const logsCount = bot.inventory
+        .items()
+        .filter((item) => item.name.includes("log"))
+        .reduce((acc, item) => acc + item.count, 0);
+      const logsNeeded = Math.ceil(additionalPlanksNeeded / 4); // 1 log crafts 4 planks
+
+      if (logsCount < logsNeeded) {
+        console.log(
+          "Bot: Not enough logs to craft the required planks for sticks."
+        );
+        addActionToQueue({
+          id: "gatherWood-" + (logsNeeded - logsCount),
+          action: BotActions.GatherWood,
+          priority: 7,
+          args: { maxDistance: 100, num: logsNeeded - logsCount },
+        });
+        return;
+      }
+
+      await craftRecipe("oak_planks", additionalPlanksNeeded);
+      planksCount += additionalPlanksNeeded;
     }
-    await craftRecipe("stick", requiredSticks);
+
+    // Now craft sticks
+    await craftRecipe("stick", sticksShortage);
+    sticksCount += sticksShortage;
+    planksCount -= planksNeededForSticks;
   }
 
-  // Craft each tool
-  toolCount.pickaxe && (await craftRecipe("wooden_pickaxe", toolCount.pickaxe));
-  toolCount.axe && (await craftRecipe("wooden_axe", toolCount.axe));
-  toolCount.sword && (await craftRecipe("wooden_sword", toolCount.sword));
-  toolCount.shovel && (await craftRecipe("wooden_shovel", toolCount.shovel));
+  // Now we have enough materials to craft the tools
+  if (toolCount.pickaxe) {
+    await craftRecipe("wooden_pickaxe", toolCount.pickaxe);
+  }
+  if (toolCount.axe) {
+    await craftRecipe("wooden_axe", toolCount.axe);
+  }
+  if (toolCount.sword) {
+    await craftRecipe("wooden_sword", toolCount.sword);
+  }
+  if (toolCount.shovel) {
+    await craftRecipe("wooden_shovel", toolCount.shovel);
+  }
 
-  console.log("Bot: All basic wooden tools have been crafted!");
+  console.log("Bot: All required wooden tools have been crafted!");
 }

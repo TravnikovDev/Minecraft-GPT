@@ -9,6 +9,7 @@ import {
 } from "../utils/worldInteraction";
 import { craftRecipe } from "../utils/crafting";
 import { __actionsDelay } from "../utils/utility";
+import { Vec3 } from "vec3";
 
 // Define parameters for DigDirectionalTunnel action
 export const parameters = z.object({
@@ -45,6 +46,7 @@ export async function execute(args: any) {
   depth = depth || 10;
   torchInterval = torchInterval || 12;
   tunnelSize = tunnelSize || { width: 3, height: 4 };
+  direction = direction || "north";
 
   let reachedEnd = false;
 
@@ -53,89 +55,61 @@ export async function execute(args: any) {
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
 
   // Dig the tunnel
-  for (let i = 1; i <= depth; i++) {
-    const basePosition = startPosition.offset(i * offsetX, -i, i * offsetZ);
+  for (let w = 0; w < tunnelSize.width; w++) {
+    // Width offsets based on direction
+    const wOffsetX = direction === "north" || direction === "south" ? w : 0;
+    const wOffsetZ = direction === "east" || direction === "west" ? w : 0;
 
-    console.log(`Digging tunnel at ${basePosition.toString()}`);
+    for (let i = 1; i <= depth; i++) {
+      const basePosition = startPosition.offset(
+        wOffsetX + i * offsetX,
+        -i,
+        wOffsetZ + i * offsetZ
+      );
 
-    // Dig the area for the tunnel
-    for (let w = 0; w < tunnelSize.width; w++) {
+      console.log(`Digging at ${basePosition.toString()}`);
+
+      // Dig the area for the tunnel
       for (let h = 0; h < tunnelSize.height; h++) {
-        console.log(
-          `Digging at ${basePosition.offset(
-            w - Math.floor(tunnelSize.width / 2),
-            h,
-            0
-          )}`
-        );
-        const digPosition =
-          direction === "north" || direction === "south"
-            ? basePosition.offset(w - Math.floor(tunnelSize.width / 2), h, 0) // width offset on x-axis
-            : basePosition.offset(0, h, w - Math.floor(tunnelSize.width / 2)); // width offset on z-axis
+        const digPosition = basePosition.offset(0, h, 0);
 
         const digResult = await breakBlockAt(
           digPosition.x,
           digPosition.y,
           digPosition.z
         );
-        __actionsDelay(digResult ? 3500 : 500);
+        await __actionsDelay(digResult ? 3500 : 500);
       }
+
       await pickupNearbyItems(bot);
-    }
 
-    // Place torch every `torchInterval` blocks
-    if (i % torchInterval === 0) {
-      const torchPosition = basePosition.offset(1, 1, 0); // Offset for wall placement
-      const torch = bot.inventory.items().find((item) => item.name === "torch");
-      if (torch) {
-        const torchBlock = bot.blockAt(torchPosition);
-        if (torchBlock) {
-          await placeBlock(
-            "wall_torch",
-            torchPosition.x,
-            torchPosition.y,
-            torchPosition.z,
-            "side"
-          );
+      // Place torch every `torchInterval` blocks
+      if (i % torchInterval === 0 && w === Math.floor(tunnelSize.width / 2)) {
+        const torchPosition = basePosition.offset(0, 1, 0);
+        const torch = bot.inventory
+          .items()
+          .find((item) => item.name === "torch");
+        if (torch) {
+          const torchBlock = bot.blockAt(torchPosition);
+          if (torchBlock) {
+            await placeBlock(
+              "wall_torch",
+              torchPosition.x,
+              torchPosition.y,
+              torchPosition.z,
+              "side"
+            );
+          }
+          bot.chat(`Placed torch at ${torchPosition.toString()}`);
+        } else {
+          console.log("No torches found in inventory.");
+          // TODO: Craft torches
         }
-        bot.chat(`Placed torch at ${torchPosition.toString()}`);
-      } else {
-        console.log("No torches found in inventory.");
-        // TODO: Craft torches
       }
     }
   }
 
-  // Place crafting table at the end of the tunnel
-  if (!reachedEnd) {
-    const endPosition = startPosition.offset(
-      depth * offsetX,
-      -depth,
-      depth * offsetZ
-    );
-    const craftingTable = bot.inventory
-      .items()
-      .find((item) => item.name === "crafting_table");
-    if (craftingTable) {
-      const endBlock = bot.blockAt(endPosition);
-      if (endBlock) {
-        await placeBlock(
-          "crafting_table",
-          endPosition.x,
-          endPosition.y,
-          endPosition.z,
-          "bottom"
-        );
-      } else {
-        bot.chat(
-          `Cannot place crafting table, no block found at ${endPosition.toString()}`
-        );
-      }
-      bot.chat("Placed crafting table at the end of the tunnel.");
-    }
-  }
-
-  const cobblestoneCount = await bot.inventory
+  const cobblestoneCount = bot.inventory
     .items()
     .filter((item) => item.name.includes("cobblestone"))
     .reduce((acc, item) => acc + item.count, 0);
@@ -144,36 +118,46 @@ export async function execute(args: any) {
   const cobblestonesNeeded = Math.ceil(stairsNeeded / 0.66);
 
   if (cobblestoneCount >= cobblestonesNeeded) {
-    craftRecipe("cobblestone_stairs", stairsNeeded);
+    await craftRecipe("cobblestone_stairs", stairsNeeded);
     bot.chat(`Crafted ${stairsNeeded} cobblestone stairs.`);
   } else {
     bot.chat(
-      `Not enough cobblestone! I have ${cobblestoneCount} and I need ${cobblestonesNeeded} block.`
+      `Not enough cobblestone! I have ${cobblestoneCount} and I need ${cobblestonesNeeded} blocks.`
     );
     // TODO: gatherCobblestone(cobblestonesNeeded - cobblestoneCount)
   }
 
   // Place stairs along the tunnel path
   for (let i = 1; i <= depth; i++) {
-    const stairPosition = startPosition.offset(i * offsetX, -i, i * offsetZ);
-    const stairs = bot.inventory
-      .items()
-      .find((item) => item.name === "cobblestone_stairs");
-    if (stairs) {
-      const stairBlock = bot.blockAt(stairPosition);
-      if (stairBlock) {
-        await placeBlock(
-          "cobblestone_stairs",
-          stairPosition.x,
-          stairPosition.y,
-          stairPosition.z,
-          "bottom"
-        );
-        bot.chat(`Placed cobblestone stair at ${stairPosition.toString()}`);
-      } else {
-        bot.chat(
-          `Cannot place stair, no block found at ${stairPosition.toString()}`
-        );
+    for (let w = 0; w < tunnelSize.width; w++) {
+      const wOffsetX = direction === "north" || direction === "south" ? w : 0;
+      const wOffsetZ = direction === "east" || direction === "west" ? w : 0;
+
+      const stairPosition = startPosition.offset(
+        wOffsetX + i * offsetX,
+        -i,
+        wOffsetZ + i * offsetZ
+      );
+
+      const stairs = bot.inventory
+        .items()
+        .find((item) => item.name === "cobblestone_stairs");
+      if (stairs) {
+        const stairBlock = bot.blockAt(stairPosition);
+        if (stairBlock) {
+          await placeBlock(
+            "cobblestone_stairs",
+            stairPosition.x,
+            stairPosition.y,
+            stairPosition.z,
+            "bottom"
+          );
+          bot.chat(`Placed cobblestone stair at ${stairPosition.toString()}`);
+        } else {
+          bot.chat(
+            `Cannot place stair, no block found at ${stairPosition.toString()}`
+          );
+        }
       }
     }
   }

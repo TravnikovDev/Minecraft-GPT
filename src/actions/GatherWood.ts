@@ -64,7 +64,6 @@ export async function execute(args: any) {
               7
             );
             console.log(`Found ${nearbyWoodBlocks.length} wood blocks nearby.`);
-            console.log(nearbyWoodBlocks);
 
             for (const block of nearbyWoodBlocks) {
               console.log(`Digging the wood block at ${block.position}.`);
