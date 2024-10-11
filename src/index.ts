@@ -2,7 +2,11 @@
 
 import mineflayer from "mineflayer";
 import { config } from "dotenv";
-import { addActionToQueue, loadDb } from "./managers/persistenceManager";
+import {
+  addActionToQueue,
+  loadDb,
+  getAllActions,
+} from "./managers/persistenceManager";
 import { executeActions } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
@@ -55,12 +59,17 @@ bot.on("chat", async (username, message) => {
 });
 
 bot.on("health", () => {
-  addActionToQueue({
-    id: "defend-self",
-    action: BotActions.DefendSelf,
-    priority: 9,
-    args: { range: 25 },
-  });
+  const existingAction = getAllActions().find(
+    (action) => action.id === "defend-self"
+  );
+  if (!existingAction) {
+    addActionToQueue({
+      id: "defend-self",
+      action: BotActions.DefendSelf,
+      priority: 9,
+      args: { range: 25 },
+    });
+  }
 });
 
 bot.on("respawn", () => {

@@ -24,10 +24,16 @@ import * as SetBaseLocation from "./SetBaseLocation";
 import * as SetBasement from "./SetBasement";
 import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
 import * as PickupNearbyItems from "./PickupNearbyItems";
+import * as BuildStoneHouse from "./BuildStoneHouse";
+import * as BuildBridge from "./BuildBridge";
+import * as CraftBackupTools from "./CraftBackupTools";
+import * as FindAndRememberNearChest from "./FindAndRememberNearChest";
+import * as ReturnToBase from "./ReturnToBase";
 
 type ActionModule = {
   parameters: any;
   execute: (args: any) => Promise<void>;
+  description: string;
 };
 
 // Creating an action registry by using the filename as a key
@@ -52,6 +58,11 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.SetBasement]: SetBasement,
   [BotActions.DigDiagonalTunnel]: DigDiagonalTunnel,
   [BotActions.PickupNearbyItems]: PickupNearbyItems,
+  [BotActions.BuildStoneHouse]: BuildStoneHouse,
+  [BotActions.BuildBridge]: BuildBridge,
+  [BotActions.CraftBackupTools]: CraftBackupTools,
+  [BotActions.FindAndRememberNearChest]: FindAndRememberNearChest,
+  [BotActions.ReturnToBase]: ReturnToBase,
 };
 
 // Extracting tools for use with validation (zodFunction)
@@ -60,5 +71,6 @@ export const availableActions = Object.entries(actionRegistry).map(
     zodFunction({
       name: actionName,
       parameters: action.parameters,
+      description: action.description,
     })
 );

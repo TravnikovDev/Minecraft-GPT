@@ -7,9 +7,15 @@ import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
 import { Bot } from "mineflayer";
 
+export const description = `The user asks the bot to avoid enemies within a certain distance. The bot will move away from 
+hostile mobs to maintain a safe distance. Example: "Avoid enemies within 10 blocks.", "Keep away from the zombies"`;
+
 // Define parameters for the AvoidEnemies action
 export const parameters = z.object({
-  distance: z.number().describe("The distance to maintain from enemies."),
+  distance: z
+    .number()
+    .optional()
+    .describe("The distance to maintain from enemies."),
 });
 
 // Register the action with zodFunction for validation
@@ -66,7 +72,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { distance } = parsed.data;
+  let { distance } = parsed.data;
+  distance = distance || 20; // Default distance to maintain
+
   let enemy = getNearestEntityWhere(
     bot,
     (entity: Entity) => isHostile(entity),

@@ -4,10 +4,12 @@ import { z } from "zod";
 import { bot } from "../index";
 import { Entity } from "prismarine-entity";
 
+export const description = `Then user asks the bot to attack the nearest mob of a given type.  The bot will search for the
+ nearest mob of the given type and attack it. Example: "Attack the nearest zombie.", "Please hit the nearest creeper."`;
+
 // Define parameters for the AttackNearest action
 export const parameters = z.object({
-  mobType: z.string().describe("The type of mob to attack."),
-  kill: z.boolean().describe("Whether to kill the mob or just attack it."),
+  mobType: z.string().optional().describe("The type of mob to attack."),
 });
 
 // Implement the AttackNearest action
@@ -21,7 +23,7 @@ export async function execute(args: any) {
     return;
   }
 
-  const { mobType, kill } = parsed.data;
+  const { mobType } = parsed.data;
 
   // Find the nearest mob of the given type
   const entities: Entity[] = Object.values(bot.entities).filter(

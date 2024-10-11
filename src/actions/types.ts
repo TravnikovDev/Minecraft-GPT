@@ -22,6 +22,11 @@ enum BotActions {
   SetBasement = "setBasement",
   DigDiagonalTunnel = "digDiagonalTunnel",
   PickupNearbyItems = "pickupNearbyItems",
+  BuildBridge = "buildBridge",
+  BuildStoneHouse = "buildStoneHouse",
+  CraftBackupTools = "craftBackupTools",
+  FindAndRememberNearChest = "findAndRememberNearChest",
+  ReturnToBase = "returnToBase",
 }
 
 // Type guard to check if a value is a valid BotActions

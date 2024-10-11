@@ -148,3 +148,67 @@ export async function giveToPlayer(
   await discard(itemType, num);
   return true;
 }
+
+export async function listInventory(): Promise<void> {
+  const items = bot.inventory.items();
+  if (items.length === 0) {
+    console.log(`Your inventory is empty.`);
+  } else {
+    console.log(`Your inventory contains:`);
+    for (const item of items) {
+      console.log(`${item.count} ${item.name}`);
+    }
+  }
+}
+
+export function checkFreeSpace(): number {
+  const totalSlots = bot.inventory.slots.length;
+  const usedSlots = bot.inventory.items().length;
+  const freeSlots = totalSlots - usedSlots;
+  console.log(`You have ${freeSlots} free slots in your inventory.`);
+  return freeSlots;
+}
+
+export async function transferAllToChest(): Promise<boolean> {
+  const chest = world.getNearestBlock(bot, "chest", 32);
+  if (!chest) {
+    console.log(`Could not find a chest nearby.`);
+    return false;
+  }
+  await goToPosition(chest.position.x, chest.position.y, chest.position.z);
+  const chestContainer = await bot.openContainer(chest);
+
+  for (const item of bot.inventory.items()) {
+    await chestContainer.deposit(item.type, null, item.count);
+    console.log(`Put ${item.count} ${item.name} in the chest.`);
+  }
+  await chestContainer.close();
+  return true;
+}
+
+export function getItemCount(itemName: string): number {
+  const item = bot.inventory.items().find((item) => item.name === itemName);
+  if (item) {
+    console.log(`You have ${item.count} ${itemName} in your inventory.`);
+    return item.count;
+  } else {
+    console.log(`You do not have any ${itemName} in your inventory.`);
+    return 0;
+  }
+}
+
+export async function organizeInventory(): Promise<void> {
+  const items = bot.inventory.items();
+  if (items.length === 0) {
+    console.log(`Inventory is empty, nothing to organize.`);
+    return;
+  }
+
+  for (const item of items) {
+    await bot.moveSlotItem(
+      item.slot,
+      bot.inventory.findInventoryItem(item.type, null, false)?.slot ?? item.slot
+    );
+  }
+  console.log(`Inventory has been organized.`);
+}

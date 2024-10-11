@@ -2,8 +2,7 @@
 
 import { z } from "zod";
 import { BotActions } from "./types";
-import { bot } from "../index";
-import { goals, Movements } from "mineflayer-pathfinder";
+import { goToPosition } from "../utils/movement";
 
 // Define parameters for the GoToPosition action
 export const parameters = z.object({
@@ -37,12 +36,5 @@ export async function execute(args: any) {
 
   const { x, y, z, minDistance } = parsed.data;
 
-  // Set goal using pathfinder
-  bot.pathfinder.setMovements(new Movements(bot));
-  try {
-    await bot.pathfinder.goto(new goals.GoalNear(x, y, z, minDistance ?? 50));
-    console.log(`You have reached ${x}, ${y}, ${z}.`);
-  } catch (error) {
-    console.error(`Failed to reach ${x}, ${y}, ${z}:`, error);
-  }
+  goToPosition(x, y, z, minDistance);
 }

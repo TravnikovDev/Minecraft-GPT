@@ -10,7 +10,6 @@
     "mineflayer-statemachine": "^1.7.0",
     "mineflayer-tool": "^1.2.0",
     "openai": "^4.67.2",
-    "redis": "^4.7.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
