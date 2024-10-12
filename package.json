@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "tsc": "tsc --noEmit"
+  },
   "dependencies": {
     "lowdb": "^7.0.1",
     "mineflayer": "^4.20.1",
@@ -14,6 +18,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.11",
     "@types/node": "^22.7.5",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.6.2"
