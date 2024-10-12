@@ -55,12 +55,12 @@ export async function execute(args: any) {
 }
 
 // Event listener for death
-bot.on("death", () => {
-  console.log("Bot has died. Respawning...");
-  bot.once("respawn", () => {
-    bot.chat("I've respawned. Heading back to base.");
-    execute({
-      baseLocation: { x: 100, y: 64, z: 100 }, // Replace with actual base coordinates
-    }); // Replace with actual base coordinates
-  });
-});
+// bot.on("death", () => {
+//   console.log("Bot has died. Respawning...");
+//   bot.once("respawn", () => {
+//     bot.chat("I've respawned. Heading back to base.");
+//     execute({
+//       baseLocation: { x: 100, y: 64, z: 100 }, // Replace with actual base coordinates
+//     }); // Replace with actual base coordinates
+//   });
+// });

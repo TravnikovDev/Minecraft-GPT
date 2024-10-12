@@ -6,9 +6,6 @@ import { Entity } from "prismarine-entity";
 import { z } from "zod";
 import { getAttackDamage } from "../utils/utility";
 
-// Load PVP plugin
-bot.loadPlugin(pvp);
-
 // Define combat parameters schema
 const combatParametersSchema = z.object({
   entityType: z.string().describe("The type of entity to attack."),
@@ -79,7 +76,7 @@ function isHostile(entity: Entity): boolean {
     "enderman",
     "pillager",
   ];
-  return hostileMobs.includes(entity.name);
+  return entity.name !== undefined && hostileMobs.includes(entity.name);
 }
 
 // Stop Combat

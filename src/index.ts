@@ -67,7 +67,7 @@ bot.on("health", () => {
       id: "defend-self",
       action: BotActions.DefendSelf,
       priority: 9,
-      args: { range: 25 },
+      args: { range: 5 },
     });
   }
 });

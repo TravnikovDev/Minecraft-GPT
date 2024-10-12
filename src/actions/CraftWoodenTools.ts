@@ -126,11 +126,12 @@ export async function execute(args: any) {
     const planksShortage = totalPlanksNeeded - planksCount;
 
     // Check for logs to craft planks
-    const logsCount = bot.inventory
+    const logs = bot.inventory
       .items()
-      .filter((item) => item.name.includes("log"))
-      .reduce((acc, item) => acc + item.count, 0);
+      .filter((item) => item.name.includes("log"));
+    const logsCount = logs.reduce((acc, item) => acc + item.count, 0);
     const logsNeeded = Math.ceil(planksShortage / 4); // 1 log crafts 4 planks
+    const woodType = logs[0].name.split("_")[0]; // e.g., "oak_log" -> "oak"
 
     console.log("Logs count:", logsCount, " and logs needed:", logsNeeded);
 
@@ -145,7 +146,7 @@ export async function execute(args: any) {
       return;
     }
 
-    await craftRecipe("oak_planks", planksShortage);
+    await craftRecipe(`${woodType}_planks`, planksShortage);
     planksCount += planksShortage;
   }
 
@@ -162,11 +163,12 @@ export async function execute(args: any) {
         planksNeededForSticks - planksAvailableForSticks;
 
       // Check for logs to craft additional planks
-      const logsCount = bot.inventory
+      const logs = bot.inventory
         .items()
-        .filter((item) => item.name.includes("log"))
-        .reduce((acc, item) => acc + item.count, 0);
+        .filter((item) => item.name.includes("log"));
+      const logsCount = logs.reduce((acc, item) => acc + item.count, 0);
       const logsNeeded = Math.ceil(additionalPlanksNeeded / 4); // 1 log crafts 4 planks
+      const woodType = logs[0].name.split("_")[0]; // e.g., "oak_log" -> "oak"
 
       if (logsCount < logsNeeded) {
         console.log(
@@ -181,7 +183,7 @@ export async function execute(args: any) {
         return;
       }
 
-      await craftRecipe("oak_planks", additionalPlanksNeeded);
+      await craftRecipe(`${woodType}_planks`, additionalPlanksNeeded);
       planksCount += additionalPlanksNeeded;
     }
 

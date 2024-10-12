@@ -12,7 +12,6 @@ enum BotActions {
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",
   GoToPosition = "goToPosition",
-  GoToNearestBlock = "goToNearestBlock",
   Unstack = "unstack",
   GatherWood = "gatherWood",
   CraftWoodenTools = "craftWoodenTools",
@@ -22,9 +21,7 @@ enum BotActions {
   SetBasement = "setBasement",
   DigDiagonalTunnel = "digDiagonalTunnel",
   PickupNearbyItems = "pickupNearbyItems",
-  BuildBridge = "buildBridge",
   BuildStoneHouse = "buildStoneHouse",
-  CraftBackupTools = "craftBackupTools",
   FindAndRememberNearChest = "findAndRememberNearChest",
   ReturnToBase = "returnToBase",
 }

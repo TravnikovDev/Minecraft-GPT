@@ -15,7 +15,6 @@ import * as AvoidEnemies from "./AvoidEnemies";
 import * as Unstack from "./Unstack";
 import * as EquipBestWeapon from "./EquipBestWeapon";
 import * as GoToPosition from "./GoToPosition";
-import * as GoToNearestBlock from "./GoToNearestBlock";
 import * as GatherWood from "./GatherWood";
 import * as CraftWoodenTools from "./CraftWoodenTools";
 import * as RandomMovement from "./RandomMovement";
@@ -25,8 +24,6 @@ import * as SetBasement from "./SetBasement";
 import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
 import * as PickupNearbyItems from "./PickupNearbyItems";
 import * as BuildStoneHouse from "./BuildStoneHouse";
-import * as BuildBridge from "./BuildBridge";
-import * as CraftBackupTools from "./CraftBackupTools";
 import * as FindAndRememberNearChest from "./FindAndRememberNearChest";
 import * as ReturnToBase from "./ReturnToBase";
 
@@ -48,7 +45,6 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.AvoidEnemies]: AvoidEnemies,
   [BotActions.EquipBestWeapon]: EquipBestWeapon,
   [BotActions.GoToPosition]: GoToPosition,
-  [BotActions.GoToNearestBlock]: GoToNearestBlock,
   [BotActions.Unstack]: Unstack,
   [BotActions.GatherWood]: GatherWood,
   [BotActions.CraftWoodenTools]: CraftWoodenTools,
@@ -59,8 +55,6 @@ export const actionRegistry: Record<BotActions, ActionModule> = {
   [BotActions.DigDiagonalTunnel]: DigDiagonalTunnel,
   [BotActions.PickupNearbyItems]: PickupNearbyItems,
   [BotActions.BuildStoneHouse]: BuildStoneHouse,
-  [BotActions.BuildBridge]: BuildBridge,
-  [BotActions.CraftBackupTools]: CraftBackupTools,
   [BotActions.FindAndRememberNearChest]: FindAndRememberNearChest,
   [BotActions.ReturnToBase]: ReturnToBase,
 };
