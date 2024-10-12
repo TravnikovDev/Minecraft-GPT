@@ -16,7 +16,7 @@ import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { BotActions } from "./actions/types";
+import { BotCommands } from "./actions/types";
 
 // Load environment variables
 config();
@@ -65,7 +65,7 @@ bot.on("health", () => {
   if (!existingAction) {
     addActionToQueue({
       id: "defend-self",
-      action: BotActions.DefendSelf,
+      action: BotCommands.DefendSelf,
       priority: 9,
       args: { range: 5 },
     });
@@ -75,7 +75,7 @@ bot.on("health", () => {
 bot.on("respawn", () => {
   addActionToQueue({
     id: "respawn",
-    action: BotActions.GoToPlayer,
+    action: BotCommands.GoToPlayer,
     priority: 10,
   });
 });

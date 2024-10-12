@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { BotActions } from "../actions/types";
+import { BotCommands } from "../actions/types";
 
 // Define action validation schema
 export const ActionSchema = z.object({
   id: z.string(),
-  action: z.nativeEnum(BotActions),
+  action: z.nativeEnum(BotCommands),
   args: z.any(),
   priority: z.number().min(1).max(10),
 });

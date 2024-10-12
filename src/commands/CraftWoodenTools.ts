@@ -4,7 +4,7 @@ import { z } from "zod";
 import { bot } from "../index";
 import { craftRecipe } from "../utils/crafting";
 import { addActionToQueue } from "../managers/persistenceManager";
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 
 export const description = `Important action to build initial tools for the bot. User can specify the number of each tool to craft. 
 If no parameters are provided, the bot will craft 3 pickaxes, 2 axes, 1 sword, and 1 shovel. Example usage: 
@@ -140,7 +140,7 @@ export async function execute(args: any) {
       // TODO: Move to actions
       addActionToQueue({
         id: "gatherWood-" + (logsNeeded - logsCount),
-        action: BotActions.GatherWood,
+        action: BotCommands.GatherWood,
         priority: 7,
         args: { maxDistance: 100, num: logsNeeded - logsCount },
       });
@@ -177,7 +177,7 @@ export async function execute(args: any) {
         );
         addActionToQueue({
           id: "gatherWood-" + (logsNeeded - logsCount),
-          action: BotActions.GatherWood,
+          action: BotCommands.GatherWood,
           priority: 7,
           args: { maxDistance: 100, num: logsNeeded - logsCount },
         });

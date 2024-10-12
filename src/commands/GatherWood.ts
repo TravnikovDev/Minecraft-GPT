@@ -7,7 +7,7 @@ import { breakBlockAt, pickupNearbyItems } from "../utils/worldInteraction";
 import { goToPosition } from "../utils/movement";
 import { __actionsDelay } from "../utils/utility";
 import { addActionToQueue } from "../managers/persistenceManager";
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 
 export const description = `When user asks the bot to gather wood, the bot will search for wood blocks nearby and gather them.
 The bot will continue gathering wood until the specified number of logs is reached. Example: "Gather wood", "Collect some logs".
@@ -44,7 +44,7 @@ export async function execute(args: any) {
     if (!hasAxe) {
       addActionToQueue({
         id: "craft wooden axe",
-        action: BotActions.CraftWoodenTools,
+        action: BotCommands.CraftWoodenTools,
         priority: 9,
         args: {
           toolCount: {

@@ -1,7 +1,7 @@
 // Path: src/actions/AvoidEnemies.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
@@ -19,7 +19,7 @@ export const parameters = z.object({
 
 // Register the action with zodFunction for validation
 export const AvoidEnemiesFunction = {
-  name: BotActions.AvoidEnemies,
+  name: BotCommands.AvoidEnemies,
   parameters: parameters,
 };
 

@@ -9,7 +9,7 @@ import * as CollectBlocks from "./CollectBlocks";
 import * as AttackNearest from "./AttackNearest";
 import * as DefendSelf from "./DefendSelf";
 
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 import * as Hunting from "./Hunting";
 import * as AvoidEnemies from "./AvoidEnemies";
 import * as Unstack from "./Unstack";
@@ -34,29 +34,29 @@ type ActionModule = {
 };
 
 // Creating an action registry by using the filename as a key
-export const actionRegistry: Record<BotActions, ActionModule> = {
-  [BotActions.GoToPlayer]: GoToPlayer,
-  [BotActions.FollowPlayer]: FollowPlayer,
-  [BotActions.GoToBlock]: GoToBlock,
-  [BotActions.CollectBlocks]: CollectBlocks,
-  [BotActions.AttackNearest]: AttackNearest,
-  [BotActions.DefendSelf]: DefendSelf,
-  [BotActions.Hunting]: Hunting,
-  [BotActions.AvoidEnemies]: AvoidEnemies,
-  [BotActions.EquipBestWeapon]: EquipBestWeapon,
-  [BotActions.GoToPosition]: GoToPosition,
-  [BotActions.Unstack]: Unstack,
-  [BotActions.GatherWood]: GatherWood,
-  [BotActions.CraftWoodenTools]: CraftWoodenTools,
-  [BotActions.RandomMovement]: RandomMovement,
-  [BotActions.EvaluateBaseLocation]: EvaluateBaseLocation,
-  [BotActions.SetBaseLocation]: SetBaseLocation,
-  [BotActions.SetBasement]: SetBasement,
-  [BotActions.DigDiagonalTunnel]: DigDiagonalTunnel,
-  [BotActions.PickupNearbyItems]: PickupNearbyItems,
-  [BotActions.BuildStoneHouse]: BuildStoneHouse,
-  [BotActions.FindAndRememberNearChest]: FindAndRememberNearChest,
-  [BotActions.ReturnToBase]: ReturnToBase,
+export const actionRegistry: Record<BotCommands, ActionModule> = {
+  [BotCommands.GoToPlayer]: GoToPlayer,
+  [BotCommands.FollowPlayer]: FollowPlayer,
+  [BotCommands.GoToBlock]: GoToBlock,
+  [BotCommands.CollectBlocks]: CollectBlocks,
+  [BotCommands.AttackNearest]: AttackNearest,
+  [BotCommands.DefendSelf]: DefendSelf,
+  [BotCommands.Hunting]: Hunting,
+  [BotCommands.AvoidEnemies]: AvoidEnemies,
+  [BotCommands.EquipBestWeapon]: EquipBestWeapon,
+  [BotCommands.GoToPosition]: GoToPosition,
+  [BotCommands.Unstack]: Unstack,
+  [BotCommands.GatherWood]: GatherWood,
+  [BotCommands.CraftWoodenTools]: CraftWoodenTools,
+  [BotCommands.RandomMovement]: RandomMovement,
+  [BotCommands.EvaluateBaseLocation]: EvaluateBaseLocation,
+  [BotCommands.SetBaseLocation]: SetBaseLocation,
+  [BotCommands.SetBasement]: SetBasement,
+  [BotCommands.DigDiagonalTunnel]: DigDiagonalTunnel,
+  [BotCommands.PickupNearbyItems]: PickupNearbyItems,
+  [BotCommands.BuildStoneHouse]: BuildStoneHouse,
+  [BotCommands.FindAndRememberNearChest]: FindAndRememberNearChest,
+  [BotCommands.ReturnToBase]: ReturnToBase,
 };
 
 // Extracting tools for use with validation (zodFunction)

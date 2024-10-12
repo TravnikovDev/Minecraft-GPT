@@ -1,7 +1,7 @@
 // Path: src/actions/GoToPosition.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 import { goToPosition } from "../utils/movement";
 
 // TODO: Rework this function with usage of objects from database
@@ -23,7 +23,7 @@ export const parameters = z.object({
 
 // Register the action with zodFunction for validation
 export const GoToPositionFunction = {
-  name: BotActions.GoToPosition,
+  name: BotCommands.GoToPosition,
   parameters: parameters,
 };
 

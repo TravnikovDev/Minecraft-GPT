@@ -1,7 +1,7 @@
 // Path: src/managers/toolManager.ts
 
 import { availableActions, actionRegistry } from "../actions/registry";
-import { BotActions } from "../actions/types";
+import { BotCommands } from "../actions/types";
 
 const tools = [...availableActions];
 
@@ -18,7 +18,7 @@ export async function executeTool(action: string, args: any) {
     return;
   }
 
-  const actionModule = actionRegistry[action as BotActions];
+  const actionModule = actionRegistry[action as BotCommands];
   if (actionModule) {
     await actionModule.execute(args);
   } else {

@@ -1,7 +1,7 @@
 // Path: src/actions/types.ts
 
 // Define an enum for available bot actions
-enum BotActions {
+enum BotCommands {
   GoToPlayer = "goToPlayer",
   FollowPlayer = "followPlayer",
   GoToBlock = "goToBlock",
@@ -26,9 +26,9 @@ enum BotActions {
   ReturnToBase = "returnToBase",
 }
 
-// Type guard to check if a value is a valid BotActions
-function isBotAction(action: string): action is BotActions {
-  return Object.values(BotActions).includes(action as BotActions);
+// Type guard to check if a value is a valid BotCommands
+function isBotAction(action: string): action is BotCommands {
+  return Object.values(BotCommands).includes(action as BotCommands);
 }
 
-export { BotActions, isBotAction };
+export { BotCommands, isBotAction };

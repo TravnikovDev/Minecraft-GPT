@@ -1,7 +1,7 @@
 // Path: src/actions/Unstack.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
+import { BotCommands } from "./types";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { moveAway } from "../utils/movement";
@@ -25,7 +25,7 @@ export const parameters = z.object({
 
 // Register the action with zodFunction for validation
 export const UnstackFunction = {
-  name: BotActions.Unstack,
+  name: BotCommands.Unstack,
   parameters: parameters,
 };
 
