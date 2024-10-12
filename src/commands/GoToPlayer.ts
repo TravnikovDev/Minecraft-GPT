@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { goToPosition } from "../utils/movement";
+import { goToPosition } from "../actions/movement";
 
 export const description = `When user asks the bot to go to a player, the bot will navigate to the player's location. 
    Example: "Go to player Steve", "Head towards Alex", "Move to player Notch", "Come to papa", "Come here".

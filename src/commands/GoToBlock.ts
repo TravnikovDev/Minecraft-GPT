@@ -2,7 +2,7 @@ import type { Bot } from "mineflayer";
 import { z } from "zod";
 import { BotCommands } from "./types";
 import { bot } from "../index";
-import { goToPosition } from "../utils/movement";
+import { goToPosition } from "../actions/movement";
 
 export const description = `When user asks the bot to go to a block, the bot will search for the nearest block of the 
 specified type and move towards it. If no parameters are provided, the bot will search for the nearest block within 50 blocks.`;

@@ -6,8 +6,8 @@ import {
   breakBlockAt,
   pickupNearbyItems,
   placeBlock,
-} from "../utils/worldInteraction";
-import { craftRecipe } from "../utils/crafting";
+} from "../actions/worldInteraction";
+import { craftRecipe } from "../actions/crafting";
 import { __actionsDelay } from "../utils/utility";
 
 export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 

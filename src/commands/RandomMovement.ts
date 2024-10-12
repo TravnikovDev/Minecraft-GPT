@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { goToPosition } from "../utils/movement";
+import { goToPosition } from "../actions/movement";
 
 export const description = `When user asks the bot to move randomly, the bot will move in a random direction
     for a random distance. Example: "Move randomly", "Go for a walk", "Random movement", "Find another spot", "Roam around", "GTFO"

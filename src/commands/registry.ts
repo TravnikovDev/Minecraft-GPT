@@ -1,4 +1,4 @@
-// Path: src/actions/registry.ts
+// Path: src/commands/registry.ts
 
 import { zodFunction } from "openai/helpers/zod";
 import * as GoToPlayer from "./GoToPlayer";

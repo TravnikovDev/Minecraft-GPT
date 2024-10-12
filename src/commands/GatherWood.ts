@@ -2,9 +2,9 @@
 
 import { bot } from "../index";
 import { z } from "zod";
-import * as world from "../utils/world";
-import { breakBlockAt, pickupNearbyItems } from "../utils/worldInteraction";
-import { goToPosition } from "../utils/movement";
+import * as world from "../actions/world";
+import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
+import { goToPosition } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
 import { addActionToQueue } from "../managers/persistenceManager";
 import { BotCommands } from "./types";

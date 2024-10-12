@@ -1,8 +1,8 @@
-// src/utils/world.ts
+// src/actions/world.ts
 
 import { Block } from "prismarine-block";
 import { Movements, goals } from "mineflayer-pathfinder";
-import * as gameData from "./minecraftData";
+import * as gameData from "../utils/minecraftData";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
 import { Item } from "prismarine-item";

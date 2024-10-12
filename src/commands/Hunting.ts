@@ -4,7 +4,7 @@ import { bot } from "../index";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
 import type { Bot } from "mineflayer";
-import { attackEntity } from "../utils/combat";
+import { attackEntity } from "../actions/combat";
 import { isHuntable } from "../utils/minecraftData";
 
 export const description = `When user asks the bot to hunt, the bot will search for the nearest huntable animal and attack it.

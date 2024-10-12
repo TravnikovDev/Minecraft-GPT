@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
 import { v4 as uuidv4 } from "uuid";
 import { bot } from "..";
-import { isBotAction } from "../actions/types";
+import { isBotAction } from "../commands/types";
 import { tools } from "./toolManager";
 import { addActionToQueue } from "./persistenceManager";
 

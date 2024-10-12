@@ -1,6 +1,6 @@
 // src/agent/library/skills/crafting.ts
 
-import * as gameData from "./minecraftData";
+import * as gameData from "../utils/minecraftData";
 import * as world from "./world.js";
 import { Item } from "prismarine-item";
 import { collectBlock, placeBlock } from "./worldInteraction";

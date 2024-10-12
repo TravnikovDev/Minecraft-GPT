@@ -1,4 +1,4 @@
-// src/utils/movement.ts
+// src/actions/movement.ts
 
 import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";

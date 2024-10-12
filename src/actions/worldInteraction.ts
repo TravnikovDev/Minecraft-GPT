@@ -1,10 +1,10 @@
-// src/utils/worldInteraction.ts
+// src/actions/worldInteraction.ts
 
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 import pf, { type SafeBlock } from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
-import * as gameData from "./minecraftData";
+import * as gameData from "../utils/minecraftData";
 import * as world from "./world.js";
 import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";

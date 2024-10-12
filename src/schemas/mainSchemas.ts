@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BotCommands } from "../actions/types";
+import { BotCommands } from "../commands/types";
 
 // Define action validation schema
 export const ActionSchema = z.object({

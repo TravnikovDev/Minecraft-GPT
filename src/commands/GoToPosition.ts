@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { BotCommands } from "./types";
-import { goToPosition } from "../utils/movement";
+import { goToPosition } from "../actions/movement";
 
 // TODO: Rework this function with usage of objects from database
 

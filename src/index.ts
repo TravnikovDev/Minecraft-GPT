@@ -16,7 +16,7 @@ import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { BotCommands } from "./actions/types";
+import { BotCommands } from "./commands/types";
 
 // Load environment variables
 config();

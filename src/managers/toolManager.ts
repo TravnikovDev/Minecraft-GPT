@@ -1,7 +1,7 @@
 // Path: src/managers/toolManager.ts
 
-import { availableActions, actionRegistry } from "../actions/registry";
-import { BotCommands } from "../actions/types";
+import { availableActions, actionRegistry } from "../commands/registry";
+import { BotCommands } from "../commands/types";
 
 const tools = [...availableActions];
 

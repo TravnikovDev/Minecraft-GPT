@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { craftRecipe } from "../utils/crafting";
+import { craftRecipe } from "../actions/crafting";
 import { addActionToQueue } from "../managers/persistenceManager";
 import { BotCommands } from "./types";
 
