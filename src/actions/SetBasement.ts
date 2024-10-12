@@ -2,7 +2,12 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { Vec3 } from "vec3";
+
+export const description = `When user asks the bot to set up a basement, the bot will dig a diagonal tunnel down and 
+create a room at the end of the tunnel. Example: "Set up a basement with a tunnel depth of 10 and room size of 3x3x4".
+If no parameters are provided, the bot will use default values as 8 for tunnel depth and 3x3x4 for room size.`;
+
+// TODO: Rework this function with function of dig
 
 // Define parameters for SetBasement action
 export const parameters = z.object({
@@ -31,12 +36,12 @@ export async function execute(args: any) {
   const startPosition = bot.entity.position.clone();
 
   // Default values for room size
-  tunnelDepth = tunnelDepth || 10;
+  tunnelDepth = tunnelDepth || 8;
   roomSize = roomSize || { width: 3, height: 3, length: 4 };
 
   // Dig a diagonal tunnel down
   for (let i = 1; i <= tunnelDepth; i++) {
-    const targetPos = startPosition.offset(i, -i, i); // Diagonal downward
+    const targetPos = startPosition.offset(i, -i, 0); // Diagonal downward
     const block = bot.blockAt(targetPos);
     if (block) {
       await bot.dig(block);

@@ -5,10 +5,16 @@ import { BotActions } from "./types";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 
+export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
+Example: "Follow player Steve at a distance of 2 blocks.", "Follow me", "Let' go", "Let' go together".`;
+
 // Define parameters for the FollowPlayer action
 export const parameters = z.object({
   player_name: z.string().describe("The name of the player to follow."),
-  distance: z.number().describe("The distance to keep from the player."),
+  distance: z
+    .number()
+    .optional()
+    .describe("The distance to keep from the player."),
 });
 
 // Register the action with zodFunction for validation
@@ -30,7 +36,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { player_name, distance } = parsed.data;
+  let { player_name, distance } = parsed.data;
+  distance = distance || 3;
+
   const playerEntity = bot.players[player_name]?.entity;
 
   if (!playerEntity) {

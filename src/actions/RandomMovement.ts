@@ -2,12 +2,16 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { goals } from "mineflayer-pathfinder";
+import { goToPosition } from "../utils/movement";
+
+export const description = `When user asks the bot to move randomly, the bot will move in a random direction
+    for a random distance. Example: "Move randomly", "Go for a walk", "Random movement", "Find another spot", "Roam around", "GTFO"
+    If no parameters are provided, the bot will move between 30 and 150 blocks.`;
 
 // Define parameters for RandomMovement action
 export const parameters = z.object({
-  minDistance: z.number().describe("Minimum distance to travel"),
-  maxDistance: z.number().describe("Maximum distance to travel"),
+  minDistance: z.number().optional().describe("Minimum distance to travel"),
+  maxDistance: z.number().optional().describe("Maximum distance to travel"),
 });
 
 // Implement the RandomMovement action
@@ -37,8 +41,6 @@ export async function execute(args: any) {
   const destY = bot.entity.position.y; // Maintain the same Y level
 
   // Set the bot’s goal to the destination
-  bot.pathfinder.setGoal(
-    new goals.GoalBlock(Math.floor(destX), Math.floor(destY), Math.floor(destZ))
-  );
+  goToPosition(destX, destY, destZ, 5);
   bot.chat(`I'm going for a walk!`);
 }

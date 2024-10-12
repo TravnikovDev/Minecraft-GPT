@@ -9,7 +9,14 @@ import {
 } from "../utils/worldInteraction";
 import { craftRecipe } from "../utils/crafting";
 import { __actionsDelay } from "../utils/utility";
-import { Vec3 } from "vec3";
+
+export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 
+and dimensions, placing torches at the specified interval. If no parameters are provided, the bot will dig a tunnel
+10 blocks deep, 3 blocks wide, and 4 blocks high, placing a torch every 12 blocks towards north. Example usage:
+'Please build a tunnel', 'Let's mine', 'Build a mine', "Dig a tunnel 20 blocks deep",
+"Dig a 3x3 tunnel towards east", "Please dig a tunnel 10 blocks deep towards south."`;
+
+// TODO: Move it as separate function in utility
 
 // Define parameters for DigDirectionalTunnel action
 export const parameters = z.object({
@@ -48,8 +55,6 @@ export async function execute(args: any) {
   tunnelSize = tunnelSize || { width: 3, height: 4 };
   direction = direction || "north";
 
-  let reachedEnd = false;
-
   // Calculate directional offsets
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
@@ -84,8 +89,8 @@ export async function execute(args: any) {
       await pickupNearbyItems(bot);
 
       // Place torch every `torchInterval` blocks
-      if (i % torchInterval === 0 && w === Math.floor(tunnelSize.width / 2)) {
-        const torchPosition = basePosition.offset(0, 1, 0);
+      if (i % torchInterval === 0 && w === tunnelSize.width - 1) {
+        const torchPosition = basePosition.offset(0, 2, 0);
         const torch = bot.inventory
           .items()
           .find((item) => item.name === "torch");
@@ -104,6 +109,7 @@ export async function execute(args: any) {
         } else {
           console.log("No torches found in inventory.");
           // TODO: Craft torches
+          craftRecipe("torch", 2);
         }
       }
     }

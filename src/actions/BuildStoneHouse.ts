@@ -6,6 +6,9 @@ import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { placeBlock } from "../utils/worldInteraction";
 
+export const description = `When user asks the bot to build a stone house, the bot will build a stone house with cobblestone 
+walls, a wooden roof, and essential items inside the house. If no dimensions are provided, the bot will build a default 5x6x5`;
+
 // Define parameters for BuildStoneHouse action
 export const parameters = z.object({
   width: z.number().optional().describe("Width of the house"),
@@ -101,7 +104,7 @@ export async function execute(args: any) {
       for (const pos of torchPositions) {
         const torchPlacePos = startPosition.offset(pos.x, pos.y, pos.z);
         await placeBlock(
-          "wall_§torch",
+          "wall_torch",
           torchPlacePos.x,
           torchPlacePos.y,
           torchPlacePos.z

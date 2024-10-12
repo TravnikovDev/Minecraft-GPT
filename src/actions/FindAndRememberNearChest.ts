@@ -1,13 +1,17 @@
 // Path: src/actions/FindAndRememberNearChest.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 
+export const description = `When user asks the bot to find and remember nearby chests, the bot will search for chests
+within a specified radius and categorize their contents. The bot will remember the locations of the chests and the
+categories of their contents for later use. Example: "Find and remember chests within 10 blocks.", "Remember those chests".
+If no parameters are provided, the bot will search for chests within a radius of 10 blocks.`;
+
 // Define parameters for FindAndRememberNearChest action
 export const parameters = z.object({
-  radius: z.number().describe("Radius to search for chests"),
+  radius: z.number().optional().describe("Radius to search for chests"),
 });
 
 // Chest memory object to store locations and categories
@@ -64,7 +68,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { radius } = parsed.data;
+  let { radius } = parsed.data;
+  radius = radius || 10;
+
   const chestsFound: Vec3[] = [];
 
   // Search for chests within the specified radius

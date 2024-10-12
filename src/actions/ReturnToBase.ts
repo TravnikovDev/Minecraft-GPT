@@ -6,6 +6,12 @@ import { bot } from "../index";
 import { goals } from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 
+// TODO: Rework using objects stored in db
+
+export const description = `When user asks the bot to return to base, the bot will navigate back to the base location.
+    Example: "Return to base", "Go back to the base", "Head home".
+    If no parameters are provided, the bot will return to the default base location.`;
+
 // Define parameters for ReturnToBase action
 export const parameters = z.object({
   baseLocation: z

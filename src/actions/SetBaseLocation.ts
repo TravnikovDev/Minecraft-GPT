@@ -1,8 +1,13 @@
 // Path: src/actions/SetBaseLocation.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
 import { bot } from "../index";
+
+export const description = `When user asks the bot to set a base location, the bot will mark the location as the base, 
+clear the area around the bot for building, build basic structures, and place essential items. 
+Example: "Set base location here", "Build a base here".`;
+
+// TODO: Rework using db stored objects
 
 // Define parameters for SetBaseLocation action
 export const parameters = z.object({

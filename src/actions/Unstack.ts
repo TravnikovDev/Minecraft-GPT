@@ -6,6 +6,9 @@ import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { moveAway } from "../utils/movement";
 
+export const description = `When user asks the bot to unstack, the bot will check if it is stuck at the current position.
+If the bot is stuck, it will attempt to move away by the specified distance. Example: "Unstack", "Move away".`;
+
 // Define parameters for the Unstack action
 export const parameters = z.object({
   distance: z

@@ -4,6 +4,12 @@ import { z } from "zod";
 import { BotActions } from "./types";
 import { goToPosition } from "../utils/movement";
 
+// TODO: Rework this function with usage of objects from database
+
+export const description = `When user asks the bot to go to a position, the bot will navigate to the specified coordinates.
+    Example: "Go to position 10 64 10", "Head towards 20 70 30", "Move to 0 100 0".
+    If no parameters are provided, the bot will move to 0 0 0.`;
+
 // Define parameters for the GoToPosition action
 export const parameters = z.object({
   x: z.number().describe("The x-coordinate to go to."),

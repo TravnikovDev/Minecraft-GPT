@@ -6,6 +6,9 @@ import { BotActions } from "./types";
 import { bot } from "../index";
 import { getAttackDamage } from "../utils/utility";
 
+export const description = `The user asks the bot to defend itself from nearby enemies. The bot will attack any hostile 
+mobs within a certain range. Example: "Defend self within 10 blocks.", "Protect yourself.". If no arguments are provided, bot will 20 block distance.`;
+
 // Define parameters for the DefendSelf action
 export const parameters = z.object({
   range: z
@@ -76,7 +79,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { range } = parsed.data;
+  let { range } = parsed.data;
+  range = range || 20; // Default range to search for enemies
+
   let attacked = false;
   let enemy = getNearestEntityWhere(
     bot,

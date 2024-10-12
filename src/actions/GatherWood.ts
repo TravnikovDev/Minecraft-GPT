@@ -6,6 +6,12 @@ import * as world from "../utils/world";
 import { breakBlockAt, pickupNearbyItems } from "../utils/worldInteraction";
 import { goToPosition } from "../utils/movement";
 import { __actionsDelay } from "../utils/utility";
+import { addActionToQueue } from "../managers/persistenceManager";
+import { BotActions } from "./types";
+
+export const description = `When user asks the bot to gather wood, the bot will search for wood blocks nearby and gather them.
+The bot will continue gathering wood until the specified number of logs is reached. Example: "Gather wood", "Collect some logs".
+If no parameters are provided, the bot will gather 32 logs at radius of 64 blocks.`;
 
 // Define parameters for the GatherWood action
 export const parameters = z.object({
@@ -26,10 +32,32 @@ export async function execute(args: any) {
   let { num } = parsed.data;
   // Default values for maxDistance and num
   let maxDistance = 64;
-  num = num || 64;
+  num = num || 32;
 
   try {
     console.log("Heading out to gather wood.");
+    // Check if the bot has an axe
+    const hasAxe = bot.inventory
+      .items()
+      .some((item) => item.name.includes("axe"));
+
+    if (!hasAxe) {
+      addActionToQueue({
+        id: "craft wooden axe",
+        action: BotActions.CraftWoodenTools,
+        priority: 9,
+        args: {
+          toolCount: {
+            pickaxe: 0,
+            axe: 1,
+            sword: 0,
+            shovel: 0,
+          },
+        },
+      });
+      // Wait for the crafting to complete (assuming some delay or event to check)
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // Adjust the delay as needed
+    }
 
     const gatherWood = async () => {
       const logsCount = await bot.inventory

@@ -4,11 +4,14 @@ import { BotActions } from "./types";
 import { bot } from "../index";
 import { goToPosition } from "../utils/movement";
 
+export const description = `When user asks the bot to go to a block, the bot will search for the nearest block of the 
+specified type and move towards it. If no parameters are provided, the bot will search for the nearest block within 50 blocks.`;
+
 // Define parameters for the GoToBlock action
 export const parameters = z.object({
   blockType: z.string().describe("The type of block to go to."),
-  minDistance: z.number().describe("Minimum distance to the block."),
-  range: z.number().describe("Maximum search range for the block."),
+  minDistance: z.number().optional().describe("Minimum distance to the block."),
+  range: z.number().optional().describe("Maximum search range for the block."),
 });
 
 // Register the action with zodFunction for validation
@@ -52,7 +55,11 @@ export async function execute(args: any) {
     return;
   }
 
-  const { blockType, minDistance, range } = parsed.data;
+  let { blockType, minDistance, range } = parsed.data;
+  // Default values
+  minDistance = minDistance || 1;
+  range = range || 50;
+
   const MAX_RANGE = 512;
   const searchRange = range > MAX_RANGE ? MAX_RANGE : range;
 

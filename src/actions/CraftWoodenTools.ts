@@ -6,6 +6,10 @@ import { craftRecipe } from "../utils/crafting";
 import { addActionToQueue } from "../managers/persistenceManager";
 import { BotActions } from "./types";
 
+export const description = `Important action to build initial tools for the bot. User can specify the number of each tool to craft. 
+If no parameters are provided, the bot will craft 3 pickaxes, 2 axes, 1 sword, and 1 shovel. Example usage: 
+"Craft wooden tools: 2 pickaxes, 1 axe.", "Please craft basic tools", "Make an axe and a shovel"`;
+
 // Define parameters for CraftWoodenTools action
 export const parameters = z.object({
   toolCount: z

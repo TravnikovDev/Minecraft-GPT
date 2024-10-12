@@ -4,10 +4,19 @@ import { bot } from "../index";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Bot } from "mineflayer";
+import { attackEntity } from "../utils/combat";
+import { isHuntable } from "../utils/minecraftData";
+
+export const description = `When user asks the bot to hunt, the bot will search for the nearest huntable animal and attack it.
+Example: "Hunt for animals within 10 blocks.", "Attack the nearest cow.", "Gather some food", "Kill the chicken", "Hunt for pigs".`;
 
 // Define parameters for the Hunting action
 export const parameters = z.object({
-  maxDistance: z.number().describe("The maximum distance to hunt for animals."),
+  targetName: z.string().optional().describe("The name of the entity to hunt."),
+  maxDistance: z
+    .number()
+    .optional()
+    .describe("The maximum distance to hunt for animals."),
 });
 
 // Register the action with zodFunction for validation
@@ -29,26 +38,6 @@ function getNearestEntityWhere(
   );
 }
 
-// Function to check if an entity is huntable
-function isHuntable(mob: Entity): boolean {
-  if (!mob || !mob.name) return false;
-  const animals: string[] = [
-    "chicken",
-    "cow",
-    "llama",
-    "mooshroom",
-    "pig",
-    "rabbit",
-    "sheep",
-  ];
-  return animals.includes(mob.name.toLowerCase()) && !mob.metadata[16]; // metadata[16] indicates baby status
-}
-
-// Function to attack an entity
-async function attackEntity(bot: Bot, entity: Entity) {
-  await bot.pvp.attack(entity);
-}
-
 // Implement the Hunting action
 export async function execute(args: any) {
   console.log(`Executing Hunting with args:`, args);
@@ -60,7 +49,9 @@ export async function execute(args: any) {
     return;
   }
 
-  const { maxDistance } = parsed.data;
+  let { maxDistance, targetName } = parsed.data;
+  maxDistance = maxDistance || 64;
+
   const huntable = getNearestEntityWhere(
     bot,
     (entity: Entity) => isHuntable(entity),
@@ -74,10 +65,13 @@ export async function execute(args: any) {
       huntable.position.z,
       1
     );
+
+    targetName = targetName || huntable.name || "chicken";
+
     const isClear = bot.pathfinder.getPathTo(new Movements(bot), goal);
     if (isClear) {
       console.log(`Hunting ${huntable.name}!`);
-      await attackEntity(bot, huntable);
+      await attackEntity(targetName, maxDistance);
     }
   } else {
     bot.chat(`No huntable animals nearby.`);

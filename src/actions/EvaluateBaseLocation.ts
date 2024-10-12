@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { bot } from "../index";
 
+export const description = `When user asks the bot to evaluate a location for a base, the bot will search the 
+area around it for resources and determine if it is suitable for a base. Example: 
+"Evaluate this location for a base.", "Find a place for a base.", "Find a good spot".
+If no parameters are provided we'll use default values: radius=120, wood=36, coal=24, iron=16.`;
+
 // Define parameters for EvaluateBaseLocation action
 export const parameters = z.object({
   radius: z.number().describe("Radius to search for base resources"),
