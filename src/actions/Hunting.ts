@@ -3,7 +3,7 @@ import { BotActions } from "./types";
 import { bot } from "../index";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 import { attackEntity } from "../utils/combat";
 import { isHuntable } from "../utils/minecraftData";
 
@@ -12,7 +12,6 @@ Example: "Hunt for animals within 10 blocks.", "Attack the nearest cow.", "Gathe
 
 // Define parameters for the Hunting action
 export const parameters = z.object({
-  targetName: z.string().optional().describe("The name of the entity to hunt."),
   maxDistance: z
     .number()
     .optional()
@@ -49,7 +48,7 @@ export async function execute(args: any) {
     return;
   }
 
-  let { maxDistance, targetName } = parsed.data;
+  let { maxDistance } = parsed.data;
   maxDistance = maxDistance || 64;
 
   const huntable = getNearestEntityWhere(
@@ -57,6 +56,8 @@ export async function execute(args: any) {
     (entity: Entity) => isHuntable(entity),
     maxDistance
   );
+
+  console.log(`Found huntable entity:`, huntable);
 
   if (huntable) {
     const goal = new goals.GoalNear(
@@ -66,12 +67,10 @@ export async function execute(args: any) {
       1
     );
 
-    targetName = targetName || huntable.name || "chicken";
-
     const isClear = bot.pathfinder.getPathTo(new Movements(bot), goal);
-    if (isClear) {
+    if (isClear && huntable.name) {
       console.log(`Hunting ${huntable.name}!`);
-      await attackEntity(targetName, maxDistance);
+      await attackEntity(huntable, maxDistance);
     }
   } else {
     bot.chat(`No huntable animals nearby.`);

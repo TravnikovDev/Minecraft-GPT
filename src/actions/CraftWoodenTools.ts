@@ -131,12 +131,13 @@ export async function execute(args: any) {
       .filter((item) => item.name.includes("log"));
     const logsCount = logs.reduce((acc, item) => acc + item.count, 0);
     const logsNeeded = Math.ceil(planksShortage / 4); // 1 log crafts 4 planks
-    const woodType = logs[0].name.split("_")[0]; // e.g., "oak_log" -> "oak"
+    const woodType = logs?.[0]?.name.split("_")[0]; // e.g., "oak_log" -> "oak"
 
     console.log("Logs count:", logsCount, " and logs needed:", logsNeeded);
 
     if (logsCount < logsNeeded) {
       console.log("Bot: Not enough logs to craft the required planks.");
+      // TODO: Move to actions
       addActionToQueue({
         id: "gatherWood-" + (logsNeeded - logsCount),
         action: BotActions.GatherWood,
@@ -168,7 +169,7 @@ export async function execute(args: any) {
         .filter((item) => item.name.includes("log"));
       const logsCount = logs.reduce((acc, item) => acc + item.count, 0);
       const logsNeeded = Math.ceil(additionalPlanksNeeded / 4); // 1 log crafts 4 planks
-      const woodType = logs[0].name.split("_")[0]; // e.g., "oak_log" -> "oak"
+      const woodType = logs?.[0]?.name.split("_")[0]; // e.g., "oak_log" -> "oak"
 
       if (logsCount < logsNeeded) {
         console.log(

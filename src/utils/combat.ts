@@ -1,40 +1,17 @@
 // Path: src/managers/combatManager.ts
 
 import { bot } from "../index";
-import { plugin as pvp } from "mineflayer-pvp";
 import { Entity } from "prismarine-entity";
-import { z } from "zod";
 import { getAttackDamage } from "../utils/utility";
 
-// Define combat parameters schema
-const combatParametersSchema = z.object({
-  entityType: z.string().describe("The type of entity to attack."),
-  range: z
-    .number()
-    .optional()
-    .describe("Range within which to find the entity."),
-});
-
 // Attack a Specific Entity by Type
-export async function attackEntity(
-  entityType: string,
-  range = 16
-): Promise<boolean> {
+export async function attackEntity(targetEntity: Entity): Promise<boolean> {
   try {
-    const targetEntity = bot.nearestEntity(
-      (entity) =>
-        entity.name === entityType &&
-        entity.type === "mob" &&
-        entity.position.distanceTo(bot.entity.position) <= range
-    );
-    if (targetEntity) {
-      bot.pvp.attack(targetEntity);
-      bot.chat(`Attacking ${entityType}!`);
-      return true;
-    } else {
-      bot.chat(`No ${entityType} found within range ${range}.`);
-      return false;
-    }
+    console.log(`Found target entity:`, targetEntity);
+
+    bot.pvp.attack(targetEntity);
+    bot.chat(`Attacking ${targetEntity.name}!`);
+    return true;
   } catch (error) {
     console.error("Error while attacking entity:", error);
     return false;
