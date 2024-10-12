@@ -28,7 +28,7 @@ loadDb();
 export const bot = mineflayer.createBot({
   host: SERVER_HOST,
   port: SERVER_PORT,
-  username: process.env.BOT_USERNAME || "MinecraftGPT",
+  username: process.env["BOT_USERNAME"] || "Minecraft-GPT",
 });
 
 // Load Plugins

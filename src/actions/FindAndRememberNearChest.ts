@@ -71,17 +71,15 @@ export async function execute(args: any) {
   let { radius } = parsed.data;
   radius = radius || 10;
 
-  const chestsFound: Vec3[] = [];
-
   // Search for chests within the specified radius
-  const blocks = bot.findBlocks({
+  const chestsFound = bot.findBlocks({
     matching: (block) => block.name === "chest",
     maxDistance: radius,
     count: 10,
   });
 
   // Process each chest found
-  for (const pos of blocks) {
+  for (const pos of chestsFound) {
     const chestPosition = new Vec3(pos.x, pos.y, pos.z);
     const block = bot.blockAt(chestPosition);
     if (block) {
@@ -96,15 +94,6 @@ export async function execute(args: any) {
     } else {
       console.error(`No block found at position ${chestPosition}`);
     }
-
-    const category = categorizeChest(chest.containerItems());
-    if (!chestMemory[category]) {
-      chestMemory[category] = [];
-    }
-
-    chestMemory[category].push(chestPosition);
-    chest.close();
-    bot.chat(`Found a chest categorized as ${category} at ${chestPosition}.`);
   }
 
   console.log("Chest memory updated:", chestMemory);

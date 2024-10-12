@@ -134,7 +134,7 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
     return false;
   }
   await bot.lookAt(doorPos);
-  if (!doorBlock.getProperties().open) {
+  if (!doorBlock.getProperties()["open"]) {
     await bot.activateBlock(doorBlock);
   }
 

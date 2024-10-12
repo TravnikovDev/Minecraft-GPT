@@ -11,7 +11,7 @@ within a specified radius and pick them up. Example: "Pick up nearby items", "Co
 export const parameters = z.object({});
 
 // Implement the PickupNearbyItems action
-export async function execute(args: any) {
+export async function execute() {
   console.log(`Collecting items nearby`);
 
   await pickupNearbyItems(bot);

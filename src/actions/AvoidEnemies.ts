@@ -5,7 +5,6 @@ import { BotActions } from "./types";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
-import { Bot } from "mineflayer";
 
 export const description = `The user asks the bot to avoid enemies within a certain distance. The bot will move away from 
 hostile mobs to maintain a safe distance. Example: "Avoid enemies within 10 blocks.", "Keep away from the zombies"`;
@@ -28,7 +27,6 @@ export const AvoidEnemiesFunction = {
 
 // Function to get the nearest entity that meets a certain condition
 function getNearestEntityWhere(
-  bot: Bot,
   condition: (entity: Entity) => boolean,
   maxDistance: number
 ): Entity | null {
@@ -76,7 +74,6 @@ export async function execute(args: any) {
   distance = distance || 20; // Default distance to maintain
 
   let enemy = getNearestEntityWhere(
-    bot,
     (entity: Entity) => isHostile(entity),
     distance
   );
@@ -88,7 +85,6 @@ export async function execute(args: any) {
     bot.pathfinder.setGoal(invertedGoal, true);
     await new Promise((resolve) => setTimeout(resolve, 500));
     enemy = getNearestEntityWhere(
-      bot,
       (entity: Entity) => isHostile(entity),
       distance
     );

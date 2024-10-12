@@ -1,6 +1,7 @@
 // src/utils/inventory.ts
 
-import { Bot } from "mineflayer";
+// src/utils/inventory.ts
+import type { Bot } from "mineflayer";
 import * as world from "./world.js";
 import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
 import { Item } from "prismarine-item";

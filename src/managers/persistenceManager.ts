@@ -4,7 +4,7 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import { resolve } from "path";
 import { z } from "zod";
-import { ActionType, DbSchemaType } from "../schemas/types";
+import type { ActionType, DbSchemaType } from "../schemas/types";
 import {
   ActionSchema,
   DbSchema,
@@ -72,7 +72,9 @@ export async function addActionToQueue(newAction: ActionType) {
 export async function removeAction(id: string) {
   try {
     if (db.data) {
-      db.data.actions = db.data.actions.filter((action) => action.id !== id);
+      db.data.actions = db.data.actions.filter(
+        (action: { id: string }) => action.id !== id
+      );
       await saveDb();
     }
   } catch (error) {

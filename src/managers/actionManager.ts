@@ -6,10 +6,7 @@ import {
   addActionToQueue,
 } from "./persistenceManager";
 import { executeTool } from "./toolManager";
-import { addTask } from "./taskManager";
-import { BotProgress } from "./botProgress";
-import { botLevels } from "../progress/botLevels";
-import { ActionType } from "../schemas/types";
+import type { ActionType } from "../schemas/types";
 
 // Process an Action
 async function processAction(nextAction: ActionType) {
@@ -59,28 +56,28 @@ export async function executeActions() {
 }
 
 // Handle Idle State by assigning tasks based on bot progress
-async function handleIdleState() {
-  const botProgress = new BotProgress();
-  const currentLevel = botProgress.getCurrentLevel();
-  console.log(`! Bot is idle. Assigning tasks for level ${currentLevel}...`);
+// async function handleIdleState() {
+//   const botProgress = new BotProgress();
+//   const currentLevel = botProgress.getCurrentLevel();
+//   console.log(`! Bot is idle. Assigning tasks for level ${currentLevel}...`);
 
-  const nextLevelConfig = botLevels.find(
-    (level) => level.level === currentLevel
-  );
-  if (nextLevelConfig) {
-    console.log(
-      `Assigning tasks for level ${currentLevel}:`,
-      nextLevelConfig.requiredTasks
-    );
-    for (const task of nextLevelConfig.requiredTasks) {
-      try {
-        await addTask(task);
-      } catch (error) {
-        console.error(
-          `Error assigning task ${task.name} for idle state:`,
-          error
-        );
-      }
-    }
-  }
-}
+//   const nextLevelConfig = botLevels.find(
+//     (level) => level.level === currentLevel
+//   );
+//   if (nextLevelConfig) {
+//     console.log(
+//       `Assigning tasks for level ${currentLevel}:`,
+//       nextLevelConfig.requiredTasks
+//     );
+//     for (const task of nextLevelConfig.requiredTasks) {
+//       try {
+//         await addTask(task);
+//       } catch (error) {
+//         console.error(
+//           `Error assigning task ${task.name} for idle state:`,
+//           error
+//         );
+//       }
+//     }
+//   }
+// }

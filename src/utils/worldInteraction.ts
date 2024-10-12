@@ -2,13 +2,12 @@
 
 import { bot } from "../index";
 import { Vec3 } from "vec3";
-import pf, { SafeBlock } from "mineflayer-pathfinder";
+import pf, { type SafeBlock } from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
-import { log } from "./utility";
 import * as gameData from "./minecraftData";
 import * as world from "./world.js";
 import { goToPosition } from "./movement";
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 

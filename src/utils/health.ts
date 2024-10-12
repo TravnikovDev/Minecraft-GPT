@@ -7,11 +7,18 @@ import { plugin as autoEat } from "mineflayer-auto-eat";
 bot.loadPlugin(autoEat);
 
 // Configure auto-eat plugin settings
-bot.autoEat({
+bot.autoEat.options = {
   priority: "foodPoints", // Prioritize foods that restore the most hunger points
   startAt: 14, // Start eating when hunger is at or below this level
   bannedFood: [], // No foods are banned by default
-});
+  healthThreshold: 10, // Start eating when health is at or below this level
+  eatingTimeout: 3000, // Timeout for eating in milliseconds
+  ignoreInventoryCheck: false, // Do not ignore inventory check
+  checkOnItemPickup: true, // Check food on item pickup
+  equipOldItem: true, // Equip old item after eating
+  offhand: true, // Use offhand for food
+};
+bot.autoEat.enable();
 
 // Heal if Health Drops Below Threshold
 export async function monitorHealth(): Promise<void> {

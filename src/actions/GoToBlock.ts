@@ -1,4 +1,4 @@
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 import { z } from "zod";
 import { BotActions } from "./types";
 import { bot } from "../index";

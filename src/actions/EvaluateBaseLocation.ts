@@ -47,7 +47,7 @@ export async function execute(args: any) {
     let ironCount = 0;
 
     // Scan the area around the bot
-    const blocks = bot.findBlocks({
+    bot.findBlocks({
       matching: (block) => {
         if (block.name.includes("log")) woodCount++;
         else if (block.name === "coal_ore") coalCount++;

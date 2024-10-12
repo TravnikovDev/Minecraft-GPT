@@ -3,8 +3,7 @@
 import { z } from "zod";
 import { BotActions } from "./types";
 import { bot } from "../index";
-import { Vec3 } from "vec3";
-import { goals, Movements } from "mineflayer-pathfinder";
+import { Movements } from "mineflayer-pathfinder";
 
 export const description = `The user asks the bot to collect a certain number of blocks of a specific type. The bot will 
 search for and collect the specified blocks. Example: "Collect 5 diamonds.", "Gather 10 iron ores."`;

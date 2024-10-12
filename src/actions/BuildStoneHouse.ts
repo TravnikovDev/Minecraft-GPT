@@ -1,7 +1,6 @@
 // Path: src/actions/BuildStoneHouse.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { placeBlock } from "../utils/worldInteraction";
@@ -34,16 +33,16 @@ export async function execute(args: any) {
   height = height || 5;
 
   const startPosition = bot.entity.position.clone();
-  const cobblestone = bot.inventory
-    .items()
-    .find((item) => item.name === "cobblestone");
-  const wood = bot.inventory.items().find((item) => item.name === "planks");
+  //   const cobblestone = bot.inventory
+  //     .items()
+  //     .find((item) => item.name === "cobblestone");
+  //   const wood = bot.inventory.items().find((item) => item.name === "planks");
 
   // Build the cobblestone walls
   for (let x = 0; x < width; x++) {
     for (let y = 0; y < height; y++) {
       for (let z of [0, length - 1]) {
-        const wallPosition = startPosition.offset(x, y, z);
+        // const wallPosition = startPosition.offset(x, y, z);
         await placeBlock("cobblestone", x, y, z);
       }
     }
@@ -51,7 +50,7 @@ export async function execute(args: any) {
   for (let z = 0; z < length; z++) {
     for (let y = 0; y < height; y++) {
       for (let x of [0, width - 1]) {
-        const wallPosition = startPosition.offset(x, y, z);
+        // const wallPosition = startPosition.offset(x, y, z);
         await placeBlock("cobblestone", x, y, z);
       }
     }
@@ -62,7 +61,7 @@ export async function execute(args: any) {
   const roofY = startPosition.y + height;
   for (let x = 0; x < width; x++) {
     for (let z = 0; z < length; z++) {
-      const roofPosition = startPosition.offset(x, height - 1, z);
+      //   const roofPosition = startPosition.offset(x, height - 1, z);
       await placeBlock("oak_planks", x, roofY, z);
     }
   }

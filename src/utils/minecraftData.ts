@@ -1,13 +1,13 @@
 // src/utils/minecraftData.ts
 
 import minecraftData, {
-  Biome,
-  ShapedRecipe,
-  ShapelessRecipe,
+  type Biome,
+  type ShapedRecipe,
+  type ShapelessRecipe,
 } from "minecraft-data";
 import prismarineItem from "prismarine-item";
 import { Entity } from "prismarine-entity";
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 
 const GAME_VERSION = "1.20.4";
 

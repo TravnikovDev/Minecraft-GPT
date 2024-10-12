@@ -6,7 +6,7 @@ import * as gameData from "./minecraftData";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
 import { Item } from "prismarine-item";
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 
 export function getNearestFreeSpace(
   bot: Bot,

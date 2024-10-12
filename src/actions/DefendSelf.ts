@@ -1,4 +1,4 @@
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { z } from "zod";

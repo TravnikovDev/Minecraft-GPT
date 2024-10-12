@@ -70,7 +70,7 @@ export async function execute(args: any) {
     const isClear = bot.pathfinder.getPathTo(new Movements(bot), goal);
     if (isClear && huntable.name) {
       console.log(`Hunting ${huntable.name}!`);
-      await attackEntity(huntable, maxDistance);
+      await attackEntity(huntable);
     }
   } else {
     bot.chat(`No huntable animals nearby.`);

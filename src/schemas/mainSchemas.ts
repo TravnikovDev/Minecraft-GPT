@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { BotActions } from "../actions/types";
-import { BotTasks } from "../tasks/types";
 
 // Define action validation schema
 export const ActionSchema = z.object({
@@ -8,14 +7,6 @@ export const ActionSchema = z.object({
   action: z.nativeEnum(BotActions),
   args: z.any(),
   priority: z.number().min(1).max(10),
-});
-
-// Define Task Schema
-export const TaskSchema = z.object({
-  id: z.string().uuid(),
-  name: z.nativeEnum(BotTasks),
-  actions: z.array(ActionSchema),
-  status: z.enum(["pending", "in_progress", "completed"]),
 });
 
 export const LoreSchema = z.object({

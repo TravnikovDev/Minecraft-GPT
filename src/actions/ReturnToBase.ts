@@ -1,7 +1,6 @@
 // Path: src/actions/ReturnToBase.ts
 
 import { z } from "zod";
-import { BotActions } from "./types";
 import { bot } from "../index";
 import { goals } from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
