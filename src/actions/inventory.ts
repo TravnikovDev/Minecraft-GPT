@@ -184,14 +184,27 @@ export async function giveToPlayer(
  * @returns
  */
 export async function listInventory(): Promise<void> {
-  const items = bot.inventory.items();
-  if (items.length === 0) {
-    bot.chat(`My inventory is empty.`);
+  const items = await bot.inventory.items();
+  sayItems(items);
+}
+
+export async function checkForItem(itemName: string): Promise<void> {
+  const items = await bot.inventory.items();
+  const searchableItems = items.filter((item) => item.name === itemName);
+  sayItems(searchableItems);
+}
+
+export async function sayItems(items: Array<Item> | null = null) {
+  if (!items) {
+    items = bot.inventory.items();
+    if (bot.registry.isNewerOrEqualTo("1.9") && bot.inventory.slots[45])
+      items.push(bot.inventory.slots[45]);
+  }
+  const output = items.map((item) => `${item.name} x ${item.count}`).join(", ");
+  if (output) {
+    bot.chat(`My inventory contains: ${output}`);
   } else {
-    console.log(`My inventory contains:`);
-    for (const item of items) {
-      console.log(`${item.count} ${item.name}`);
-    }
+    bot.chat("My inventory is empty.`");
   }
 }
 

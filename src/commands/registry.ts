@@ -26,6 +26,8 @@ import * as PickupNearbyItems from "./PickupNearbyItems";
 import * as BuildStoneHouse from "./BuildStoneHouse";
 import * as FindAndRememberNearChest from "./FindAndRememberNearChest";
 import * as ReturnToBase from "./ReturnToBase";
+import * as ListInventory from "./ListInventory";
+import * as CheckForItem from "./CheckForItem";
 
 type ActionModule = {
   parameters: any;
@@ -57,6 +59,8 @@ export const actionRegistry: Record<BotCommands, ActionModule> = {
   [BotCommands.BuildStoneHouse]: BuildStoneHouse,
   [BotCommands.FindAndRememberNearChest]: FindAndRememberNearChest,
   [BotCommands.ReturnToBase]: ReturnToBase,
+  [BotCommands.ListInventory]: ListInventory,
+  [BotCommands.CheckForItem]: CheckForItem,
 };
 
 // Extracting tools for use with validation (zodFunction)

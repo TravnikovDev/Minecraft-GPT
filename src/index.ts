@@ -76,11 +76,11 @@ bot.on("respawn", () => {
   addActionToQueue({
     id: "respawn",
     action: BotCommands.GoToPlayer,
-    priority: 10,
+    priority: 8,
   });
 });
 
 // Idle behavior: Always keep the bot busy
 setInterval(async () => {
   await executeActions();
-}, 5000);
+}, 3000);

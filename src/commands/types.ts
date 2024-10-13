@@ -24,6 +24,8 @@ enum BotCommands {
   BuildStoneHouse = "buildStoneHouse",
   FindAndRememberNearChest = "findAndRememberNearChest",
   ReturnToBase = "returnToBase",
+  ListInventory = "listInventory",
+  CheckForItem = "checkForItem",
 }
 
 // Type guard to check if a value is a valid BotCommands

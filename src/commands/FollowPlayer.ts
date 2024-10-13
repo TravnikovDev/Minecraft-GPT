@@ -2,8 +2,6 @@
 
 import { z } from "zod";
 import { BotCommands } from "./types";
-import { bot } from "../index";
-import { goals, Movements } from "mineflayer-pathfinder";
 import { followPlayer } from "../actions/movement";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.

@@ -43,6 +43,21 @@ export async function execute(args: any) {
       `Heading towards ${player_name}, getting ${closeness} blocks close.`
     );
   } else {
-    bot.chat(`Could not find player ${player_name}.`);
+    const entity = bot.nearestEntity();
+    if (entity !== null) {
+      if (entity.type === "player") {
+        goToPosition(
+          entity.position.x,
+          entity.position.y,
+          entity.position.z,
+          closeness
+        );
+        bot.chat(
+          `Heading towards ${player_name}, getting ${closeness} blocks close.`
+        );
+      } else {
+        bot.chat(`Could not find player ${player_name}.`);
+      }
+    }
   }
 }
