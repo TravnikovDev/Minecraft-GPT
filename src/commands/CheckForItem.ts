@@ -4,7 +4,8 @@ import { z } from "zod";
 import { BotCommands } from "./types";
 import { checkForItem } from "../actions/inventory";
 
-export const description = `When user asks the bot`;
+export const description = `When user asks the bot to check for an item in its inventory, the bot will check if it has the item.
+Example: "Do you have a sword?", "Check for a pickaxe", "Do you have any food?".`;
 
 // Define parameters for the CheckForItem action
 export const parameters = z.object({

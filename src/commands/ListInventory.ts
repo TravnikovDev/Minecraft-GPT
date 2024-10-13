@@ -17,6 +17,6 @@ export const ListInventoryFunction = {
 };
 
 // Implement the ListInventory action
-export async function execute(args: any) {
+export async function execute() {
   listInventory();
 }

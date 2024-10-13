@@ -26,6 +26,8 @@ enum BotCommands {
   ReturnToBase = "returnToBase",
   ListInventory = "listInventory",
   CheckForItem = "checkForItem",
+  DiscardItem = "discardItem",
+  GiveItemToAPlayer = "giveItemToAPlayer",
 }
 
 // Type guard to check if a value is a valid BotCommands

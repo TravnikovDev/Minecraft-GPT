@@ -28,6 +28,8 @@ import * as FindAndRememberNearChest from "./FindAndRememberNearChest";
 import * as ReturnToBase from "./ReturnToBase";
 import * as ListInventory from "./ListInventory";
 import * as CheckForItem from "./CheckForItem";
+import * as DiscardItem from "./DiscardItem";
+import * as GiveItemToAPlayer from "./GiveItemToAPlayer";
 
 type ActionModule = {
   parameters: any;
@@ -61,6 +63,8 @@ export const actionRegistry: Record<BotCommands, ActionModule> = {
   [BotCommands.ReturnToBase]: ReturnToBase,
   [BotCommands.ListInventory]: ListInventory,
   [BotCommands.CheckForItem]: CheckForItem,
+  [BotCommands.DiscardItem]: DiscardItem,
+  [BotCommands.GiveItemToAPlayer]: GiveItemToAPlayer,
 };
 
 // Extracting tools for use with validation (zodFunction)
