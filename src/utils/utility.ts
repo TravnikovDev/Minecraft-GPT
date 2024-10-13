@@ -12,8 +12,10 @@ export function log(message: string, sendToChat = false): void {
 }
 
 // Utility function to introduce a delay
+// @ts-ignore
 export async function __actionsDelay(ms = 2500): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  // return new Promise((resolve) => setTimeout(resolve, ms));
+  return bot.waitForTicks(getRandomInt(1, 5));
 }
 
 // Utility function to get a formatted timestamp

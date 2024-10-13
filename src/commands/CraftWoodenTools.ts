@@ -3,8 +3,7 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { craftRecipe } from "../actions/crafting";
-import { addActionToQueue } from "../managers/persistenceManager";
-import { BotCommands } from "./types";
+import { gatherWood } from "../actions/gatherWood";
 
 export const description = `Important action to build initial tools for the bot. User can specify the number of each tool to craft. 
 If no parameters are provided, the bot will craft 3 pickaxes, 2 axes, 1 sword, and 1 shovel. Example usage: 
@@ -137,14 +136,7 @@ export async function execute(args: any) {
 
     if (logsCount < logsNeeded) {
       console.log("Bot: Not enough logs to craft the required planks.");
-      // TODO: Move to actions
-      addActionToQueue({
-        id: "gatherWood-" + (logsNeeded - logsCount),
-        action: BotCommands.GatherWood,
-        priority: 7,
-        args: { maxDistance: 100, num: logsNeeded - logsCount },
-      });
-      return;
+      await gatherWood(logsNeeded - logsCount);
     }
 
     await craftRecipe(`${woodType}_planks`, planksShortage);
@@ -175,13 +167,7 @@ export async function execute(args: any) {
         console.log(
           "Bot: Not enough logs to craft the required planks for sticks."
         );
-        addActionToQueue({
-          id: "gatherWood-" + (logsNeeded - logsCount),
-          action: BotCommands.GatherWood,
-          priority: 7,
-          args: { maxDistance: 100, num: logsNeeded - logsCount },
-        });
-        return;
+        await gatherWood(logsNeeded - logsCount);
       }
 
       await craftRecipe(`${woodType}_planks`, additionalPlanksNeeded);

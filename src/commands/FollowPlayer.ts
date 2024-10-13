@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BotCommands } from "./types";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
+import { followPlayer } from "../actions/movement";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
 Example: "Follow player Steve at a distance of 2 blocks.", "Follow me", "Let' go", "Let' go together".`;
@@ -39,33 +40,5 @@ export async function execute(args: any) {
   let { player_name, distance } = parsed.data;
   distance = distance || 3;
 
-  const playerEntity = bot.players[player_name]?.entity;
-
-  if (!playerEntity) {
-    bot.chat(`Could not find player ${player_name}.`);
-    return;
-  }
-
-  const move = new Movements(bot);
-  bot.pathfinder.setMovements(move);
-  bot.pathfinder.setGoal(new goals.GoalFollow(playerEntity, distance), true);
-  bot.chat(`You are now actively following player ${player_name}.`);
-
-  let lastTime = Date.now();
-  let stuckTime = 0;
-  let lastPos = bot.entity.position.clone();
-
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const delta = Date.now() - lastTime;
-  const farAway =
-    bot.entity.position.distanceTo(playerEntity.position) > distance + 1;
-  if (farAway && bot.entity.position.distanceTo(lastPos) <= 2) {
-    stuckTime += delta;
-    if (stuckTime > 10000) {
-      bot.chat(`Got stuck, attempting to move away.`);
-      bot.pathfinder.stop();
-      // Execute unstuck logic if needed here
-      return;
-    }
-  }
+  followPlayer(player_name, distance);
 }

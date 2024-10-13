@@ -7,6 +7,11 @@ import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
 import { Item } from "prismarine-item";
 import { bot } from "..";
 
+/**
+ * Equip an item from the bot's inventory.
+ * @param itemName The name of the item to equip.
+ * @returns Whether the item was successfully equipped.
+ */
 export async function equip(itemName: string): Promise<boolean> {
   const item = bot.inventory.items().find((item) => item.name === itemName);
   if (!item) {
@@ -23,6 +28,12 @@ export async function equip(itemName: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Discard an item from the bot's inventory.
+ * @param itemName The name of the item to discard.
+ * @param num The number of items to discard. Default is -1 for all.
+ * @returns Whether the item was successfully discarded.
+ */
 export async function discard(itemName: string, num = -1): Promise<boolean> {
   let discarded = 0;
   while (true) {
@@ -92,6 +103,11 @@ export async function takeFromChest(
   return true;
 }
 
+/**
+ * View the contents of a chest near the bot.
+ * @param bot
+ * @returns
+ */
 export async function viewChest(bot: Bot): Promise<boolean> {
   const chest = world.getNearestBlock(bot, "chest", 32);
   if (!chest) {
@@ -113,6 +129,11 @@ export async function viewChest(bot: Bot): Promise<boolean> {
   return true;
 }
 
+/**
+ * Ask to bot to eat a food item from its inventory.
+ * @param foodName The name of the food item to eat.
+ * @returns
+ */
 export async function eat(foodName = ""): Promise<boolean> {
   let item: Item | undefined;
   let name: string;
@@ -134,6 +155,13 @@ export async function eat(foodName = ""): Promise<boolean> {
   return true;
 }
 
+/**
+ * Give an item to a player.
+ * @param itemType The name of the item to give.
+ * @param username The username of the player to give the item to.
+ * @param num The number of items to give.
+ * @returns
+ */
 export async function giveToPlayer(
   itemType: string,
   username: string,
@@ -150,18 +178,28 @@ export async function giveToPlayer(
   return true;
 }
 
+/**
+ * List the items in the bot's inventory.
+ * @param bot
+ * @returns
+ */
 export async function listInventory(): Promise<void> {
   const items = bot.inventory.items();
   if (items.length === 0) {
-    console.log(`Your inventory is empty.`);
+    bot.chat(`My inventory is empty.`);
   } else {
-    console.log(`Your inventory contains:`);
+    console.log(`My inventory contains:`);
     for (const item of items) {
       console.log(`${item.count} ${item.name}`);
     }
   }
 }
 
+/**
+ * Find the number of free slots in the bot's inventory.
+ * @param bot
+ * @returns
+ */
 export function checkFreeSpace(): number {
   const totalSlots = bot.inventory.slots.length;
   const usedSlots = bot.inventory.items().length;
@@ -170,6 +208,11 @@ export function checkFreeSpace(): number {
   return freeSlots;
 }
 
+/**
+ * Transfer all items from the bot's inventory to a chest.
+ * @param bot
+ * @returns
+ */
 export async function transferAllToChest(): Promise<boolean> {
   const chest = world.getNearestBlock(bot, "chest", 32);
   if (!chest) {
@@ -187,6 +230,11 @@ export async function transferAllToChest(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Check for item counts
+ * @param bot
+ * @returns
+ */
 export function getItemCount(itemName: string): number {
   const item = bot.inventory.items().find((item) => item.name === itemName);
   if (item) {
@@ -198,6 +246,11 @@ export function getItemCount(itemName: string): number {
   }
 }
 
+/**
+ * Organize the bot's inventory.
+ * @param bot
+ * @returns
+ */
 export async function organizeInventory(): Promise<void> {
   const items = bot.inventory.items();
   if (items.length === 0) {
