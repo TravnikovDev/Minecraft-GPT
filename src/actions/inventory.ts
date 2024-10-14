@@ -6,6 +6,7 @@ import * as world from "./world.js";
 import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
 import { Item } from "prismarine-item";
 import { bot } from "..";
+import type { InventoryItemType } from "../schemas/types.js";
 
 /**
  * Equip an item from the bot's inventory.
@@ -189,9 +190,14 @@ export async function giveToPlayer(
  * @param bot
  * @returns
  */
-export async function listInventory(): Promise<void> {
+export async function listInventory(): Promise<InventoryItemType[]> {
   const items = await bot.inventory.items();
   sayItems(items);
+
+  return items.map((item) => ({
+    name: item.name,
+    count: item.count,
+  }));
 }
 
 export async function checkForItem(itemName: string): Promise<void> {

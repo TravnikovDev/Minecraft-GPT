@@ -2,7 +2,7 @@
 
 import { zodFunction } from "openai/helpers/zod";
 import * as GoToPlayer from "./GoToPlayer";
-// Import other actions following the same convention
+// Import other Commands following the same convention
 import * as FollowPlayer from "./FollowPlayer";
 import * as GoToBlock from "./GoToBlock";
 import * as CollectBlocks from "./CollectBlocks";
@@ -32,14 +32,14 @@ import * as DiscardItem from "./DiscardItem";
 import * as GiveItemToAPlayer from "./GiveItemToAPlayer";
 import * as CraftItem from "./CraftItem";
 
-type ActionModule = {
+type CommandModule = {
   parameters: any;
   execute: (args: any) => Promise<void>;
   description: string;
 };
 
-// Creating an action registry by using the filename as a key
-export const actionRegistry: Record<BotCommands, ActionModule> = {
+// Creating an Command registry by using the filename as a key
+export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.GoToPlayer]: GoToPlayer,
   [BotCommands.FollowPlayer]: FollowPlayer,
   [BotCommands.GoToBlock]: GoToBlock,
@@ -70,11 +70,11 @@ export const actionRegistry: Record<BotCommands, ActionModule> = {
 };
 
 // Extracting tools for use with validation (zodFunction)
-export const availableActions = Object.entries(actionRegistry).map(
-  ([actionName, action]) =>
+export const availableCommands = Object.entries(commandRegistry).map(
+  ([commandName, command]) =>
     zodFunction({
-      name: actionName,
-      parameters: action.parameters,
-      description: action.description,
+      name: commandName,
+      parameters: command.parameters,
+      description: command.description,
     })
 );

@@ -3,11 +3,11 @@
 import mineflayer from "mineflayer";
 import { config } from "dotenv";
 import {
-  addActionToQueue,
+  addCommandToQueue,
   loadDb,
-  getAllActions,
+  getAllCommands,
 } from "./managers/persistenceManager";
-import { executeActions } from "./managers/actionManager";
+import { executeCommands } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
 import { Movements, pathfinder } from "mineflayer-pathfinder";
@@ -59,13 +59,13 @@ bot.on("chat", async (username, message) => {
 });
 
 bot.on("health", () => {
-  const existingAction = getAllActions().find(
+  const existingAction = getAllCommands().find(
     (action) => action.id === "defend-self"
   );
   if (!existingAction) {
-    addActionToQueue({
+    addCommandToQueue({
       id: "defend-self",
-      action: BotCommands.DefendSelf,
+      command: BotCommands.DefendSelf,
       priority: 9,
       args: { range: 5 },
     });
@@ -73,14 +73,14 @@ bot.on("health", () => {
 });
 
 bot.on("respawn", () => {
-  addActionToQueue({
+  addCommandToQueue({
     id: "respawn",
-    action: BotCommands.GoToPlayer,
+    command: BotCommands.GoToPlayer,
     priority: 8,
   });
 });
 
 // Idle behavior: Always keep the bot busy
 setInterval(async () => {
-  await executeActions();
-}, 3000);
+  await executeCommands();
+}, 2500);

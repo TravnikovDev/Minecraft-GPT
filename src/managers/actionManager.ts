@@ -1,56 +1,56 @@
-// Path: src/managers/actionManager.ts
+// Path: src/managers/commandManager.ts
 
 import {
-  removeAction,
-  getAllActions,
-  addActionToQueue,
+  addCommandToQueue,
+  getAllCommands,
+  removeCommand,
 } from "./persistenceManager";
 import { executeTool } from "./toolManager";
-import type { ActionType } from "../schemas/types";
+import type { CommandType } from "../schemas/types";
 
-// Process an Action
-async function processAction(nextAction: ActionType) {
+// Process an Command
+async function processCommand(nextCommand: CommandType) {
   try {
-    await executeTool(nextAction.action, nextAction.args);
+    await executeTool(nextCommand.command, nextCommand.args);
   } catch (error) {
-    console.error(`Error executing action ${nextAction.action}:`, error);
-    // Fallback mechanism: re-add action to the queue with lower priority for retry
-    await addActionToQueue(nextAction);
+    console.error(`Error executing command ${nextCommand.command}:`, error);
+    // Fallback mechanism: re-add command to the queue with lower priority for retry
+    await addCommandToQueue(nextCommand);
     console.log(
-      `Re-added action ${nextAction.action} to queue with lower priority for retry.`
+      `Re-added command ${nextCommand.command} to queue with lower priority for retry.`
     );
   } finally {
     try {
-      await removeAction(nextAction.id);
+      await removeCommand(nextCommand.id);
     } catch (error) {
       console.error(
-        `Error removing action ${nextAction.id} from queue:`,
+        `Error removing command ${nextCommand.id} from queue:`,
         error
       );
     }
   }
 }
 
-// Execute Actions in Queue
-export async function executeActions() {
-  const actions = await getAllActions();
-  console.log("- Executing actions in queue...");
+// Execute Commands in Queue
+export async function executeCommands() {
+  const commands = await getAllCommands();
+  console.log("- Executing commands in queue...");
 
-  if (actions.length === 0) {
-    console.log("- No actions in queue. Attempting idle tasks...");
+  if (commands.length === 0) {
+    console.log("- No commands in queue. Attempting idle tasks...");
     // await handleIdleState();
     return;
   }
 
-  actions.sort((a, b) => a.priority - b.priority);
-  for (const action of actions) {
+  commands.sort((a, b) => a.priority - b.priority);
+  for (const command of commands) {
     try {
       console.log(
-        `- Executing action ${action.action} with priority ${action.priority}`
+        `- Executing command ${command.command} with priority ${command.priority}`
       );
-      await processAction(action);
+      await processCommand(command);
     } catch (error) {
-      console.error("Error executing actions:", error);
+      console.error("Error executing commands:", error);
     }
   }
 }

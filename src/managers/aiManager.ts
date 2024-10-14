@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { bot } from "..";
 import { isBotAction } from "../commands/types";
 import { tools } from "./toolManager";
-import { addActionToQueue } from "./persistenceManager";
+import { addCommandToQueue } from "./persistenceManager";
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -132,8 +132,8 @@ export async function initiateActionFromAI(
           }, with args: ${JSON.stringify(toolAction.arguments)}`
         );
         // Add the parsed action to the queue with priority 3
-        await addActionToQueue({
-          action: toolAction.action,
+        await addCommandToQueue({
+          command: toolAction.action,
           id: actionId,
           priority: 3,
           args: toolAction.arguments,

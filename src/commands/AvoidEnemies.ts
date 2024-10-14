@@ -1,7 +1,6 @@
 // Path: src/actions/AvoidEnemies.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";

@@ -4,9 +4,13 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import { resolve } from "path";
 import { z } from "zod";
-import type { ActionType, DbSchemaType } from "../schemas/types";
+import type {
+  CommandType,
+  DbSchemaType,
+  InventoryItemType,
+} from "../schemas/types";
 import {
-  ActionSchema,
+  CommandSchema,
   DbSchema,
   InventorySchema,
 } from "../schemas/mainSchemas";
@@ -15,7 +19,7 @@ import {
 const dbPath = resolve("db.json");
 const adapter = new JSONFile<DbSchemaType>(dbPath);
 const db = new Low<DbSchemaType>(adapter, {
-  actions: [],
+  commands: [],
   lore: { events: [] },
   inventory: [],
 });
@@ -24,7 +28,7 @@ const db = new Low<DbSchemaType>(adapter, {
 export async function loadDb() {
   try {
     await db.read();
-    db.data ||= { actions: [], lore: { events: [] }, inventory: [] };
+    db.data ||= { commands: [], lore: { events: [] }, inventory: [] };
     const parsedData = DbSchema.safeParse(db.data);
     if (!parsedData.success) {
       throw new Error("Database validation failed");
@@ -49,42 +53,42 @@ export async function saveDb() {
   }
 }
 
-// Add Action to Database
-export async function addActionToQueue(newAction: ActionType) {
+// Add Command to Database
+export async function addCommandToQueue(newCommand: CommandType) {
   try {
-    console.log("Adding action to queue:", newAction.action);
-    const parsedAction = ActionSchema.safeParse(newAction);
-    if (!parsedAction.success) {
-      throw new Error("Action validation failed: " + parsedAction.error);
+    console.log("Adding command to queue:", newCommand.command);
+    const parsedCommand = CommandSchema.safeParse(newCommand);
+    if (!parsedCommand.success) {
+      throw new Error("Command validation failed: " + parsedCommand.error);
     } else {
       console.log(
-        `- Adding action ${parsedAction.data.action} with priority ${parsedAction.data.priority} to queue.`
+        `- Adding command ${parsedCommand.data.command} with priority ${parsedCommand.data.priority} to queue.`
       );
     }
-    db.data?.actions.push(parsedAction.data);
+    db.data?.commands.push(parsedCommand.data);
     await saveDb();
   } catch (error) {
-    console.error("Error adding action to database:", error);
+    console.error("Error adding command to database:", error);
   }
 }
 
-// Remove Action from Database
-export async function removeAction(id: string) {
+// Remove command from Database
+export async function removeCommand(id: string) {
   try {
     if (db.data) {
-      db.data.actions = db.data.actions.filter(
-        (action: { id: string }) => action.id !== id
+      db.data.commands = db.data.commands.filter(
+        (command: { id: string }) => command.id !== id
       );
       await saveDb();
     }
   } catch (error) {
-    console.error("Error removing action from database:", error);
+    console.error("Error removing command from database:", error);
   }
 }
 
-// Get All Actions from Database
-export function getAllActions() {
-  return db.data?.actions || [];
+// Get All commands from Database
+export function getAllCommands() {
+  return db.data?.commands || [];
 }
 
 // Add Lore Event to Database
@@ -107,9 +111,7 @@ export function getAllLoreEvents() {
 }
 
 // Sync Inventory with Database
-export async function syncInventory(
-  inventory: { name: string; count: number }[]
-) {
+export async function syncInventory(inventory: InventoryItemType[]) {
   try {
     const parsedInventory = InventorySchema.safeParse(inventory);
     if (!parsedInventory.success) {
