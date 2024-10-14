@@ -24,7 +24,7 @@ export async function execute(args: any) {
   }
 
   let { item_name, num } = parsed.data;
-  num = num || 1;
+  num = num || 64;
 
   await discard(item_name, num);
 }

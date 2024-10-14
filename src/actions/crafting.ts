@@ -92,9 +92,9 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
   try {
     await bot.craft(recipe, num, craftingTable);
     const invCounts = world.getInventoryCounts(bot);
-    const itegameDataount = invCounts[itemName] || 0;
+    const itemsCount = invCounts[itemName] || 0;
     bot.chat(
-      `Successfully crafted ${itemName}, I now have ${itegameDataount} ${itemName}.`
+      `Successfully crafted ${itemName}, I now have ${itemsCount} ${itemName}.`
     );
     if (placedTable) {
       await collectBlock("crafting_table", 1);

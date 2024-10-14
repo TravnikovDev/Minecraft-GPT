@@ -34,10 +34,10 @@ async function processCommand(nextCommand: CommandType) {
 // Execute Commands in Queue
 export async function executeCommands() {
   const commands = await getAllCommands();
-  console.log("- Executing commands in queue...");
+  // console.log("- Executing commands in queue...");
 
   if (commands.length === 0) {
-    console.log("- No commands in queue. Attempting idle tasks...");
+    // console.log("- No commands in queue. Attempting idle tasks...");
     // await handleIdleState();
     return;
   }

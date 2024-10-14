@@ -28,10 +28,9 @@ const db = new Low<DbSchemaType>(adapter, {
 export async function loadDb() {
   try {
     await db.read();
-    db.data ||= { commands: [], lore: { events: [] }, inventory: [] };
     const parsedData = DbSchema.safeParse(db.data);
     if (!parsedData.success) {
-      throw new Error("Database validation failed");
+      throw new Error("Database validation failed", parsedData.error);
     }
     db.data = parsedData.data;
     await db.write();
@@ -45,7 +44,7 @@ export async function saveDb() {
   try {
     const parsedData = DbSchema.safeParse(db.data);
     if (!parsedData.success) {
-      throw new Error("Database validation failed");
+      throw new Error("Database validation failed", parsedData.error);
     }
     await db.write();
   } catch (error) {
