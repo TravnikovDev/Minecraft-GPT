@@ -1,5 +1,6 @@
 import { Vec3 } from "vec3";
 import { bot } from "..";
+import { breakBlockAt, placeBlock } from "./worldInteraction";
 
 // Helper function to place dirt if there's a hole
 async function fillHole(pos: Vec3) {
@@ -11,7 +12,15 @@ async function fillHole(pos: Vec3) {
 
   const blockBelow = bot.blockAt(pos.offset(0, -1, 0));
   if (blockBelow && blockBelow.name === "air") {
-    await bot.placeBlock(bot.blockAt(pos.offset(0, -2, 0)), dirt);
+    const targetBlock = bot.blockAt(pos.offset(0, -2, 0));
+    if (targetBlock) {
+      await placeBlock(
+        dirt.name,
+        targetBlock.position.x,
+        targetBlock.position.y,
+        targetBlock.position.z
+      );
+    }
     bot.chat(`Filled hole at ${pos.toString()} with dirt.`);
   }
 }
@@ -32,7 +41,11 @@ export async function clearSite(
         if (block && block.name !== "air") {
           // Dig the block if it's not at ground level
           if (currentPos.y > startPosition.y) {
-            await bot.dig(block);
+            await breakBlockAt(
+              block.position.x,
+              block.position.y,
+              block.position.z
+            );
             bot.chat(`Cleared block at ${currentPos.toString()}.`);
           }
         } else if (currentPos.y === startPosition.y) {

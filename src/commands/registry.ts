@@ -19,7 +19,7 @@ import * as GatherWood from "./GatherWood";
 import * as CraftWoodenTools from "./CraftWoodenTools";
 import * as RandomMovement from "./RandomMovement";
 import * as EvaluateBaseLocation from "./EvaluateBaseLocation";
-import * as SetBaseLocation from "./SetBaseLocation";
+import * as SetBase from "./SetBase";
 import * as SetBasement from "./SetBasement";
 import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
 import * as PickupNearbyItems from "./PickupNearbyItems";
@@ -56,7 +56,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.CraftWoodenTools]: CraftWoodenTools,
   [BotCommands.RandomMovement]: RandomMovement,
   [BotCommands.EvaluateBaseLocation]: EvaluateBaseLocation,
-  [BotCommands.SetBaseLocation]: SetBaseLocation,
+  [BotCommands.SetBase]: SetBase,
   [BotCommands.SetBasement]: SetBasement,
   [BotCommands.DigDiagonalTunnel]: DigDiagonalTunnel,
   [BotCommands.PickupNearbyItems]: PickupNearbyItems,

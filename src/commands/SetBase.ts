@@ -1,4 +1,4 @@
-// Path: src/actions/SetBaseLocation.ts
+// Path: src/actions/SetBase.ts
 
 import { z } from "zod";
 import { bot } from "../index";
@@ -9,20 +9,20 @@ Example: "Set base location here", "Build a base here".`;
 
 // TODO: Rework using db stored objects
 
-// Define parameters for SetBaseLocation action
+// Define parameters for SetBase action
 export const parameters = z.object({
   baseName: z.string().describe("The name of the base location"),
   radius: z.number().describe("Radius around the bot for base setup"),
 });
 
-// Implement the SetBaseLocation action
+// Implement the SetBase action
 export async function execute(args: any) {
-  console.log(`Executing SetBaseLocation with args:`, args);
+  console.log(`Executing SetBase with args:`, args);
 
   // Validate arguments
   const parsed = parameters.safeParse(args);
   if (!parsed.success) {
-    console.error(`Invalid parameters for SetBaseLocation:`, parsed.error);
+    console.error(`Invalid parameters for SetBase:`, parsed.error);
     return;
   }
 

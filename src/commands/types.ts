@@ -18,7 +18,7 @@ enum BotCommands {
   CraftWoodenTools = "craftWoodenTools",
   RandomMovement = "randomMovement",
   EvaluateBaseLocation = "evaluateBaseLocation",
-  SetBaseLocation = "setBaseLocation",
+  SetBase = "SetBase",
   SetBasement = "setBasement",
   DigDiagonalTunnel = "digDiagonalTunnel",
   PickupNearbyItems = "pickupNearbyItems",

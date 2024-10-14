@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { bot } from "../index";
-import { setBaseLocation } from "../managers/persistenceManager";
 import { moveAway } from "../actions/movement";
 
 export const description = `When user asks the bot to evaluate a location for a base, the bot will search the 

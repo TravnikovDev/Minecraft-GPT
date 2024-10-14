@@ -137,7 +137,7 @@ export function getInventory(): InventoryItemType[] {
 }
 
 // Set Base Location
-export async function setBaseLocation(location: PositionType) {
+export async function SetBase(location: PositionType) {
   try {
     const parsedLocation = PositionSchema.safeParse(location);
     if (!parsedLocation.success) {
