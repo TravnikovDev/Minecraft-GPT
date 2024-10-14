@@ -11,6 +11,10 @@ search for and collect the specified blocks. Example: "Collect 5 diamonds.", "Ga
 // Define parameters for the CollectBlock action
 export const parameters = z.object({
   blockType: z.string().describe("The type of block to collect."),
+  range: z
+    .number()
+    .optional()
+    .describe("The maximum distance to search for blocks."),
   num: z.number().describe("The number of blocks to collect."),
   exclude: z
     .array(
@@ -34,12 +38,10 @@ export async function execute(args: any) {
     return;
   }
 
-  const { blockType, num, exclude } = parsed.data;
+  let { blockType, range, num, exclude } = parsed.data;
 
-  if (num < 1) {
-    console.log(`Invalid number of blocks to collect: ${num}.`);
-    return;
-  }
+  range = range || 8;
+  num = num || 1;
 
   let blockTypes = [blockType];
   // Add variants
@@ -68,8 +70,8 @@ export async function execute(args: any) {
   for (let i = 0; i < num; i++) {
     let blocks = bot.findBlocks({
       matching: (block) => blockTypes.includes(block.name),
-      maxDistance: 64,
-      count: 1000,
+      maxDistance: range,
+      count: 100,
     });
 
     if (exclude.length > 0) {
