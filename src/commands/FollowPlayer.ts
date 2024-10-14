@@ -1,7 +1,6 @@
 // Path: src/actions/FollowPlayer.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { followPlayer } from "../actions/movement";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
@@ -15,12 +14,6 @@ export const parameters = z.object({
     .optional()
     .describe("The distance to keep from the player."),
 });
-
-// Register the action with zodFunction for validation
-export const FollowPlayerFunction = {
-  name: BotCommands.FollowPlayer,
-  parameters: parameters,
-};
 
 // Implement the FollowPlayer action
 export async function execute(args: any) {

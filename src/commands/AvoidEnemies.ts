@@ -17,14 +17,6 @@ export const parameters = z.object({
     .describe("The distance to maintain from enemies."),
 });
 
-// Register the action with zodFunction for validation
-export const AvoidEnemiesFunction = {
-  name: BotCommands.AvoidEnemies,
-  parameters: parameters,
-};
-
-// Implement the AvoidEnemies action
-
 // Function to get the nearest entity that meets a certain condition
 function getNearestEntityWhere(
   condition: (entity: Entity) => boolean,

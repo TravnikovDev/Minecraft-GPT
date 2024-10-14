@@ -2,7 +2,6 @@ import type { Bot } from "mineflayer";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { getAttackDamage } from "../utils/utility";
 
@@ -16,12 +15,6 @@ export const parameters = z.object({
     .optional()
     .describe("The range within which to detect enemies."),
 });
-
-// Register the action with zodFunction for validation
-export const DefendSelfFunction = {
-  name: BotCommands.DefendSelf,
-  parameters: parameters,
-};
 
 // Function to get the nearest entity that meets a certain condition
 function getNearestEntityWhere(

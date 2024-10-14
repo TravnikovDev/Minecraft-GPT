@@ -1,7 +1,6 @@
 // Path: src/actions/EquipBestWeapon.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 
 export const description = `When user asks the bot to equip the best weapon, the bot will search for the best weapon 
@@ -9,12 +8,6 @@ in its inventory and equip it. Example: "Equip the best weapon.", "Prepare to fi
 
 // Define parameters for the EquipBestWeapon action
 export const parameters = z.object({});
-
-// Register the action with zodFunction for validation
-export const EquipBestWeaponFunction = {
-  name: BotCommands.EquipBestWeapon,
-  parameters: parameters,
-};
 
 // Implement the EquipBestWeapon action
 export async function execute(args: any) {

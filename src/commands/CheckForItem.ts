@@ -1,7 +1,6 @@
 // Path: src/actions/CheckForItem.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { checkForItem } from "../actions/inventory";
 
 export const description = `When user asks the bot to check for an item in its inventory, the bot will check if it has the item.
@@ -13,12 +12,6 @@ export const parameters = z.object({
     .string()
     .describe("The name of the item to check into bot inventory."),
 });
-
-// Register the action with zodFunction for validation
-export const CheckForItemFunction = {
-  name: BotCommands.CheckForItem,
-  parameters: parameters,
-};
 
 // Implement the CheckForItem action
 export async function execute(args: any) {

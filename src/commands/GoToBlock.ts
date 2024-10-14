@@ -1,6 +1,5 @@
 import type { Bot } from "mineflayer";
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { goToPosition } from "../actions/movement";
 
@@ -13,12 +12,6 @@ export const parameters = z.object({
   minDistance: z.number().optional().describe("Minimum distance to the block."),
   range: z.number().optional().describe("Maximum search range for the block."),
 });
-
-// Register the action with zodFunction for validation
-export const GoToBlockFunction = {
-  name: BotCommands.GoToBlock,
-  parameters: parameters,
-};
 
 // Function to get the nearest block of a specific type
 function getNearestBlock(bot: Bot, blockType: string, maxDistance: number) {

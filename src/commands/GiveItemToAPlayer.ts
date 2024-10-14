@@ -1,7 +1,6 @@
 // Path: src/actions/GiveItemToAPlayer.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { giveToPlayer } from "../actions/inventory";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
@@ -16,12 +15,6 @@ export const parameters = z.object({
     .optional()
     .describe("The number of items to give to the player."),
 });
-
-// Register the action with zodFunction for validation
-export const GiveItemToAPlayerFunction = {
-  name: BotCommands.GiveItemToAPlayer,
-  parameters: parameters,
-};
 
 // Implement the GiveItemToAPlayer action
 export async function execute(args: any) {

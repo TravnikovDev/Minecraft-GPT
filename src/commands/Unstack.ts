@@ -1,7 +1,6 @@
 // Path: src/actions/Unstack.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { moveAway } from "../actions/movement";
@@ -22,12 +21,6 @@ export const parameters = z.object({
       "Maximum time in seconds before considering the bot to be stuck."
     ),
 });
-
-// Register the action with zodFunction for validation
-export const UnstackFunction = {
-  name: BotCommands.Unstack,
-  parameters: parameters,
-};
 
 // Implement the Unstack action
 export async function execute(args: any) {

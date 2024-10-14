@@ -1,7 +1,6 @@
 // Path: src/actions/GoToPosition.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { goToPosition } from "../actions/movement";
 
 // TODO: Rework this function with usage of objects from database
@@ -20,12 +19,6 @@ export const parameters = z.object({
     .optional()
     .describe("The minimum distance to stop from the target position."),
 });
-
-// Register the action with zodFunction for validation
-export const GoToPositionFunction = {
-  name: BotCommands.GoToPosition,
-  parameters: parameters,
-};
 
 // Implement the GoToPosition action
 export async function execute(args: any) {

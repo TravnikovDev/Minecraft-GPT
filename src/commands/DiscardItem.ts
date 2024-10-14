@@ -1,7 +1,6 @@
 // Path: src/actions/DiscardItem.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { discard } from "../actions/inventory";
 
 export const description = `When user asks the bot to discard an item from its inventory, the bot will discard the item.
@@ -12,12 +11,6 @@ export const parameters = z.object({
   item_name: z.string().describe("The name of the item to discard"),
   num: z.number().optional().describe("The number of items to discard."),
 });
-
-// Register the action with zodFunction for validation
-export const DiscardItemFunction = {
-  name: BotCommands.DiscardItem,
-  parameters: parameters,
-};
 
 // Implement the DiscardItem action
 export async function execute(args: any) {

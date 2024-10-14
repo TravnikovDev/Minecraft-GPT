@@ -1,7 +1,6 @@
 // Path: src/actions/CollectBlock.ts
 
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { Movements } from "mineflayer-pathfinder";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
@@ -23,12 +22,6 @@ export const parameters = z.object({
     )
     .describe("The positions to exclude from collection."),
 });
-
-// Register the action with zodFunction for validation
-export const CollectBlockFunction = {
-  name: BotCommands.CollectBlocks,
-  parameters: parameters,
-};
 
 // Implement the CollectBlock action
 export async function execute(args: any) {

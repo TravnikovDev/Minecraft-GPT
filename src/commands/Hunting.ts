@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { BotCommands } from "./types";
 import { bot } from "../index";
 import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
@@ -17,12 +16,6 @@ export const parameters = z.object({
     .optional()
     .describe("The maximum distance to hunt for animals."),
 });
-
-// Register the action with zodFunction for validation
-export const HuntingFunction = {
-  name: BotCommands.Hunting,
-  parameters: parameters,
-};
 
 // Function to get the nearest entity that meets a certain condition
 function getNearestEntityWhere(
