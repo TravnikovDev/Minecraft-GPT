@@ -10,8 +10,6 @@ and dimensions, placing torches at the specified interval. If no parameters are 
 'Please build a tunnel', 'Let's mine', 'Build a mine', "Dig a tunnel 20 blocks deep",
 "Dig a 3x3 tunnel towards east", "Please dig a tunnel 10 blocks deep towards south."`;
 
-// TODO: Move it as separate function in utility
-
 // Define parameters for DigDirectionalTunnel action
 export const parameters = z.object({
   depth: z.number().optional().describe("Depth of the tunnel"),
@@ -44,7 +42,7 @@ export async function execute(args: any) {
 
   // Default values for tunnel size
   depth = depth || 10;
-  torchInterval = torchInterval || 12;
+  torchInterval = torchInterval || 10;
   tunnelSize = tunnelSize || { width: 3, height: 4 };
   direction = direction || "north";
 

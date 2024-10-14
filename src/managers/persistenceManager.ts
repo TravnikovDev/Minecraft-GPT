@@ -8,12 +8,16 @@ import type {
   CommandType,
   DbSchemaType,
   InventoryItemType,
+  PositionType,
 } from "../schemas/types";
 import {
   CommandSchema,
   DbSchema,
   InventorySchema,
+  MineSchema,
+  PositionSchema,
 } from "../schemas/mainSchemas";
+import type { DirectionType } from "../actions/digDiagonalTunnel";
 
 // Database Setup
 const dbPath = resolve("db.json");
@@ -105,12 +109,14 @@ export async function addLoreEvent(event: string) {
 }
 
 // Get All Lore Events from Database
-export function getAllLoreEvents() {
+export function getAllLoreEvents(): string[] {
   return db.data?.lore?.events || [];
 }
 
 // Sync Inventory with Database
-export async function syncInventory(inventory: InventoryItemType[]) {
+export async function syncInventory(
+  inventory: InventoryItemType[]
+): Promise<void> {
   try {
     const parsedInventory = InventorySchema.safeParse(inventory);
     if (!parsedInventory.success) {
@@ -126,6 +132,139 @@ export async function syncInventory(inventory: InventoryItemType[]) {
 }
 
 // Get Inventory
-export function getInventory() {
+export function getInventory(): InventoryItemType[] {
   return db.data?.inventory || [];
+}
+
+// Set Base Location
+export async function setBaseLocation(location: PositionType) {
+  try {
+    const parsedLocation = PositionSchema.safeParse(location);
+    if (!parsedLocation.success) {
+      throw new Error(
+        "Base location validation failed: " + parsedLocation.error
+      );
+    }
+    if (db.data) {
+      db.data.baseLocation = { location: parsedLocation.data };
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error setting base location in database:", error);
+  }
+}
+
+// Place Crafting Table
+export async function placeCraftingTable(position: PositionType) {
+  try {
+    const parsedPosition = PositionSchema.safeParse(position);
+    if (!parsedPosition.success) {
+      throw new Error(
+        "Crafting table position validation failed: " + parsedPosition.error
+      );
+    }
+    if (db.data?.baseLocation) {
+      db.data.baseLocation.craftTable = parsedPosition.data;
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error placing crafting table in database:", error);
+  }
+}
+
+// Place Furnace
+export async function placeFurnace(position: PositionType) {
+  try {
+    const parsedPosition = PositionSchema.safeParse(position);
+    if (!parsedPosition.success) {
+      throw new Error(
+        "Furnace position validation failed: " + parsedPosition.error
+      );
+    }
+    if (db.data?.baseLocation) {
+      db.data.baseLocation.furnace = parsedPosition.data;
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error placing furnace in database:", error);
+  }
+}
+
+// Place Chest
+export async function placeChest(position: PositionType) {
+  try {
+    const parsedPosition = PositionSchema.safeParse(position);
+    if (!parsedPosition.success) {
+      throw new Error(
+        "Chest position validation failed: " + parsedPosition.error
+      );
+    }
+    if (db.data?.baseLocation) {
+      if (!db.data.baseLocation.chests) {
+        db.data.baseLocation.chests = [];
+      }
+      db.data.baseLocation.chests.push(parsedPosition.data);
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error placing chest in database:", error);
+  }
+}
+
+// Dig Mine
+export async function digMine(mine: {
+  name: string;
+  direction: DirectionType;
+  startsAt: PositionType;
+  endsAt: PositionType;
+  depth: number;
+}) {
+  try {
+    const parsedMine = MineSchema.safeParse(mine);
+    if (!parsedMine.success) {
+      throw new Error("Mine validation failed: " + parsedMine.error);
+    }
+    if (db.data?.baseLocation) {
+      if (!db.data.baseLocation.mines) {
+        db.data.baseLocation.mines = [];
+      }
+      db.data.baseLocation.mines.push(parsedMine.data);
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error digging mine in database:", error);
+  }
+}
+
+// Get Base Location
+export function getBaseLocation(): PositionType | undefined {
+  return db.data?.baseLocation?.location;
+}
+
+// Get Crafting Table
+export function getCraftingTable(): PositionType | undefined {
+  return db.data?.baseLocation?.craftTable;
+}
+
+// Get Furnace
+export function getFurnace(): PositionType | undefined {
+  return db.data?.baseLocation?.furnace;
+}
+
+// Get Chests
+export function getChests(): PositionType[] | undefined {
+  return db.data?.baseLocation?.chests;
+}
+
+// Get Mines
+export function getMines():
+  | {
+      name: string;
+      direction: DirectionType;
+      startsAt: PositionType;
+      endsAt: PositionType;
+      depth: number;
+    }[]
+  | undefined {
+  return db.data?.baseLocation?.mines;
 }

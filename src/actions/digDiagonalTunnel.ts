@@ -7,8 +7,18 @@ import {
 import { craftRecipe } from "../actions/crafting";
 import { __actionsDelay } from "../utils/utility";
 
+export type DirectionType = "north" | "south" | "west" | "east";
+
+/**
+ * Digs a diagonal tunnel in the specified direction.
+ * @param direction The direction to dig the tunnel in.
+ * @param depth The depth of the tunnel.
+ * @param tunnelSize The size of the tunnel.
+ * @param torchInterval The interval at which to place torches.
+ * @returns A promise that resolves to a boolean indicating whether the tunnel was successfully dug.
+ */
 export async function digDiagonalTunnel(
-  direction: "north" | "south" | "west" | "east" = "north",
+  direction: DirectionType = "north",
   depth: number = 10,
   tunnelSize: { width: number; height: number } = { width: 3, height: 4 },
   torchInterval: number = 12

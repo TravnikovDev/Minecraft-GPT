@@ -28,6 +28,14 @@ export const PositionSchema = z.object({
 
 export const LocationsSchema = z.array(PositionSchema);
 
+export const MineSchema = z.object({
+  name: z.string(),
+  direction: z.enum(["north", "south", "east", "west"]),
+  startsAt: PositionSchema,
+  endsAt: PositionSchema,
+  depth: z.number().min(0),
+});
+
 export const DbSchema = z.object({
   commands: z.array(CommandSchema),
   lore: LoreSchema.optional(),
@@ -38,7 +46,7 @@ export const DbSchema = z.object({
       craftTable: PositionSchema.optional(),
       furnace: PositionSchema.optional(),
       chests: LocationsSchema.optional(),
-      mines: LocationsSchema.optional(),
+      mines: z.array(MineSchema).optional(),
     })
     .optional(),
 });

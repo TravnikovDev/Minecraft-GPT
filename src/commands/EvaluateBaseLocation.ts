@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { bot } from "../index";
+import { setBaseLocation } from "../managers/persistenceManager";
+import { moveAway } from "../actions/movement";
 
 export const description = `When user asks the bot to evaluate a location for a base, the bot will search the 
 area around it for resources and determine if it is suitable for a base. Example: 
@@ -71,6 +73,7 @@ export async function execute(args: any) {
       bot.chat(
         "This location is not suitable for a base. It lacks sufficient resources."
       );
+      moveAway(60);
       setTimeout(evaluateLocation, 5000); // Retry after 5 seconds
     }
   };
