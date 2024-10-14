@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { goToPosition } from "../actions/movement";
+import { getNearbyPlayerNames } from "../actions/world";
 
 export const description = `When user asks the bot to go to a player, the bot will navigate to the player's location. 
    Example: "Go to player Steve", "Head towards Alex", "Move to player Notch", "Come to papa", "Come here".
@@ -30,7 +31,13 @@ export async function execute(args: any) {
   let { player_name, closeness } = parsed.data;
   // Default value for closeness
   closeness = closeness || 3;
-  const targetPlayer = bot.players[player_name]?.entity;
+  let targetPlayer;
+  if (player_name) {
+    targetPlayer = bot.players[player_name]?.entity;
+  } else {
+    const players = getNearbyPlayerNames(bot, 220);
+    targetPlayer = bot.players[players[0]].entity;
+  }
 
   if (targetPlayer) {
     goToPosition(
@@ -43,21 +50,6 @@ export async function execute(args: any) {
       `Heading towards ${player_name}, getting ${closeness} blocks close.`
     );
   } else {
-    const entity = bot.nearestEntity();
-    if (entity !== null) {
-      if (entity.type === "player") {
-        goToPosition(
-          entity.position.x,
-          entity.position.y,
-          entity.position.z,
-          closeness
-        );
-        bot.chat(
-          `Heading towards ${player_name}, getting ${closeness} blocks close.`
-        );
-      } else {
-        bot.chat(`Could not find player ${player_name}.`);
-      }
-    }
+    bot.chat(`Could not find player ${player_name}.`);
   }
 }

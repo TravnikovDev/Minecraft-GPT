@@ -5,8 +5,6 @@ import { bot } from "../index";
 import { goToPosition } from "../actions/movement";
 import { getBaseLocation } from "../managers/persistenceManager";
 
-// TODO: Rework using objects stored in db
-
 export const description = `When user asks the bot to return to base, the bot will navigate back to the base location.
     Example: "Return to base", "Go back to the base", "Head home".
     If no parameters are provided, the bot will return to the default base location.`;

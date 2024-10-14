@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 import { giveToPlayer } from "../actions/inventory";
+import { getNearbyPlayerNames } from "../actions/world";
+import { bot } from "..";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
 Example: "Give a sword to Steve.", "Give 2 apples to Alex", "Give a pickaxe to me".`;
@@ -30,5 +32,13 @@ export async function execute(args: any) {
   let { player_name, item_name, num } = parsed.data;
   num = num || 1;
 
-  await giveToPlayer(item_name, player_name, num);
+  let theName;
+  if (player_name) {
+    theName = player_name;
+  } else {
+    const players = getNearbyPlayerNames(bot, 220);
+    theName = players[0];
+  }
+
+  await giveToPlayer(item_name, theName, num);
 }

@@ -228,7 +228,7 @@ export function getNearbyEntityTypes(bot: Bot): string[] {
   return found;
 }
 
-export function getNearbyPlayerNames(bot: Bot): string[] {
+export function getNearbyPlayerNames(bot: Bot, distance = 32): string[] {
   /**
    * Get a list of all nearby player names.
    * @param {Bot} bot - The bot to get nearby players for.
@@ -236,7 +236,7 @@ export function getNearbyPlayerNames(bot: Bot): string[] {
    * @example
    * let players = world.getNearbyPlayerNames(bot);
    **/
-  const players = getNearbyPlayers(bot, 16);
+  const players = getNearbyPlayers(bot, distance);
   const found: string[] = [];
   for (const player of players) {
     if (

@@ -72,7 +72,7 @@ bot.on("health", () => {
   }
 });
 
-bot.on("respawn", () => {
+bot.on("spawn", () => {
   addCommandToQueue({
     id: "respawn",
     command: BotCommands.GoToPlayer,
