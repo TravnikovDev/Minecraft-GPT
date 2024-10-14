@@ -10,6 +10,8 @@ import { bot } from "..";
 export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
   let placedTable = false;
 
+  itemName = itemName.split(" ").join("_").toLowerCase();
+
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
 
   // Get recipes that don't require a crafting table
