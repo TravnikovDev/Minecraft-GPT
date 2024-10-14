@@ -71,7 +71,7 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
   }
 
   if (!recipes || recipes.length === 0) {
-    console.log(`You do not have the resources to craft a ${itemName}.`);
+    console.log(`I do not have the resources to craft a ${itemName}.`);
     if (placedTable) {
       await collectBlock("crafting_table", 1);
     }
@@ -91,15 +91,15 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
     await bot.craft(recipe, num, craftingTable);
     const invCounts = world.getInventoryCounts(bot);
     const itegameDataount = invCounts[itemName] || 0;
-    console.log(
-      `Successfully crafted ${itemName}, you now have ${itegameDataount} ${itemName}.`
+    bot.chat(
+      `Successfully crafted ${itemName}, I now have ${itegameDataount} ${itemName}.`
     );
     if (placedTable) {
       await collectBlock("crafting_table", 1);
     }
     return true;
   } catch (err) {
-    console.log(`Failed to craft ${itemName}: ${(err as Error).message}`);
+    bot.chat(`Failed to craft ${itemName}: ${(err as Error).message}`);
     if (placedTable) {
       await collectBlock("crafting_table", 1);
     }
@@ -143,7 +143,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     }
   }
   if (!furnaceBlock) {
-    console.log(`There is no furnace nearby and you have no furnace.`);
+    console.log(`There is no furnace nearby and I have no furnace.`);
     return false;
   }
   if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
@@ -171,7 +171,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
   // Check if the bot has enough items to smelt
   const invCounts = world.getInventoryCounts(bot);
   if (!invCounts[itemName] || invCounts[itemName] < num) {
-    console.log(`You do not have enough ${itemName} to smelt.`);
+    console.log(`I do not have enough ${itemName} to smelt.`);
     if (placedFurnace) await collectBlock("furnace", 1);
     return false;
   }
@@ -184,7 +184,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     const putFuel = Math.ceil(num / 8);
     if (!fuel || fuel.count < putFuel) {
       console.log(
-        `You do not have enough coal or charcoal to smelt ${num} ${itemName}, you need ${putFuel} coal or charcoal`
+        `I do not have enough coal or charcoal to smelt ${num} ${itemName}, I need ${putFuel} coal or charcoal`
       );
       if (placedFurnace) await collectBlock("furnace", 1);
       return false;

@@ -30,6 +30,7 @@ import * as ListInventory from "./ListInventory";
 import * as CheckForItem from "./CheckForItem";
 import * as DiscardItem from "./DiscardItem";
 import * as GiveItemToAPlayer from "./GiveItemToAPlayer";
+import * as CraftItem from "./CraftItem";
 
 type ActionModule = {
   parameters: any;
@@ -51,6 +52,7 @@ export const actionRegistry: Record<BotCommands, ActionModule> = {
   [BotCommands.GoToPosition]: GoToPosition,
   [BotCommands.Unstack]: Unstack,
   [BotCommands.GatherWood]: GatherWood,
+  [BotCommands.CraftItem]: CraftItem,
   [BotCommands.CraftWoodenTools]: CraftWoodenTools,
   [BotCommands.RandomMovement]: RandomMovement,
   [BotCommands.EvaluateBaseLocation]: EvaluateBaseLocation,
