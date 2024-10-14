@@ -13,7 +13,9 @@ import { bot } from "..";
  * @returns Whether the item was successfully equipped.
  */
 export async function equip(itemName: string): Promise<boolean> {
-  const item = bot.inventory.items().find((item) => item.name === itemName);
+  const item = bot.inventory
+    .items()
+    .find((item) => item.name.includes(itemName));
   if (!item) {
     console.log(`You do not have any ${itemName} to equip.`);
     return false;
@@ -37,7 +39,9 @@ export async function equip(itemName: string): Promise<boolean> {
 export async function discard(itemName: string, num = -1): Promise<boolean> {
   let discarded = 0;
   while (true) {
-    const item = bot.inventory.items().find((item) => item.name === itemName);
+    const item = bot.inventory
+      .items()
+      .find((item) => item.name.includes(itemName));
     if (!item) {
       break;
     }
@@ -63,7 +67,9 @@ export async function putInChest(itemName: string, num = -1): Promise<boolean> {
     console.log(`Could not find a chest nearby.`);
     return false;
   }
-  const item = bot.inventory.items().find((item) => item.name === itemName);
+  const item = bot.inventory
+    .items()
+    .find((item) => item.name.includes(itemName));
   if (!item) {
     console.log(`You do not have any ${itemName} to put in the chest.`);
     return false;
@@ -90,7 +96,7 @@ export async function takeFromChest(
   const chestContainer = await bot.openContainer(chest);
   const item = chestContainer
     .containerItems()
-    .find((item) => item.name === itemName);
+    .find((item) => item.name.includes(itemName));
   if (!item) {
     console.log(`Could not find any ${itemName} in the chest.`);
     await chestContainer.close();
@@ -138,7 +144,7 @@ export async function eat(foodName = ""): Promise<boolean> {
   let item: Item | undefined;
   let name: string;
   if (foodName) {
-    item = bot.inventory.items().find((item) => item.name === foodName);
+    item = bot.inventory.items().find((item) => item.name.includes(foodName));
     name = foodName;
   } else {
     // @ts-ignore
@@ -169,7 +175,7 @@ export async function giveToPlayer(
 ): Promise<boolean> {
   const player = bot.players[username]?.entity;
   if (!player) {
-    console.log(`Could not find ${username}.`);
+    console.log(`Could not find a player with username: ${username}.`);
     return false;
   }
   await goToPlayer(username);
@@ -190,7 +196,7 @@ export async function listInventory(): Promise<void> {
 
 export async function checkForItem(itemName: string): Promise<void> {
   const items = await bot.inventory.items();
-  const searchableItems = items.filter((item) => item.name === itemName);
+  const searchableItems = items.filter((item) => item.name.includes(itemName));
   sayItems(searchableItems);
 }
 
@@ -249,7 +255,9 @@ export async function transferAllToChest(): Promise<boolean> {
  * @returns
  */
 export function getItemCount(itemName: string): number {
-  const item = bot.inventory.items().find((item) => item.name === itemName);
+  const item = bot.inventory
+    .items()
+    .find((item) => item.name.includes(itemName));
   if (item) {
     console.log(`You have ${item.count} ${itemName} in your inventory.`);
     return item.count;

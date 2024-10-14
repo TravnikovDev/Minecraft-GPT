@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BotCommands } from "./types";
 import { bot } from "../index";
 import { Movements } from "mineflayer-pathfinder";
+import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 
 export const description = `The user asks the bot to collect a certain number of blocks of a specific type. The bot will 
 search for and collect the specified blocks. Example: "Collect 5 diamonds.", "Gather 10 iron ores."`;
@@ -89,7 +90,6 @@ export async function execute(args: any) {
 
     const movements = new Movements(bot);
     movements.dontMineUnderFallingBlock = false;
-    blocks = blocks.filter((block) => movements.safeToBreak(block as any));
 
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);
@@ -110,11 +110,10 @@ export async function execute(args: any) {
       return;
     }
     try {
-      // @ts-ignore
-      await bot.collectBlock.collect(block);
+      await breakBlockAt(blockPosition.x, blockPosition.y, blockPosition.z);
+      await pickupNearbyItems(bot);
+
       collected++;
-      // Simulate auto light behavior after collecting
-      console.log("Auto light behavior after collecting.");
     } catch (err) {
       if (err instanceof Error && err.name === "NoChests") {
         console.log(
@@ -131,5 +130,5 @@ export async function execute(args: any) {
       }
     }
   }
-  console.log(`Collected ${collected} ${blockType}.`);
+  bot.chat(`Collected ${collected} ${blockType}.`);
 }

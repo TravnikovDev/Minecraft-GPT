@@ -407,7 +407,7 @@ export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
   const getNearestItem = (bot: Bot) =>
     bot.nearestEntity(
       (entity) =>
-        entity.name === "item" &&
+        // entity.name === "item" &&
         bot.entity.position.distanceTo(entity.position) < distance
     );
   let nearestItem = getNearestItem(bot);
