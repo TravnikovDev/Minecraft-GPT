@@ -2,12 +2,13 @@
 
 import { bot } from "../index";
 import { Vec3 } from "vec3";
-import pf, { type SafeBlock } from "mineflayer-pathfinder";
+import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
 import * as gameData from "../utils/minecraftData";
 import * as world from "./world.js";
 import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";
+import { __actionsDelay } from "../utils/utility.js";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 
@@ -224,7 +225,8 @@ export async function breakBlockAt(
 export async function collectBlock(
   blockType: string,
   num = 1,
-  exclude: Vec3[] = []
+  exclude: Vec3[] = [],
+  range = 64
 ): Promise<boolean> {
   if (num < 1) {
     console.log(`Invalid number of blocks to collect: ${num}.`);
@@ -256,7 +258,7 @@ export async function collectBlock(
   let collected = 0;
 
   for (let i = 0; i < num; i++) {
-    let blocks = world.getNearestBlocks(bot, blockTypes, 64);
+    let blocks = world.getNearestBlocks(bot, blockTypes, range);
     if (exclude.length > 0) {
       blocks = blocks.filter(
         (block) =>
@@ -270,9 +272,9 @@ export async function collectBlock(
     }
     const movements = new pf.Movements(bot);
     movements.dontMineUnderFallingBlock = false;
-    blocks = blocks.filter((block) =>
-      movements.safeToBreak(block as any as SafeBlock)
-    );
+    // blocks = blocks.filter((block) =>
+    //   movements.safeToBreak(block as any as SafeBlock)
+    // );
 
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);
@@ -407,10 +409,12 @@ export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
   const getNearestItem = (bot: Bot) =>
     bot.nearestEntity(
       (entity) =>
-        // entity.name === "item" &&
+        entity.name == "item" &&
+        entity.onGround &&
         bot.entity.position.distanceTo(entity.position) < distance
     );
   let nearestItem = getNearestItem(bot);
+
   let pickedUp = 0;
   while (nearestItem) {
     bot.pathfinder.setMovements(new pf.Movements(bot));
@@ -418,7 +422,7 @@ export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
       new pf.goals.GoalFollow(nearestItem, 0.8),
       () => {}
     );
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await __actionsDelay(500);
     const prev = nearestItem;
     nearestItem = getNearestItem(bot);
     if (prev === nearestItem) {

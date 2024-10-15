@@ -5,7 +5,8 @@ import { __actionsDelay } from "../utils/utility";
 import { gatherWood } from "../actions/gatherWood";
 
 export const description = `When user asks the bot to gather wood, the bot will search for wood blocks nearby and gather them.
-The bot will continue gathering wood until the specified number of logs is reached. Example: "Gather wood", "Collect some logs".
+The bot will continue gathering wood until the specified number of logs is reached. 
+Example: "Gather wood", "Collect some logs", "Collect 6 wood", "Need some wood".
 If no parameters are provided, the bot will gather 32 logs at radius of 64 blocks.`;
 
 // Define parameters for the GatherWood action

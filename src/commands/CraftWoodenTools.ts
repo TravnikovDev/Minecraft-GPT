@@ -7,7 +7,7 @@ import { gatherWood } from "../actions/gatherWood";
 
 export const description = `Important action to build initial tools for the bot. User can specify the number of each tool to craft. 
 If no parameters are provided, the bot will craft 3 pickaxes, 2 axes, 1 sword, and 1 shovel. Example usage: 
-"Craft wooden tools: 2 pickaxes, 1 axe.", "Please craft basic tools", "Make an axe and a shovel"`;
+"Craft wooden tools: 2 pickaxes, 1 axe.", "Please craft basic tools", "Make an axe and a shovel", "Craft wooden pickaxe"`;
 
 // Define parameters for CraftWoodenTools action
 export const parameters = z.object({
@@ -35,7 +35,7 @@ export async function execute(args: any) {
 
   let { toolCount } = parsed.data;
   // Default values for toolCount
-  toolCount = toolCount || { pickaxe: 3, axe: 2, sword: 1, shovel: 1 };
+  toolCount = toolCount || { pickaxe: 1, axe: 1, sword: 0, shovel: 0 };
 
   // Check existing tools in inventory and adjust toolCount
   const existingToolCounts = {

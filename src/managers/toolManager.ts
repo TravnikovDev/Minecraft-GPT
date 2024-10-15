@@ -12,12 +12,6 @@ export { tools };
 export async function executeTool(command: string, args: any) {
   console.log(`Executing tool command ${command}`);
 
-  // Validate that args contain the expected properties
-  if (!args) {
-    console.error(`Error: Arguments for command ${command} are undefined.`);
-    return;
-  }
-
   const commandModule = commandRegistry[command as BotCommands];
   if (commandModule) {
     await commandModule.execute(args);

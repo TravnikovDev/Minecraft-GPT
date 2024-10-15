@@ -11,24 +11,19 @@ export const description = `When user asks the bot to go to a player, the bot wi
 
 // Define parameters for the GoToPlayer action
 export const parameters = z.object({
-  player_name: z.string().describe("The name of the player to go to."),
+  player_name: z
+    .string()
+    .optional()
+    .describe("The name of the player to go to."),
   closeness: z.number().optional().describe("How close to get to the player."),
 });
 
 // Implement the GoToPlayer action
-export async function execute(args: any) {
-  console.log(`Executing GoToPlayer with args:`, args);
-
+export async function execute(args: any = {}) {
   // Validate arguments
-  const parsed = parameters.safeParse(args);
-  if (!parsed.success) {
-    console.error(
-      `Missing parameters for GoToPlayer: player_name or closeness is undefined.`
-    );
-    return;
-  }
+  const parsed = parameters.parse(args);
 
-  let { player_name, closeness } = parsed.data;
+  let { player_name, closeness } = parsed || {};
   // Default value for closeness
   closeness = closeness || 3;
   let targetPlayer;
@@ -40,16 +35,15 @@ export async function execute(args: any) {
   }
 
   if (targetPlayer) {
-    goToPosition(
+    bot.chat(`Heading towards ${targetPlayer.name}.`);
+    await goToPosition(
       targetPlayer.position.x,
       targetPlayer.position.y,
       targetPlayer.position.z,
       closeness
     );
-    bot.chat(
-      `Heading towards ${player_name}, getting ${closeness} blocks close.`
-    );
+    await bot.lookAt(targetPlayer.position.offset(0, 1.6, 0));
   } else {
-    bot.chat(`Could not find player ${player_name}.`);
+    bot.chat(`Could not find player to follow.`);
   }
 }

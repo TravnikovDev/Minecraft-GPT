@@ -67,12 +67,17 @@ bot.on("health", () => {
       id: "defend-self",
       command: BotCommands.DefendSelf,
       priority: 9,
-      args: { range: 5 },
+      args: { range: 8 },
     });
   }
 });
 
 bot.on("spawn", () => {
+  addCommandToQueue({
+    id: "pickup",
+    command: BotCommands.PickupNearbyItems,
+    priority: 9,
+  });
   addCommandToQueue({
     id: "respawn",
     command: BotCommands.GoToPlayer,

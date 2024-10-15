@@ -15,42 +15,52 @@ export async function gatherWood(
   num: number,
   maxDistance = 64
 ): Promise<boolean> {
-  const gatherWood = async () => {
+  const gatherWoodInternal = async () => {
     console.log(`Gathering wood... I need to make ${num} logs.`);
 
     const logsCount = bot.inventory
       .items()
       .filter((item) => item.name.includes("log"))
       .reduce((acc, item) => acc + item.count, 0);
+
+    console.log(`I have ${logsCount} logs.`);
     if (logsCount >= num) {
       console.log(`Wood gathering complete! I have ${logsCount} logs.`);
+      bot.chat(`I have gathered ${logsCount} logs.`);
       return true;
     }
 
-    const woodBlock = await bot.findBlock({
+    const woodBlock = bot.findBlock({
       matching: (block) => block.name.includes("log"),
       maxDistance,
     });
+
     if (woodBlock) {
       const destination = await goToPosition(
         woodBlock.position.x,
         woodBlock.position.y,
-        woodBlock.position.z
+        woodBlock.position.z,
+        1
       );
+
       if (destination) {
         try {
-          await bot.pathfinder.stop();
-          await breakBlockAt(
-            woodBlock.position.x,
-            woodBlock.position.y,
-            woodBlock.position.z
-          );
+          for (let i = 0; i < 4; i++) {
+            console.log("Trying to break the wood block. number:", i);
+            await breakBlockAt(
+              woodBlock.position.x,
+              woodBlock.position.y + i,
+              woodBlock.position.z
+            );
+            console.log("Successfully broke the wood block.");
+            await __actionsDelay(2000); // Add delay to simulate gathering
+          }
           await pickupNearbyItems(bot);
-          await __actionsDelay(); // Add delay to simulate gathering
-          return gatherWood(); // Repeat the process
+          console.log("Successfully gathered a wood block.");
+          return gatherWoodInternal(); // Repeat the process if needed
         } catch (digError) {
           console.error("Failed to dig the wood block:", digError);
-          return gatherWood();
+          return gatherWoodInternal();
         }
       }
     } else {
@@ -60,11 +70,10 @@ export async function gatherWood(
   };
 
   try {
-    gatherWood();
+    await gatherWoodInternal();
+    return true;
   } catch (error) {
     console.error("Failed to gather wood:", error);
     return false;
   }
-
-  return true;
 }
