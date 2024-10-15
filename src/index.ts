@@ -1,6 +1,6 @@
 // Path: src/index.ts
 
-import mineflayer from "mineflayer";
+import mineflayer, { type Player } from "mineflayer";
 import { config } from "dotenv";
 import {
   addCommandToQueue,
@@ -30,22 +30,35 @@ export const bot = mineflayer.createBot({
   username: process.env["BOT_USERNAME"] || "MinecraftGPT",
 });
 
-// Load Plugins
-bot.loadPlugin(pathfinder);
-bot.loadPlugin(pvp);
-bot.loadPlugin(autoEat);
-bot.loadPlugin(tool);
-bot.loadPlugin(armorManager);
-
 // Event: Bot spawned
 bot.once("spawn", () => {
-  bot.chat("Hello world! Minecraft-gpt at your service!");
+  // Load Plugins
+  bot.loadPlugin(pathfinder);
+  bot.loadPlugin(pvp);
+  bot.loadPlugin(autoEat);
+  bot.loadPlugin(tool);
+  bot.loadPlugin(armorManager);
+
+  bot.chat("Hello world! MinecraftGPT at your service!");
 
   const defaultMove = new Movements(bot);
 
   defaultMove.allow1by1towers = false; // Do not build 1x1 towers when going up
   defaultMove.canDig = false; // Disable breaking of blocks when pathing
   bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
+
+  addCommandToQueue({
+    id: "pickup",
+    command: BotCommands.PickupNearbyItems,
+    priority: 9,
+    retryCount: 1,
+  });
+  addCommandToQueue({
+    id: "go-to-player",
+    command: BotCommands.GoToPlayer,
+    priority: 8,
+    retryCount: 1,
+  });
 });
 
 // Event: Player chat interaction
@@ -54,6 +67,19 @@ bot.on("chat", async (username, message) => {
 
   await bot.pathfinder.stop();
   initiateActionFromAI(username, message);
+});
+
+bot.on("playerJoined", (player: Player) => {
+  const playerUsername = player.username;
+  if (playerUsername === bot.username) return;
+  bot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
+  addCommandToQueue({
+    id: "go-to-player",
+    command: BotCommands.GoToPlayer,
+    priority: 8,
+    retryCount: 1,
+    args: { player_name: playerUsername, closeness: 5 },
+  });
 });
 
 bot.on("health", () => {
@@ -71,19 +97,13 @@ bot.on("health", () => {
   }
 });
 
-bot.on("spawn", () => {
-  addCommandToQueue({
-    id: "pickup",
-    command: BotCommands.PickupNearbyItems,
-    priority: 9,
-    retryCount: 1,
-  });
-  addCommandToQueue({
-    id: "go-to-player",
-    command: BotCommands.GoToPlayer,
-    priority: 8,
-    retryCount: 1,
-  });
+bot.on("breath", () => {
+  bot.respawn();
+});
+
+bot.on("end", () => {
+  console.log("Bot disconnected. Reconnecting...");
+  bot.end();
 });
 
 /**
