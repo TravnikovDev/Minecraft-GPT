@@ -82,7 +82,7 @@ bot.on("spawn", () => {
     id: "go-to-player",
     command: BotCommands.GoToPlayer,
     priority: 8,
-    retryCount: 0,
+    retryCount: 1,
   });
 });
 
