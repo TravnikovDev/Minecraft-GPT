@@ -193,6 +193,10 @@ export async function breakBlockAt(
     console.log(`No block found at position ${blockPos}.`);
     return false;
   }
+  if (!bot.canDigBlock(block)) {
+    console.log(`Cannot break ${block.name} at ${blockPos}.`);
+    return false;
+  }
   if (block.name !== "air" && block.name !== "water" && block.name !== "lava") {
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
       await goToPosition(x, y, z);
@@ -205,13 +209,20 @@ export async function breakBlockAt(
         return false;
       }
     }
-    await bot.dig(block, true);
-    console.log(
-      `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(
-        1
-      )}, z:${z.toFixed(1)}.`
-    );
-    return true;
+    await bot.lookAt(block.position, true); // Ensure the bot has finished turning
+    await __actionsDelay(500);
+    try {
+      await bot.dig(block, true);
+      console.log(
+        `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(
+          1
+        )}, z:${z.toFixed(1)}.`
+      );
+      return true;
+    } catch (err) {
+      console.error(`Failed to dig the block: ${err}`);
+      return false;
+    }
   } else {
     console.log(
       `Skipping block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(
@@ -222,11 +233,10 @@ export async function breakBlockAt(
   }
 }
 
-export async function collectBlock(
+/* export async function collectBlock(
   blockType: string,
   num = 1,
-  exclude: Vec3[] = [],
-  range = 64
+  range = 16
 ): Promise<boolean> {
   if (num < 1) {
     console.log(`Invalid number of blocks to collect: ${num}.`);
@@ -254,28 +264,14 @@ export async function collectBlock(
   if (blockType === "dirt") {
     blockTypes.push("grass_block");
   }
-
   let collected = 0;
-
   for (let i = 0; i < num; i++) {
     let blocks = world.getNearestBlocks(bot, blockTypes, range);
-    if (exclude.length > 0) {
-      blocks = blocks.filter(
-        (block) =>
-          !exclude.some(
-            (pos) =>
-              pos.x === block.position.x &&
-              pos.y === block.position.y &&
-              pos.z === block.position.z
-          )
-      );
-    }
     const movements = new pf.Movements(bot);
     movements.dontMineUnderFallingBlock = false;
     // blocks = blocks.filter((block) =>
-    //   movements.safeToBreak(block as any as SafeBlock)
+    //   movements.safeToBreak(block as unknown as pf.SafeBlock)
     // );
-
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);
       else console.log(`No more ${blockType} nearby to collect.`);
@@ -289,8 +285,8 @@ export async function collectBlock(
       return false;
     }
     try {
-      // @ts-ignore
       await bot.collectBlock.collect(block);
+      console.log("Collected block ", block.name);
       collected++;
     } catch (err) {
       if (err instanceof Error && err.name === "NoChests") {
@@ -310,7 +306,7 @@ export async function collectBlock(
   }
   console.log(`Collected ${collected} ${blockType}.`);
   return collected > 0;
-}
+} */
 
 export async function activateNearestBlock(bot: Bot, type: string) {
   /**
@@ -404,8 +400,10 @@ export async function tillAndSow(
   return true;
 }
 
-export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
-  const distance = 8;
+export async function pickupNearbyItems(
+  bot: Bot,
+  distance = 8
+): Promise<boolean> {
   const getNearestItem = (bot: Bot) =>
     bot.nearestEntity(
       (entity) =>
@@ -417,7 +415,7 @@ export async function pickupNearbyItems(bot: Bot): Promise<boolean> {
 
   let pickedUp = 0;
   while (nearestItem) {
-    bot.pathfinder.setMovements(new pf.Movements(bot));
+    // bot.pathfinder.setMovements(new pf.Movements(bot));
     await bot.pathfinder.goto(
       new pf.goals.GoalFollow(nearestItem, 0.8),
       () => {}

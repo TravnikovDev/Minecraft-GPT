@@ -4,6 +4,7 @@ import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { bot } from "../index.js";
+import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 
 export async function goToPosition(
   x: number,
@@ -56,8 +57,8 @@ export async function goToPlayer(
     return false;
   }
 
-  const move = new pf.Movements(bot);
-  bot.pathfinder.setMovements(move);
+  // const move = new pf.Movements(bot);
+  // bot.pathfinder.setMovements(move);
   await bot.pathfinder.goto(new pf.goals.GoalFollow(playerEntity, distance));
 
   console.log(`You have reached ${username}.`);
@@ -73,8 +74,8 @@ export async function followPlayer(
     return false;
   }
 
-  const move = new pf.Movements(bot);
-  bot.pathfinder.setMovements(move);
+  // const move = new pf.Movements(bot);
+  // bot.pathfinder.setMovements(move);
   bot.pathfinder.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
   console.log(`You are now actively following player ${username}.`);
 
@@ -82,15 +83,26 @@ export async function followPlayer(
 }
 
 export async function moveAway(distance: number): Promise<boolean> {
-  const pos = bot.entity.position;
-  const goal = new pf.goals.GoalNear(pos.x, pos.y, pos.z, distance);
-  const invertedGoal = new pf.goals.GoalInvert(goal);
-  bot.pathfinder.setMovements(new pf.Movements(bot));
+  try {
+    let rand = getRandomInt(0, 1);
+    let bigRand1 = getRandomInt(0, 100);
+    let bigRand2 = getRandomInt(0, 100);
 
-  await bot.pathfinder.goto(invertedGoal);
-  const newPos = bot.entity.position;
-  console.log(`Moved away from nearest entity to ${newPos}.`);
-  return true;
+    const pos = bot.entity.position;
+    const farGoal = new pf.goals.GoalXZ(
+      pos.x + (distance * bigRand1) / 100,
+      pos.z + ((distance * bigRand2) / 100) * (rand ? 1 : -1)
+    );
+    const invertedGoal = new pf.goals.GoalInvert(farGoal);
+
+    await bot.pathfinder.goto(rand ? farGoal : invertedGoal);
+    const newPos = bot.entity.position;
+    console.log(`Moved away from nearest entity to ${newPos}.`);
+    return true;
+  } catch (err) {
+    console.log(`Failed to move away: ${(err as Error).message}`);
+    return false;
+  }
 }
 
 export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
@@ -123,9 +135,9 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
   bot.pathfinder.setGoal(
     new pf.goals.GoalNear(doorPos.x, doorPos.y, doorPos.z, 1)
   );
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await __actionsDelay(1000);
   while (bot.pathfinder.isMoving()) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await __actionsDelay(100);
   }
 
   const doorBlock = bot.blockAt(doorPos);
@@ -139,7 +151,7 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
   }
 
   bot.setControlState("forward", true);
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  await __actionsDelay(600);
   bot.setControlState("forward", false);
   await bot.activateBlock(doorBlock);
 
@@ -168,7 +180,7 @@ export async function goToBed(): Promise<boolean> {
     await bot.sleep(bed);
     console.log(`You are in bed.`);
     while (bot.isSleeping) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await __actionsDelay(500);
     }
     console.log(`You have woken up.`);
     return true;

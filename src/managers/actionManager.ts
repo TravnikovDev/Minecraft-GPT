@@ -10,23 +10,26 @@ import type { CommandType } from "../schemas/types";
 
 // Process an Command
 async function processCommand(nextCommand: CommandType) {
+  let success = false;
   try {
     await executeTool(nextCommand.command, nextCommand.args);
+    success = true;
   } catch (error) {
     console.error(`Error executing command ${nextCommand.command}:`, error);
-    // Fallback mechanism: re-add command to the queue with lower priority for retry
+    // Optionally adjust priority or add retry count
+    nextCommand.retryCount = (nextCommand.retryCount || 0) + 1;
     await addCommandToQueue(nextCommand);
-    console.log(
-      `Re-added command ${nextCommand.command} to queue with lower priority for retry.`
-    );
+    console.log(`Re-added command ${nextCommand.command} to queue for retry.`);
   } finally {
-    try {
-      await removeCommand(nextCommand.id);
-    } catch (error) {
-      console.error(
-        `Error removing command ${nextCommand.id} from queue:`,
-        error
-      );
+    if (success) {
+      try {
+        await removeCommand(nextCommand.id);
+      } catch (error) {
+        console.error(
+          `Error removing command ${nextCommand.id} from queue:`,
+          error
+        );
+      }
     }
   }
 }

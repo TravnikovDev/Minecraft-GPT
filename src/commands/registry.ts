@@ -31,6 +31,7 @@ import * as CheckForItem from "./CheckForItem";
 import * as DiscardItem from "./DiscardItem";
 import * as GiveItemToAPlayer from "./GiveItemToAPlayer";
 import * as CraftItem from "./CraftItem";
+import * as CraftStoneTools from "./CraftStoneTools";
 
 type CommandModule = {
   parameters: any;
@@ -67,6 +68,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.CheckForItem]: CheckForItem,
   [BotCommands.DiscardItem]: DiscardItem,
   [BotCommands.GiveItemToAPlayer]: GiveItemToAPlayer,
+  [BotCommands.CraftStoneTools]: CraftStoneTools,
 };
 
 // Extracting tools for use with validation (zodFunction)

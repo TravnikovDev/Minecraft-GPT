@@ -137,6 +137,7 @@ export async function initiateActionFromAI(
           id: actionId,
           priority: 3,
           args: toolAction.arguments,
+          retryCount: 0,
         });
         // toolAction.action, 3, toolAction.arguments);
       } else {

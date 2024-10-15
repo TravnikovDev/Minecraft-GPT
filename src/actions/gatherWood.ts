@@ -1,79 +1,91 @@
 import { bot } from "../index";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
-import { goToPosition } from "../actions/movement";
+import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
+import { getNearestBlocks } from "./world";
 
 /**
  * Gather wood blocks nearby to collect logs.
-It should be separate function because a "log" names
  * @param num The number of wood logs to gather.
  * @param maxDistance The maximum distance to search for wood blocks.
  * @returns Whether the wood gathering was successful.
  */
-
 export async function gatherWood(
   num: number,
   maxDistance = 64
 ): Promise<boolean> {
-  const gatherWoodInternal = async () => {
-    console.log(`Gathering wood... I need to make ${num} logs.`);
+  console.log(`Gathering wood... I need to collect ${num} logs.`);
+  bot.chat(`Gathering wood... I need to collect ${num} logs.`);
 
-    const logsCount = bot.inventory
-      .items()
-      .filter((item) => item.name.includes("log"))
-      .reduce((acc, item) => acc + item.count, 0);
+  try {
+    let logsCount = getLogsCount();
+    console.log(`I currently have ${logsCount} logs.`);
 
-    console.log(`I have ${logsCount} logs.`);
-    if (logsCount >= num) {
-      console.log(`Wood gathering complete! I have ${logsCount} logs.`);
-      bot.chat(`I have gathered ${logsCount} logs.`);
-      return true;
-    }
+    while (logsCount < num) {
+      console.log(`Looking for wood blocks nearby...`, logsCount, num);
 
-    const woodBlock = bot.findBlock({
-      matching: (block) => block.name.includes("log"),
-      maxDistance,
-    });
+      const woodBlock = bot.findBlock({
+        matching: (block) => block.name.includes("log"),
+        maxDistance,
+      });
 
-    if (woodBlock) {
-      const destination = await goToPosition(
+      if (!woodBlock) {
+        console.log("No wood blocks found nearby.");
+        await moveAway(50);
+        continue;
+      }
+
+      const destinationReached = await goToPosition(
         woodBlock.position.x,
         woodBlock.position.y,
         woodBlock.position.z,
-        1
+        2
       );
 
-      if (destination) {
-        try {
-          for (let i = 0; i < 4; i++) {
-            console.log("Trying to break the wood block. number:", i);
-            await breakBlockAt(
-              woodBlock.position.x,
-              woodBlock.position.y + i,
-              woodBlock.position.z
-            );
-            console.log("Successfully broke the wood block.");
-            await __actionsDelay(2000); // Add delay to simulate gathering
-          }
-          await pickupNearbyItems(bot);
-          console.log("Successfully gathered a wood block.");
-          return gatherWoodInternal(); // Repeat the process if needed
-        } catch (digError) {
-          console.error("Failed to dig the wood block:", digError);
-          return gatherWoodInternal();
-        }
+      if (!destinationReached) {
+        console.log("Unable to reach the wood block.");
+        continue; // Try finding another wood block
       }
-    } else {
-      console.log("No wood blocks found nearby.");
-      return false;
-    }
-  };
 
-  try {
-    await gatherWoodInternal();
+      const aTree = await getNearestBlocks(bot, woodBlock.name, 5, 5);
+      if (aTree.length === 0) {
+        console.log("No wood blocks found nearby.");
+        bot.chat("I cannot find any wood blocks nearby.");
+        await moveAway(15);
+        continue;
+      }
+
+      try {
+        for (const aLog of aTree) {
+          await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
+          await __actionsDelay(1200); // Simulate gathering delay
+        }
+        await pickupNearbyItems(bot);
+        await __actionsDelay(2500);
+        logsCount = getLogsCount();
+        console.log(`Collected logs. Total logs now: ${logsCount}.`);
+      } catch (digError) {
+        console.error("Failed to break the wood block:", digError);
+        continue; // Attempt to find and break another wood block
+      }
+    }
+
+    console.log(`Wood gathering complete! Total logs collected: ${logsCount}.`);
+    bot.chat(`I have gathered ${logsCount} logs.`);
     return true;
   } catch (error) {
     console.error("Failed to gather wood:", error);
     return false;
   }
+}
+
+/**
+ * Helper function to count the number of logs in the inventory.
+ * @returns The total number of logs.
+ */
+export function getLogsCount(): number {
+  return bot.inventory
+    .items()
+    .filter((item) => item.name.includes("log"))
+    .reduce((acc, item) => acc + item.count, 0);
 }

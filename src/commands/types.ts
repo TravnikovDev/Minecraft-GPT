@@ -16,6 +16,7 @@ enum BotCommands {
   GatherWood = "gatherWood",
   CraftItem = "craftItem",
   CraftWoodenTools = "craftWoodenTools",
+  CraftStoneTools = "craftStoneTools",
   RandomMovement = "randomMovement",
   EvaluateBaseLocation = "evaluateBaseLocation",
   SetBase = "SetBase",

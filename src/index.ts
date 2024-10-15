@@ -12,7 +12,6 @@ import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
 import { Movements, pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
-import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
@@ -34,7 +33,6 @@ export const bot = mineflayer.createBot({
 // Load Plugins
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(pvp);
-bot.loadPlugin(collectBlock);
 bot.loadPlugin(autoEat);
 bot.loadPlugin(tool);
 bot.loadPlugin(armorManager);
@@ -68,6 +66,7 @@ bot.on("health", () => {
       command: BotCommands.DefendSelf,
       priority: 9,
       args: { range: 8 },
+      retryCount: 1,
     });
   }
 });
@@ -77,15 +76,26 @@ bot.on("spawn", () => {
     id: "pickup",
     command: BotCommands.PickupNearbyItems,
     priority: 9,
+    retryCount: 1,
   });
   addCommandToQueue({
-    id: "respawn",
+    id: "go-to-player",
     command: BotCommands.GoToPlayer,
     priority: 8,
+    retryCount: 0,
   });
 });
 
-// Idle behavior: Always keep the bot busy
+/**
+ * Main loop to execute commands in queue
+ */
+let isProcessing = false;
 setInterval(async () => {
-  await executeCommands();
-}, 2500);
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    await executeCommands();
+  } finally {
+    isProcessing = false;
+  }
+}, 1500);

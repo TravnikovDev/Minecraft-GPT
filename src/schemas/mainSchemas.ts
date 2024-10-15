@@ -7,6 +7,7 @@ export const CommandSchema = z.object({
   command: z.nativeEnum(BotCommands),
   args: z.any(),
   priority: z.number().min(1).max(10),
+  retryCount: z.number().optional().default(0),
 });
 
 export const LoreSchema = z.object({

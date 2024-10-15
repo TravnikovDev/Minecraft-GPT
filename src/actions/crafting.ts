@@ -3,14 +3,17 @@
 import * as gameData from "../utils/minecraftData";
 import * as world from "./world.js";
 import { Item } from "prismarine-item";
-import { collectBlock, placeBlock } from "./worldInteraction";
+import { placeBlock } from "./worldInteraction";
 import { goToNearestBlock } from "./movement";
 import { bot } from "..";
+import { collectBlock } from "./collectBlock.js";
 
-export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
-  let placedTable = false;
-
-  itemName = itemName.split(" ").join("_").toLowerCase();
+export async function craftRecipe(
+  incomingItemName: string,
+  num = 1
+): Promise<boolean> {
+  let placedTable = false; // When we do not have a crafting table nearby and we place one and then remove it
+  let itemName = incomingItemName.replace(" ", "_").toLowerCase();
 
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
 
@@ -21,7 +24,7 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
     "crafting_table",
     craftingTableRange
   );
-  let recipes = bot.recipesFor(gameData.getItemId(itemName), null, 1, null);
+  let recipes = bot.recipesFor(gameData.getItemId(itemName), null, num, null);
   const pos = world.getNearestFreeSpace(bot, 1, 6);
   const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
 
@@ -66,17 +69,20 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
       recipes = bot.recipesFor(
         gameData.getItemId(itemName),
         null,
-        1,
+        num,
         craftingTable
       );
+
+      console.log("To craft", itemName, "I need:");
+      console.log(recipes[0]?.ingredients);
     }
   }
 
   if (!recipes || recipes.length === 0) {
     console.log(`I do not have the resources to craft a ${itemName}.`);
-    if (placedTable) {
-      await collectBlock("crafting_table", 1);
-    }
+    // if (placedTable) {
+    //   await collectBlock("crafting_table", 1);
+    // }
     return false;
   }
 
@@ -93,18 +99,22 @@ export async function craftRecipe(itemName: string, num = 1): Promise<boolean> {
     await bot.craft(recipe, num, craftingTable);
     const invCounts = world.getInventoryCounts(bot);
     const itemsCount = invCounts[itemName] || 0;
+    console.log(
+      `Successfully crafted ${itemName}, I now have ${itemsCount} ${itemName}.`
+    );
     bot.chat(
       `Successfully crafted ${itemName}, I now have ${itemsCount} ${itemName}.`
     );
-    if (placedTable) {
-      await collectBlock("crafting_table", 1);
-    }
+    // if (placedTable) {
+    //   await collectBlock("crafting_table", 1);
+    // }
     return true;
   } catch (err) {
+    console.log(`Failed to craft ${itemName}: ${(err as Error).message}`);
     bot.chat(`Failed to craft ${itemName}: ${(err as Error).message}`);
-    if (placedTable) {
-      await collectBlock("crafting_table", 1);
-    }
+    // if (placedTable) {
+    //   await collectBlock("crafting_table", 1);
+    // }
     return false;
   }
 }
