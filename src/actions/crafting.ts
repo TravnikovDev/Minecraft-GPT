@@ -94,7 +94,7 @@ export async function craftRecipe(
   }
 
   const recipe = recipes[0];
-  console.log("crafting...");
+  console.log("crafting...", itemName, num);
   try {
     await bot.craft(recipe, num, craftingTable);
     const invCounts = world.getInventoryCounts(bot);

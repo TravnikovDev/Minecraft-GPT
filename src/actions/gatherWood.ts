@@ -22,6 +22,7 @@ export async function gatherWood(
     console.log(`I currently have ${logsCount} logs.`);
 
     while (logsCount < num) {
+      // Gather 1 extra log to account for any failures
       console.log(`Looking for wood blocks nearby...`, logsCount, num);
 
       const woodBlock = bot.findBlock({
