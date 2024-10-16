@@ -25,6 +25,7 @@ export const parameters = z.object({
     .enum(["north", "south", "west", "east"])
     .optional()
     .describe("Tunnel direction"),
+  tunnelName: z.string().optional().describe("Name of the tunnel"),
 });
 
 // Implement the DigDirectionalTunnel action
@@ -38,7 +39,7 @@ export async function execute(args: any) {
     return;
   }
 
-  let { depth, torchInterval, tunnelSize, direction } = parsed.data;
+  let { depth, torchInterval, tunnelSize, direction, tunnelName } = parsed.data;
 
   // Default values for tunnel size
   depth = depth || 10;
@@ -46,7 +47,14 @@ export async function execute(args: any) {
   tunnelSize = tunnelSize || { width: 3, height: 4 };
   direction = direction || "north";
 
-  digDiagonalTunnel(direction, depth, tunnelSize, torchInterval);
+  await digDiagonalTunnel(
+    direction,
+    depth,
+    tunnelSize,
+    undefined,
+    tunnelName,
+    torchInterval
+  );
 
   bot.chat("Tunnel setup complete.");
 }

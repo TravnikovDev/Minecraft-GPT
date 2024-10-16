@@ -6,6 +6,8 @@ import {
 } from "../actions/worldInteraction";
 import { craftRecipe } from "../actions/crafting";
 import { __actionsDelay } from "../utils/utility";
+import { saveMineLocation } from "../managers/persistenceManager";
+import { Vec3 } from "vec3";
 
 export type DirectionType = "north" | "south" | "west" | "east";
 
@@ -20,10 +22,12 @@ export type DirectionType = "north" | "south" | "west" | "east";
 export async function digDiagonalTunnel(
   direction: DirectionType = "north",
   depth: number = 10,
-  tunnelSize: { width: number; height: number } = { width: 3, height: 4 },
+  tunnelSize: { width: number; height: number } = { width: 1, height: 4 },
+  startPosition?: Vec3,
+  tunnelName: string = `Tunnel-${direction}-${depth}`,
   torchInterval: number = 12
 ): Promise<boolean> {
-  const startPosition = bot.entity.position.clone();
+  if (!startPosition) startPosition = bot.entity.position.clone();
 
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
@@ -72,6 +76,17 @@ export async function digDiagonalTunnel(
       }
     }
   }
+
+  bot.chat(`I've dug ${tunnelName}`);
+
+  if (tunnelName !== "basementEntrance")
+    saveMineLocation({
+      name: tunnelName,
+      direction,
+      startsAt: startPosition,
+      endsAt: startPosition.offset(depth * offsetX, -depth, depth * offsetZ),
+      depth,
+    });
 
   const cobblestoneCount = bot.inventory
     .items()

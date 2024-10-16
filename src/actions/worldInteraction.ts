@@ -193,10 +193,6 @@ export async function breakBlockAt(
     console.log(`No block found at position ${blockPos}.`);
     return false;
   }
-  if (!bot.canDigBlock(block)) {
-    console.log(`Cannot break ${block.name} at ${blockPos}.`);
-    return false;
-  }
   if (block.name !== "air" && block.name !== "water" && block.name !== "lava") {
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
       await goToPosition(x, y, z);
@@ -208,6 +204,10 @@ export async function breakBlockAt(
         console.log(`Don't have right tools to break ${block.name}.`);
         return false;
       }
+    }
+    if (!bot.canDigBlock(block)) {
+      console.log(`Cannot break ${block.name} at ${blockPos}.`);
+      return false;
     }
     await bot.lookAt(block.position, true); // Ensure the bot has finished turning
     await __actionsDelay(500);

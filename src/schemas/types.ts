@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
+  ChestSchema,
   CommandSchema,
   DbSchema,
   InventoryItemSchema,
-  LocationsSchema,
   MineSchema,
   PositionSchema,
 } from "./mainSchemas";
@@ -13,5 +13,5 @@ export type DbSchemaType = z.infer<typeof DbSchema>;
 export type CommandType = z.infer<typeof CommandSchema>;
 export type InventoryItemType = z.infer<typeof InventoryItemSchema>;
 export type PositionType = z.infer<typeof PositionSchema>;
-export type LocationsType = z.infer<typeof LocationsSchema>;
 export type MineType = z.infer<typeof MineSchema>;
+export type ChestType = z.infer<typeof ChestSchema>;

@@ -12,7 +12,7 @@ export async function craftRecipe(
   incomingItemName: string,
   num = 1
 ): Promise<boolean> {
-  let placedTable = false; // When we do not have a crafting table nearby and we place one and then remove it
+  // let placedTable = false; // When we do not have a crafting table nearby and we place one and then remove it
   let itemName = incomingItemName.replace(" ", "_").toLowerCase();
 
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
@@ -63,7 +63,7 @@ export async function craftRecipe(
         "crafting_table",
         craftingTableRange
       );
-      placedTable = !!craftingTable;
+      // placedTable = !!craftingTable;
     }
     if (craftingTable) {
       recipes = bot.recipesFor(

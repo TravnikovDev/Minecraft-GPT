@@ -17,8 +17,11 @@ async function processCommand(nextCommand: CommandType) {
   } catch (error) {
     console.error(`Error executing command ${nextCommand.command}:`, error);
     // Optionally adjust priority or add retry count
-    nextCommand.retryCount = (nextCommand.retryCount || 0) + 1;
-    await addCommandToQueue(nextCommand);
+    nextCommand.retryCount = (nextCommand.retryCount || 0) - 1;
+    if (nextCommand.retryCount >= 0) {
+      await addCommandToQueue(nextCommand);
+      nextCommand.priority += 1;
+    }
     console.log(`Re-added command ${nextCommand.command} to queue for retry.`);
   } finally {
     if (success) {
