@@ -3,14 +3,15 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { craftRecipe } from "../actions/crafting";
-import { gatherWood } from "../actions/gatherWood";
 import { moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
 import { collectBlock } from "../actions/collectBlock";
+import { ensurePickaxe, ensureSticks } from "../actions/ensure";
+import { getItemCount } from "../actions/inventory";
 
 export const description = `Important action to build stone tools for the bot. The user can specify the number of each tool to craft. 
 If no parameters are provided, the bot will craft 2 pickaxes, 1 axe, 0 sword, and 1 shovel. Example usage: 
-"Craft stone tools: 2 pickaxes, 1 axe.", "Please craft stone tools", "Make a stone axe and a shovel"
+"Craft stone tools: 2 pickaxes, 1 axe.", "Please craft stone tools", "Make a stone axe and a shovel", "Make a stone pickaxe".
 !important: The default type of tools to craft is stone tools.`;
 
 export const parameters = z.object({
@@ -40,28 +41,18 @@ export async function execute(args: any) {
 
   try {
     // Ensure wooden pickaxe before gathering stone
-    const pica = await ensurePickaxe();
-    if (pica) {
-      bot.chat("I have a  pickaxe. Let's gather some cobblestone!");
+    const hasPickaxe = await ensurePickaxe();
+    if (hasPickaxe) {
+      bot.chat("I have a pickaxe. Let's gather some cobblestone!");
     }
 
     // Check existing stone tools and adjust toolCount
     const existingToolCounts = {
-      pickaxe: 0,
-      axe: 0,
-      sword: 0,
-      shovel: 0,
+      pickaxe: getItemCount("stone_pickaxe"),
+      axe: getItemCount("stone_axe"),
+      sword: getItemCount("stone_sword"),
+      shovel: getItemCount("stone_shovel"),
     };
-
-    bot.inventory.items().forEach((item) => {
-      if (item.name === "stone_pickaxe")
-        existingToolCounts.pickaxe += item.count;
-      else if (item.name === "stone_axe") existingToolCounts.axe += item.count;
-      else if (item.name === "stone_sword")
-        existingToolCounts.sword += item.count;
-      else if (item.name === "stone_shovel")
-        existingToolCounts.shovel += item.count;
-    });
 
     toolCount.pickaxe = Math.max(
       0,
@@ -85,116 +76,81 @@ export async function execute(args: any) {
 
     // Calculate required cobblestone for tools
     const requiredCobblestone =
-      toolCount.pickaxe * 3 +
-      toolCount.axe * 3 +
-      toolCount.shovel * 1 +
-      toolCount.sword * 2;
+      (toolCount.pickaxe || 0) * 3 +
+      (toolCount.axe || 0) * 3 +
+      (toolCount.shovel || 0) * 1 +
+      (toolCount.sword || 0) * 2;
 
-    await gatherCobblestone(requiredCobblestone);
+    // Gather cobblestone
+    const cobblestoneGathered = await gatherCobblestone(requiredCobblestone);
+    if (!cobblestoneGathered) {
+      console.error("Failed to gather enough cobblestone.");
+      return;
+    }
 
     // Ensure enough sticks
     const requiredSticks =
-      toolCount.pickaxe * 2 +
-      toolCount.axe * 2 +
-      toolCount.shovel * 2 +
-      toolCount.sword * 1;
+      (toolCount.pickaxe || 0) * 2 +
+      (toolCount.axe || 0) * 2 +
+      (toolCount.shovel || 0) * 2 +
+      (toolCount.sword || 0) * 1;
 
-    let sticksCount = bot.inventory
-      .items()
-      .filter((item) => item.name.includes("stick"))
-      .reduce((acc, item) => acc + item.count, 0);
-
-    if (sticksCount < requiredSticks) {
-      const sticksShortage = requiredSticks - sticksCount;
-      await gatherWood(1); // Collect an extra log for sticks
-      await craftRecipe("stick", sticksShortage);
+    const sticksEnsured = await ensureSticks(requiredSticks);
+    if (!sticksEnsured) {
+      console.error("Failed to ensure enough sticks.");
+      return;
     }
 
     // Craft stone tools
-    if (toolCount.pickaxe)
-      await craftRecipe("stone_pickaxe", toolCount.pickaxe);
-    if (toolCount.axe) await craftRecipe("stone_axe", toolCount.axe);
-    if (toolCount.sword) await craftRecipe("stone_sword", toolCount.sword);
-    if (toolCount.shovel) await craftRecipe("stone_shovel", toolCount.shovel);
+    const toolsToCraft = [
+      { name: "stone_pickaxe", count: toolCount.pickaxe || 0 },
+      { name: "stone_axe", count: toolCount.axe || 0 },
+      { name: "stone_sword", count: toolCount.sword || 0 },
+      { name: "stone_shovel", count: toolCount.shovel || 0 },
+    ];
+
+    for (const tool of toolsToCraft) {
+      if (tool.count > 0) {
+        const crafted = await craftRecipe(tool.name, tool.count);
+        if (!crafted) {
+          console.error(`Failed to craft ${tool.name}.`);
+          return;
+        }
+      }
+    }
 
     console.log("Bot: All required stone tools have been crafted!");
+    bot.chat("All required stone tools have been crafted!");
   } catch (error) {
     console.error("Error occurred during tool crafting:", error);
   }
 }
 
-// Helper function to ensure a wooden pickaxe
-const ensurePickaxe = async (): Promise<boolean> => {
-  console.log("Checking for a pickaxe...");
-  let hasPickaxe: boolean = bot.inventory
-    .items()
-    .some((item) => item.name.includes("pickaxe"));
-
-  if (hasPickaxe) {
-    console.log("Bot: Pickaxe is available.");
-    return true;
-  }
-
-  while (!hasPickaxe) {
-    const logs = bot.inventory
-      .items()
-      .filter((item) => item.name.includes("log"));
-    const logsCount = logs.reduce((acc, item) => acc + item.count, 0);
-
-    if (logsCount >= 4) {
-      const logType = logs[0].name.replace("_log", "");
-
-      const gotPlanks = await craftRecipe(`${logType}_planks`, 12);
-      const getStick = await craftRecipe(`Stick`, 8);
-      if (!gotPlanks || !getStick) {
-        continue;
-      }
-      hasPickaxe = await craftRecipe("Wooden_pickaxe", 1);
-      bot.chat("I have crafted a wooden pickaxe.");
-      console.log("Bot: Wooden pickaxe crafted.");
-    } else {
-      await gatherWood(5);
-      console.error("Bot: No logs available to craft wooden pickaxe.");
-      continue;
-    }
-  }
-
-  return hasPickaxe;
-};
-
 // Helper function to gather cobblestone
 const gatherCobblestone = async (
   requiredCobblestone: number
 ): Promise<boolean> => {
-  let cobblestoneCount = bot.inventory
-    .items()
-    .filter((item) => item.name.includes("cobblestone"))
-    .reduce((acc, item) => acc + item.count, 0);
+  let cobblestoneCount = getItemCount("cobblestone");
 
-  if (cobblestoneCount >= requiredCobblestone) {
-    console.log("Bot: Collected enough cobblestone.");
-    return true;
-  }
+  while (cobblestoneCount < requiredCobblestone) {
+    console.log("Bot: Gathering more cobblestone...");
+    const cobblestoneShortage = requiredCobblestone - cobblestoneCount;
 
-  console.log("Bot: Gathering more cobblestone...");
-  const cobblestoneShortage = requiredCobblestone - cobblestoneCount;
-  const collected = await collectBlock("stone", cobblestoneShortage, 5).catch(
-    async (err) => {
-      if (err.includes("right tools")) {
+    try {
+      await collectBlock("stone", cobblestoneShortage, 5);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("right tools")) {
         await ensurePickaxe();
+      } else {
+        console.error("Error collecting cobblestone:", err);
+        moveAway(20);
+        continue;
       }
     }
-  );
 
-  console.log("Bot: Collected cobblestone:", collected);
-
-  if (!collected) {
-    await moveAway(15);
-    await __actionsDelay();
-    // Recursively try gathering cobblestone again
-    return gatherCobblestone(requiredCobblestone);
-  } else {
-    // Recursively check if we've gathered enough cobblestone now
-    return gatherCobblestone(requiredCobblestone);
+    cobblestoneCount = getItemCount("cobblestone");
   }
+
+  console.log("Bot: Collected enough cobblestone.");
+  return true;
 };

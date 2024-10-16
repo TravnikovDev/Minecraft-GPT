@@ -50,7 +50,7 @@ export async function digDiagonalTunnel(
           digPosition.y,
           digPosition.z
         );
-        await __actionsDelay(digResult ? 3000 : 500);
+        await __actionsDelay(digResult ? 1000 : 200);
       }
 
       await pickupNearbyItems(bot);

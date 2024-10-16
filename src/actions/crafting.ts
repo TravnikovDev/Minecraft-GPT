@@ -1,91 +1,101 @@
 // src/agent/library/skills/crafting.ts
 
 import * as gameData from "../utils/minecraftData";
-import * as world from "./world.js";
+import * as world from "./world";
 import { Item } from "prismarine-item";
+import { Block } from "prismarine-block";
+import { Recipe } from "prismarine-recipe";
 import { placeBlock } from "./worldInteraction";
 import { goToNearestBlock } from "./movement";
 import { bot } from "..";
-import { collectBlock } from "./collectBlock.js";
+import { collectBlock } from "./collectBlock";
+import { ensureCraftingTable } from "./ensure";
 
 export async function craftRecipe(
   incomingItemName: string,
   num = 1
 ): Promise<boolean> {
-  // let placedTable = false; // When we do not have a crafting table nearby and we place one and then remove it
   let itemName = incomingItemName.replace(" ", "_").toLowerCase();
 
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
 
-  // Get recipes that don't require a crafting table
+  const itemId = gameData.getItemId(itemName);
+  if (itemId === null) {
+    console.log(`Invalid item name: ${itemName}`);
+    return false;
+  }
+
+  // Helper function to attempt crafting
+  async function attemptCraft(
+    recipes: Recipe[],
+    craftingTable: Block | null = null
+  ): Promise<boolean> {
+    if (recipes && recipes.length > 0) {
+      const recipe = recipes[0];
+      try {
+        await bot.craft(recipe, num, craftingTable ?? undefined);
+        console.log(
+          `Successfully crafted ${num} ${itemName}${
+            craftingTable ? " using crafting table" : ""
+          }.`
+        );
+        // bot.chat(`Successfully crafted ${num} ${itemName}.`);
+        return true;
+      } catch (err) {
+        console.log(`Failed to craft ${itemName}: ${(err as Error).message}`);
+        // bot.chat(`Failed to craft ${itemName}: ${(err as Error).message}`);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // Step 1: Try to craft without a crafting table
+  let recipes = bot.recipesFor(itemId, null, num, null);
+  if (await attemptCraft(recipes)) {
+    return true;
+  }
+
+  // Step 2: Check for a nearby crafting table
   const craftingTableRange = 32;
   let craftingTable = world.getNearestBlock(
     bot,
     "crafting_table",
     craftingTableRange
   );
-  let recipes = bot.recipesFor(gameData.getItemId(itemName), null, num, null);
-  const pos = world.getNearestFreeSpace(bot, 1, 6);
-  const hasTable = world.getInventoryCounts(bot)["crafting_table"] > 0;
-
-  // Look for crafting table
-  if (!recipes || recipes.length === 0) {
-    if (!craftingTable) {
-      if (!hasTable) {
-        try {
-          const craftingTableRecipe = bot.recipesFor(
-            bot.registry.itemsByName["crafting_table"].id,
-            null,
-            1,
-            null
-          )[0];
-          if (craftingTableRecipe) {
-            await bot.craft(craftingTableRecipe, 1);
-          }
-        } catch (err) {
-          console.log(
-            `Failed to make and place a crafting table: ${
-              (err as Error).message
-            }`
-          );
-          return false;
-        }
-      }
-      console.log("Positioning crafting table...", pos?.x, pos?.y, pos?.z);
-      if (pos) {
-        await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-      } else {
-        console.log("No suitable position found to place the crafting table.");
-        return false;
-      }
-      craftingTable = world.getNearestBlock(
-        bot,
-        "crafting_table",
-        craftingTableRange
-      );
-      // placedTable = !!craftingTable;
+  if (craftingTable) {
+    // Move closer to the crafting table if necessary
+    if (bot.entity.position.distanceTo(craftingTable.position) > 4) {
+      await goToNearestBlock("crafting_table", 4, craftingTableRange);
     }
-    if (craftingTable) {
-      recipes = bot.recipesFor(
-        gameData.getItemId(itemName),
-        null,
-        num,
-        craftingTable
-      );
-
-      console.log("To craft", itemName, "I need:");
-      console.log(recipes[0]?.ingredients);
+    recipes = bot.recipesFor(itemId, null, num, craftingTable ?? null);
+    if (await attemptCraft(recipes, craftingTable)) {
+      return true;
     }
   }
 
-  if (!recipes || recipes.length === 0) {
-    console.log(`I do not have the resources to craft a ${itemName}.`);
-    // if (placedTable) {
-    //   await collectBlock("crafting_table", 1);
-    // }
+  // Step 3: Ensure we have a crafting table in inventory and place it
+  const hasCraftingTable = await ensureCraftingTable();
+  if (!hasCraftingTable) {
+    console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
     return false;
   }
 
+  // Find a suitable position to place the crafting table
+  const pos = world.getNearestFreeSpace(bot, 1, 6);
+  if (pos) {
+    await placeBlock("crafting_table", pos.x, pos.y, pos.z);
+    craftingTable = world.getNearestBlock(
+      bot,
+      "crafting_table",
+      craftingTableRange
+    );
+  } else {
+    console.log("No suitable position found to place the crafting table.");
+    return false;
+  }
+
+  // Move closer to the placed crafting table
   if (
     craftingTable &&
     bot.entity.position.distanceTo(craftingTable.position) > 4
@@ -93,28 +103,14 @@ export async function craftRecipe(
     await goToNearestBlock("crafting_table", 4, craftingTableRange);
   }
 
-  const recipe = recipes[0];
-  console.log("crafting...", itemName, num);
-  try {
-    await bot.craft(recipe, num, craftingTable);
-    const invCounts = world.getInventoryCounts(bot);
-    const itemsCount = invCounts[itemName] || 0;
-    console.log(
-      `Successfully crafted ${itemName}, I now have ${itemsCount} ${itemName}.`
-    );
-    bot.chat(
-      `Successfully crafted ${itemName}, I now have ${itemsCount} ${itemName}.`
-    );
-    // if (placedTable) {
-    //   await collectBlock("crafting_table", 1);
-    // }
+  // Try crafting with the placed crafting table
+  recipes = bot.recipesFor(itemId, null, num, craftingTable ?? null);
+  if (await attemptCraft(recipes, craftingTable)) {
+    // Optionally collect the crafting table after use
+    // await collectBlock("crafting_table", 1);
     return true;
-  } catch (err) {
-    console.log(`Failed to craft ${itemName}: ${(err as Error).message}`);
-    bot.chat(`Failed to craft ${itemName}: ${(err as Error).message}`);
-    // if (placedTable) {
-    //   await collectBlock("crafting_table", 1);
-    // }
+  } else {
+    console.log(`I do not have the resources to craft a ${itemName}.`);
     return false;
   }
 }

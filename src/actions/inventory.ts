@@ -256,22 +256,16 @@ export async function transferAllToChest(): Promise<boolean> {
 }
 
 /**
- * Check for item counts
- * @param bot
- * @returns
+ * Utility function to get item count in inventory
+ * @param itemName - The name of the item to count.
+ * @returns number
  */
-export function getItemCount(itemName: string): number {
-  const item = bot.inventory
+export const getItemCount = (itemName: string): number => {
+  return bot.inventory
     .items()
-    .find((item) => item.name.includes(itemName));
-  if (item) {
-    console.log(`You have ${item.count} ${itemName} in your inventory.`);
-    return item.count;
-  } else {
-    console.log(`You do not have any ${itemName} in your inventory.`);
-    return 0;
-  }
-}
+    .filter((item) => item.name.includes(itemName))
+    .reduce((acc, item) => acc + item.count, 0);
+};
 
 /**
  * Organize the bot's inventory.
