@@ -1,7 +1,6 @@
 // src/agent/library/skills/crafting.ts
 
 import * as gameData from "../utils/minecraftData";
-import * as world from "./world";
 import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
@@ -10,6 +9,11 @@ import { goToNearestBlock } from "./movement";
 import { bot } from "..";
 import { collectBlock } from "./collectBlock";
 import { ensureCraftingTable } from "./ensure";
+import {
+  getInventoryCounts,
+  getNearestBlock,
+  getNearestFreeSpace,
+} from "./world";
 
 export async function craftRecipe(
   incomingItemName: string,
@@ -27,7 +31,7 @@ export async function craftRecipe(
 
   // Helper function to attempt crafting
   async function attemptCraft(
-    recipes: Recipe[],
+    recipes: Recipe[] | null,
     craftingTable: Block | null = null
   ): Promise<boolean> {
     if (recipes && recipes.length > 0) {
@@ -51,30 +55,35 @@ export async function craftRecipe(
   }
 
   // Step 1: Try to craft without a crafting table
+  console.log(`Step 1: Try to craft without a crafting table`);
   let recipes = bot.recipesFor(itemId, null, num, null);
   if (await attemptCraft(recipes)) {
     return true;
   }
 
   // Step 2: Check for a nearby crafting table
+  console.log(`Step 2: Check for a nearby crafting table`);
   const craftingTableRange = 32;
-  let craftingTable = world.getNearestBlock(
+  let craftingTable = getNearestBlock(
     bot,
     "crafting_table",
     craftingTableRange
   );
   if (craftingTable) {
     // Move closer to the crafting table if necessary
-    if (bot.entity.position.distanceTo(craftingTable.position) > 4) {
-      await goToNearestBlock("crafting_table", 4, craftingTableRange);
+    if (bot.entity.position.distanceTo(craftingTable.position) > 3) {
+      await goToNearestBlock("crafting_table", 3, craftingTableRange);
     }
-    recipes = bot.recipesFor(itemId, null, num, craftingTable ?? null);
+    recipes = bot.recipesFor(itemId, null, num, craftingTable);
     if (await attemptCraft(recipes, craftingTable)) {
       return true;
     }
   }
 
   // Step 3: Ensure we have a crafting table in inventory and place it
+  console.log(
+    `Step 3: Ensure we have a crafting table in inventory and place it`
+  );
   const hasCraftingTable = await ensureCraftingTable();
   if (!hasCraftingTable) {
     console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
@@ -82,14 +91,10 @@ export async function craftRecipe(
   }
 
   // Find a suitable position to place the crafting table
-  const pos = world.getNearestFreeSpace(bot, 1, 6);
+  const pos = getNearestFreeSpace(bot, 1, 10);
   if (pos) {
     await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-    craftingTable = world.getNearestBlock(
-      bot,
-      "crafting_table",
-      craftingTableRange
-    );
+    craftingTable = getNearestBlock(bot, "crafting_table", craftingTableRange);
   } else {
     console.log("No suitable position found to place the crafting table.");
     return false;
@@ -134,19 +139,19 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
   } // TODO: allow cobblestone, sand, clay, etc.
 
   let placedFurnace = false;
-  let furnaceBlock = world.getNearestBlock(bot, "furnace", 32);
+  let furnaceBlock = getNearestBlock(bot, "furnace", 32);
   if (!furnaceBlock) {
     // Try to place furnace
-    const hasFurnace = world.getInventoryCounts(bot)["furnace"] > 0;
+    const hasFurnace = getInventoryCounts(bot)["furnace"] > 0;
     if (hasFurnace) {
-      const pos = world.getNearestFreeSpace(bot, 1, 32);
+      const pos = getNearestFreeSpace(bot, 1, 32);
       if (pos) {
         await placeBlock("furnace", pos.x, pos.y, pos.z);
       } else {
         console.log("No suitable position found to place the furnace.");
         return false;
       }
-      furnaceBlock = world.getNearestBlock(bot, "furnace", 32);
+      furnaceBlock = getNearestBlock(bot, "furnace", 32);
       placedFurnace = true;
     }
   }
@@ -177,7 +182,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     return false;
   }
   // Check if the bot has enough items to smelt
-  const invCounts = world.getInventoryCounts(bot);
+  const invCounts = getInventoryCounts(bot);
   if (!invCounts[itemName] || invCounts[itemName] < num) {
     console.log(`I do not have enough ${itemName} to smelt.`);
     if (placedFurnace) await collectBlock("furnace", 1);
@@ -254,7 +259,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
 }
 
 export async function clearNearestFurnace(): Promise<boolean> {
-  const furnaceBlock = world.getNearestBlock(bot, "furnace", 6);
+  const furnaceBlock = getNearestBlock(bot, "furnace", 6);
   if (!furnaceBlock) {
     console.log(`There is no furnace nearby.`);
     return false;
