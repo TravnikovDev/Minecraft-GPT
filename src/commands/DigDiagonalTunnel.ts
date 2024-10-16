@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { digDiagonalTunnel } from "../actions/digDiagonalTunnel";
+import { ensurePickaxe } from "../actions/ensure";
 
 export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 
 and dimensions, placing torches at the specified interval. If no parameters are provided, the bot will dig a tunnel
@@ -47,7 +48,9 @@ export async function execute(args: any) {
   tunnelSize = tunnelSize || { width: 3, height: 4 };
   direction = direction || "north";
 
-  await digDiagonalTunnel(
+  await ensurePickaxe();
+
+  const result = await digDiagonalTunnel(
     direction,
     depth,
     tunnelSize,
@@ -56,5 +59,9 @@ export async function execute(args: any) {
     torchInterval
   );
 
-  bot.chat("Tunnel setup complete.");
+  if (result) {
+    bot.chat(`Tunnel ${tunnelName} setup complete.`);
+  } else {
+    bot.chat(`Failed to dig ${tunnelName} tunnel`);
+  }
 }

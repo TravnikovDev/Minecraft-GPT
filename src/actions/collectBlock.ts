@@ -59,8 +59,7 @@ export async function collectBlock(
         const itemId = bot.heldItem ? bot.heldItem.type : null;
         if (!block.canHarvest(itemId)) {
           console.log(`Don't have right tools to harvest ${block.name}.`);
-          // Optionally, attempt to craft or obtain the required tool
-          break;
+          throw new Error("Don't have right tools to harvest block.");
         }
       }
 

@@ -9,6 +9,7 @@ import {
   getBaseLocation,
   saveBasementLocation,
 } from "../managers/persistenceManager";
+import { ensurePickaxe } from "../actions/ensure";
 
 export const description = `When user asks the bot to set up a basement, the bot will dig a diagonal tunnel down and 
 create a room at the end of the tunnel. Example: "Set up a basement with a room size of 3x3x4",
@@ -56,6 +57,8 @@ export async function execute(args: any) {
   const tunnelDepth = 6;
   roomSize = roomSize || { width: 3, height: 3, length: 4 };
 
+  await ensurePickaxe();
+
   await digDiagonalTunnel(
     direction as any,
     tunnelDepth,
@@ -82,46 +85,5 @@ export async function execute(args: any) {
 
   await pickupNearbyItems(bot);
   bot.chat("Room is dug out for the basement.");
-
-  //   // Place essential items in the room
-  //   async function placeItem(itemName: string, positionOffset: Vec3) {
-  //     const item = bot.inventory.items().find((i) => i.name === itemName);
-  //     if (item) {
-  //       const targetPos = roomStart.offset(
-  //         positionOffset.x,
-  //         positionOffset.y,
-  //         positionOffset.z
-  //       );
-  //       await bot.placeBlock(bot.blockAt(targetPos), item);
-  //       bot.chat(`Placed ${itemName} in the basement.`);
-  //     } else {
-  //       bot.chat(`${itemName} is missing in inventory.`);
-  //     }
-  //   }
-
-  //   // Place crafting table, chest, bed, and torch
-  //   await placeItem("crafting_table", new Vec3(0, 0, 0));
-  //   await placeItem("chest", new Vec3(1, 0, 0));
-  //   await placeItem("bed", new Vec3(2, 0, 0));
-  //   await placeItem("torch", new Vec3(1, 1, 1)); // Place torch on wall or ground
-
-  // Craft and place door at room entrance
-  //   const doorRecipe = bot.recipesFor("wooden_door", null, 1)[0];
-  //   if (doorRecipe) {
-  //     await bot.craft(doorRecipe, 1);
-  //     const doorPos = startPosition.offset(
-  //       tunnelDepth - 1,
-  //       -tunnelDepth,
-  //       tunnelDepth - 1
-  //     );
-  //     await bot.placeBlock(
-  //       bot.blockAt(doorPos),
-  //       bot.inventory.items().find((i) => i.name === "wooden_door")
-  //     );
-  //     bot.chat("Wooden door crafted and placed at the room entrance.");
-  //   } else {
-  //     bot.chat("No recipe found for wooden door.");
-  //   }
-
   bot.chat("Basement setup complete.");
 }

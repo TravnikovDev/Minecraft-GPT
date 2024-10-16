@@ -40,5 +40,10 @@ export async function execute(args: any) {
     theName = players[0];
   }
 
-  await giveToPlayer(item_name, theName, num);
+  const result = await giveToPlayer(item_name, theName, num);
+  if (result) {
+    bot.chat(`Gave ${num} ${item_name} to ${theName}`);
+  } else {
+    bot.chat(`Failed to give ${num} ${item_name} to ${theName}`);
+  }
 }

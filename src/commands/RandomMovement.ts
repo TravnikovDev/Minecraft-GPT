@@ -40,7 +40,7 @@ export async function execute(args: any) {
   const destZ = bot.entity.position.z + Math.sin(angle) * distance;
   const destY = bot.entity.position.y; // Maintain the same Y level
 
-  // Set the bot’s goal to the destination
-  goToPosition(destX, destY, destZ, 5);
   bot.chat(`I'm going for a walk!`);
+  // Set the bot’s goal to the destination
+  await goToPosition(destX, destY, destZ, 5);
 }

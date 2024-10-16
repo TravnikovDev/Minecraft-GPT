@@ -4,6 +4,7 @@ import { z } from "zod";
 import { bot } from "../index";
 import { Vec3 } from "vec3";
 import { moveAway } from "../actions/movement";
+import { __actionsDelay } from "../utils/utility";
 
 export const description = `When user asks the bot to unstack, the bot will check if it is stuck at the current position.
 If the bot is stuck, it will attempt to move away by the specified distance. Example: "Unstack", "Move away".`;
@@ -61,6 +62,6 @@ export async function execute(args: any) {
       stuckTime = 0;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    __actionsDelay(1000);
   }
 }

@@ -3,7 +3,7 @@ import { Entity } from "prismarine-entity";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { z } from "zod";
 import { bot } from "../index";
-import { getAttackDamage } from "../utils/utility";
+import { __actionsDelay, getAttackDamage } from "../utils/utility";
 
 export const description = `The user asks the bot to defend itself from nearby enemies. The bot will attack any hostile 
 mobs within a certain range. Example: "Defend self within 10 blocks.", "Protect yourself.". If no arguments are provided, bot will 20 block distance.`;
@@ -98,7 +98,7 @@ export async function execute(args: any) {
     }
     bot.pvp.attack(enemy);
     attacked = true;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    __actionsDelay(500);
     enemy = getNearestEntityWhere(
       bot,
       (entity: Entity) => isHostile(entity),

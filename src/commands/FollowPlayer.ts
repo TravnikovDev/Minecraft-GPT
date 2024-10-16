@@ -41,5 +41,10 @@ export async function execute(args: any) {
     userToFollow = players[0];
   }
 
-  followPlayer(userToFollow, distance);
+  const result = await followPlayer(userToFollow, distance);
+  if (result) {
+    bot.chat(`Following ${player_name}`);
+  } else {
+    bot.chat(`Failed to follow ${player_name}`);
+  }
 }

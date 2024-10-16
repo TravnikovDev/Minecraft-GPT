@@ -27,7 +27,8 @@ export async function execute(args: any) {
 
   // Find the nearest mob of the given type
   const entities: Entity[] = Object.values(bot.entities).filter(
-    (entity) => entity.name === mobType && entity.type === "mob"
+    (entity) =>
+      mobType && entity.name?.includes(mobType) && entity.type === "mob"
   );
 
   if (entities.length === 0) {

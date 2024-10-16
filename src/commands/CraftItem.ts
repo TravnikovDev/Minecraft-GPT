@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { craftRecipe } from "../actions/crafting";
+import { bot } from "..";
 
 export const description = `When player is asking the bot to craft an item, the bot will craft the item. 
 Example: "Craft a diamond sword", "Craft 5 wooden planks", "Craft 10 torches", etc.`;
@@ -27,5 +28,11 @@ export async function execute(args: any) {
   // Default values for toolCount
   itemCount = itemCount || 1;
 
-  await craftRecipe(itemName, itemCount);
+  const result = await craftRecipe(itemName, itemCount);
+
+  if (result) {
+    bot.chat(`Crafted ${itemCount} ${itemName}.`);
+  } else {
+    bot.chat(`Failed to collect ${itemCount} ${itemName}.`);
+  }
 }

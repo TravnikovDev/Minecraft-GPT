@@ -13,5 +13,5 @@ export const parameters = z.object({});
 // Implement the ListInventory action
 export async function execute() {
   const items = await listInventory();
-  syncInventory(items);
+  await syncInventory(items);
 }

@@ -141,6 +141,7 @@ const gatherCobblestone = async (
     } catch (err) {
       if (err instanceof Error && err.message.includes("right tools")) {
         await ensurePickaxe();
+        continue;
       } else {
         console.error("Error collecting cobblestone:", err);
         moveAway(20);

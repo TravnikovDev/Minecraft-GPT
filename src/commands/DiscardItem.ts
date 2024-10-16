@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { discard } from "../actions/inventory";
+import { bot } from "..";
 
 export const description = `When user asks the bot to discard an item from its inventory, the bot will discard the item.
 Example: "Discard the sword.", "Drop the pickaxe", "Get rid of the food.".`;
@@ -26,5 +27,10 @@ export async function execute(args: any) {
   let { item_name, num } = parsed.data;
   num = num || 64;
 
-  await discard(item_name, num);
+  const result = await discard(item_name, num);
+  if (result) {
+    bot.chat(`Discarded ${num} ${item_name}.`);
+  } else {
+    bot.chat(`Failed to discard ${num} ${item_name}.`);
+  }
 }

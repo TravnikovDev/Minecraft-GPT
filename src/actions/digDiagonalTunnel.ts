@@ -69,9 +69,6 @@ export async function digDiagonalTunnel(
             "side"
           );
           bot.chat(`Placed torch at ${torchPosition.toString()}`);
-        } else {
-          console.log("No torches found in inventory.");
-          await craftRecipe("torch", 2);
         }
       }
     }

@@ -51,7 +51,6 @@ export async function gatherWood(
       const aTree = await getNearestBlocks(bot, woodBlock.name, 5, 5);
       if (aTree.length === 0) {
         console.log("No wood blocks found nearby.");
-        bot.chat("I cannot find any wood blocks nearby.");
         await moveAway(15);
         continue;
       }
@@ -72,7 +71,6 @@ export async function gatherWood(
     }
 
     console.log(`Wood gathering complete! Total logs collected: ${logsCount}.`);
-    bot.chat(`I have gathered ${logsCount} logs.`);
     return true;
   } catch (error) {
     console.error("Failed to gather wood:", error);
