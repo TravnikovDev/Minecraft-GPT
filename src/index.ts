@@ -39,8 +39,6 @@ bot.once("spawn", () => {
   bot.loadPlugin(tool);
   bot.loadPlugin(armorManager);
 
-  bot.chat("Hello world! MinecraftGPT at your service!");
-
   const defaultMove = new Movements(bot);
 
   defaultMove.allow1by1towers = false; // Do not build 1x1 towers when going up
@@ -51,12 +49,6 @@ bot.once("spawn", () => {
     id: "pickup",
     command: BotCommands.PickupNearbyItems,
     priority: 9,
-    retryCount: 1,
-  });
-  addCommandToQueue({
-    id: "go-to-player",
-    command: BotCommands.GoToPlayer,
-    priority: 8,
     retryCount: 1,
   });
 });
