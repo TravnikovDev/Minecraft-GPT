@@ -187,7 +187,7 @@ export async function breakBlockAt(
   if (x == null || y == null || z == null) {
     throw new Error("Invalid position to break block at.");
   }
-  const blockPos = new Vec3(x, y, z);
+  const blockPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
   const block = bot.blockAt(blockPos);
   if (!block) {
     console.log(`No block found at position ${blockPos}.`);

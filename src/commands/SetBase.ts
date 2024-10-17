@@ -9,7 +9,6 @@ import {
 import { BotCommands } from "./types";
 import { ensureLocation } from "../actions/ensure";
 import { __actionsDelay } from "../utils/utility";
-import { moveAway } from "../actions/movement";
 
 export const description = `When user asks the bot to set a base location, the bot will mark the location as the base, 
 clear the area around the bot for building, build basic structures, and place essential items. 
@@ -66,6 +65,5 @@ export async function execute(args: any) {
     command: BotCommands.SetBasement,
     priority: 6,
     args: { tunnelDepth: 6, roomSize: { width: 3, height: 3, length: 4 } },
-    retryCount: 1,
   });
 }

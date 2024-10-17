@@ -4,7 +4,6 @@ import {
   pickupNearbyItems,
   placeBlock,
 } from "../actions/worldInteraction";
-import { craftRecipe } from "../actions/crafting";
 import { __actionsDelay } from "../utils/utility";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
@@ -36,7 +35,7 @@ export async function digDiagonalTunnel(
     const wOffsetX = direction === "north" || direction === "south" ? w : 0;
     const wOffsetZ = direction === "east" || direction === "west" ? w : 0;
 
-    for (let i = 1; i <= depth; i++) {
+    for (let i = 0; i <= depth; i++) {
       const basePosition = startPosition.offset(
         wOffsetX + i * offsetX,
         -i,

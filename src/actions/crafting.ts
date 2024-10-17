@@ -78,27 +78,31 @@ export async function craftRecipe(
     if (await attemptCraft(recipes, craftingTable)) {
       return true;
     }
-  }
-
-  // Step 3: Ensure we have a crafting table in inventory and place it
-  console.log(
-    `Step 3: Ensure we have a crafting table in inventory and place it`
-  );
-  const hasCraftingTable = await ensureCraftingTable();
-  if (!hasCraftingTable) {
-    console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
-    return false;
-  }
-
-  // Find a suitable position to place the crafting table
-  const pos = getNearestFreeSpace(bot, 1, 10);
-  if (pos) {
-    await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-    craftingTable = getNearestBlock(bot, "crafting_table", craftingTableRange);
   } else {
-    console.log("No suitable position found to place the crafting table.");
-    moveAway(5);
-    return false;
+    // Step 3: Ensure we have a crafting table in inventory and place it
+    console.log(
+      `Step 3: Ensure we have a crafting table in inventory and place it`
+    );
+    const hasCraftingTable = await ensureCraftingTable();
+    if (!hasCraftingTable) {
+      console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
+      return false;
+    }
+
+    // Find a suitable position to place the crafting table
+    const pos = getNearestFreeSpace(bot, 1, 10);
+    if (pos) {
+      await placeBlock("crafting_table", pos.x, pos.y, pos.z);
+      craftingTable = getNearestBlock(
+        bot,
+        "crafting_table",
+        craftingTableRange
+      );
+    } else {
+      console.log("No suitable position found to place the crafting table.");
+      moveAway(5);
+      return false;
+    }
   }
 
   // Move closer to the placed crafting table

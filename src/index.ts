@@ -43,6 +43,7 @@ bot.once("spawn", () => {
 
   defaultMove.allow1by1towers = true; // Do not build 1x1 towers when going up
   defaultMove.canDig = true; // Disable breaking of blocks when pathing
+  defaultMove.canOpenDoors = true; // Enable opening doors
   bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
 
   addCommandToQueue({

@@ -50,7 +50,7 @@ export async function execute(args: any) {
     maxDistance
   );
 
-  console.log(`Found huntable entity:`, huntable);
+  // console.log(`Found huntable entity:`, huntable);
 
   if (huntable) {
     const goal = new goals.GoalNear(

@@ -17,6 +17,7 @@ import {
   saveBasementLocation,
 } from "../managers/persistenceManager";
 import { ensurePickaxe } from "../actions/ensure";
+import { gatherWood } from "../actions/gatherWood";
 // import { ensurePickaxe } from "../actions/ensureItems";
 // import { ensureShovel } from "../actions/ensureItems"; // Implement this function as needed
 // import { ensureDoor } from "../actions/ensureItems"; // Implement this function as needed
@@ -59,9 +60,9 @@ export async function execute(args: any) {
   const basementPosition = getBaseLocation();
   const startPosition = basementPosition
     ? new Vec3(
-        basementPosition.x,
-        basementPosition.y,
-        basementPosition.z
+        Math.floor(basementPosition.x),
+        Math.floor(basementPosition.y),
+        Math.floor(basementPosition.z)
       ).offset(4, 0, 0)
     : bot.entity.position.clone();
   let direction = "south" as DirectionType;
@@ -83,6 +84,7 @@ export async function execute(args: any) {
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
 
+  // await gatherWood(12);
   await ensurePickaxe();
   // await ensureShovel(); // Ensure the bot has a shovel for digging dirt
 
@@ -96,37 +98,37 @@ export async function execute(args: any) {
   );
 
   // Build a doorway at the entrance to basement (end of tunnel)
-  const doorwayPosition = startPosition.offset(
+  const enterPosition = startPosition.offset(
     tunnelDepth * offsetX,
     -tunnelDepth,
     tunnelDepth * offsetZ
-  );
+  ); // (0, -6, 6)
 
-  await buildDoorway(doorwayPosition, direction);
+  // (0, -6, 6) => (0, -6, 7)
+  await buildDoorway(enterPosition, direction);
+  bot.chat("Enter doorway built!");
 
   // **4. Offset room to make tunnel at the center**
   // Adjust roomStart position to center the tunnel
-  const roomStart = doorwayPosition.offset(
-    offsetX * 2 - offsetZ,
-    0,
-    offsetZ * 2 - offsetX
-  );
+  // (0, -6, 6) => (0, -6, 8)
+  const roomStart = enterPosition.offset(offsetX * 2, 0, offsetZ * 2);
 
   // Create the room at the end of the tunnel
+  // => (0, -6, 8)
   await digRoom(roomStart, roomSize);
+  bot.chat("Room dig complete!");
 
   // **6. Make a doorway on another side of the room and dig a mine**
-  // const mineEntrancePosition = doorwayPosition.offset(
-  //   offsetX * roomSize.length,
-  //   0,
-  //   offsetZ * roomSize.length
-  // );
-  // await buildDoorway(mineEntrancePosition, direction);
-  // await digStraightTunnel(
-  //   direction,
-  //   10, // Length of the mine tunnel
-  //   mineEntrancePosition
-  // );
+  // => // (0, -6, 6) => (0, -6, 12)
+  const exitPosition = enterPosition.offset(
+    offsetX * roomSize.length + offsetX,
+    0,
+    offsetZ * roomSize.length + offsetZ
+  );
+  await buildDoorway(exitPosition, direction);
+  bot.chat("eXit doorway built!");
+
+  await ensurePickaxe();
 
   saveBasementLocation(roomStart);
 
@@ -139,9 +141,9 @@ async function digRoom(
   roomStart: Vec3,
   roomSize: { width: number; height: number; length: number }
 ) {
-  for (let x = 0; x < roomSize.width; x++) {
+  for (let z = 0; z < roomSize.length; z++) {
     for (let y = 0; y < roomSize.height; y++) {
-      for (let z = 0; z < roomSize.length; z++) {
+      for (let x = -1; x < roomSize.width - 1; x++) {
         const roomBlock = roomStart.offset(x, y, z);
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
       }
@@ -150,6 +152,7 @@ async function digRoom(
 }
 
 // Helper function to build a doorway
+// (0, -6, 6) => (0, -6, 7)
 async function buildDoorway(position: Vec3, direction: string) {
   // await ensureDoor(); // Ensure the bot has a door
 
@@ -159,6 +162,8 @@ async function buildDoorway(position: Vec3, direction: string) {
   // Clear the doorway space (2 blocks high)
   for (let y = 0; y < 2; y++) {
     const doorwayBlock = position.offset(offsetX, y, offsetZ);
+    // => (0, -6, 7)
+    // => (0, -5, 7)
     await breakBlockAt(doorwayBlock.x, doorwayBlock.y, doorwayBlock.z);
   }
 
