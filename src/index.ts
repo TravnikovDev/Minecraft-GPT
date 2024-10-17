@@ -48,8 +48,7 @@ bot.once("spawn", () => {
   addCommandToQueue({
     id: "pickup",
     command: BotCommands.PickupNearbyItems,
-    priority: 9,
-    retryCount: 1,
+    priority: 4,
   });
 });
 
@@ -68,8 +67,7 @@ bot.on("playerJoined", (player: Player) => {
   addCommandToQueue({
     id: "go-to-player",
     command: BotCommands.GoToPlayer,
-    priority: 8,
-    retryCount: 1,
+    priority: 7,
     args: { player_name: playerUsername, closeness: 5 },
   });
 });
@@ -84,7 +82,6 @@ bot.on("health", () => {
       command: BotCommands.DefendSelf,
       priority: 9,
       args: { range: 8 },
-      retryCount: 1,
     });
   }
 });
