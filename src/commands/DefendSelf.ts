@@ -105,7 +105,7 @@ export async function execute(args: any) {
       range
     );
   }
-  bot.pvp.stop();
+  bot.pvp?.stop();
   if (attacked) {
     console.log(`Successfully defended self.`);
   } else {

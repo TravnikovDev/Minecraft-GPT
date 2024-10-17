@@ -5,7 +5,7 @@ import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
 import { placeBlock } from "./worldInteraction";
-import { goToNearestBlock } from "./movement";
+import { goToNearestBlock, moveAway } from "./movement";
 import { bot } from "..";
 import { collectBlock } from "./collectBlock";
 import { ensureCraftingTable } from "./ensure";
@@ -97,6 +97,7 @@ export async function craftRecipe(
     craftingTable = getNearestBlock(bot, "crafting_table", craftingTableRange);
   } else {
     console.log("No suitable position found to place the crafting table.");
+    moveAway(5);
     return false;
   }
 

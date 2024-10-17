@@ -85,7 +85,7 @@ export async function digDiagonalTunnel(
       depth,
     });
 
-  const cobblestoneCount = bot.inventory
+  /* const cobblestoneCount = bot.inventory
     .items()
     .filter((item) => item.name.includes("cobblestone"))
     .reduce((acc, item) => acc + item.count, 0);
@@ -125,7 +125,7 @@ export async function digDiagonalTunnel(
         bot.chat(`Placed cobblestone stair at ${stairPosition.toString()}`);
       }
     }
-  }
+  } */
 
   return true;
 }

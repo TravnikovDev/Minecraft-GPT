@@ -59,7 +59,7 @@ function isHostile(entity: Entity): boolean {
 // Stop Combat
 export async function stopCombat(): Promise<void> {
   try {
-    bot.pvp.stop();
+    bot.pvp?.stop();
     bot.chat("Stopping combat.");
   } catch (error) {
     console.error("Error while stopping combat:", error);

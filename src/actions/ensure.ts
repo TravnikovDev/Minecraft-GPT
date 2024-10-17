@@ -11,7 +11,7 @@ import { moveAway } from "./movement";
 // Constants for crafting and gathering
 const PLANKS_PER_LOG = 4;
 const STICKS_PER_PLANK = 2;
-const MIN_LOGS_FOR_PICKAXE = 4;
+const MIN_LOGS_FOR_PICKAXE = 5;
 const MIN_LOGS_FOR_CRAFTING_TABLE = 2;
 
 // Helper function to ensure a wooden pickaxe
@@ -31,6 +31,7 @@ export const ensurePickaxe = async (): Promise<boolean> => {
     const logsCount = getItemCount("log");
 
     if (logsCount >= MIN_LOGS_FOR_PICKAXE) {
+      await ensureCraftingTable();
       // Ensure planks and sticks using existing functions
       const planksEnsured = await ensurePlanks(12);
       const sticksEnsured = await ensureSticks(8);
@@ -63,7 +64,7 @@ export const ensureCraftingTable = async (): Promise<boolean> => {
 
   let hasCraftingTable = bot.inventory
     .items()
-    .some((item) => item.name.includes("crafting_table"));
+    .some((item) => item.name.includes("crafting"));
 
   if (hasCraftingTable) {
     console.log("Bot: Crafting table is available.");
