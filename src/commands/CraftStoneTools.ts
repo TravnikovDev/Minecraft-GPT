@@ -6,8 +6,9 @@ import { craftRecipe } from "../actions/crafting";
 import { moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
 import { collectBlock } from "../actions/collectBlock";
-import { ensurePickaxe, ensureSticks } from "../actions/ensure";
+import { ensureSticks } from "../actions/ensure";
 import { getItemCount } from "../actions/inventory";
+import { ensurePickaxe } from "../actions/ensureTools";
 
 export const description = `Important action to build stone tools for the bot. The user can specify the number of each tool to craft. 
 If no parameters are provided, the bot will craft 2 pickaxes, 1 axe, 0 sword, and 1 shovel. Example usage: 

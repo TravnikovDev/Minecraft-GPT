@@ -23,12 +23,14 @@ config();
 // Load Database before starting bot
 loadDb();
 
-// Create Bot
-export const bot = mineflayer.createBot({
+const connectionOptions = {
   host: SERVER_HOST,
   port: SERVER_PORT,
   username: process.env["BOT_USERNAME"] || "MinecraftGPT",
-});
+};
+
+// Create Bot
+export const bot = mineflayer.createBot(connectionOptions);
 
 // Event: Bot spawned
 bot.once("spawn", () => {
@@ -105,8 +107,8 @@ bot.on("breath", () => {
 });
 
 bot.on("end", () => {
-  console.log("Bot disconnected. Reconnecting...");
-  bot.respawn();
+  console.log("Bot disconnected. Exiting...");
+  process.exit(1);
 });
 
 /**

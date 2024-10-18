@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { digDiagonalTunnel } from "../actions/digDiagonalTunnel";
-import { ensurePickaxe } from "../actions/ensure";
+import { ensurePickaxe } from "../actions/ensureTools";
 
 export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 
 and dimensions, placing torches at the specified interval. If no parameters are provided, the bot will dig a tunnel
@@ -41,6 +41,7 @@ export async function execute(args: any) {
   }
 
   let { depth, torchInterval, tunnelSize, direction, tunnelName } = parsed.data;
+  const startPosition = bot.entity.position;
 
   // Default values for tunnel size
   depth = depth || 10;
@@ -54,7 +55,7 @@ export async function execute(args: any) {
     direction,
     depth,
     tunnelSize,
-    undefined,
+    startPosition,
     tunnelName,
     torchInterval
   );

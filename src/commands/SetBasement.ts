@@ -16,8 +16,8 @@ import {
   getBaseLocation,
   saveBasementLocation,
 } from "../managers/persistenceManager";
-import { ensurePickaxe } from "../actions/ensure";
 import { gatherWood } from "../actions/gatherWood";
+import { ensurePickaxe, ensureShovel } from "../actions/ensureTools";
 // import { ensurePickaxe } from "../actions/ensureItems";
 // import { ensureShovel } from "../actions/ensureItems"; // Implement this function as needed
 // import { ensureDoor } from "../actions/ensureItems"; // Implement this function as needed
@@ -84,9 +84,9 @@ export async function execute(args: any) {
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
 
-  // await gatherWood(12);
-  await ensurePickaxe();
-  // await ensureShovel(); // Ensure the bot has a shovel for digging dirt
+  await gatherWood(12);
+  await ensurePickaxe(2);
+  await ensureShovel();
 
   // Dig the diagonal tunnel
   await digDiagonalTunnel(

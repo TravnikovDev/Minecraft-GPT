@@ -9,6 +9,7 @@ import {
 import { BotCommands } from "./types";
 import { __actionsDelay } from "../utils/utility";
 import { ensureLocation } from "../actions/ensureLocation";
+import { ensureAxe } from "../actions/ensureTools";
 
 export const description = `When user asks the bot to set a base location, the bot will mark the location as the base, 
 clear the area around the bot for building, build basic structures, and place essential items. 
@@ -35,6 +36,7 @@ export async function execute(args: any) {
   const { baseName } = parsed.data;
   const basePosition = bot.entity.position;
 
+  await ensureAxe(); // Ensure the bot has an axe to harvest a lot of wood
   const goodLocation = await ensureLocation();
 
   if (!goodLocation) {
