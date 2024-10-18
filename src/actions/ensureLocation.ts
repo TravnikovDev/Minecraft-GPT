@@ -1,4 +1,5 @@
 import { bot } from "..";
+import { Vec3 } from "vec3"; // Add this import statement
 import { isHuntable } from "../utils/minecraftData";
 import { goToPosition, moveAway } from "./movement";
 import {
@@ -86,12 +87,19 @@ export async function ensureLocation(
       "desert",
     ].includes(biome);
 
+    // Cave/Ravine detection under the flat terrain within half the radius
+    const caveDetected = await checkForCavesBelow(flatTerrain);
+    if (caveDetected) {
+      console.log(
+        "Detected large cave under the flat terrain. Not safe for building."
+      );
+    }
+
     console.log(
       `Resources found - Wood: ${woodCount}, Coal: ${coalCount}, Iron: ${ironCount}, Stone: ${stoneCount}, Sand: ${sandCount}, Animals: ${animalCount}`
     );
 
     // Check all conditions for a good location
-    // Detailed report of the location
     if (
       woodCount >= wood &&
       coalCount >= coal &&
@@ -99,19 +107,13 @@ export async function ensureLocation(
       stoneCount >= stone &&
       animalCount >= animals &&
       terrainIsFlat &&
-      biomeIsSuitable
+      biomeIsSuitable &&
+      !caveDetected // Ensure no cave detected
     ) {
       await goToPosition(flatTerrain.x, flatTerrain.y, flatTerrain.z);
       bot.chat(
         `Success! This location is suitable for a base, radius of ${radius} blocks we have: 
-          - Wood: ${woodCount} ✅
-          - Coal: ${coalCount} ✅
-          - Iron: ${ironCount} ✅
-          - Stone: ${stoneCount} ✅
-          - Sand: ${sandCount} ✅
-          - Animals: ${animalCount} ✅
-          - Flat terrain ✅
-          - Biome is suitable ✅`
+        1. Resources ✅ 2. Flat terrain ✅ 3. Biome is suitable ✅ 4. No caves below base ✅`
       );
       return true;
     } else {
@@ -126,6 +128,10 @@ export async function ensureLocation(
         issues.push(`Animals: ${animalCount}/${animals} ❌`);
       if (!terrainIsFlat) issues.push("Terrain is not flat ❌");
       if (!biomeIsSuitable) issues.push(`Biome (${biome}) is not suitable ❌`);
+      if (caveDetected)
+        issues.push(
+          "Detected a large cave below the possible base location ❌"
+        );
 
       bot.chat(
         `This location is not suitable for a base due to the following issues:
@@ -136,4 +142,32 @@ export async function ensureLocation(
       await moveAway(100);
     }
   }
+}
+
+// Function to check for large caves directly beneath the flat terrain within half the radius
+async function checkForCavesBelow(
+  flatTerrain: Vec3 | undefined
+): Promise<boolean> {
+  if (!flatTerrain) return false; // No flat terrain means no need to check
+
+  const checkRadius = 8;
+
+  console.log(
+    `Checking for caves beneath the flat terrain within radius of ${checkRadius}`
+  );
+
+  // Check 20 blocks below the surface
+  const blocksBelow = bot.findBlocks({
+    matching: (block) => block.name === "air", // Detect air blocks, indicating a cave
+    maxDistance: checkRadius,
+    count: 100,
+    point: flatTerrain.offset(0, -checkRadius / 2, 0), // Start at flatTerrain position
+  });
+
+  if (blocksBelow.length > Math.pow(checkRadius, 3) * 0.2) {
+    // If there are a significant number of air blocks (indicating a large cave)
+    return true; // Large cave detected
+  }
+
+  return false; // No significant caves detected
 }
