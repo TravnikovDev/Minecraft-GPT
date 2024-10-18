@@ -91,6 +91,17 @@ export async function removeCommand(id: string) {
   }
 }
 
+export async function removeAllCommands() {
+  try {
+    if (db.data) {
+      db.data.commands = [];
+      await saveDb();
+    }
+  } catch (error) {
+    console.error("Error removing all commands from database:", error);
+  }
+}
+
 // Get All commands from Database
 export function getAllCommands() {
   return db.data?.commands || [];
