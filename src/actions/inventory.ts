@@ -63,7 +63,7 @@ export async function discard(itemName: string, num = -1): Promise<boolean> {
 }
 
 export async function putInChest(itemName: string, num = -1): Promise<boolean> {
-  const chest = world.getNearestBlock(bot, "chest", 32);
+  const chest = world.getNearestBlock("chest", 32);
   if (!chest) {
     console.log(`Could not find a chest nearby.`);
     return false;
@@ -88,7 +88,7 @@ export async function takeFromChest(
   itemName: string,
   num = -1
 ): Promise<boolean> {
-  const chest = world.getNearestBlock(bot, "chest", 32);
+  const chest = world.getNearestBlock("chest", 32);
   if (!chest) {
     console.log(`Could not find a chest nearby.`);
     return false;
@@ -116,7 +116,7 @@ export async function takeFromChest(
  * @returns
  */
 export async function viewChest(bot: Bot): Promise<boolean> {
-  const chest = world.getNearestBlock(bot, "chest", 32);
+  const chest = world.getNearestBlock("chest", 32);
   if (!chest) {
     console.log(`Could not find a chest nearby.`);
     return false;
@@ -239,7 +239,7 @@ export function checkFreeSpace(): number {
  * @returns
  */
 export async function transferAllToChest(): Promise<boolean> {
-  const chest = world.getNearestBlock(bot, "chest", 32);
+  const chest = world.getNearestBlock("chest", 32);
   if (!chest) {
     console.log(`Could not find a chest nearby.`);
     return false;

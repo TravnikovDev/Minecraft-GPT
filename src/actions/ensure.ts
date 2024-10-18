@@ -6,7 +6,6 @@ import { bot } from "..";
 import { craftRecipe } from "./crafting";
 import { gatherWood } from "./gatherWood";
 import { getItemCount } from "./inventory";
-import { moveAway } from "./movement";
 
 // Constants for crafting and gathering
 const PLANKS_PER_LOG = 4;
@@ -181,80 +180,3 @@ export const ensureSticks = async (neededAmount: number): Promise<boolean> => {
 
   return sticksCount >= neededAmount;
 };
-
-export async function ensureLocation(
-  radius: number = 100,
-  requiredResources: { wood: number; coal: number; iron: number } = {
-    wood: 36,
-    coal: 54,
-    iron: 72,
-  }
-): Promise<boolean> {
-  console.log(
-    `Scanning location with radius ${radius} for required resources:`,
-    requiredResources
-  );
-
-  const { wood, coal, iron } = requiredResources;
-
-  while (true) {
-    // Initialize resource counters
-    let woodCount = 0;
-    let coalCount = 0;
-    let ironCount = 0;
-
-    // Get block IDs for logs
-    const logBlockNames = Object.keys(bot.registry.blocksByName).filter(
-      (name) => name.endsWith("_log") || name.endsWith("_stem")
-    );
-    const logBlockIds = logBlockNames.map(
-      (name) => bot.registry.blocksByName[name].id
-    );
-
-    // Scan for wood logs
-    const woodBlocks = bot.findBlocks({
-      matching: logBlockIds,
-      maxDistance: radius,
-      count: wood,
-    });
-    woodCount = woodBlocks.length;
-
-    // Scan for coal ores
-    const coalOreId = bot.registry.blocksByName["coal_ore"].id;
-    const coalBlocks = bot.findBlocks({
-      matching: coalOreId,
-      maxDistance: radius,
-      count: coal,
-    });
-    coalCount = coalBlocks.length;
-
-    // Scan for iron ores
-    const ironOreId = bot.registry.blocksByName["iron_ore"].id;
-    const ironBlocks = bot.findBlocks({
-      matching: ironOreId,
-      maxDistance: radius,
-      count: iron,
-    });
-    ironCount = ironBlocks.length;
-
-    console.log(
-      `Found resources - Wood: ${woodCount}, Coal: ${coalCount}, Iron: ${ironCount}`
-    );
-
-    // Check if resource requirements are met
-    if (woodCount >= wood && coalCount >= coal && ironCount >= iron) {
-      bot.chat(
-        "This location is suitable for a base. It has enough wood, coal, and iron."
-      );
-      return true;
-    } else {
-      bot.chat(
-        "This location is not suitable for a base. It lacks sufficient resources."
-      );
-      // Move away and try again
-      await moveAway(60);
-      // Wait some time before re-evaluating
-      await bot.waitForTicks(100); // Wait for 5 seconds assuming 20 ticks per second
-    }
-  }
-}

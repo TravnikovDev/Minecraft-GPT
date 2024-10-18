@@ -40,11 +40,24 @@ bot.once("spawn", () => {
   bot.loadPlugin(armorManager);
 
   const defaultMove = new Movements(bot);
-
   defaultMove.allow1by1towers = true; // Do not build 1x1 towers when going up
   defaultMove.canDig = true; // Disable breaking of blocks when pathing
   defaultMove.canOpenDoors = true; // Enable opening doors
   bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
+
+  // Configure auto-eat plugin settings
+  bot.autoEat.options = {
+    priority: "foodPoints", // Prioritize foods that restore the most hunger points
+    startAt: 14, // Start eating when hunger is at or below this level
+    bannedFood: [], // No foods are banned by default
+    healthThreshold: 10, // Start eating when health is at or below this level
+    eatingTimeout: 3000, // Timeout for eating in milliseconds
+    ignoreInventoryCheck: false, // Do not ignore inventory check
+    checkOnItemPickup: true, // Check food on item pickup
+    equipOldItem: true, // Equip old item after eating
+    offhand: true, // Use offhand for food
+  };
+  bot.autoEat.enable();
 
   addCommandToQueue({
     id: "pickup",
@@ -93,7 +106,7 @@ bot.on("breath", () => {
 
 bot.on("end", () => {
   console.log("Bot disconnected. Reconnecting...");
-  bot.end();
+  bot.respawn();
 });
 
 /**

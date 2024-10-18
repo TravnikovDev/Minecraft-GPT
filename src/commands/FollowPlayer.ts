@@ -37,7 +37,7 @@ export async function execute(args: any) {
   if (player_name) {
     userToFollow = player_name;
   } else {
-    const players = getNearbyPlayerNames(bot, 220);
+    const players = getNearbyPlayerNames(220);
     userToFollow = players[0];
   }
 

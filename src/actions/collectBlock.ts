@@ -42,7 +42,7 @@ export async function collectBlock(
   let collected = 0;
 
   while (collected < num) {
-    let blocks = world.getNearestBlocks(bot, blockTypes, range);
+    let blocks = world.getNearestBlocks(blockTypes, range);
 
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);

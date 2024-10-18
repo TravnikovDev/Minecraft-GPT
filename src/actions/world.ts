@@ -6,21 +6,19 @@ import * as gameData from "../utils/minecraftData";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
 import { Item } from "prismarine-item";
-import type { Bot } from "mineflayer";
+import { bot } from "..";
 
 export function getNearestFreeSpace(
-  bot: Bot,
   size: number = 1,
   distance: number = 8
 ): Vec3 | undefined {
   /**
    * Get the nearest empty space with solid blocks beneath it of the given size.
-   * @param {Bot} bot - The bot to get the nearest free space for.
    * @param {number} size - The (size x size) of the space to find, default 1.
    * @param {number} distance - The maximum distance to search, default 8.
    * @returns {Vec3} - The south west corner position of the nearest free space.
    * @example
-   * let position = world.getNearestFreeSpace(bot, 1, 8);
+   * let position = world.getNearestFreeSpace( 1, 8);
    **/
   const empty_pos = bot.findBlocks({
     matching: (block: Block | null) => {
@@ -57,20 +55,18 @@ export function getNearestFreeSpace(
 }
 
 export function getNearestBlocks(
-  bot: Bot,
   block_types: string[] | string | null = null,
   distance: number = 16,
   count: number = 10000
 ): Block[] {
   /**
    * Get a list of the nearest blocks of the given types.
-   * @param {Bot} bot - The bot to get the nearest block for.
    * @param {string[]} block_types - The names of the blocks to search for.
    * @param {number} distance - The maximum distance to search, default 16.
    * @param {number} count - The maximum number of blocks to find, default 10000.
    * @returns {Block[]} - The nearest blocks of the given type.
    * @example
-   * let woodBlocks = world.getNearestBlocks(bot, ['oak_log', 'birch_log'], 16, 1);
+   * let woodBlocks = world.getNearestBlocks( ['oak_log', 'birch_log'], 16, 1);
    **/
   let block_ids: number[] = [];
   if (block_types === null) {
@@ -105,30 +101,25 @@ export function getNearestBlocks(
 }
 
 export function getNearestBlock(
-  bot: Bot,
   block_type: string,
   distance: number = 16
 ): Block | undefined {
   /**
    * Get the nearest block of the given type.
-   * @param {Bot} bot - The bot to get the nearest block for.
    * @param {string} block_type - The name of the block to search for.
    * @param {number} distance - The maximum distance to search, default 16.
    * @returns {Block} - The nearest block of the given type.
    * @example
-   * let coalBlock = world.getNearestBlock(bot, 'coal_ore', 16);
+   * let coalBlock = world.getNearestBlock( 'coal_ore', 16);
    **/
-  const blocks = getNearestBlocks(bot, block_type, distance, 1);
+  const blocks = getNearestBlocks(block_type, distance, 1);
   if (blocks.length > 0) {
     return blocks[0];
   }
   return undefined;
 }
 
-export function getNearbyEntities(
-  bot: Bot,
-  maxDistance: number = 16
-): Entity[] {
+export function getNearbyEntities(maxDistance: number = 16): Entity[] {
   const entitiesWithDistance: { entity: Entity; distance: number }[] = [];
   for (const entity of Object.values(bot.entities)) {
     const distance = entity.position.distanceTo(bot.entity.position);
@@ -140,7 +131,6 @@ export function getNearbyEntities(
 }
 
 export function getNearestEntityWhere(
-  bot: Bot,
   predicate: (entity: Entity) => boolean,
   maxDistance: number = 16
 ): Entity | null {
@@ -151,7 +141,7 @@ export function getNearestEntityWhere(
   );
 }
 
-export function getNearbyPlayers(bot: Bot, maxDistance: number = 16): Entity[] {
+export function getNearbyPlayers(maxDistance: number = 16): Entity[] {
   const playersWithDistance: { entity: Entity; distance: number }[] = [];
   for (const entity of Object.values(bot.entities)) {
     const distance = entity.position.distanceTo(bot.entity.position);
@@ -164,7 +154,7 @@ export function getNearbyPlayers(bot: Bot, maxDistance: number = 16): Entity[] {
   return playersWithDistance.map((item) => item.entity);
 }
 
-export function getInventoryStacks(bot: Bot): Item[] {
+export function getInventoryStacks(): Item[] {
   const inventory: Item[] = [];
   for (const item of bot.inventory.items()) {
     if (item != null) {
@@ -174,12 +164,11 @@ export function getInventoryStacks(bot: Bot): Item[] {
   return inventory;
 }
 
-export function getInventoryCounts(bot: Bot): {
+export function getInventoryCounts(): {
   [key: string]: number;
 } {
   /**
    * Get an object representing the bot's inventory.
-   * @param {Bot} bot - The bot to get the inventory for.
    * @returns {object} - An object with item names as keys and counts as values.
    * @example
    * let inventory = world.getInventoryCounts(bot);
@@ -198,10 +187,9 @@ export function getInventoryCounts(bot: Bot): {
   return inventory;
 }
 
-export function getPosition(bot: Bot): Vec3 {
+export function getPosition(): Vec3 {
   /**
    * Get your position in the world (Note that y is vertical).
-   * @param {Bot} bot - The bot to get the position for.
    * @returns {Vec3} - An object with x, y, and z attributes representing the position of the bot.
    * @example
    * let position = world.getPosition(bot);
@@ -210,15 +198,14 @@ export function getPosition(bot: Bot): Vec3 {
   return bot.entity.position;
 }
 
-export function getNearbyEntityTypes(bot: Bot): string[] {
+export function getNearbyEntityTypes(): string[] {
   /**
    * Get a list of all nearby mob types.
-   * @param {Bot} bot - The bot to get nearby mobs for.
    * @returns {string[]} - A list of all nearby mobs.
    * @example
    * let mobs = world.getNearbyEntityTypes(bot);
    **/
-  const mobs = getNearbyEntities(bot, 16);
+  const mobs = getNearbyEntities(16);
   const found: string[] = [];
   for (const mob of mobs) {
     if (mob.name && !found.includes(mob.name)) {
@@ -228,15 +215,14 @@ export function getNearbyEntityTypes(bot: Bot): string[] {
   return found;
 }
 
-export function getNearbyPlayerNames(bot: Bot, distance = 32): string[] {
+export function getNearbyPlayerNames(distance = 32): string[] {
   /**
    * Get a list of all nearby player names.
-   * @param {Bot} bot - The bot to get nearby players for.
    * @returns {string[]} - A list of all nearby players.
    * @example
    * let players = world.getNearbyPlayerNames(bot);
    **/
-  const players = getNearbyPlayers(bot, distance);
+  const players = getNearbyPlayers(distance);
   const found: string[] = [];
   for (const player of players) {
     if (
@@ -250,16 +236,15 @@ export function getNearbyPlayerNames(bot: Bot, distance = 32): string[] {
   return found;
 }
 
-export function getNearbyBlockTypes(bot: Bot, distance: number = 16): string[] {
+export function getNearbyBlockTypes(distance: number = 16): string[] {
   /**
    * Get a list of all nearby block names.
-   * @param {Bot} bot - The bot to get nearby blocks for.
    * @param {number} distance - The maximum distance to search, default 16.
    * @returns {string[]} - A list of all nearby blocks.
    * @example
    * let blocks = world.getNearbyBlockTypes(bot);
    **/
-  const blocks = getNearestBlocks(bot, null, distance);
+  const blocks = getNearestBlocks(null, distance);
   const found: string[] = [];
   for (const block of blocks) {
     if (!found.includes(block.name)) {
@@ -269,10 +254,9 @@ export function getNearbyBlockTypes(bot: Bot, distance: number = 16): string[] {
   return found;
 }
 
-export async function isClearPath(bot: Bot, target: Entity): Promise<boolean> {
+export async function isClearPath(target: Entity): Promise<boolean> {
   /**
    * Check if there is a path to the target that requires no digging or placing blocks.
-   * @param {Bot} bot - The bot to get the path for.
    * @param {Entity} target - The target to path to.
    * @returns {boolean} - True if there is a clear path, false otherwise.
    */
@@ -288,11 +272,11 @@ export async function isClearPath(bot: Bot, target: Entity): Promise<boolean> {
   return path.status === "success";
 }
 
-export function shouldPlaceTorch(bot: Bot): boolean {
-  const pos = getPosition(bot);
+export function shouldPlaceTorch(): boolean {
+  const pos = getPosition();
   // TODO: check light level instead of nearby torches, block.light is broken
-  let nearest_torch = getNearestBlock(bot, "torch", 10);
-  if (!nearest_torch) nearest_torch = getNearestBlock(bot, "wall_torch", 10);
+  let nearest_torch = getNearestBlock("torch", 10);
+  if (!nearest_torch) nearest_torch = getNearestBlock("wall_torch", 10);
   if (!nearest_torch) {
     const block = bot.blockAt(pos);
     const has_torch = bot.inventory
@@ -303,10 +287,9 @@ export function shouldPlaceTorch(bot: Bot): boolean {
   return false;
 }
 
-export function getBiomeName(bot: Bot): string {
+export function getBiomeName(): string {
   /**
    * Get the name of the biome the bot is in.
-   * @param {Bot} bot - The bot to get the biome for.
    * @returns {string} - The name of the biome.
    * @example
    * let biome = world.getBiomeName(bot);

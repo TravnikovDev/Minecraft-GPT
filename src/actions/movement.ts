@@ -32,7 +32,7 @@ export async function goToNearestBlock(
     console.log(`Maximum search range capped at ${MAX_RANGE}.`);
     range = MAX_RANGE;
   }
-  const block = world.getNearestBlock(bot, blockType, range);
+  const block = world.getNearestBlock(blockType, range);
   if (!block) {
     console.log(`Could not find any ${blockType} in ${range} blocks.`);
     return false;
@@ -120,7 +120,7 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
       "crimson_door",
       "warped_door",
     ]) {
-      const doorBlock = world.getNearestBlock(bot, doorType, 16);
+      const doorBlock = world.getNearestBlock(doorType, 16);
       if (doorBlock) {
         doorPos = doorBlock.position;
         break;

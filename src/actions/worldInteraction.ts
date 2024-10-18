@@ -233,16 +233,15 @@ export async function breakBlockAt(
   }
 }
 
-export async function activateNearestBlock(bot: Bot, type: string) {
+export async function activateNearestBlock(type: string) {
   /**
    * Activate the nearest block of the given type.
-   * @param {MinecraftBot} bot, reference to the minecraft bot.
    * @param {string} type, the type of block to activate.
    * @returns {Promise<boolean>} true if the block was activated, false otherwise.
    * @example
-   * await skills.activateNearestBlock(bot, "lever");
+   * await skills.activateNearestBlock( "lever");
    * **/
-  let block = world.getNearestBlock(bot, type, 16);
+  let block = world.getNearestBlock(type, 16);
   if (!block) {
     console.log(`Could not find any ${type} to activate.`);
     return false;

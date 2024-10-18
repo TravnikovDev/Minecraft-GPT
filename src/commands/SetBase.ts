@@ -7,8 +7,8 @@ import {
   saveBaseLocation,
 } from "../managers/persistenceManager";
 import { BotCommands } from "./types";
-import { ensureLocation } from "../actions/ensure";
 import { __actionsDelay } from "../utils/utility";
+import { ensureLocation } from "../actions/ensureLocation";
 
 export const description = `When user asks the bot to set a base location, the bot will mark the location as the base, 
 clear the area around the bot for building, build basic structures, and place essential items. 

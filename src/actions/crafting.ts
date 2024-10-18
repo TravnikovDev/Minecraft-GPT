@@ -64,11 +64,7 @@ export async function craftRecipe(
   // Step 2: Check for a nearby crafting table
   console.log(`Step 2: Check for a nearby crafting table`);
   const craftingTableRange = 32;
-  let craftingTable = getNearestBlock(
-    bot,
-    "crafting_table",
-    craftingTableRange
-  );
+  let craftingTable = getNearestBlock("crafting_table", craftingTableRange);
   if (craftingTable) {
     // Move closer to the crafting table if necessary
     if (bot.entity.position.distanceTo(craftingTable.position) > 3) {
@@ -90,14 +86,10 @@ export async function craftRecipe(
     }
 
     // Find a suitable position to place the crafting table
-    const pos = getNearestFreeSpace(bot, 1, 10);
+    const pos = getNearestFreeSpace(1, 10);
     if (pos) {
       await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-      craftingTable = getNearestBlock(
-        bot,
-        "crafting_table",
-        craftingTableRange
-      );
+      craftingTable = getNearestBlock("crafting_table", craftingTableRange);
     } else {
       console.log("No suitable position found to place the crafting table.");
       moveAway(5);
@@ -144,19 +136,19 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
   } // TODO: allow cobblestone, sand, clay, etc.
 
   let placedFurnace = false;
-  let furnaceBlock = getNearestBlock(bot, "furnace", 32);
+  let furnaceBlock = getNearestBlock("furnace", 32);
   if (!furnaceBlock) {
     // Try to place furnace
-    const hasFurnace = getInventoryCounts(bot)["furnace"] > 0;
+    const hasFurnace = getInventoryCounts()["furnace"] > 0;
     if (hasFurnace) {
-      const pos = getNearestFreeSpace(bot, 1, 32);
+      const pos = getNearestFreeSpace(1, 32);
       if (pos) {
         await placeBlock("furnace", pos.x, pos.y, pos.z);
       } else {
         console.log("No suitable position found to place the furnace.");
         return false;
       }
-      furnaceBlock = getNearestBlock(bot, "furnace", 32);
+      furnaceBlock = getNearestBlock("furnace", 32);
       placedFurnace = true;
     }
   }
@@ -187,7 +179,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     return false;
   }
   // Check if the bot has enough items to smelt
-  const invCounts = getInventoryCounts(bot);
+  const invCounts = getInventoryCounts();
   if (!invCounts[itemName] || invCounts[itemName] < num) {
     console.log(`I do not have enough ${itemName} to smelt.`);
     if (placedFurnace) await collectBlock("furnace", 1);
@@ -264,7 +256,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
 }
 
 export async function clearNearestFurnace(): Promise<boolean> {
-  const furnaceBlock = getNearestBlock(bot, "furnace", 6);
+  const furnaceBlock = getNearestBlock("furnace", 6);
   if (!furnaceBlock) {
     console.log(`There is no furnace nearby.`);
     return false;
