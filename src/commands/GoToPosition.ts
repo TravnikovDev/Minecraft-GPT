@@ -2,22 +2,27 @@
 
 import { z } from "zod";
 import { goToPosition } from "../actions/movement";
+import {
+  getBasementLocation,
+  getChests,
+  getCraftingTables,
+  getFurnaces,
+  getMines,
+} from "../managers/persistenceManager";
 
-// TODO: Rework this function with usage of objects from database
-
-export const description = `When user asks the bot to go to a position, the bot will navigate to the specified coordinates.
-    Example: "Go to position 10 64 10", "Head towards 20 70 30", "Move to 0 100 0".
-    If no parameters are provided, the bot will move to 0 0 0.`;
+export const description = `When user asks the bot to go to a position, the bot will navigate to the specified place.
+The bot can go to the base, basement, crafting table, furnace, chest, or mine.
+Expected usage: "Go to the basement" or "Go to the crafting table" or "Go to the furnace" or "Go to the chest" or "Go to the mine".`;
 
 // Define parameters for the GoToPosition action
 export const parameters = z.object({
-  x: z.number().describe("The x-coordinate to go to."),
-  y: z.number().describe("The y-coordinate to go to."),
-  z: z.number().describe("The z-coordinate to go to."),
-  minDistance: z
-    .number()
-    .optional()
-    .describe("The minimum distance to stop from the target position."),
+  targetName: z.enum([
+    "basement",
+    "crafting table",
+    "furnace",
+    "chest",
+    "mine",
+  ]),
 });
 
 // Implement the GoToPosition action
@@ -33,7 +38,55 @@ export async function execute(args: any) {
     return;
   }
 
-  const { x, y, z, minDistance } = parsed.data;
+  let target = parsed.data.targetName || "base";
 
-  goToPosition(x, y, z, minDistance);
+  switch (target) {
+    case "basement":
+      const basementLocation = getBasementLocation();
+      if (basementLocation)
+        await goToPosition(
+          basementLocation.x,
+          basementLocation.y,
+          basementLocation.z
+        );
+      break;
+    case "crafting table":
+      const craftingTableLocation = getCraftingTables();
+      if (craftingTableLocation)
+        await goToPosition(
+          craftingTableLocation[0].x,
+          craftingTableLocation[0].y,
+          craftingTableLocation[0].z
+        );
+      break;
+    case "furnace":
+      const furnaceLocations = getFurnaces();
+      if (furnaceLocations)
+        await goToPosition(
+          furnaceLocations[0].x,
+          furnaceLocations[0].y,
+          furnaceLocations[0].z
+        );
+      break;
+    case "chest":
+      const chestLocations = getChests();
+      if (chestLocations)
+        await goToPosition(
+          chestLocations[0].location.x,
+          chestLocations[0].location.y,
+          chestLocations[0].location.z
+        );
+      break;
+    case "mine":
+      const minesLocations = getMines();
+      if (minesLocations)
+        await goToPosition(
+          minesLocations[0].startsAt.x,
+          minesLocations[0].startsAt.y,
+          minesLocations[0].startsAt.z
+        );
+      break;
+    default:
+      console.error(`Invalid target name for GoToPosition: ${target}`);
+  }
 }
