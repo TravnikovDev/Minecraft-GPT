@@ -128,3 +128,50 @@ export async function digDiagonalTunnel(
 
   return true;
 }
+
+/**
+ * Builds a doorway at the specified position.
+ * @param position The position to build the doorway at.
+ * @param direction The direction the doorway should face.
+ */
+export async function digDoorway(position: Vec3, direction: string) {
+  const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
+  const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
+
+  // Clear the doorway space (2 blocks high)
+  for (let y = 0; y < 2; y++) {
+    const doorwayBlock = position.offset(offsetX, y, offsetZ);
+    await breakBlockAt(doorwayBlock.x, doorwayBlock.y, doorwayBlock.z);
+  }
+
+  // !important: Bot can't go thought doors yet
+  // Place the door
+  // await ensureDoor(); // Ensure the bot has a door
+  // await placeBlock("wooden_door", position.x, position.y, position.z);
+}
+
+/**
+ * Digs a straight tunnel in the specified direction.
+ * @param direction The direction to dig the tunnel in.
+ * @param length The length of the tunnel.
+ * @param startPosition The starting position of the tunnel.
+ */
+export async function digStraightTunnel(
+  direction: "north" | "south" | "east" | "west",
+  length: number,
+  startPosition: Vec3
+) {
+  const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
+  const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
+
+  for (let i = 1; i <= length; i++) {
+    const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
+    // Dig out a 2x2 tunnel
+    for (let y = 0; y < 2; y++) {
+      for (let x = -1; x <= 1; x++) {
+        const blockPos = position.offset(x, y, 0);
+        await breakBlockAt(blockPos.x, blockPos.y, blockPos.z);
+      }
+    }
+  }
+}

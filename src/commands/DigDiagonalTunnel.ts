@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { digDiagonalTunnel } from "../actions/digDiagonalTunnel";
+import { digDiagonalTunnel } from "../actions/digging";
 import { ensurePickaxe } from "../actions/ensureTools";
 
 export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 

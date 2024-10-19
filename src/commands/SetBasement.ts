@@ -5,23 +5,16 @@ import { Vec3 } from "vec3";
 import { bot } from "../index";
 import {
   digDiagonalTunnel,
+  digDoorway,
   type DirectionType,
-} from "../actions/digDiagonalTunnel";
-import {
-  breakBlockAt,
-  pickupNearbyItems,
-  placeBlock,
-} from "../actions/worldInteraction";
+} from "../actions/digging";
+import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import {
   getBaseLocation,
   saveBasementLocation,
 } from "../managers/persistenceManager";
 import { gatherWood } from "../actions/gatherWood";
 import { ensurePickaxe, ensureShovel } from "../actions/ensureTools";
-// import { ensurePickaxe } from "../actions/ensureItems";
-// import { ensureShovel } from "../actions/ensureItems"; // Implement this function as needed
-// import { ensureDoor } from "../actions/ensureItems"; // Implement this function as needed
-// import { Block } from "prismarine-block";
 
 export const description = `When the user asks the bot to set up a basement, the bot will dig a diagonal tunnel down and 
 create a room at the end of the tunnel. Example: "Set up a basement with a room size of 3x3x4",
@@ -105,7 +98,7 @@ export async function execute(args: any) {
   ); // (0, -6, 6)
 
   // (0, -6, 6) => (0, -6, 7)
-  await buildDoorway(enterPosition, direction);
+  await digDoorway(enterPosition, direction);
   bot.chat("Enter doorway built!");
 
   // **4. Offset room to make tunnel at the center**
@@ -125,7 +118,7 @@ export async function execute(args: any) {
     0,
     offsetZ * roomSize.length + offsetZ
   );
-  await buildDoorway(exitPosition, direction);
+  await digDoorway(exitPosition, direction);
   bot.chat("eXit doorway built!");
 
   await ensurePickaxe();
@@ -153,41 +146,3 @@ async function digRoom(
 
 // Helper function to build a doorway
 // (0, -6, 6) => (0, -6, 7)
-async function buildDoorway(position: Vec3, direction: string) {
-  // await ensureDoor(); // Ensure the bot has a door
-
-  const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
-  const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
-
-  // Clear the doorway space (2 blocks high)
-  for (let y = 0; y < 2; y++) {
-    const doorwayBlock = position.offset(offsetX, y, offsetZ);
-    // => (0, -6, 7)
-    // => (0, -5, 7)
-    await breakBlockAt(doorwayBlock.x, doorwayBlock.y, doorwayBlock.z);
-  }
-
-  // Place the door
-  // await placeBlock("wooden_door", position.x, position.y, position.z);
-}
-
-// Helper function to dig a straight tunnel
-async function digStraightTunnel(
-  direction: "north" | "south" | "east" | "west",
-  length: number,
-  startPosition: Vec3
-) {
-  const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
-  const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
-
-  for (let i = 1; i <= length; i++) {
-    const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
-    // Dig out a 2x2 tunnel
-    for (let y = 0; y < 2; y++) {
-      for (let x = -1; x <= 1; x++) {
-        const blockPos = position.offset(x, y, 0);
-        await breakBlockAt(blockPos.x, blockPos.y, blockPos.z);
-      }
-    }
-  }
-}

@@ -19,7 +19,7 @@ import {
   MineSchema,
   PositionSchema,
 } from "../schemas/mainSchemas";
-import type { DirectionType } from "../actions/digDiagonalTunnel";
+import type { DirectionType } from "../actions/digging";
 
 // Database Setup
 const dbPath = resolve("db.json");
