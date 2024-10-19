@@ -84,18 +84,34 @@ export async function followPlayer(
 
 export async function moveAway(distance: number): Promise<boolean> {
   try {
-    let rand = getRandomInt(0, 1);
-    let bigRand1 = getRandomInt(0, 100);
-    let bigRand2 = getRandomInt(0, 100);
-
     const pos = bot.entity.position;
-    const farGoal = new pf.goals.GoalXZ(
-      pos.x + (distance * bigRand1) / 100,
-      pos.z + ((distance * bigRand2) / 100) * (rand ? 1 : -1)
-    );
-    const invertedGoal = new pf.goals.GoalInvert(farGoal);
+    let newX: number = 0;
+    let newZ: number = 0;
+    let suitableGoal = false;
 
-    await bot.pathfinder.goto(rand ? farGoal : invertedGoal);
+    while (!suitableGoal) {
+      let rand1 = getRandomInt(0, 1);
+      let rand2 = getRandomInt(0, 1);
+      let bigRand1 = getRandomInt(0, 100);
+      let bigRand2 = getRandomInt(0, 100);
+
+      newX = Math.floor(
+        pos.x + ((distance * bigRand1) / 100) * (rand1 ? 1 : -1)
+      );
+      newZ = Math.floor(
+        pos.z + ((distance * bigRand2) / 100) * (rand2 ? 1 : -1)
+      );
+
+      const block = bot.blockAt(new Vec3(newX, pos.y - 1, newZ));
+
+      if (block?.name !== "water" && block?.name !== "lava") {
+        suitableGoal = true;
+      }
+    }
+
+    const farGoal = new pf.goals.GoalXZ(newX, newZ);
+
+    await bot.pathfinder.goto(farGoal);
     const newPos = bot.entity.position;
     console.log(`Moved away from nearest entity to ${newPos}.`);
     return true;

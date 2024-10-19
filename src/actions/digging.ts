@@ -194,3 +194,5 @@ export async function digRoom(
     }
   }
 }
+
+// TODO: For all cases, check if under block exist a foundation block. If no - place a plank
