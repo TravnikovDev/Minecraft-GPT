@@ -145,7 +145,7 @@ export async function placeBlock(
         2
       )
     );
-    bot.pathfinder.setMovements(new pf.Movements(bot));
+    // bot.pathfinder.setMovements(new pf.Movements(bot));
     await bot.pathfinder.goto(goal);
   }
 
@@ -251,7 +251,7 @@ export async function activateNearestBlock(type: string) {
   }
   if (bot.entity.position.distanceTo(block.position) > 4.5) {
     let pos = block.position;
-    bot.pathfinder.setMovements(new pf.Movements(bot));
+    // bot.pathfinder.setMovements(new pf.Movements(bot));
     await bot.pathfinder.goto(new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
   }
   await bot.activateBlock(block);
@@ -313,7 +313,7 @@ export async function tillAndSow(
       seedType += "s"; // Fixes common mistake
     const seeds = bot.inventory
       .items()
-      .find((item) => item.name.includes(seedType));
+      .find((item) => item.name.includes(seedType || "seed"));
     if (!seeds) {
       console.log(`No ${seedType} to plant.`);
       return false;

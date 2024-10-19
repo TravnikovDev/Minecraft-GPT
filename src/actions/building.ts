@@ -195,7 +195,8 @@ export async function setupTheShelter() {
     await goToPosition(
       shelterLocation.x - 1,
       shelterLocation.y,
-      shelterLocation.z + 2
+      shelterLocation.z + 2,
+      0
     );
 
     const craftingTableLocations = new Vec3(
@@ -228,6 +229,12 @@ export async function setupTheShelter() {
     await saveChestLocation(craftingTableLocations.offset(0, 0, 1));
     await __actionsDelay(1000);
 
+    await goToPosition(
+      shelterLocation.x - 1,
+      shelterLocation.y,
+      shelterLocation.z + 4,
+      0
+    );
     await placeBlock(
       "furnace",
       craftingTableLocations.offset(0, 0, 3).x,

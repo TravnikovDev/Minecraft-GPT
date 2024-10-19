@@ -13,7 +13,7 @@ export async function goToPosition(
   z: number,
   minDistance = 2
 ): Promise<boolean> {
-  bot.pathfinder.setMovements(new pf.Movements(bot));
+  // bot.pathfinder.setMovements(new pf.Movements(bot));
   const base = await getBaseLocation();
 
   try {
@@ -97,8 +97,8 @@ export async function followPlayer(
     return false;
   }
 
-  const move = new pf.Movements(bot);
-  bot.pathfinder.setMovements(move);
+  // const move = new pf.Movements(bot);
+  // bot.pathfinder.setMovements(move);
   bot.pathfinder.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
   console.log(`You are now actively following player ${username}.`);
 

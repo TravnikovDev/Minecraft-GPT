@@ -21,7 +21,7 @@ export type DirectionType = "north" | "south" | "west" | "east";
  * @returns A promise that resolves to a boolean indicating whether the tunnel was successfully dug.
  */
 export async function digDiagonalTunnel(
-  direction: DirectionType = "north",
+  direction: DirectionType = "south",
   depth: number = 10,
   tunnelSize: { width: number; height: number } = { width: 1, height: 4 },
   startPosition?: Vec3,
