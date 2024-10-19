@@ -30,7 +30,7 @@ export async function execute(args: any = {}) {
   if (player_name) {
     targetPlayer = bot.players[player_name]?.entity;
   } else {
-    const players = getNearbyPlayerNames(500);
+    const players = getNearbyPlayerNames(1000);
     targetPlayer = bot.players[players[0]].entity;
   }
 

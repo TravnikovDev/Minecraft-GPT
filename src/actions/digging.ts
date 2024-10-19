@@ -190,6 +190,7 @@ export async function digRoom(
       for (let x = -1; x < roomSize.width - 1; x++) {
         const roomBlock = roomStart.offset(x, y, z);
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
+        await __actionsDelay(1000);
       }
     }
   }

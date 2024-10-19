@@ -42,8 +42,8 @@ bot.once("spawn", () => {
   bot.loadPlugin(armorManager);
 
   const defaultMove = new Movements(bot);
-  defaultMove.allow1by1towers = true; // Do not build 1x1 towers when going up
-  defaultMove.canDig = true; // Disable breaking of blocks when pathing
+  defaultMove.allow1by1towers = false; // Do not build 1x1 towers when going up
+  defaultMove.canDig = false; // Disable breaking of blocks when pathing
   defaultMove.canOpenDoors = true; // Enable opening doors
   bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
 

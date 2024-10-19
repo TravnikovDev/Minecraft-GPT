@@ -8,6 +8,7 @@ import {
   getNearbyEntities,
   getNearestFreeSpace,
 } from "./world"; // Assuming these are imported from your helpers
+import { __actionsDelay } from "../utils/utility";
 
 export async function ensureLocation(
   radius: number = 120,
@@ -27,15 +28,12 @@ export async function ensureLocation(
     animals: 4,
   }
 ): Promise<Vec3> {
-  console.log(
-    `Scanning location with radius ${radius} for required resources:`,
-    requiredResources
-  );
+  console.log(`Scanning location with radius ${radius} for required resources`);
 
   const { wood, coal, iron, stone, sand, animals } = requiredResources;
 
   while (true) {
-    await moveAway(30);
+    await __actionsDelay(1000); // Delay to avoid spamming the server
 
     // Initialize resource counters
     let woodCount = 0;
@@ -52,37 +50,30 @@ export async function ensureLocation(
       count: wood,
     });
     woodCount = woodBlocks ? woodBlocks.length : 0;
-    if (woodCount < wood) continue;
 
     const coalBlocks = getNearestBlocks("coal_ore", radius, coal);
     coalCount = coalBlocks.length;
-    if (coalCount < coal) continue;
 
     const ironBlocks = getNearestBlocks("iron_ore", radius, iron);
     ironCount = ironBlocks.length;
-    if (ironCount < iron) continue;
 
     const stoneBlocks = getNearestBlocks("stone", radius, stone); // 20 as example count
     stoneCount = stoneBlocks.length;
-    if (stoneCount < stone) continue;
 
     const sandBlocks = getNearestBlocks("sand", radius, stone); // Limit sand to avoid island
     sandCount = sandBlocks.length;
-    if (sandCount < sand) continue;
 
     // Scan for animals (farming and food)
     const animalsNearby = getNearbyEntities(radius).filter((entity) =>
       isHuntable(entity)
     );
     animalCount = animalsNearby.length;
-    if (animalCount < animals) continue;
 
     // Terrain flatness check using helper function
     // 8x8 of flat area is good for base
     const possibleBasePosition = getNearestFreeSpace(3, radius);
     console.log(`Flat terrain: ${possibleBasePosition}`);
     const terrainIsFlat = possibleBasePosition !== undefined;
-    if (!terrainIsFlat) continue;
 
     // Check biome suitability
     const biome = getBiomeName();
@@ -95,7 +86,6 @@ export async function ensureLocation(
       "ice",
       "desert",
     ].includes(biome);
-    if (!biomeIsSuitable) continue;
 
     // Cave/Ravine detection under the flat terrain within half the radius
     const caveDetected = await checkForCavesBelow(possibleBasePosition);
@@ -103,7 +93,6 @@ export async function ensureLocation(
       console.log(
         "Detected large cave under the flat terrain. Not safe for building."
       );
-      continue;
     }
 
     // Check for large lakes or rivers nearby within a radius of 12 blocks
@@ -112,7 +101,6 @@ export async function ensureLocation(
       console.log(
         "Detected large lake or river nearby. Not safe for building."
       );
-      continue;
     }
 
     // Check all conditions for a good location

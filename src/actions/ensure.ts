@@ -148,7 +148,7 @@ export const ensureChests = async (quantity: number = 1): Promise<boolean> => {
   }
 
   while (chestCount < quantity) {
-    const planksEnsured = await ensurePlanks(8 * (quantity - chestCount)); // 8 planks per chest
+    const planksEnsured = await ensurePlanks(8 * quantity); // 8 planks per chest
     if (!planksEnsured) {
       console.error("Bot: Failed to ensure planks for chest(s).");
       return false;

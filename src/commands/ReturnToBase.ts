@@ -18,7 +18,7 @@ export async function execute() {
     const baseLocation = getBaseLocation();
     // Set the pathfinder goal to go back to the base
     if (baseLocation) {
-      goToPosition(baseLocation?.x, baseLocation?.y, baseLocation?.z);
+      await goToPosition(baseLocation?.x, baseLocation?.y, baseLocation?.z);
       bot.chat(`Returning to base!`);
     } else {
       bot.chat(`No base location found!`);

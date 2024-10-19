@@ -7,7 +7,11 @@ import {
 } from "./worldInteraction";
 import {
   getBaseLocation,
+  getBasementLocation,
   saveBasementLocation,
+  saveChestLocation,
+  saveCraftingTableLocation,
+  saveFurnaceLocation,
 } from "../managers/persistenceManager";
 import {
   digDiagonalTunnel,
@@ -16,7 +20,18 @@ import {
   type DirectionType,
 } from "./digging";
 import { gatherWood } from "./gatherWood";
-import { ensurePickaxe, ensureShovel } from "./ensureTools";
+import { ensureAxe, ensurePickaxe, ensureShovel } from "./ensureTools";
+import {
+  ensureCampfire,
+  ensureChests,
+  ensureCobblestone,
+  ensureCraftingTable,
+  ensureFurnaces,
+  ensurePlanks,
+  ensureTorches,
+} from "./ensure";
+import { goToPosition } from "./movement";
+import { __actionsDelay } from "../utils/utility";
 
 // Helper function to place dirt if there's a hole
 async function fillHole(pos: Vec3) {
@@ -68,6 +83,7 @@ export async function clearSite(
         }
       }
     }
+    await pickupNearbyItems(bot);
   }
 }
 
@@ -82,7 +98,7 @@ export async function buildShelter(
     height: 3,
     length: 4,
   },
-  tunnelDepth: number = 6
+  tunnelDepth: number = 4
 ) {
   console.log(`Building a shelter to survive the night...`);
 
@@ -151,9 +167,82 @@ export async function buildShelter(
   await digDoorway(exitPosition, direction);
   console.log("Exit doorway built!");
 
-  saveBasementLocation(roomStart);
+  await saveBasementLocation(roomStart);
 
   await pickupNearbyItems(bot);
+}
+
+export async function setupTheShelter() {
+  const shelterLocation = getBasementLocation();
+
+  if (shelterLocation) {
+    // Prepare resources
+    await ensureAxe();
+    await __actionsDelay(1000);
+    await gatherWood(15);
+    await __actionsDelay(1000);
+    await ensurePickaxe(2);
+    await __actionsDelay(1000);
+    await ensureCobblestone(15);
+
+    await ensureFurnaces();
+    await __actionsDelay(1000);
+    await ensureChests(2);
+    await __actionsDelay(1000);
+    await ensureCraftingTable();
+    await __actionsDelay(1000);
+
+    await goToPosition(
+      shelterLocation.x,
+      shelterLocation.y,
+      shelterLocation.z + 2
+    );
+
+    const craftingTableLocations = new Vec3(
+      shelterLocation.x,
+      shelterLocation.y,
+      shelterLocation.z
+    ).offset(-1, 0, 0);
+    await placeBlock(
+      "crafting_table",
+      craftingTableLocations.x,
+      craftingTableLocations.y,
+      craftingTableLocations.z
+    );
+    await saveCraftingTableLocation(craftingTableLocations);
+    await __actionsDelay(1000);
+
+    await placeBlock(
+      "chest",
+      craftingTableLocations.offset(0, 0, 1).x,
+      craftingTableLocations.offset(0, 0, 1).y,
+      craftingTableLocations.offset(0, 0, 1).z
+    );
+    await __actionsDelay(1000);
+    await placeBlock(
+      "chest",
+      craftingTableLocations.offset(0, 0, 2).x,
+      craftingTableLocations.offset(0, 0, 2).y,
+      craftingTableLocations.offset(0, 0, 2).z
+    );
+    await saveChestLocation(craftingTableLocations.offset(0, 0, 1));
+    await __actionsDelay(1000);
+
+    await placeBlock(
+      "furnace",
+      craftingTableLocations.offset(0, 0, 3).x,
+      craftingTableLocations.offset(0, 0, 3).y,
+      craftingTableLocations.offset(0, 0, 3).z
+    );
+    await saveFurnaceLocation(craftingTableLocations.offset(0, 0, 3));
+    await __actionsDelay(1000);
+
+    // make some charcoal
+
+    // await ensureCampfire();
+    // await ensureTorches(4);
+    // await ensureBed();
+  }
 }
 
 export async function buildShack() {}

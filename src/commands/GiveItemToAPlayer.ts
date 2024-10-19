@@ -36,7 +36,7 @@ export async function execute(args: any) {
   if (player_name) {
     theName = player_name;
   } else {
-    const players = getNearbyPlayerNames(220);
+    const players = getNearbyPlayerNames(1000);
     theName = players[0];
   }
 

@@ -225,11 +225,7 @@ export function getNearbyPlayerNames(distance = 32): string[] {
   const players = getNearbyPlayers(distance);
   const found: string[] = [];
   for (const player of players) {
-    if (
-      player.username &&
-      !found.includes(player.username) &&
-      player.username !== bot.username
-    ) {
+    if (player.username) {
       found.push(player.username);
     }
   }
