@@ -5,17 +5,13 @@
 import { bot } from "..";
 import { craftRecipe } from "./crafting";
 import { ensureCraftingTable, ensurePlanks, ensureSticks } from "./ensure";
-import { gatherWood } from "./gatherWood";
 import { getItemCount } from "./inventory";
 
 // Define the valid tool types as a union type
-type ToolType = "pickaxe" | "sword" | "axe" | "shovel";
+type ToolType = "pickaxe" | "sword" | "axe" | "shovel" | "hoe";
 
 // Define the valid materials as a union type
 type MaterialType = "diamond" | "golden" | "iron" | "stone" | "wooden";
-
-// Constants for crafting and gathering
-const MIN_LOGS_FOR_TOOLS = 4;
 
 // Constants for crafting tools
 const TOOLS_MATERIALS: MaterialType[] = [
@@ -26,12 +22,29 @@ const TOOLS_MATERIALS: MaterialType[] = [
   "wooden",
 ];
 
+export const materialsForTool = (tool: ToolType): number => {
+  switch (tool) {
+    case "pickaxe":
+    case "axe":
+      return 3;
+    case "sword":
+    case "hoe":
+      return 2;
+    case "shovel":
+      return 1;
+    default:
+      return 0;
+  }
+};
+
 // Helper function to ensure a specific tool, checking from best materials to wood
 const ensureTool = async (
   toolType: ToolType,
   quantity: number = 1
 ): Promise<boolean> => {
   console.log(`Bot: Checking for ${quantity} ${toolType}(s)...`);
+
+  const neededMaterials = materialsForTool(toolType);
 
   // Check how many of the tool the bot currently has
   let toolCount = bot.inventory
@@ -47,22 +60,19 @@ const ensureTool = async (
     // Iterate over the tool materials from best (diamond) to worst (wooden)
     for (const material of TOOLS_MATERIALS) {
       const toolRecipe = `${material}_${toolType}`; // Craft tool name like diamond_pickaxe, iron_sword
+      const hasResources = await hasResourcesForTool(material, neededMaterials);
 
       // Check if we have enough material for the current tool
-      if (await hasResourcesForTool(material)) {
+      if (hasResources) {
         await ensureCraftingTable();
 
-        // Ensure planks and sticks if the material requires it (only for wooden tools)
-        if (material === "wooden") {
-          const planksEnsured = await ensurePlanks(3);
-          const sticksEnsured = await ensureSticks(2);
+        const sticksEnsured = await ensureSticks(2);
 
-          if (!planksEnsured || !sticksEnsured) {
-            console.error(
-              `Bot: Failed to ensure planks or sticks for wooden ${toolType}.`
-            );
-            continue;
-          }
+        if (!sticksEnsured) {
+          console.error(
+            `Bot: Failed to ensure planks or sticks for wooden ${toolType}.`
+          );
+          continue;
         }
 
         // Craft the tool
@@ -79,15 +89,12 @@ const ensureTool = async (
         } else {
           console.error(`Bot: Failed to craft ${material} ${toolType}.`);
         }
+      } else if (material === "wooden") {
+        // Crafting planks if we don't have enough resources for wooden tools
+        console.log(`Bot: Crafting planks for ${material} ${toolType}...`);
+        await ensurePlanks(4);
       }
     }
-
-    // If no materials were sufficient for crafting, gather logs for a wooden tool
-    await gatherWood(MIN_LOGS_FOR_TOOLS);
-    console.error(
-      `Bot: Not enough materials to craft a ${toolType}. Gathering logs for a wooden ${toolType}.`
-    );
-    return false;
   }
 
   return toolCount >= quantity;
@@ -108,8 +115,7 @@ export async function hasResourcesForTool(
     case "stone":
       return getItemCount("cobblestone") >= num;
     case "wooden":
-      const logsCount = getItemCount("log");
-      return logsCount >= MIN_LOGS_FOR_TOOLS;
+      return getItemCount("planks") >= num;
     default:
       return false;
   }
@@ -135,4 +141,8 @@ export const ensureAxe = async (quantity: number = 1): Promise<boolean> => {
 // Ensure a shovel
 export const ensureShovel = async (quantity: number = 1): Promise<boolean> => {
   return await ensureTool("shovel", quantity);
+};
+
+export const ensureHoe = async (quantity: number = 1): Promise<boolean> => {
+  return await ensureTool("hoe", quantity);
 };

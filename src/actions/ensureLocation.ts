@@ -1,7 +1,7 @@
 import { bot } from "..";
 import { Vec3 } from "vec3"; // Add this import statement
 import { isHuntable } from "../utils/minecraftData";
-import { goToPosition, moveAway } from "./movement";
+import { moveAway } from "./movement";
 import {
   getNearestBlocks,
   getBiomeName,
@@ -26,7 +26,7 @@ export async function ensureLocation(
     sand: 24,
     animals: 4,
   }
-): Promise<boolean> {
+): Promise<Vec3> {
   console.log(
     `Scanning location with radius ${radius} for required resources:`,
     requiredResources
@@ -35,6 +35,8 @@ export async function ensureLocation(
   const { wood, coal, iron, stone, sand, animals } = requiredResources;
 
   while (true) {
+    await moveAway(30);
+
     // Initialize resource counters
     let woodCount = 0;
     let coalCount = 0;
@@ -50,30 +52,37 @@ export async function ensureLocation(
       count: wood,
     });
     woodCount = woodBlocks ? woodBlocks.length : 0;
+    if (woodCount < wood) continue;
 
     const coalBlocks = getNearestBlocks("coal_ore", radius, coal);
     coalCount = coalBlocks.length;
+    if (coalCount < coal) continue;
 
     const ironBlocks = getNearestBlocks("iron_ore", radius, iron);
     ironCount = ironBlocks.length;
+    if (ironCount < iron) continue;
 
     const stoneBlocks = getNearestBlocks("stone", radius, stone); // 20 as example count
     stoneCount = stoneBlocks.length;
+    if (stoneCount < stone) continue;
 
     const sandBlocks = getNearestBlocks("sand", radius, stone); // Limit sand to avoid island
     sandCount = sandBlocks.length;
+    if (sandCount < sand) continue;
 
     // Scan for animals (farming and food)
     const animalsNearby = getNearbyEntities(radius).filter((entity) =>
       isHuntable(entity)
     );
     animalCount = animalsNearby.length;
+    if (animalCount < animals) continue;
 
     // Terrain flatness check using helper function
     // 8x8 of flat area is good for base
-    const flatTerrain = getNearestFreeSpace(3, radius);
-    console.log(`Flat terrain: ${flatTerrain}`);
-    const terrainIsFlat = flatTerrain !== undefined;
+    const possibleBasePosition = getNearestFreeSpace(3, radius);
+    console.log(`Flat terrain: ${possibleBasePosition}`);
+    const terrainIsFlat = possibleBasePosition !== undefined;
+    if (!terrainIsFlat) continue;
 
     // Check biome suitability
     const biome = getBiomeName();
@@ -86,18 +95,25 @@ export async function ensureLocation(
       "ice",
       "desert",
     ].includes(biome);
+    if (!biomeIsSuitable) continue;
 
     // Cave/Ravine detection under the flat terrain within half the radius
-    const caveDetected = await checkForCavesBelow(flatTerrain);
+    const caveDetected = await checkForCavesBelow(possibleBasePosition);
     if (caveDetected) {
       console.log(
         "Detected large cave under the flat terrain. Not safe for building."
       );
+      continue;
     }
 
-    console.log(
-      `Resources found - Wood: ${woodCount}, Coal: ${coalCount}, Iron: ${ironCount}, Stone: ${stoneCount}, Sand: ${sandCount}, Animals: ${animalCount}`
-    );
+    // Check for large lakes or rivers nearby within a radius of 12 blocks
+    const waterNearby = await checkForWaterNearby(possibleBasePosition);
+    if (waterNearby) {
+      console.log(
+        "Detected large lake or river nearby. Not safe for building."
+      );
+      continue;
+    }
 
     // Check all conditions for a good location
     if (
@@ -108,14 +124,14 @@ export async function ensureLocation(
       animalCount >= animals &&
       terrainIsFlat &&
       biomeIsSuitable &&
-      !caveDetected // Ensure no cave detected
+      !caveDetected && // Ensure no cave detected
+      !waterNearby // Ensure no large water body nearby
     ) {
-      await goToPosition(flatTerrain.x, flatTerrain.y, flatTerrain.z);
       bot.chat(
         `Success! This location is suitable for a base, radius of ${radius} blocks we have: 
-        1. Resources ✅ 2. Flat terrain ✅ 3. Biome is suitable ✅ 4. No caves below base ✅`
+        1. Resources ✅ 2. Flat terrain ✅ 3. Biome is suitable ✅ 4. No caves below base ✅ 5. No large water bodies nearby ✅`
       );
-      return true;
+      return possibleBasePosition;
     } else {
       // Detailed failure report
       const issues = [];
@@ -132,6 +148,7 @@ export async function ensureLocation(
         issues.push(
           "Detected a large cave below the possible base location ❌"
         );
+      if (waterNearby) issues.push("Detected a large lake or river nearby ❌");
 
       bot.chat(
         `This location is not suitable for a base due to the following issues:
@@ -146,11 +163,10 @@ export async function ensureLocation(
 
 // Function to check for large caves directly beneath the flat terrain within half the radius
 async function checkForCavesBelow(
-  flatTerrain: Vec3 | undefined
+  position: Vec3 | undefined,
+  checkRadius = 8
 ): Promise<boolean> {
-  if (!flatTerrain) return false; // No flat terrain means no need to check
-
-  const checkRadius = 8;
+  if (!position) return false; // No flat terrain means no need to check
 
   console.log(
     `Checking for caves beneath the flat terrain within radius of ${checkRadius}`
@@ -161,7 +177,7 @@ async function checkForCavesBelow(
     matching: (block) => block.name === "air", // Detect air blocks, indicating a cave
     maxDistance: checkRadius,
     count: 100,
-    point: flatTerrain.offset(0, -checkRadius / 2, 0), // Start at flatTerrain position
+    point: position.offset(0, -checkRadius / 2, 0), // Start at flatTerrain position
   });
 
   if (blocksBelow.length > Math.pow(checkRadius, 3) * 0.2) {
@@ -170,4 +186,32 @@ async function checkForCavesBelow(
   }
 
   return false; // No significant caves detected
+}
+
+// Function to check for large lakes or rivers nearby within a given radius
+async function checkForWaterNearby(
+  position: Vec3 | undefined,
+  checkRadius: number = 12,
+  percent: number = 0.15
+): Promise<boolean> {
+  if (!position) return false; // No flat terrain means no need to check
+
+  console.log(
+    `Checking for water bodies nearby within radius of ${checkRadius}`
+  );
+
+  // Scan for water blocks within the specified radius
+  const waterBlocks = bot.findBlocks({
+    matching: (block) => block.name === "water",
+    maxDistance: checkRadius,
+    count: Math.pow(checkRadius, 3) * percent,
+    point: position.offset(0, -checkRadius / 2, 0), // Start at flatTerrain position
+  });
+
+  if (waterBlocks.length > Math.pow(checkRadius, 3) * percent) {
+    // If a significant number of water blocks are found, assume there's a large lake/river
+    return true; // Large water body detected
+  }
+
+  return false; // No significant water bodies detected
 }

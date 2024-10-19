@@ -2,20 +2,16 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import {
-  addCommandToQueue,
-  saveBaseLocation,
-} from "../managers/persistenceManager";
-import { BotCommands } from "./types";
+import { saveBaseLocation } from "../managers/persistenceManager";
 import { __actionsDelay } from "../utils/utility";
 import { ensureLocation } from "../actions/ensureLocation";
 import { ensureAxe } from "../actions/ensureTools";
+import { buildShelter, clearSite } from "../actions/building";
+import { goToPosition } from "../actions/movement";
 
 export const description = `When user asks the bot to set a base location, the bot will mark the location as the base, 
 clear the area around the bot for building, build basic structures, and place essential items. 
 Example: "Set base location here", "Build a base here".`;
-
-// TODO: Rework using db stored objects
 
 // Define parameters for SetBase action
 export const parameters = z.object({
@@ -34,10 +30,11 @@ export async function execute(args: any) {
   }
 
   const { baseName } = parsed.data;
-  const basePosition = bot.entity.position;
 
   await ensureAxe(); // Ensure the bot has an axe to harvest a lot of wood
   const goodLocation = await ensureLocation();
+  await goToPosition(goodLocation.x, goodLocation.y, goodLocation.z);
+  const basePosition = goodLocation.offset(0, -1, 0);
 
   if (!goodLocation) {
     console.log(`Not a good location to set base.`);
@@ -45,15 +42,11 @@ export async function execute(args: any) {
   }
 
   // Placeholder: Mark the location as the base
-  console.log(
-    `Setting base at position ${basePosition} with name "${baseName}".`
-  );
+  console.log(`Setting base with name "${baseName}".`);
   await saveBaseLocation(baseName, basePosition);
 
-  // Placeholder: Clear area around the bot for building
-  // TODO: Implement block clearing within the specified radius
-  // console.log(`Clearing blocks in a ${radius}-block radius for base setup.`);
-  // Example: Find and remove blocks in the radius
+  // Clear the area around the bot for building
+  await clearSite(basePosition);
 
   // Notify in chat
   bot.chat(
@@ -62,10 +55,10 @@ export async function execute(args: any) {
     )}, ${Math.floor(basePosition.y)}, ${Math.floor(basePosition.z)}`
   );
 
-  await addCommandToQueue({
-    id: "set-basement",
-    command: BotCommands.SetBasement,
-    priority: 6,
-    args: { tunnelDepth: 6, roomSize: { width: 3, height: 3, length: 4 } },
-  });
+  try {
+    await buildShelter();
+    bot.chat("Shelter setup complete ⾕");
+  } catch (error) {
+    bot.chat(`Error during up basement: ${error}`);
+  }
 }

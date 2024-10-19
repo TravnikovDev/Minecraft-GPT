@@ -175,3 +175,22 @@ export async function digStraightTunnel(
     }
   }
 }
+
+/**
+ * Digs a room at the specified position.
+ * @param roomStart The starting position of the room.
+ * @param roomSize The size of the room.
+ */
+export async function digRoom(
+  roomStart: Vec3,
+  roomSize: { width: number; height: number; length: number }
+) {
+  for (let z = 0; z < roomSize.length; z++) {
+    for (let y = 0; y < roomSize.height; y++) {
+      for (let x = -1; x < roomSize.width - 1; x++) {
+        const roomBlock = roomStart.offset(x, y, z);
+        await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
+      }
+    }
+  }
+}
