@@ -7,6 +7,8 @@ import {
 import { __actionsDelay } from "../utils/utility";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
+import { getItemCount } from "./inventory";
+import { ensurePlanks } from "./ensure";
 
 export type DirectionType = "north" | "south" | "west" | "east";
 
@@ -50,6 +52,11 @@ export async function digDiagonalTunnel(
           digPosition.z
         );
         await __actionsDelay(digResult ? 1000 : 200);
+
+        // After digging the floor block, ensure there is a foundation
+        if (h === 0) {
+          await ensureFoundation(basePosition);
+        }
       }
 
       await pickupNearbyItems(bot);
@@ -142,6 +149,11 @@ export async function digDoorway(position: Vec3, direction: string) {
   for (let y = 0; y < 2; y++) {
     const doorwayBlock = position.offset(offsetX, y, offsetZ);
     await breakBlockAt(doorwayBlock.x, doorwayBlock.y, doorwayBlock.z);
+
+    // Ensure foundation under the floor blocks
+    if (y === 0) {
+      await ensureFoundation(doorwayBlock);
+    }
   }
 
   // !important: Bot can't go thought doors yet
@@ -171,6 +183,11 @@ export async function digStraightTunnel(
       for (let x = -1; x <= 1; x++) {
         const blockPos = position.offset(x, y, 0);
         await breakBlockAt(blockPos.x, blockPos.y, blockPos.z);
+
+        // Ensure foundation under the floor blocks
+        if (y === 0) {
+          await ensureFoundation(blockPos);
+        }
       }
     }
   }
@@ -191,9 +208,48 @@ export async function digRoom(
         const roomBlock = roomStart.offset(x, y, z);
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
         await __actionsDelay(1000);
+
+        // Ensure foundation under the floor blocks
+        if (y === 0) {
+          await ensureFoundation(roomBlock);
+        }
       }
     }
   }
 }
 
-// TODO: For all cases, check if under block exist a foundation block. If no - place a plank
+/**
+ * Ensures that the block below is solid. If it's air, place a foundation block.
+ * @param position The current block position.
+ * @param foundationBlock The block to place as foundation (e.g., dirt, plank).
+ */
+export async function ensureFoundation(position: Vec3): Promise<void> {
+  const belowPosition = position.offset(0, -1, 0); // Position of the block below
+  const dirtNum = getItemCount("dirt");
+  const plankNum = getItemCount("planks");
+  if (!dirtNum && !plankNum) {
+    console.log("I don't have any dirt or planks to place!");
+    await ensurePlanks(4);
+    return;
+  }
+
+  const stubName = dirtNum ? "dirt" : "planks";
+
+  // Check if the block below is air
+  const blockBelow = bot.blockAt(belowPosition);
+  if (blockBelow?.name === "air") {
+    if (stubName) {
+      // Place the foundation block below
+      await placeBlock(
+        stubName,
+        belowPosition.x,
+        belowPosition.y,
+        belowPosition.z,
+        "bottom"
+      );
+      console.log(`Placed ${stubName} at to fix a hole`);
+    } else {
+      console.log(`I don't have any ${stubName} to place!`);
+    }
+  }
+}

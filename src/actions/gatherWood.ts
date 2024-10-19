@@ -48,7 +48,7 @@ export async function gatherWood(
         continue; // Try finding another wood block
       }
 
-      const aTree = await getNearestBlocks(woodBlock.name, 5, 5);
+      const aTree = await getNearestBlocks(woodBlock.name, 4, 4);
       if (aTree.length === 0) {
         console.log("No wood blocks found nearby.");
         await moveAway(15);

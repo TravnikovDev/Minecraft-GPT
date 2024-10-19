@@ -26,10 +26,12 @@ export async function placeBlock(
 
   const targetDest = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
 
-  let block = bot.inventory.items().find((item) => item.name === blockType);
+  let block = bot.inventory
+    .items()
+    .find((item) => item.name.includes(blockType));
   if (!block && bot.game.gameMode === "creative") {
     await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
-    block = bot.inventory.items().find((item) => item.name === blockType);
+    block = bot.inventory.items().find((item) => item.name.includes(blockType));
   }
   if (!block) {
     console.log(`Don't have any ${blockType} to place.`);
@@ -159,6 +161,7 @@ export async function placeBlock(
 
   await bot.equip(block, "hand");
   await bot.lookAt(buildOffBlock.position);
+  await __actionsDelay(500);
 
   try {
     await bot.placeBlock(buildOffBlock, faceVec);
@@ -308,7 +311,9 @@ export async function tillAndSow(
   if (seedType) {
     if (seedType.endsWith("seed") && !seedType.endsWith("seeds"))
       seedType += "s"; // Fixes common mistake
-    const seeds = bot.inventory.items().find((item) => item.name === seedType);
+    const seeds = bot.inventory
+      .items()
+      .find((item) => item.name.includes(seedType));
     if (!seeds) {
       console.log(`No ${seedType} to plant.`);
       return false;

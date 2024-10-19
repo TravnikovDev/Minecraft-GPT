@@ -193,7 +193,7 @@ export async function setupTheShelter() {
     await __actionsDelay(1000);
 
     await goToPosition(
-      shelterLocation.x,
+      shelterLocation.x - 1,
       shelterLocation.y,
       shelterLocation.z + 2
     );
