@@ -32,6 +32,7 @@ import * as GiveItemToAPlayer from "./GiveItemToAPlayer";
 import * as CraftItem from "./CraftItem";
 import * as CraftStoneTools from "./CraftStoneTools";
 import * as Stop from "./Stop";
+import * as ShowMeBase from "./ShowMeBase";
 
 type CommandModule = {
   parameters: any;
@@ -69,6 +70,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.GiveItemToAPlayer]: GiveItemToAPlayer,
   [BotCommands.CraftStoneTools]: CraftStoneTools,
   [BotCommands.Stop]: Stop,
+  [BotCommands.ShowMeBase]: ShowMeBase,
 };
 
 // Extracting tools for use with validation (zodFunction)
