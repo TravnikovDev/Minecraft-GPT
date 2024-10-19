@@ -3,9 +3,12 @@
 */
 
 import { bot } from "..";
+import { collectBlock } from "./collectBlock";
 import { craftRecipe } from "./crafting";
+import { ensurePickaxe } from "./ensureTools";
 import { gatherWood } from "./gatherWood";
 import { getItemCount } from "./inventory";
+import { moveAway } from "./movement";
 
 // Constants for crafting and gathering
 const PLANKS_PER_LOG = 4;
@@ -128,4 +131,211 @@ export const ensureSticks = async (neededAmount: number): Promise<boolean> => {
   }
 
   return sticksCount >= neededAmount;
+};
+
+// Ensure a specific number of chests
+export const ensureChests = async (quantity: number = 1): Promise<boolean> => {
+  console.log(`Bot: Checking for ${quantity} chest(s)...`);
+
+  // Count the number of chests the bot already has
+  let chestCount = bot.inventory
+    .items()
+    .filter((item) => item.name === "chest").length;
+
+  if (chestCount >= quantity) {
+    console.log(`Bot: Already has ${quantity} or more chest(s).`);
+    return true;
+  }
+
+  while (chestCount < quantity) {
+    const planksEnsured = await ensurePlanks(8 * (quantity - chestCount)); // 8 planks per chest
+    if (!planksEnsured) {
+      console.error("Bot: Failed to ensure planks for chest(s).");
+      return false;
+    }
+
+    // Craft the chest(s)
+    const crafted = await craftRecipe("chest", quantity - chestCount);
+    if (crafted) {
+      chestCount += quantity;
+      bot.chat(`I have crafted ${quantity} chest(s).`);
+      console.log(`Bot: ${quantity} chest(s) crafted.`);
+      return chestCount >= quantity;
+    } else {
+      console.error("Bot: Failed to craft chest(s).");
+    }
+  }
+  return chestCount >= quantity;
+};
+
+// Ensure a specific number of furnaces
+export const ensureFurnaces = async (
+  quantity: number = 1
+): Promise<boolean> => {
+  console.log(`Bot: Checking for ${quantity} furnace(s)...`);
+
+  // Count the number of furnaces the bot already has
+  let furnaceCount = bot.inventory
+    .items()
+    .filter((item) => item.name === "furnace").length;
+
+  if (furnaceCount >= quantity) {
+    console.log(`Bot: Already has ${quantity} or more furnace(s).`);
+    return true;
+  }
+
+  while (furnaceCount < quantity) {
+    const stoneEnsured = await ensureCobblestone(8 * (quantity - furnaceCount)); // 8 stone blocks per furnace
+    if (!stoneEnsured) {
+      console.error("Bot: Failed to ensure stone for furnace(s).");
+      return false;
+    }
+
+    // Craft the furnace(s)
+    const crafted = await craftRecipe("furnace", quantity - furnaceCount);
+    if (crafted) {
+      furnaceCount += quantity;
+      bot.chat(`I have crafted ${quantity} furnace(s).`);
+      console.log(`Bot: ${quantity} furnace(s) crafted.`);
+      return furnaceCount >= quantity;
+    } else {
+      console.error("Bot: Failed to craft furnace(s).");
+    }
+  }
+  return furnaceCount >= quantity;
+};
+
+// Ensure a specific number of torches
+export const ensureTorches = async (quantity: number = 1): Promise<boolean> => {
+  console.log(`Bot: Checking for ${quantity} torch(es)...`);
+
+  // Count the number of torches the bot already has
+  let torchCount = bot.inventory
+    .items()
+    .filter((item) => item.name === "torch").length;
+
+  if (torchCount >= quantity) {
+    console.log(`Bot: Already has ${quantity} or more torch(es).`);
+    return true;
+  }
+
+  while (torchCount < quantity) {
+    const sticksEnsured = await ensureSticks(quantity - torchCount); // 1 stick per 4 torches
+    const coalEnsured = await ensureCoal(
+      Math.ceil((quantity - torchCount) / 4)
+    ); // 1 coal per 4 torches
+
+    if (!sticksEnsured || !coalEnsured) {
+      console.error("Bot: Failed to ensure sticks or coal for torch(es).");
+      return false;
+    }
+
+    // Craft the torch(es)
+    const crafted = await craftRecipe("torch", quantity - torchCount);
+    if (crafted) {
+      torchCount += quantity;
+      bot.chat(`I have crafted ${quantity} torch(es).`);
+      console.log(`Bot: ${quantity} torch(es) crafted.`);
+      return torchCount >= quantity;
+    } else {
+      console.error("Bot: Failed to craft torch(es).");
+    }
+  }
+  return torchCount >= quantity;
+};
+
+// Ensure a campfire
+export const ensureCampfire = async (): Promise<boolean> => {
+  console.log("Bot: Checking for a campfire...");
+
+  let hasCampfire = bot.inventory
+    .items()
+    .some((item) => item.name === "campfire");
+
+  if (hasCampfire) {
+    console.log("Bot: Campfire is already available.");
+    return true;
+  }
+
+  const logsEnsured = await ensurePlanks(3); // Need 3 logs for a campfire
+  const sticksEnsured = await ensureSticks(3); // Need 3 sticks for a campfire
+  const coalEnsured = await ensureCoal(1); // Need 1 coal or charcoal for a campfire
+
+  if (!logsEnsured || !sticksEnsured || !coalEnsured) {
+    console.error("Bot: Failed to ensure resources for campfire.");
+    return false;
+  }
+
+  const crafted = await craftRecipe("campfire", 1);
+  if (crafted) {
+    bot.chat("I have crafted a campfire.");
+    console.log("Bot: Campfire crafted.");
+    return true;
+  } else {
+    console.error("Bot: Failed to craft campfire.");
+  }
+
+  return hasCampfire;
+};
+
+// Helper function to gather cobblestone
+export const ensureCobblestone = async (
+  requiredCobblestone: number,
+  maxDistance: number = 4
+): Promise<boolean> => {
+  let cobblestoneCount = getItemCount("cobblestone");
+
+  while (cobblestoneCount < requiredCobblestone) {
+    console.log("Bot: Gathering more cobblestone...");
+    const cobblestoneShortage = requiredCobblestone - cobblestoneCount;
+
+    try {
+      await collectBlock("stone", cobblestoneShortage, maxDistance);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("right tools")) {
+        await ensurePickaxe();
+        continue;
+      } else {
+        console.error("Error collecting cobblestone:", err);
+        moveAway(30);
+        continue;
+      }
+    }
+
+    cobblestoneCount = getItemCount("cobblestone");
+  }
+
+  console.log("Bot: Collected enough cobblestone.");
+  return true;
+};
+
+export const ensureCoal = async (
+  neededAmount: number,
+  maxDistance: number = 4
+): Promise<boolean> => {
+  console.log("Bot: Checking for coal...");
+  let coalCount = getItemCount("coal");
+
+  while (coalCount < neededAmount) {
+    console.log("Bot: Gathering more coal...");
+    const coalShortage = neededAmount - coalCount;
+
+    try {
+      await collectBlock("stone", coalShortage, maxDistance);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("right tools")) {
+        await ensurePickaxe();
+        continue;
+      } else {
+        console.error("Error collecting cobblestone:", err);
+        moveAway(30);
+        continue;
+      }
+    }
+
+    coalCount = getItemCount("cobblestone");
+  }
+
+  console.log("Bot: Collected enough cobblestone.");
+  return true;
 };

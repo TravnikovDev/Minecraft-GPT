@@ -3,10 +3,8 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { craftRecipe } from "../actions/crafting";
-import { moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
-import { collectBlock } from "../actions/collectBlock";
-import { ensureSticks } from "../actions/ensure";
+import { ensureCobblestone, ensureSticks } from "../actions/ensure";
 import { getItemCount } from "../actions/inventory";
 import { ensurePickaxe } from "../actions/ensureTools";
 
@@ -83,7 +81,7 @@ export async function execute(args: any) {
       (toolCount.sword || 0) * 2;
 
     // Gather cobblestone
-    const cobblestoneGathered = await gatherCobblestone(requiredCobblestone);
+    const cobblestoneGathered = await ensureCobblestone(requiredCobblestone);
     if (!cobblestoneGathered) {
       console.error("Failed to gather enough cobblestone.");
       return;
@@ -126,33 +124,3 @@ export async function execute(args: any) {
     console.error("Error occurred during tool crafting:", error);
   }
 }
-
-// Helper function to gather cobblestone
-const gatherCobblestone = async (
-  requiredCobblestone: number
-): Promise<boolean> => {
-  let cobblestoneCount = getItemCount("cobblestone");
-
-  while (cobblestoneCount < requiredCobblestone) {
-    console.log("Bot: Gathering more cobblestone...");
-    const cobblestoneShortage = requiredCobblestone - cobblestoneCount;
-
-    try {
-      await collectBlock("stone", cobblestoneShortage, 5);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("right tools")) {
-        await ensurePickaxe();
-        continue;
-      } else {
-        console.error("Error collecting cobblestone:", err);
-        moveAway(20);
-        continue;
-      }
-    }
-
-    cobblestoneCount = getItemCount("cobblestone");
-  }
-
-  console.log("Bot: Collected enough cobblestone.");
-  return true;
-};
