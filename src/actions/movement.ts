@@ -5,6 +5,7 @@ import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { bot } from "../index.js";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
+import { getBaseLocation } from "../managers/persistenceManager.js";
 
 export async function goToPosition(
   x: number,
@@ -12,14 +13,36 @@ export async function goToPosition(
   z: number,
   minDistance = 2
 ): Promise<boolean> {
-  if (x == null || y == null || z == null) {
-    console.log(`Missing coordinates, given x:${x} y:${y} z:${z}`);
+  bot.pathfinder.setMovements(new pf.Movements(bot));
+  const base = await getBaseLocation();
+
+  try {
+    if (base) {
+      const baseBlock = bot.blockAt(new Vec3(base.x, base.y, base.z));
+      const startBlock = bot.blockAt(new Vec3(x, y, z));
+      const baseArea = 20;
+      if (
+        baseBlock &&
+        startBlock &&
+        baseBlock.position.distanceTo(startBlock.position) < baseArea
+      ) {
+        // If the targe position is within the base area, go to the base first
+        // fix to prevent bot breaking walls
+        await bot.pathfinder.goto(
+          new pf.goals.GoalNear(base.x, base.y, base.z, minDistance)
+        );
+        __actionsDelay(1000);
+        await bot.pathfinder.goto(new pf.goals.GoalNear(x, y, z, minDistance));
+      }
+    } else {
+      await bot.pathfinder.goto(new pf.goals.GoalNear(x, y, z, minDistance));
+      console.log(`You have reached at ${x}, ${y}, ${z}.`);
+    }
+    return true;
+  } catch (err) {
+    console.log(`Failed to go to position: ${(err as Error).message}`);
     return false;
   }
-  bot.pathfinder.setMovements(new pf.Movements(bot));
-  await bot.pathfinder.goto(new pf.goals.GoalNear(x, y, z, minDistance));
-  console.log(`You have reached at ${x}, ${y}, ${z}.`);
-  return true;
 }
 
 export async function goToNearestBlock(

@@ -52,7 +52,7 @@ export async function execute(args: any) {
       break;
     case "crafting table":
       const craftingTableLocation = getCraftingTables();
-      if (craftingTableLocation)
+      if (craftingTableLocation?.length)
         await goToPosition(
           craftingTableLocation[0].x,
           craftingTableLocation[0].y,
@@ -61,7 +61,7 @@ export async function execute(args: any) {
       break;
     case "furnace":
       const furnaceLocations = getFurnaces();
-      if (furnaceLocations)
+      if (furnaceLocations?.length)
         await goToPosition(
           furnaceLocations[0].x,
           furnaceLocations[0].y,
@@ -70,7 +70,7 @@ export async function execute(args: any) {
       break;
     case "chest":
       const chestLocations = getChests();
-      if (chestLocations)
+      if (chestLocations?.length)
         await goToPosition(
           chestLocations[0].location.x,
           chestLocations[0].location.y,
@@ -79,7 +79,7 @@ export async function execute(args: any) {
       break;
     case "mine":
       const minesLocations = getMines();
-      if (minesLocations)
+      if (minesLocations?.length)
         await goToPosition(
           minesLocations[0].startsAt.x,
           minesLocations[0].startsAt.y,
