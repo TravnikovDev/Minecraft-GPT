@@ -92,7 +92,7 @@ export async function craftRecipe(
           craftingTable.position.z,
           1
         );
-        const recipes = bot.recipesFor(itemId, null, num, craftingTable);
+        const recipes = bot.recipesFor(itemId, null, 1, craftingTable);
         success = await attemptCraft(recipes, craftingTable);
       } catch (err) {
         console.log(
@@ -145,7 +145,7 @@ export async function craftRecipe(
 
   // Step 1: Try to craft without a crafting table
   console.log(`Step 1: Try to craft without a crafting table`);
-  let recipes = bot.recipesFor(itemId, null, num, null);
+  let recipes = bot.recipesFor(itemId, null, 1, null);
   if (recipes && (await attemptCraft(recipes))) {
     return true;
   }

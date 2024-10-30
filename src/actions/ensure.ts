@@ -57,30 +57,48 @@ export const ensurePlanks = async (neededAmount: number): Promise<boolean> => {
     return true;
   }
 
-  while (neededAmount >= planksCount) {
-    const logsCount = getItemCount("log");
-    const logType = bot.inventory
-      .items()
-      .find((item) => item.name.includes("log"))
-      ?.name.replace("_log", "");
+  while (neededAmount > planksCount) {
     const logsNeeded = Math.ceil((neededAmount - planksCount) / PLANKS_PER_LOG);
 
-    if (logsCount >= logsNeeded) {
+    // Get all available log types in inventory
+    const availableLogs = bot.inventory
+      .items()
+      .filter((item) => item.name.includes("log"));
+
+    // If no logs available, gather more wood
+    if (availableLogs.length === 0) {
+      await gatherWood(logsNeeded, 80);
+      console.error("Bot: Not enough logs for planks.");
+      continue;
+    }
+
+    // Iterate over each log type to craft planks
+    for (const log of availableLogs) {
+      const logType = log.name.replace("_log", ""); // Get log type without "_log" suffix
+      const logsToCraft = Math.min(log.count, logsNeeded);
+
+      console.log(
+        `Trying to make ${logsToCraft * PLANKS_PER_LOG} ${logType}_planks`
+      );
+      console.log(`NeededAmount: ${neededAmount}, while I have ${planksCount}`);
+
       const crafted = await craftRecipe(
         `${logType}_planks`,
-        neededAmount - planksCount
+        logsToCraft * PLANKS_PER_LOG
       );
       if (crafted) {
         planksCount = getItemCount("planks");
-        bot.chat(`I have made ${neededAmount} ${logType} planks.`);
+        bot.chat(
+          `I have crafted ${logsToCraft * PLANKS_PER_LOG} ${logType} planks.`
+        );
         console.log(`Bot: ${logType} planks crafted.`);
       } else {
-        console.error("Bot: Failed to craft planks.");
+        console.error(`Bot: Failed to craft ${logType} planks.`);
         return false;
       }
-    } else {
-      await gatherWood(logsNeeded, 80);
-      console.error("Bot: Not enough logs for planks.");
+
+      // Check if we have enough planks after crafting
+      if (planksCount >= neededAmount) break;
     }
   }
 

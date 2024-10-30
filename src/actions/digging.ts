@@ -44,7 +44,7 @@ export async function digDiagonalTunnel(
         wOffsetZ + i * offsetZ
       );
 
-      for (let h = tunnelSize.height; h > 0; h--) {
+      for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
         const digResult = await breakBlockAt(
           digPosition.x,
@@ -228,9 +228,10 @@ export async function digRoom(
         // Ensure sides walls. Currently he blocks doorways
         /* if (z === 0) {
           await ensureBlock(roomBlock.offset(0, 0, -1));
-        } else if (z === roomSize.length - 1) {
+        } else */
+        if (z === roomSize.length - 1) {
           await ensureBlock(roomBlock.offset(0, 0, 1));
-        } */
+        }
 
         // Ensure ceiling block
         if (y === roomSize.height - 1) {
