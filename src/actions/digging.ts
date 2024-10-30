@@ -44,7 +44,7 @@ export async function digDiagonalTunnel(
         wOffsetZ + i * offsetZ
       );
 
-      for (let h = 0; h < tunnelSize.height; h++) {
+      for (let h = tunnelSize.height; h > 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
         const digResult = await breakBlockAt(
           digPosition.x,
@@ -55,7 +55,7 @@ export async function digDiagonalTunnel(
 
         // After digging the floor block, ensure there is a foundation
         if (h === 0) {
-          await ensureFoundation(basePosition);
+          await ensureBlock(basePosition.offset(0, -1, 0));
         }
       }
 
@@ -152,7 +152,10 @@ export async function digDoorway(position: Vec3, direction: string) {
 
     // Ensure foundation under the floor blocks
     if (y === 0) {
-      await ensureFoundation(doorwayBlock);
+      await ensureBlock(doorwayBlock.offset(0, -1, 0));
+    } else if (y === 1) {
+      // Ensure ceiling block
+      await ensureBlock(doorwayBlock.offset(0, 1, 0));
     }
   }
 
@@ -186,7 +189,7 @@ export async function digStraightTunnel(
 
         // Ensure foundation under the floor blocks
         if (y === 0) {
-          await ensureFoundation(blockPos);
+          await ensureBlock(blockPos.offset(0, -1, 0));
         }
       }
     }
@@ -195,6 +198,7 @@ export async function digStraightTunnel(
 
 /**
  * Digs a room at the specified position.
+ * Ensures that all surrounding walls, floor, and ceiling are solid by placing a foundation block if necessary.
  * @param roomStart The starting position of the room.
  * @param roomSize The size of the room.
  */
@@ -209,9 +213,28 @@ export async function digRoom(
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
         await __actionsDelay(1000);
 
-        // Ensure foundation under the floor blocks
+        // Ensure the floor foundation
         if (y === 0) {
-          await ensureFoundation(roomBlock);
+          await ensureBlock(roomBlock.offset(0, -1, 0));
+        }
+
+        // Ensure walls
+        if (x === -1) {
+          await ensureBlock(roomBlock.offset(-1, 0, 0));
+        } else if (x === roomSize.width - 2) {
+          await ensureBlock(roomBlock.offset(1, 0, 0));
+        }
+
+        // Ensure sides walls. Currently he blocks doorways
+        /* if (z === 0) {
+          await ensureBlock(roomBlock.offset(0, 0, -1));
+        } else if (z === roomSize.length - 1) {
+          await ensureBlock(roomBlock.offset(0, 0, 1));
+        } */
+
+        // Ensure ceiling block
+        if (y === roomSize.height - 1) {
+          await ensureBlock(roomBlock.offset(0, 1, 0));
         }
       }
     }
@@ -219,14 +242,14 @@ export async function digRoom(
 }
 
 /**
- * Ensures that the block below is solid. If it's air, place a foundation block.
- * @param position The current block position.
- * @param foundationBlock The block to place as foundation (e.g., dirt, plank).
+ * Ensures that a block at a specific position is solid.
+ * If it's air or water, a foundation block (dirt or planks) will be placed.
+ * @param position The position of the block.
  */
-export async function ensureFoundation(position: Vec3): Promise<void> {
-  const belowPosition = position.offset(0, -1, 0); // Position of the block below
+export async function ensureBlock(position: Vec3): Promise<void> {
   const dirtNum = getItemCount("dirt");
   const plankNum = getItemCount("planks");
+  // Check if we have dirt or planks available to use as foundation
   if (!dirtNum && !plankNum) {
     console.log("I don't have any dirt or planks to place!");
     await ensurePlanks(4);
@@ -235,18 +258,12 @@ export async function ensureFoundation(position: Vec3): Promise<void> {
 
   const stubName = dirtNum ? "dirt" : "planks";
 
-  // Check if the block below is air
-  const blockBelow = bot.blockAt(belowPosition);
-  if (blockBelow?.name === "air") {
+  // Check if the block is air or water (indicating a hole or exposed area)
+  const blockToCheck = bot.blockAt(position);
+  if (blockToCheck?.name === "air" || blockToCheck?.name === "water") {
     if (stubName) {
-      // Place the foundation block below
-      await placeBlock(
-        stubName,
-        belowPosition.x,
-        belowPosition.y,
-        belowPosition.z,
-        "bottom"
-      );
+      // Place the foundation block
+      await placeBlock(stubName, position.x, position.y, position.z);
       console.log(`Placed ${stubName} at to fix a hole`);
     } else {
       console.log(`I don't have any ${stubName} to place!`);

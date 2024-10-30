@@ -96,7 +96,7 @@ export async function buildShelter(
   roomSize: { width: number; height: number; length: number } = {
     width: 3,
     height: 3,
-    length: 4,
+    length: 5,
   },
   tunnelDepth: number = 4
 ) {
@@ -129,7 +129,7 @@ export async function buildShelter(
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
 
-  await gatherWood(12);
+  await gatherWood(12, 80);
   await ensurePickaxe(2); // Need at least 2 pickaxes to dig the tunnel and room
   await ensureShovel(); // Need a shovel to dig the dirt
 
@@ -173,13 +173,19 @@ export async function buildShelter(
 }
 
 export async function setupTheShelter() {
-  const shelterLocation = getBasementLocation();
+  const basementLocation = getBasementLocation();
+  if (!basementLocation) {
+    console.error("Basement location is undefined.");
+    return;
+  }
+  const { x, y, z } = basementLocation;
+  const shelterLocation = new Vec3(x, y, z);
 
   if (shelterLocation) {
     // Prepare resources
     await ensureAxe();
     await __actionsDelay(1000);
-    await gatherWood(15);
+    await gatherWood(20, 80); // Increase wood gathering for extra chests
     await __actionsDelay(1000);
     await ensurePickaxe(2);
     await __actionsDelay(1000);
@@ -187,61 +193,104 @@ export async function setupTheShelter() {
 
     await ensureFurnaces();
     await __actionsDelay(1000);
-    await ensureChests(2);
+    await ensureChests(6); // 6 single chests to create 3 double chests
     await __actionsDelay(1000);
     await ensureCraftingTable();
     await __actionsDelay(1000);
 
     await goToPosition(
-      shelterLocation.x - 1,
+      shelterLocation.x,
+      shelterLocation.y,
+      shelterLocation.z,
+      0
+    );
+    await placeBlock(
+      "chest",
+      shelterLocation.offset(1, 0, 0).x,
+      shelterLocation.offset(1, 0, 0).y,
+      shelterLocation.offset(1, 0, 0).z
+    );
+    await __actionsDelay(1000);
+    await placeBlock(
+      "chest",
+      shelterLocation.offset(-1, 0, 0).x,
+      shelterLocation.offset(-1, 0, 0).y,
+      shelterLocation.offset(-1, 0, 0).z
+    );
+    await __actionsDelay(1000);
+    await goToPosition(
+      shelterLocation.x,
+      shelterLocation.y,
+      shelterLocation.z + 1,
+      0
+    );
+    await placeBlock(
+      "chest",
+      shelterLocation.offset(1, 0, 1).x,
+      shelterLocation.offset(1, 0, 1).y,
+      shelterLocation.offset(1, 0, 1).z
+    );
+    await __actionsDelay(1000);
+    await placeBlock(
+      "chest",
+      shelterLocation.offset(-1, 0, 1).x,
+      shelterLocation.offset(-1, 0, 1).y,
+      shelterLocation.offset(-1, 0, 1).z
+    );
+    await saveChestLocation(shelterLocation.offset(1, 0, 1));
+    await saveChestLocation(shelterLocation.offset(-1, 0, 1));
+    await __actionsDelay(1000);
+
+    await goToPosition(
+      shelterLocation.x,
       shelterLocation.y,
       shelterLocation.z + 2,
       0
     );
 
-    const craftingTableLocations = new Vec3(
-      shelterLocation.x,
-      shelterLocation.y,
-      shelterLocation.z
-    ).offset(-1, 0, 0);
     await placeBlock(
       "crafting_table",
-      craftingTableLocations.x,
-      craftingTableLocations.y,
-      craftingTableLocations.z
+      shelterLocation.x - 1,
+      shelterLocation.y,
+      shelterLocation.z + 2
     );
-    await saveCraftingTableLocation(craftingTableLocations);
+    await saveCraftingTableLocation(shelterLocation.offset(-1, 0, 2));
     await __actionsDelay(1000);
 
     await placeBlock(
-      "chest",
-      craftingTableLocations.offset(0, 0, 1).x,
-      craftingTableLocations.offset(0, 0, 1).y,
-      craftingTableLocations.offset(0, 0, 1).z
+      "furnace",
+      shelterLocation.x + 1,
+      shelterLocation.y,
+      shelterLocation.z + 2
     );
-    await __actionsDelay(1000);
-    await placeBlock(
-      "chest",
-      craftingTableLocations.offset(0, 0, 2).x,
-      craftingTableLocations.offset(0, 0, 2).y,
-      craftingTableLocations.offset(0, 0, 2).z
-    );
-    await saveChestLocation(craftingTableLocations.offset(0, 0, 1));
+    await saveFurnaceLocation(shelterLocation.offset(1, 0, 2));
     await __actionsDelay(1000);
 
     await goToPosition(
-      shelterLocation.x - 1,
+      shelterLocation.x,
+      shelterLocation.y,
+      shelterLocation.z + 3,
+      0
+    );
+    await placeBlock(
+      "chest",
+      shelterLocation.offset(1, 0, 3).x,
+      shelterLocation.offset(1, 0, 3).y,
+      shelterLocation.offset(1, 0, 3).z
+    );
+    await goToPosition(
+      shelterLocation.x,
       shelterLocation.y,
       shelterLocation.z + 4,
       0
     );
     await placeBlock(
-      "furnace",
-      craftingTableLocations.offset(0, 0, 3).x,
-      craftingTableLocations.offset(0, 0, 3).y,
-      craftingTableLocations.offset(0, 0, 3).z
+      "chest",
+      shelterLocation.offset(1, 0, 4).x,
+      shelterLocation.offset(1, 0, 4).y,
+      shelterLocation.offset(1, 0, 4).z
     );
-    await saveFurnaceLocation(craftingTableLocations.offset(0, 0, 3));
+    await saveChestLocation(shelterLocation.offset(1, 0, 4));
     await __actionsDelay(1000);
 
     // make some charcoal

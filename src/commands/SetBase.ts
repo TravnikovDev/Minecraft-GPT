@@ -8,7 +8,7 @@ import {
 } from "../managers/persistenceManager";
 import { __actionsDelay } from "../utils/utility";
 import { ensureLocation } from "../actions/ensureLocation";
-import { ensureAxe, ensureShovel } from "../actions/ensureTools";
+import { ensureAxe, ensurePickaxe, ensureShovel } from "../actions/ensureTools";
 import { buildShelter, clearSite, setupTheShelter } from "../actions/building";
 import { goToPosition } from "../actions/movement";
 
@@ -51,7 +51,8 @@ export async function execute(args: any) {
 
     // Clear the area around the bot for building
     bot.chat(`Clearing the area around the bot for building...`);
-    await ensureShovel();
+    await ensureShovel(); // Better to have a shovel to clear the area
+    await ensurePickaxe(); // It could have some stone blocks, so we need a pickaxe
     await clearSite(basePosition);
 
     // Notify in chat

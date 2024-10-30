@@ -19,10 +19,10 @@ export async function placeBlock(
   z: number,
   placeOn: string = "bottom"
 ): Promise<boolean> {
-  if (!gameData.getBlockId(blockType)) {
-    console.log(`Invalid block type: ${blockType}.`);
-    return false;
-  }
+  // if (!gameData.getBlockId(blockType)) {
+  //   console.log(`Invalid block type: ${blockType}.`);
+  //   return false;
+  // }
 
   const targetDest = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
 
@@ -30,6 +30,7 @@ export async function placeBlock(
     .items()
     .find((item) => item.name.includes(blockType));
   if (!block && bot.game.gameMode === "creative") {
+    // TODO: Rework
     await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
     block = bot.inventory.items().find((item) => item.name.includes(blockType));
   }

@@ -14,7 +14,8 @@ export async function goToPosition(
   minDistance = 2
 ): Promise<boolean> {
   // bot.pathfinder.setMovements(new pf.Movements(bot));
-  const base = await getBaseLocation();
+  // const base = await getBaseLocation();
+  const base = null;
 
   try {
     if (base) {
@@ -80,8 +81,8 @@ export async function goToPlayer(
     return false;
   }
 
-  // const move = new pf.Movements(bot);
-  // bot.pathfinder.setMovements(move);
+  const move = new pf.Movements(bot);
+  bot.pathfinder.setMovements(move);
   await bot.pathfinder.goto(new pf.goals.GoalFollow(playerEntity, distance));
 
   console.log(`You have reached ${username}.`);
@@ -97,8 +98,8 @@ export async function followPlayer(
     return false;
   }
 
-  // const move = new pf.Movements(bot);
-  // bot.pathfinder.setMovements(move);
+  const move = new pf.Movements(bot);
+  bot.pathfinder.setMovements(move);
   bot.pathfinder.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
   console.log(`You are now actively following player ${username}.`);
 
@@ -137,6 +138,7 @@ export async function moveAway(distance: number): Promise<boolean> {
     await bot.pathfinder.goto(farGoal);
     const newPos = bot.entity.position;
     console.log(`Moved away from nearest entity to ${newPos}.`);
+    await __actionsDelay(500);
     return true;
   } catch (err) {
     console.log(`Failed to move away: ${(err as Error).message}`);
