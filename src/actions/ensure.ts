@@ -52,7 +52,7 @@ export const ensurePlanks = async (neededAmount: number): Promise<boolean> => {
 
   let planksCount = getItemCount("planks");
 
-  if (neededAmount <= planksCount) {
+  if (neededAmount < planksCount) {
     console.log("Bot: Have enough planks.");
     return true;
   }

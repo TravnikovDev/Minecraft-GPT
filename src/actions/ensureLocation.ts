@@ -78,14 +78,19 @@ export async function ensureLocation(
     // Check biome suitability
     const biome = getBiomeName();
     console.log(`Biome: ${biome}`);
-    const biomeIsSuitable = ![
+    const UNSUITABLE_BIOMES = [
       "ocean",
       "peaks",
       "snowy",
       "beach",
       "ice",
       "desert",
-    ].includes(biome);
+      "frozen",
+    ];
+
+    const biomeIsSuitable = !UNSUITABLE_BIOMES.some((unsuitable) =>
+      biome.toLowerCase().includes(unsuitable.toLowerCase())
+    );
 
     // Cave/Ravine detection under the flat terrain within half the radius
     const caveDetected = await checkForCavesBelow(possibleBasePosition);
@@ -130,8 +135,9 @@ export async function ensureLocation(
       if (sandCount < sand) issues.push(`Sand: ${sandCount}/${sand} ❌`);
       if (animalCount < animals)
         issues.push(`Animals: ${animalCount}/${animals} ❌`);
-      if (!terrainIsFlat) issues.push("Terrain is not flat ❌");
       if (!biomeIsSuitable) issues.push(`Biome (${biome}) is not suitable ❌`);
+      if (!terrainIsFlat) issues.push("Terrain is not flat ❌");
+
       if (caveDetected)
         issues.push(
           "Detected a large cave below the possible base location ❌"

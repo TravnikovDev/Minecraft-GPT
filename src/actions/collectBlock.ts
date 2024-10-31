@@ -4,6 +4,7 @@ import { Block } from "prismarine-block";
 import * as world from "./world.js";
 import { __actionsDelay } from "../utils/utility.js";
 import { breakBlockAt, pickupNearbyItems } from "./worldInteraction.js";
+import { ensurePickaxe } from "./ensureTools.js";
 
 export async function collectBlock(
   blockType: string,
@@ -59,6 +60,9 @@ export async function collectBlock(
         const itemId = bot.heldItem ? bot.heldItem.type : null;
         if (!block.canHarvest(itemId)) {
           console.log(`Don't have right tools to harvest ${block.name}.`);
+          if (block.name.includes("ore") || block.name.includes("stone")) {
+            await ensurePickaxe();
+          }
           throw new Error("Don't have right tools to harvest block.");
         }
       }
