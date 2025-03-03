@@ -543,3 +543,425 @@ export async function useNearbyObject(objectType: string, maxDistance: number = 
   // Use the existing activateNearestBlock function
   return await activateNearestBlock(blockType);
 }
+
+export async function deployVehicle(vehicleType: string, maxDistance: number = 16): Promise<boolean> {
+  console.log(`Attempting to deploy ${vehicleType}...`);
+  
+  // Check if we have the vehicle/item in inventory
+  const inventoryItem = bot.inventory.items().find(item => 
+    item.name.toLowerCase() === vehicleType.toLowerCase() || 
+    item.name.toLowerCase().includes(vehicleType.toLowerCase()) || 
+    (vehicleType === "saddle" && item.name === "saddle")
+  );
+  
+  if (!inventoryItem) {
+    console.log(`You don't have a ${vehicleType} in your inventory.`);
+    return false;
+  }
+  
+  // Different deployment logic based on vehicle type
+  if (vehicleType.toLowerCase() === "minecart" || vehicleType.toLowerCase().includes("cart")) {
+    // Enhanced minecart placement logic
+    console.log(`Found ${inventoryItem.name} in inventory. Looking for rails to place it on...`);
+    
+    // Search for all rail types
+    const railTypes = ["rail", "powered_rail", "detector_rail", "activator_rail"];
+    let rails = null;
+    let railBlock = null;
+    
+    // Find the nearest rail by checking each rail type
+    for (const railType of railTypes) {
+      const foundRails = bot.findBlocks({
+        matching: (block) => block !== null && block.name.includes(railType),
+        maxDistance: maxDistance,
+        count: 100
+      });
+      
+      if (foundRails.length > 0) {
+        // Sort by distance
+        const sortedRails = foundRails
+          .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
+          .sort((a, b) => a.distance - b.distance);
+        
+        for (const rail of sortedRails) {
+          const block = bot.blockAt(rail.pos);
+          if (block) {
+            rails = rail.pos;
+            railBlock = block;
+            console.log(`Found ${block.name} at ${rails.x}, ${rails.y}, ${rails.z}`);
+            break;
+          }
+        }
+        
+        if (rails) break;
+      }
+    }
+    
+    if (!rails || !railBlock) {
+      console.log(`Could not find rails within ${maxDistance} blocks to place the minecart.`);
+      return false;
+    }
+    
+    // Find the best position to stand to place the minecart
+    // We want to be beside the rail, not on it
+    const adjacentPositions = [
+      {x: 1, y: 0, z: 0},
+      {x: -1, y: 0, z: 0},
+      {x: 0, y: 0, z: 1},
+      {x: 0, y: 0, z: -1}
+    ];
+    
+    let standingPos = null;
+    
+    for (const offset of adjacentPositions) {
+      const possiblePos = rails.offset(offset.x, offset.y, offset.z);
+      const blockAtPos = bot.blockAt(possiblePos);
+      const blockBelowPos = bot.blockAt(possiblePos.offset(0, -1, 0));
+      
+      // Check if this is a valid standing position (solid block below, air at feet and head)
+      if (blockAtPos && blockAtPos.name === "air" && blockBelowPos && blockBelowPos.solid) {
+        standingPos = possiblePos;
+        console.log(`Found good standing position at ${standingPos.x}, ${standingPos.y}, ${standingPos.z}`);
+        break;
+      }
+    }
+    
+    // If we couldn't find a good adjacent position, try to stand on the rail itself as a last resort
+    if (!standingPos) {
+      // For rails, sometimes we need to stand directly on them
+      standingPos = rails.offset(0, 1, 0); // Position above the rail
+      console.log(`No good adjacent position found, will try to place from above rail at ${standingPos.x}, ${standingPos.y}, ${standingPos.z}`);
+    }
+    
+    // Move to the standing position
+    try {
+      console.log(`Moving to position near rails...`);
+      await goToPosition(standingPos.x, standingPos.y, standingPos.z, 0);
+      await __actionsDelay(500);
+      
+      // Equip the minecart
+      console.log(`Equipping ${inventoryItem.name}...`);
+      await bot.equip(inventoryItem, "hand");
+      await __actionsDelay(300);
+      
+      // Use multiple methods to place the minecart
+      
+      // Method 1: Look at center of rail and use activateBlock
+      console.log(`Looking at rail at ${rails.x}, ${rails.y}, ${rails.z}...`);
+      await bot.lookAt(rails.offset(0.5, 0.5, 0.5), true);
+      await __actionsDelay(500);
+      
+      try {
+        // Output current bot position and where it's looking to help with debugging
+        const currentPos = bot.entity.position;
+        console.log(`Bot position: ${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}, ${currentPos.z.toFixed(2)}`);
+        console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
+        
+        console.log(`Activating rail block...`);
+        await bot.activateBlock(railBlock);
+        await __actionsDelay(1000);
+        
+        // Check if the minecart was placed by looking for a minecart entity nearby
+        const nearbyMinecart = world.getNearestEntityWhere(
+          entity => entity.name?.toLowerCase().includes("minecart"),
+          3
+        );
+        
+        if (nearbyMinecart) {
+          console.log(`Successfully placed minecart on rails!`);
+          return true;
+        }
+        
+        // Method 2: Try using placeBlock instead
+        console.log(`Method 1 failed, trying alternative placement method...`);
+        const referenceBlock = bot.blockAt(rails.offset(0, -1, 0)); // Block below rail
+        
+        if (referenceBlock && referenceBlock.solid) {
+          // Look directly at the top face of the block below the rail
+          await bot.lookAt(referenceBlock.position.offset(0.5, 1, 0.5), true);
+          await __actionsDelay(300);
+          
+          try {
+            // Try to use the minecart on the top face of the block below
+            await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+            await __actionsDelay(1000);
+            
+            // Check again if minecart was placed
+            const minecartAfterMethod2 = world.getNearestEntityWhere(
+              entity => entity.name?.toLowerCase().includes("minecart"),
+              3
+            );
+            
+            if (minecartAfterMethod2) {
+              console.log(`Successfully placed minecart using method 2!`);
+              return true;
+            }
+          } catch (e) {
+            console.log(`Method 2 failed: ${e}`);
+          }
+        }
+        
+        // Method 3: Try to use activateItem while looking at rail
+        console.log(`Trying method 3: activateItem...`);
+        await bot.lookAt(rails.offset(0.5, 0.6, 0.5), true);
+        await __actionsDelay(300);
+        
+        try {
+          await bot.activateItem();
+          await __actionsDelay(1000);
+          
+          // Check again if minecart was placed
+          const minecartAfterMethod3 = world.getNearestEntityWhere(
+            entity => entity.name?.toLowerCase().includes("minecart"),
+            3
+          );
+          
+          if (minecartAfterMethod3) {
+            console.log(`Successfully placed minecart using method 3!`);
+            return true;
+          } else {
+            console.log(`All methods failed. Could not place minecart on rail.`);
+            return false;
+          }
+        } catch (e) {
+          console.log(`Method 3 failed: ${e}`);
+          return false;
+        }
+      } catch (error) {
+        console.log(`Failed to place minecart: ${error}`);
+        return false;
+      }
+    } catch (error) {
+      console.log(`Failed to move to position near rails: ${error}`);
+      return false;
+    }
+  }
+  else if (vehicleType.toLowerCase().includes("boat") || inventoryItem.name.includes("boat")) {
+    // Improved boat detection and placement logic
+    console.log(`Found ${inventoryItem.name} in inventory. Looking for water to place it on...`);
+    
+    // For boats, find water to place on - use a more robust water detection method
+    const waterBlocks = bot.findBlocks({
+      matching: (block) => block !== null && (block.name === "water" || block.name.includes("water")),
+      maxDistance: maxDistance,
+      count: 100
+    });
+    
+    if (waterBlocks.length === 0) {
+      console.log(`Could not find water within ${maxDistance} blocks to place the boat.`);
+      return false;
+    }
+    
+    // Sort water blocks by distance
+    const sortedWaterBlocks = waterBlocks
+      .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
+      .sort((a, b) => a.distance - b.distance);
+    
+    // Try each water block until we find one that works
+    for (const waterBlockData of sortedWaterBlocks) {
+      const waterPos = waterBlockData.pos;
+      const waterBlock = bot.blockAt(waterPos);
+      
+      if (!waterBlock || !waterBlock.name.includes("water")) continue;
+      
+      console.log(`Trying to place boat at water: ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+      
+      // Try to find a good position to stand while placing the boat
+      const adjacentPositions = [
+        {x: 1, y: 0, z: 0},
+        {x: -1, y: 0, z: 0},
+        {x: 0, y: 0, z: 1},
+        {x: 0, y: 0, z: -1},
+        {x: 1, y: 0, z: 1},
+        {x: -1, y: 0, z: -1},
+        {x: 1, y: 0, z: -1},
+        {x: -1, y: 0, z: 1}
+      ];
+      
+      // Try standing positions at same level and one level up
+      for (const yOffset of [0, 1]) {
+        for (const offset of adjacentPositions) {
+          const standingPos = waterPos.offset(offset.x, yOffset, offset.z);
+          const blockAtPos = bot.blockAt(standingPos);
+          
+          if (blockAtPos && blockAtPos.name !== "water" && blockAtPos.name !== "lava" && 
+              blockAtPos.name !== "air" && blockAtPos.solid) {
+            console.log(`Found solid block to stand on at ${standingPos}`);
+            
+            // Try to go to the standing position
+            try {
+              await goToPosition(standingPos.x, standingPos.y, standingPos.z, 1);
+              await __actionsDelay(300);
+              
+              // Check if we can see the water block from here
+              const rayTraceResult = bot.world.raycast(
+                bot.entity.position.offset(0, 1.6, 0), // Eye position
+                waterPos.offset(0.5, 0.5, 0.5), // Center of water block
+                10, // Max distance
+                (block) => block.boundingBox === 'block'
+              );
+              
+              if (rayTraceResult) {
+                // There's something between us and the water
+                continue;
+              }
+              
+              // Equip the boat
+              await bot.equip(inventoryItem, "hand");
+              await __actionsDelay(200);
+              
+              // Look at the water and try to place the boat
+              await bot.lookAt(waterPos.offset(0.5, 0.5, 0.5));
+              await __actionsDelay(300);
+              
+              // Try several placement methods
+              try {
+                // Method 1: Use activateItem while looking at water
+                bot.activateItem();
+                await __actionsDelay(1000);
+                
+                // Check if boat was placed (could look for entity)
+                const nearbyBoats = world.getNearestEntityWhere(
+                  entity => entity.name?.toLowerCase().includes("boat"),
+                  5
+                );
+                
+                if (nearbyBoats) {
+                  console.log(`Successfully deployed boat in water at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+                  return true;
+                }
+                
+                // Method 2: Direct use block
+                try {
+                  const waterBlockRef = bot.blockAt(waterPos);
+                  if (waterBlockRef) {
+                    await bot.activateBlock(waterBlockRef);
+                    await __actionsDelay(1000);
+                    
+                    // Check again if boat was placed
+                    const nearbyBoatsAfterMethod2 = world.getNearestEntityWhere(
+                      entity => entity.name?.toLowerCase().includes("boat"),
+                      5
+                    );
+                    
+                    if (nearbyBoatsAfterMethod2) {
+                      console.log(`Successfully deployed boat in water (method 2) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+                      return true;
+                    }
+                  }
+                } catch (e) {
+                  console.log(`Method 2 failed: ${e}`);
+                }
+                
+                // Method 3: Try to place on adjacent block facing water
+                try {
+                  const blockBelowStanding = bot.blockAt(standingPos.offset(0, -1, 0));
+                  if (blockBelowStanding && blockBelowStanding.solid) {
+                    // Get face vector pointing toward water
+                    const dx = waterPos.x - standingPos.x;
+                    const dz = waterPos.z - standingPos.z;
+                    const faceVector = new Vec3(
+                      Math.sign(dx), 
+                      0, 
+                      Math.sign(dz)
+                    );
+                    
+                    // Try placing on block below feet, facing toward water
+                    await bot.placeBlock(blockBelowStanding, faceVector);
+                    await __actionsDelay(1000);
+                    
+                    // Check again if boat was placed
+                    const nearbyBoatsAfterMethod3 = world.getNearestEntityWhere(
+                      entity => entity.name?.toLowerCase().includes("boat"),
+                      5
+                    );
+                    
+                    if (nearbyBoatsAfterMethod3) {
+                      console.log(`Successfully deployed boat in water (method 3) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+                      return true;
+                    }
+                  }
+                } catch (e) {
+                  console.log(`Method 3 failed: ${e}`);
+                }
+              } catch (error) {
+                console.log(`Failed to activate item: ${error}`);
+              }
+            } catch (error) {
+              console.log(`Failed to move to position ${standingPos}: ${error}`);
+              continue;
+            }
+          }
+        }
+      }
+    }
+    
+    console.log(`Could not find a suitable position to place the boat near water.`);
+    return false;
+  }
+  else if (vehicleType.toLowerCase() === "saddle") {
+    // For saddles, find horses or other rideable mobs
+    const rideable = world.getNearestEntityWhere(
+      entity => 
+        entity.name === "horse" || 
+        entity.name === "donkey" || 
+        entity.name === "mule" || 
+        entity.name === "pig" || 
+        entity.name === "strider",
+      maxDistance
+    );
+    
+    if (!rideable) {
+      console.log(`Could not find any rideable animals within ${maxDistance} blocks.`);
+      return false;
+    }
+    
+    // Move close to the animal
+    if (bot.entity.position.distanceTo(rideable.position) > 3) {
+      await goToPosition(rideable.position.x, rideable.position.y, rideable.position.z, 2);
+    }
+    
+    try {
+      // Equip the saddle
+      await bot.equip(inventoryItem, "hand");
+      
+      // Look at the animal
+      await bot.lookAt(rideable.position);
+      await __actionsDelay(300);
+      
+      // Use the saddle on the animal
+      // @ts-ignore - Some versions of Mineflayer have this method
+      if (bot.activateEntity) {
+        // @ts-ignore
+        await bot.activateEntity(rideable);
+      } else {
+        // Alternative method
+        const offsets = [
+          {x: 0, y: 0, z: 0},
+          {x: 0, y: 1, z: 0}
+        ];
+        
+        for (const offset of offsets) {
+          try {
+            const pos = rideable.position.offset(offset.x, offset.y, offset.z);
+            await bot.lookAt(pos);
+            // Using activateItem as a fallback
+            await bot.activateItem();
+            await __actionsDelay(500);
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      
+      console.log(`Successfully saddled the ${rideable.name} at ${rideable.position.x}, ${rideable.position.y}, ${rideable.position.z}`);
+      return true;
+    } catch (error) {
+      console.log(`Failed to saddle animal: ${error}`);
+      return false;
+    }
+  }
+  
+  console.log(`Unrecognized vehicle type: ${vehicleType}`);
+  return false;
+}
