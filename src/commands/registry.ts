@@ -14,7 +14,6 @@ import * as Hunting from "./Hunting";
 import * as AvoidEnemies from "./AvoidEnemies";
 import * as Unstack from "./Unstack";
 import * as EquipBestWeapon from "./EquipBestWeapon";
-import * as GoToPosition from "./GoToPosition";
 import * as GatherWood from "./GatherWood";
 import * as CraftWoodenTools from "./CraftWoodenTools";
 import * as RandomMovement from "./RandomMovement";
@@ -33,6 +32,8 @@ import * as CraftItem from "./CraftItem";
 import * as CraftStoneTools from "./CraftStoneTools";
 import * as Stop from "./Stop";
 import * as ShowMeBase from "./ShowMeBase";
+import * as GoToCoordinates from "./GoToCoordinates";
+import * as GoToNamedLocation from "./GoToNamedLocation";
 
 type CommandModule = {
   parameters: any;
@@ -43,6 +44,8 @@ type CommandModule = {
 // Creating an Command registry by using the filename as a key
 export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.GoToPlayer]: GoToPlayer,
+  [BotCommands.GoToCoordinates]: GoToCoordinates,
+  [BotCommands.GoToNamedLocation]: GoToNamedLocation,
   [BotCommands.FollowPlayer]: FollowPlayer,
   [BotCommands.GoToBlock]: GoToBlock,
   [BotCommands.CollectBlocks]: CollectBlocks,
@@ -51,7 +54,6 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.Hunting]: Hunting,
   [BotCommands.AvoidEnemies]: AvoidEnemies,
   [BotCommands.EquipBestWeapon]: EquipBestWeapon,
-  [BotCommands.GoToPosition]: GoToPosition,
   [BotCommands.Unstack]: Unstack,
   [BotCommands.GatherWood]: GatherWood,
   [BotCommands.CraftItem]: CraftItem,

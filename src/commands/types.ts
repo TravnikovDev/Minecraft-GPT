@@ -3,6 +3,8 @@
 // Define an enum for available bot actions
 enum BotCommands {
   GoToPlayer = "goToPlayer",
+  GoToCoordinates = "goToCoordinates",
+  GoToNamedLocation = "goToNamedLocation",
   FollowPlayer = "followPlayer",
   GoToBlock = "goToBlock",
   CollectBlocks = "collectBlocks",
@@ -11,7 +13,6 @@ enum BotCommands {
   Hunting = "hunting",
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",
-  GoToPosition = "goToPosition",
   Unstack = "unstack",
   GatherWood = "gatherWood",
   CraftItem = "craftItem",

@@ -1,5 +1,3 @@
-// Path: src/actions/GoToPosition.ts
-
 import { z } from "zod";
 import { goToPosition } from "../actions/movement";
 import {
@@ -10,11 +8,11 @@ import {
   getMines,
 } from "../managers/persistenceManager";
 
-export const description = `When user asks the bot to go to a position, the bot will navigate to the specified place.
+export const description = `When user asks the bot to go to a specific location, the bot will navigate to the specified place.
 The bot can go to the base, basement, crafting table, furnace, chest, or mine.
 Expected usage: "Go to the basement" or "Go to the crafting table" or "Go to the furnace" or "Go to the chest" or "Go to the mine".`;
 
-// Define parameters for the GoToPosition action
+// Define parameters for the GoToNamedLocation action
 export const parameters = z.object({
   targetName: z.enum([
     "basement",
@@ -25,20 +23,20 @@ export const parameters = z.object({
   ]),
 });
 
-// Implement the GoToPosition action
+// Implement the GoToNamedLocation action
 export async function execute(args: any) {
-  console.log(`Executing GoToPosition with args:`, args);
+  console.log(`Executing GoToNamedLocation with args:`, args);
 
   // Validate arguments
   const parsed = parameters.safeParse(args);
   if (!parsed.success) {
     console.error(
-      `Missing or invalid parameters for GoToPosition: x, y, or z are undefined or incorrect.`
+      `Missing or invalid parameters for GoToNamedLocation: targetName is undefined or incorrect.`
     );
     return;
   }
 
-  let target = parsed.data.targetName || "base";
+  let target = parsed.data.targetName;
 
   switch (target) {
     case "basement":
@@ -87,6 +85,6 @@ export async function execute(args: any) {
         );
       break;
     default:
-      console.error(`Invalid target name for GoToPosition: ${target}`);
+      console.error(`Invalid target name for GoToNamedLocation: ${target}`);
   }
 }
