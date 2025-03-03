@@ -34,6 +34,7 @@ import * as Stop from "./Stop";
 import * as ShowMeBase from "./ShowMeBase";
 import * as GoToCoordinates from "./GoToCoordinates";
 import * as GoToNamedLocation from "./GoToNamedLocation";
+import * as TellLocation from "./TellLocation";
 
 type CommandModule = {
   parameters: any;
@@ -71,6 +72,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.DiscardItem]: DiscardItem,
   [BotCommands.GiveItemToAPlayer]: GiveItemToAPlayer,
   [BotCommands.CraftStoneTools]: CraftStoneTools,
+  [BotCommands.TellLocation]: TellLocation,
   [BotCommands.Stop]: Stop,
   [BotCommands.ShowMeBase]: ShowMeBase,
 };

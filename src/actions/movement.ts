@@ -230,3 +230,12 @@ export async function goToBed(): Promise<boolean> {
     return false;
   }
 }
+
+export function getBotPosition(): { x: number, y: number, z: number } {
+  const position = bot.entity.position;
+  return {
+    x: Math.floor(position.x), 
+    y: Math.floor(position.y),
+    z: Math.floor(position.z)
+  };
+}
