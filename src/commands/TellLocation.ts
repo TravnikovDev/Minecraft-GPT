@@ -8,7 +8,7 @@ Expected usage: "Where are you?" or "Tell me your location" or "What's your curr
 // No parameters needed for this command
 export const parameters = z.object({});
 
-export async function execute() {
+export async function execute(): Promise<void> {
   console.log(`Executing TellLocation command`);
   
   const position = getBotPosition();
@@ -23,6 +23,4 @@ export async function execute() {
   } catch (error) {
     console.error("Failed to send position to chat:", error);
   }
-  
-  return position;
 }

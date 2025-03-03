@@ -30,7 +30,7 @@ const connectionOptions = {
 };
 
 // Create Bot
-export const bot = mineflayer.createBot(connectionOptions);
+export const bot: mineflayer.Bot = mineflayer.createBot(connectionOptions);
 
 // Event: Bot spawned
 bot.once("spawn", () => {
@@ -66,11 +66,11 @@ bot.once("spawn", () => {
   };
   bot.autoEat.enable();
 
-  addCommandToQueue({
-    id: "pickup",
-    command: BotCommands.PickupNearbyItems,
-    priority: 4,
-  });
+  // addCommandToQueue({
+  //   id: "pickup",
+  //   command: BotCommands.PickupNearbyItems,
+  //   priority: 4,
+  // });
 });
 
 // Event: Player chat interaction
@@ -85,26 +85,26 @@ bot.on("playerJoined", (player: Player) => {
   const playerUsername = player.username;
   if (playerUsername === bot.username) return;
   bot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
-  addCommandToQueue({
-    id: "go-to-player",
-    command: BotCommands.GoToPlayer,
-    priority: 7,
-    args: { player_name: playerUsername, closeness: 5 },
-  });
+  // addCommandToQueue({
+  //   id: "go-to-player",
+  //   command: BotCommands.GoToPlayer,
+  //   priority: 7,
+  //   args: { player_name: playerUsername, closeness: 5 },
+  // });
 });
 
 bot.on("health", () => {
   const existingAction = getAllCommands().find(
     (action) => action.id === "defend-self"
   );
-  if (!existingAction) {
-    addCommandToQueue({
-      id: "defend-self",
-      command: BotCommands.DefendSelf,
-      priority: 9,
-      args: { range: 8 },
-    });
-  }
+  // if (!existingAction) {
+  //   addCommandToQueue({
+  //     id: "defend-self",
+  //     command: BotCommands.DefendSelf,
+  //     priority: 9,
+  //     args: { range: 8 },
+  //   });
+  // }
 });
 
 bot.on("breath", () => {

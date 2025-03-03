@@ -361,3 +361,185 @@ export async function pickupNearbyItems(
   console.log(`Picked up ${pickedUp} items.`);
   return true;
 }
+
+export async function useNearbyObject(objectType: string, maxDistance: number = 16, action: string = "use"): Promise<boolean> {
+  console.log(`Looking to ${action} ${objectType}...`);
+  
+  // Check if this is a dismount command for any mountable entity
+  if ((action === "exit" || action === "leave" || action === "dismount" || action === "get out")) {
+    // Simplified dismount logic - don't check object type when dismounting
+    // Just check if the bot is in any vehicle and dismount
+    console.log('Attempting to dismount from current vehicle...');
+    
+    if (bot.vehicle) {
+      try {
+        console.log(`Currently in a vehicle of type: ${bot.vehicle.name || "unknown"}, dismounting...`);
+        await bot.dismount();
+        console.log(`Successfully dismounted from ${bot.vehicle.name || "vehicle"}`);
+        return true;
+      } catch (error) {
+        console.log(`Failed to dismount: ${error}`);
+        
+        // Try alternate dismount method
+        try {
+          console.log("Trying alternate dismount method...");
+          // In some versions, we can simulate pressing shift
+          bot.setControlState('sneak', true);
+          await __actionsDelay(500);
+          bot.setControlState('sneak', false);
+          
+          // Check if we're still in the vehicle
+          if (!bot.vehicle) {
+            console.log("Successfully dismounted using alternate method");
+            return true;
+          } else {
+            console.log("Still in vehicle after alternate method attempt");
+            return false;
+          }
+        } catch (innerError) {
+          console.log(`Alternate dismount method failed: ${innerError}`);
+          return false;
+        }
+      }
+    } else {
+      console.log(`Not currently in any vehicle`);
+      return false;
+    }
+  }
+  
+  // Handle mountable entities (vehicles and animals)
+  const mountableEntities = [
+    "boat", "minecart",  // Vehicles
+    "horse", "camel", "donkey", "mule", "pig", "strider"  // Rideable animals
+  ];
+  
+  if (mountableEntities.includes(objectType.toLowerCase()) || 
+      objectType.toLowerCase() === "animal" || 
+      objectType.toLowerCase() === "rideable" ||
+      objectType.toLowerCase() === "vehicle") {
+    
+    // Define the entity types to look for based on user input
+    let entityTypes: string[] = [];
+    
+    if (objectType.toLowerCase() === "animal" || objectType.toLowerCase() === "rideable") {
+      entityTypes = ["horse", "camel", "donkey", "mule", "pig", "strider"];
+    } else if (objectType.toLowerCase() === "vehicle") {
+      entityTypes = ["boat", "minecart"];
+    } else {
+      entityTypes = [objectType.toLowerCase()];
+    }
+    
+    // Find the nearest matching entity
+    let targetEntity = null;
+    for (const entityType of entityTypes) {
+      const entity = world.getNearestEntityWhere(
+        (entity) => entity.name?.toLowerCase().includes(entityType),
+        maxDistance
+      );
+      
+      if (entity) {
+        targetEntity = entity;
+        console.log(`Found ${entityType} at ${entity.position.x}, ${entity.position.y}, ${entity.position.z}`);
+        break;
+      }
+    }
+    
+    if (targetEntity) {
+      // Move close to the entity if needed
+      if (bot.entity.position.distanceTo(targetEntity.position) > 3) {
+        await goToPosition(targetEntity.position.x, targetEntity.position.y, targetEntity.position.z, 2);
+      }
+      
+      try {
+        // Try to mount the entity as passenger if possible
+        await bot.lookAt(targetEntity.position);
+        
+        // Check if the entity has multiple seats (like boats)
+        let mountedAsPassenger = false;
+        
+        // Check if it's a vehicle that typically has multiple seats
+        if (objectType.toLowerCase() === "boat") {
+          try {
+            // Check if there's already someone in the driver's seat
+            if (targetEntity.passengers && targetEntity.passengers.length === 1) {
+              // There's already one passenger, so we can directly mount as the second passenger
+              await bot.mount(targetEntity);
+              console.log(`Mounted as passenger in the ${targetEntity.name}`);
+              mountedAsPassenger = true;
+            } else if (!targetEntity.passengers || targetEntity.passengers.length === 0) {
+              // No passengers yet, we need to find a way to mount as passenger
+              // For boats, we can try right-clicking with a specific offset that might target the passenger seat
+              
+              // First, try to use the activateEntity method if available
+              try {
+                // @ts-ignore - Some Mineflayer versions have this method
+                if (bot.activateEntity) {
+                  // @ts-ignore
+                  await bot.activateEntity(targetEntity, true); // true = sneaking which sometimes helps get passenger seat
+                  console.log(`Attempted to mount as passenger using activateEntity`);
+                  mountedAsPassenger = true;
+                }
+              } catch (e) {
+                // If activateEntity failed or doesn't exist, fall back to regular mounting
+                console.log(`Could not use activateEntity, falling back to regular mount`);
+              }
+              
+              if (!mountedAsPassenger) {
+                // Regular mounting - will likely get the driver's seat
+                await bot.mount(targetEntity);
+                console.log(`Mounted the ${targetEntity.name} (likely as driver)`);
+              }
+            }
+          } catch (innerError) {
+            console.log(`Failed specific passenger seat mounting: ${innerError}`);
+            // Fall back to regular mounting if specific passenger mounting fails
+            if (!mountedAsPassenger) {
+              await bot.mount(targetEntity);
+              console.log(`Mounted the ${targetEntity.name} with fallback method`);
+            }
+          }
+        } else {
+          // Regular mounting for other entities
+          await bot.mount(targetEntity);
+          console.log(`Successfully mounted the ${targetEntity.name}`);
+        }
+        return true;
+      } catch (error) {
+        console.log(`Failed to mount ${targetEntity.name}: ${error}`);
+        return false;
+      }
+    } else {
+      console.log(`No mountable entity found within ${maxDistance} blocks`);
+      return false;
+    }
+  }
+  
+  // Handle interactive blocks with the existing activateNearestBlock function
+  // Map common terms to their block names in Minecraft
+  const blockTypeMap: Record<string, string> = {
+    // ...existing block mappings...
+    "button": "button",
+    "wooden_button": "wooden_button",
+    "stone_button": "stone_button",
+    "lever": "lever",
+    "leveler": "lever",
+    "switch": "lever",
+    "door": "door",
+    "trapdoor": "trapdoor",
+    "crafting_table": "crafting_table",
+    "workbench": "crafting_table",
+    "furnace": "furnace",
+    "chest": "chest",
+    "ender_chest": "ender_chest",
+    "anvil": "anvil",
+    "enchanting_table": "enchanting_table",
+    "brewing_stand": "brewing_stand",
+    "bed": "bed"
+  };
+  
+  // Determine the actual block type to look for
+  const blockType = blockTypeMap[objectType.toLowerCase()] || objectType;
+  
+  // Use the existing activateNearestBlock function
+  return await activateNearestBlock(blockType);
+}
