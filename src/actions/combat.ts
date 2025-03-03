@@ -7,8 +7,6 @@ import { getAttackDamage } from "../utils/utility";
 // Attack a Specific Entity by Type
 export async function attackEntity(targetEntity: Entity): Promise<boolean> {
   try {
-    // console.log(`Found target entity:`, targetEntity);
-
     await bot.pvp.attack(targetEntity);
     bot.chat(`Attacking ${targetEntity.name}!`);
     return true;

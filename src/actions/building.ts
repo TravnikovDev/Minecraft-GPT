@@ -30,7 +30,7 @@ import {
   ensurePlanks,
   ensureTorches,
 } from "./ensure";
-import { goToPosition } from "./movement";
+import { goToPosition, moveAway } from "./movement";
 import { __actionsDelay } from "../utils/utility";
 
 // Helper function to place dirt if there's a hole
@@ -129,6 +129,8 @@ export async function buildShelter(
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
 
+  await moveAway(50);
+  await ensureCobblestone(5); // Need cobblestone to make a stone pickaxe
   await ensurePickaxe(2); // Need at least 2 pickaxes to dig the tunnel and room
   await ensureShovel(); // Need a shovel to dig the dirt
 
