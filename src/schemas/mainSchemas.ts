@@ -46,10 +46,17 @@ export const ChestSchema = z.object({
   items: InventorySchema,
 });
 
+export const BotProgressSchema = z.object({
+  currentLevel: z.number().min(1),
+  craftableTier: z.number().min(1),
+  unlockedRecipes: z.array(z.string())
+});
+
 export const DbSchema = z.object({
   commands: z.array(CommandSchema),
   lore: LoreSchema.optional(),
   inventory: InventorySchema.optional(),
+  botProgress: BotProgressSchema.optional(),
   baseLocation: z
     .object({
       baseName: z.string(),

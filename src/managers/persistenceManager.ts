@@ -28,6 +28,11 @@ const db = new Low<DbSchemaType>(adapter, {
   commands: [],
   lore: { events: [] },
   inventory: [],
+  botProgress: {
+    currentLevel: 1,
+    craftableTier: 1,
+    unlockedRecipes: []
+  }
 });
 
 // Load Database
@@ -329,4 +334,47 @@ export function getChests(): ChestType[] | undefined {
 // Get Mines
 export function getMines(): MineType[] | undefined {
   return db.data?.baseLocation?.mines;
+}
+
+// Save Bot Progress
+export async function saveBotProgress(progress: {
+  currentLevel: number;
+  craftableTier: number;
+  unlockedRecipes: string[];
+}): Promise<void> {
+  try {
+    if (db.data) {
+      // Ensure botProgress field exists
+      if (!db.data.botProgress) {
+        db.data.botProgress = {
+          currentLevel: 1,
+          craftableTier: 1,
+          unlockedRecipes: []
+        };
+      }
+      
+      // Update with new progress
+      db.data.botProgress = progress;
+      await saveDb();
+      console.log(`Bot progress saved: Level ${progress.currentLevel}, Tier ${progress.craftableTier}`);
+    }
+  } catch (error) {
+    console.error("Error saving bot progress to database:", error);
+  }
+}
+
+// Get Bot Progress
+export function getBotProgress(): { 
+  currentLevel: number; 
+  craftableTier: number;
+  unlockedRecipes: string[];
+} {
+  if (!db.data?.botProgress) {
+    return {
+      currentLevel: 1,
+      craftableTier: 1,
+      unlockedRecipes: []
+    };
+  }
+  return db.data.botProgress;
 }
