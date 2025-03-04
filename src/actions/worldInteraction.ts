@@ -737,167 +737,139 @@ export async function deployVehicle(vehicleType: string, maxDistance: number = 1
     }
   }
   else if (vehicleType.toLowerCase().includes("boat") || inventoryItem.name.includes("boat")) {
-    // Improved boat detection and placement logic
+    // Fixed boat placement logic
     console.log(`Found ${inventoryItem.name} in inventory. Looking for water to place it on...`);
     
-    // For boats, find water to place on - use a more robust water detection method
-    const waterBlocks = bot.findBlocks({
-      matching: (block) => block !== null && (block.name === "water" || block.name.includes("water")),
-      maxDistance: maxDistance,
-      count: 100
-    });
-    
-    if (waterBlocks.length === 0) {
-      console.log(`Could not find water within ${maxDistance} blocks to place the boat.`);
-      return false;
-    }
-    
-    // Sort water blocks by distance
-    const sortedWaterBlocks = waterBlocks
-      .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
-      .sort((a, b) => a.distance - b.distance);
-    
-    // Try each water block until we find one that works
-    for (const waterBlockData of sortedWaterBlocks) {
-      const waterPos = waterBlockData.pos;
-      const waterBlock = bot.blockAt(waterPos);
+    // Use a simpler approach to find water blocks
+    try {
+      // First find water blocks without checking air above in the matcher
+      const waterBlocks = bot.findBlocks({
+        matching: (block) => block !== null && block.name === "water",
+        maxDistance: maxDistance,
+        count: 50
+      });
       
-      if (!waterBlock || !waterBlock.name.includes("water")) continue;
+      if (waterBlocks.length === 0) {
+        console.log(`Could not find any water within ${maxDistance} blocks to place the boat.`);
+        return false;
+      }
       
-      console.log(`Trying to place boat at water: ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+      // Sort water blocks by distance
+      const sortedWaterPositions = waterBlocks
+        .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
+        .sort((a, b) => a.distance - b.distance);
       
-      // Try to find a good position to stand while placing the boat
-      const adjacentPositions = [
-        {x: 1, y: 0, z: 0},
-        {x: -1, y: 0, z: 0},
-        {x: 0, y: 0, z: 1},
-        {x: 0, y: 0, z: -1},
-        {x: 1, y: 0, z: 1},
-        {x: -1, y: 0, z: -1},
-        {x: 1, y: 0, z: -1},
-        {x: -1, y: 0, z: 1}
-      ];
+      console.log(`Found ${sortedWaterPositions.length} water blocks. Checking for suitable placement...`);
       
-      // Try standing positions at same level and one level up
-      for (const yOffset of [0, 1]) {
-        for (const offset of adjacentPositions) {
-          const standingPos = waterPos.offset(offset.x, yOffset, offset.z);
-          const blockAtPos = bot.blockAt(standingPos);
-          
-          if (blockAtPos && blockAtPos.name !== "water" && blockAtPos.name !== "lava" && 
-              blockAtPos.name !== "air" && blockAtPos.solid) {
-            console.log(`Found solid block to stand on at ${standingPos}`);
-            
-            // Try to go to the standing position
-            try {
-              await goToPosition(standingPos.x, standingPos.y, standingPos.z, 1);
-              await __actionsDelay(300);
-              
-              // Check if we can see the water block from here
-              const rayTraceResult = bot.world.raycast(
-                bot.entity.position.offset(0, 1.6, 0), // Eye position
-                waterPos.offset(0.5, 0.5, 0.5), // Center of water block
-                10, // Max distance
-                (block) => block.boundingBox === 'block'
-              );
-              
-              if (rayTraceResult) {
-                // There's something between us and the water
-                continue;
-              }
-              
-              // Equip the boat
-              await bot.equip(inventoryItem, "hand");
-              await __actionsDelay(200);
-              
-              // Look at the water and try to place the boat
-              await bot.lookAt(waterPos.offset(0.5, 0.5, 0.5));
-              await __actionsDelay(300);
-              
-              // Try several placement methods
-              try {
-                // Method 1: Use activateItem while looking at water
-                bot.activateItem();
-                await __actionsDelay(1000);
-                
-                // Check if boat was placed (could look for entity)
-                const nearbyBoats = world.getNearestEntityWhere(
-                  entity => entity.name?.toLowerCase().includes("boat"),
-                  5
-                );
-                
-                if (nearbyBoats) {
-                  console.log(`Successfully deployed boat in water at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
-                  return true;
-                }
-                
-                // Method 2: Direct use block
-                try {
-                  const waterBlockRef = bot.blockAt(waterPos);
-                  if (waterBlockRef) {
-                    await bot.activateBlock(waterBlockRef);
-                    await __actionsDelay(1000);
-                    
-                    // Check again if boat was placed
-                    const nearbyBoatsAfterMethod2 = world.getNearestEntityWhere(
-                      entity => entity.name?.toLowerCase().includes("boat"),
-                      5
-                    );
-                    
-                    if (nearbyBoatsAfterMethod2) {
-                      console.log(`Successfully deployed boat in water (method 2) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
-                      return true;
-                    }
-                  }
-                } catch (e) {
-                  console.log(`Method 2 failed: ${e}`);
-                }
-                
-                // Method 3: Try to place on adjacent block facing water
-                try {
-                  const blockBelowStanding = bot.blockAt(standingPos.offset(0, -1, 0));
-                  if (blockBelowStanding && blockBelowStanding.solid) {
-                    // Get face vector pointing toward water
-                    const dx = waterPos.x - standingPos.x;
-                    const dz = waterPos.z - standingPos.z;
-                    const faceVector = new Vec3(
-                      Math.sign(dx), 
-                      0, 
-                      Math.sign(dz)
-                    );
-                    
-                    // Try placing on block below feet, facing toward water
-                    await bot.placeBlock(blockBelowStanding, faceVector);
-                    await __actionsDelay(1000);
-                    
-                    // Check again if boat was placed
-                    const nearbyBoatsAfterMethod3 = world.getNearestEntityWhere(
-                      entity => entity.name?.toLowerCase().includes("boat"),
-                      5
-                    );
-                    
-                    if (nearbyBoatsAfterMethod3) {
-                      console.log(`Successfully deployed boat in water (method 3) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
-                      return true;
-                    }
-                  }
-                } catch (e) {
-                  console.log(`Method 3 failed: ${e}`);
-                }
-              } catch (error) {
-                console.log(`Failed to activate item: ${error}`);
-              }
-            } catch (error) {
-              console.log(`Failed to move to position ${standingPos}: ${error}`);
-              continue;
-            }
-          }
+      // Now check if there's air above each water block
+      const suitableWaterBlocks = [];
+      
+      for (const waterData of sortedWaterPositions) {
+        const waterPos = waterData.pos;
+        const waterBlock = bot.blockAt(waterPos);
+        
+        if (!waterBlock) continue;
+        
+        // Check if there's air above this water block
+        const abovePos = waterPos.clone();
+        abovePos.y += 1;
+        const blockAbove = bot.blockAt(abovePos);
+        
+        if (blockAbove && blockAbove.name === "air") {
+          suitableWaterBlocks.push({
+            pos: waterPos,
+            distance: waterData.distance
+          });
         }
       }
+      
+      if (suitableWaterBlocks.length === 0) {
+        console.log(`Could not find any water with air above within ${maxDistance} blocks.`);
+        return false;
+      }
+      
+      console.log(`Found ${suitableWaterBlocks.length} suitable water blocks with air above.`);
+      
+      // Try each suitable water block until successful
+      for (const waterData of suitableWaterBlocks) {
+        const waterPos = waterData.pos;
+        const waterBlock = bot.blockAt(waterPos);
+        
+        if (!waterBlock) continue;
+        
+        console.log(`Trying to place boat at water: ${waterPos.x}, ${waterPos.y}, ${waterPos.z} (distance: ${waterData.distance.toFixed(1)})`);
+        
+        // If we're already close enough, no need to move
+        if (waterData.distance > 3) {
+          try {
+            // Move close to the water block if needed
+            await goToPosition(waterPos.x, waterPos.y, waterPos.z, 3);
+          } catch (error) {
+            console.log(`Failed to move to water at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}: ${error}`);
+            continue;
+          }
+        }
+        
+        try {
+          // Equip the boat
+          await bot.equip(inventoryItem, "hand");
+          await __actionsDelay(300);
+          
+          // Look at the water surface
+          const waterSurfacePos = new Vec3(waterPos.x + 0.5, waterPos.y + 0.5, waterPos.z + 0.5);
+          await bot.lookAt(waterSurfacePos, true);
+          await __actionsDelay(500);
+          
+          console.log(`Looking at water at ${waterSurfacePos.x}, ${waterSurfacePos.y}, ${waterSurfacePos.z}`);
+          console.log(`Bot position: ${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}`);
+          console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
+          
+          // Try to place the boat using activateItem
+          await bot.activateItem();
+          await __actionsDelay(1000);
+          
+          // Check if boat was placed
+          const nearbyBoat = world.getNearestEntityWhere(
+            entity => entity && entity.name && entity.name.toLowerCase().includes("boat"),
+            8
+          );
+          
+          if (nearbyBoat) {
+            console.log(`Successfully deployed boat in water at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+            return true;
+          }
+          
+          // If the first attempt failed, try activating the water block directly
+          try {
+            await bot.activateBlock(waterBlock);
+            await __actionsDelay(1000);
+            
+            // Check again
+            const nearbyBoat2 = world.getNearestEntityWhere(
+              entity => entity && entity.name && entity.name.toLowerCase().includes("boat"),
+              8
+            );
+            
+            if (nearbyBoat2) {
+              console.log(`Successfully deployed boat (method 2) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
+              return true;
+            }
+          } catch (e) {
+            console.log(`Failed to activate water block: ${e}`);
+          }
+          
+        } catch (error) {
+          console.log(`Failed to place boat at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}: ${error}`);
+          // Continue trying other water blocks
+        }
+      }
+      
+      console.log(`Tried ${suitableWaterBlocks.length} water blocks but failed to place the boat.`);
+      return false;
+    } catch (error) {
+      console.log(`Error while looking for water blocks: ${error}`);
+      return false;
     }
-    
-    console.log(`Could not find a suitable position to place the boat near water.`);
-    return false;
   }
   else if (vehicleType.toLowerCase() === "saddle") {
     // For saddles, find horses or other rideable mobs
