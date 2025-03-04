@@ -62,6 +62,12 @@ export async function saveDb() {
 export async function addCommandToQueue(newCommand: CommandType) {
   try {
     console.log("Adding command to queue:", newCommand.command);
+    
+    // Ensure retryCount is set
+    if (newCommand.retryCount === undefined) {
+      newCommand.retryCount = 3; // Default to 3 retries
+    }
+    
     const parsedCommand = CommandSchema.safeParse(newCommand);
     if (!parsedCommand.success) {
       throw new Error("Command validation failed: " + parsedCommand.error);
@@ -70,6 +76,20 @@ export async function addCommandToQueue(newCommand: CommandType) {
         `- Adding command ${parsedCommand.data.command} with priority ${parsedCommand.data.priority} to queue.`
       );
     }
+    
+    // Check if this is a duplicate command
+    if (db.data?.commands) {
+      const isDuplicate = db.data.commands.some(cmd => 
+        cmd.command === parsedCommand.data.command && 
+        JSON.stringify(cmd.args) === JSON.stringify(parsedCommand.data.args)
+      );
+      
+      if (isDuplicate) {
+        console.log(`Command ${parsedCommand.data.command} already in queue. Skipping.`);
+        return;
+      }
+    }
+    
     db.data?.commands.push(parsedCommand.data);
     await saveDb();
   } catch (error) {
