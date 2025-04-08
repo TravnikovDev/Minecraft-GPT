@@ -2,7 +2,6 @@
 
 import { bot } from "..";
 import { getInventory, getBotProgress, saveBotProgress } from "./persistenceManager";
-import { botLevels } from "../progress/botLevels";
 import { getItemCraftingRecipes } from "../utils/minecraftData";
 
 // Define crafting tiers for progression

@@ -5,7 +5,6 @@ import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { bot } from "../index.js";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
-import { getBaseLocation } from "../managers/persistenceManager.js";
 
 export async function goToPosition(
   x: number,
@@ -14,11 +13,10 @@ export async function goToPosition(
   minDistance = 2
 ): Promise<boolean> {
   // bot.pathfinder.setMovements(new pf.Movements(bot));
-  // const base = await getBaseLocation();
-  const base = null;
+  let base: Vec3 | undefined;
 
   try {
-    if (base) {
+    if (base && typeof base === 'object' && 'x' in base && 'y' in base && 'z' in base) {
       const baseBlock = bot.blockAt(new Vec3(base.x, base.y, base.z));
       const startBlock = bot.blockAt(new Vec3(x, y, z));
       const baseArea = 20;

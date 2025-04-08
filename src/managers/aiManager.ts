@@ -136,9 +136,9 @@ export async function initiateActionFromAI(
           command: toolAction.action,
           id: actionId,
           priority: 3,
+          retryCount: 0, // Adding the missing retryCount property
           args: toolAction.arguments,
         });
-        // toolAction.action, 3, toolAction.arguments);
       } else {
         console.error(`Invalid action: ${toolAction.action}`);
       }

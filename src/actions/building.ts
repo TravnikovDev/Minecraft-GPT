@@ -1,3 +1,4 @@
+// Only include imports that are actually used in this file
 import { Vec3 } from "vec3";
 import { bot } from "..";
 import {
@@ -19,16 +20,12 @@ import {
   digRoom,
   type DirectionType,
 } from "./digging";
-import { gatherWood } from "./gatherWood";
 import { ensureAxe, ensurePickaxe, ensureShovel } from "./ensureTools";
 import {
-  ensureCampfire,
   ensureChests,
   ensureCobblestone,
   ensureCraftingTable,
   ensureFurnaces,
-  ensurePlanks,
-  ensureTorches,
 } from "./ensure";
 import { goToPosition, moveAway } from "./movement";
 import { __actionsDelay } from "../utils/utility";

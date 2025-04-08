@@ -13,12 +13,14 @@ import { unstuck } from "../actions/unstuck";
 // Constants for action monitoring
 const MAX_ACTION_EXECUTION_TIME = 30000; // 30 seconds timeout for any action
 const ACTION_CHECK_INTERVAL = 5000; // Check action progress every 5 seconds
+const STUCK_THRESHOLD = 3;          // Number of consecutive checks without movement to trigger unstuck
 
 // Store currently executing command and its start time
 let currentCommand: CommandType | null = null;
 let actionStartTime: number | null = null;
 let lastBotPosition = { x: 0, y: 0, z: 0 };
 let botStuckCounter = 0;
+let recoveryInProgress = false;
 
 // Process an Command
 async function processCommand(nextCommand: CommandType) {
@@ -42,13 +44,21 @@ async function processCommand(nextCommand: CommandType) {
     success = true;
   } catch (error) {
     console.error(`Error executing command ${nextCommand.command}:`, error);
-    // Optionally adjust priority or add retry count
-    nextCommand.retryCount = (nextCommand.retryCount || 0) - 1;
-    if (nextCommand.retryCount >= 0) {
-      await addCommandToQueue(nextCommand);
-      nextCommand.priority += 1;
+    
+    // Check if this is a retry-worthy error
+    if (!recoveryInProgress) {
+      // Optionally adjust priority or add retry count
+      nextCommand.retryCount = (nextCommand.retryCount || 0) - 1;
+      if (nextCommand.retryCount >= 0) {
+        // Increase priority slightly with each retry
+        const newPriority = Math.max(1, (nextCommand.priority || 5) - 1);
+        await addCommandToQueue({
+          ...nextCommand,
+          priority: newPriority
+        });
+        console.log(`Re-added command ${nextCommand.command} to queue for retry with priority ${newPriority}.`);
+      }
     }
-    console.log(`Re-added command ${nextCommand.command} to queue for retry.`);
   } finally {
     if (success) {
       try {
@@ -75,7 +85,7 @@ function startActionMonitoring() {
 
 // Check if the current action is making progress
 async function checkActionProgress() {
-  if (!currentCommand || !actionStartTime) return;
+  if (!currentCommand || !actionStartTime || recoveryInProgress) return;
   
   const currentTime = Date.now();
   const executionTime = currentTime - actionStartTime;
@@ -94,19 +104,19 @@ async function checkActionProgress() {
     Math.abs(currentPosition.y - lastBotPosition.y) > 0.1 ||
     Math.abs(currentPosition.z - lastBotPosition.z) > 0.1;
     
-  if (!hasMovementProgress) {
+  if (!hasMovementProgress && bot.pathfinder.isMoving()) {
     botStuckCounter++;
     console.log(`Bot hasn't moved while executing ${currentCommand.command}. Stuck counter: ${botStuckCounter}`);
     
     // If bot hasn't moved for multiple checks, consider it stuck
-    if (botStuckCounter >= 3) {
+    if (botStuckCounter >= STUCK_THRESHOLD) {
       console.log(`Bot appears to be stuck while executing ${currentCommand.command}. Initiating recovery.`);
       await handleStuckAction();
       return;
     }
   } else {
     // Reset stuck counter if there's movement
-    botStuckCounter = 0;
+    botStuckCounter = Math.max(0, botStuckCounter - 1);
     lastBotPosition = currentPosition.clone();
   }
   
@@ -116,33 +126,65 @@ async function checkActionProgress() {
 
 // Handle a stuck action by attempting recovery
 async function handleStuckAction() {
-  if (!currentCommand) return;
+  if (!currentCommand || recoveryInProgress) return;
   
+  recoveryInProgress = true;
   console.log(`Recovering from stuck action: ${currentCommand.command}`);
   
   try {
     // Try to unstuck the bot using our action
     const unstuckSuccess = await unstuck();
     
-    // Remove the stuck command from the queue
-    if (currentCommand.id) {
+    if (unstuckSuccess) {
+      console.log("Unstuck successful. Continuing with command execution.");
+      // If unstuck was successful, don't remove the command - let it continue execution
+      // Just reset the monitoring variables
+      actionStartTime = Date.now(); // Reset timer
+      lastBotPosition = bot.entity.position.clone();
+      botStuckCounter = 0;
+    } else {
+      console.log("Unstuck failed. Removing current command and continuing with next command.");
+      // Remove the stuck command from the queue if unstuck failed
+      if (currentCommand.id) {
+        await removeCommand(currentCommand.id);
+      }
+      // Reset tracking variables
+      currentCommand = null;
+      actionStartTime = null;
+    }
+  } catch (error) {
+    console.error("Error during stuck action recovery:", error);
+    
+    // If unstuck fails with an error, remove the command to prevent getting stuck in a loop
+    if (currentCommand?.id) {
       await removeCommand(currentCommand.id);
     }
     
     // Reset tracking variables
     currentCommand = null;
     actionStartTime = null;
+  } finally {
     botStuckCounter = 0;
-    
-    console.log(`Unstuck attempt ${unstuckSuccess ? 'successful' : 'may have failed'}`);
-    
-  } catch (error) {
-    console.error("Error during stuck action recovery:", error);
+    recoveryInProgress = false;
   }
+}
+
+// Event handler for when bot rejoins after a disconnect (to be attached in index.ts)
+export function handleBotRejoin() {
+  console.log("Bot rejoined the server. Resetting action state and continuing execution.");
+  currentCommand = null;
+  actionStartTime = null;
+  botStuckCounter = 0;
+  recoveryInProgress = false;
 }
 
 // Execute Commands in Queue
 export async function executeCommands() {
+  // Skip if we're in the middle of recovery
+  if (recoveryInProgress) {
+    return;
+  }
+  
   const commands = await getAllCommands();
   
   if (commands.length === 0) {
@@ -151,11 +193,13 @@ export async function executeCommands() {
   
   // Only process new commands if we're not currently processing one
   if (currentCommand === null) {
-    commands.sort((a, b) => a.priority - b.priority);
+    // Sort commands by priority (lower number = higher priority)
+    commands.sort((a, b) => (a.priority || 5) - (b.priority || 5));
+    
     for (const command of commands) {
       try {
         console.log(
-          `- Executing command ${command.command} with priority ${command.priority}`
+          `- Executing command ${command.command} with priority ${command.priority || 5}`
         );
         await processCommand(command);
         break; // Only process one command per cycle

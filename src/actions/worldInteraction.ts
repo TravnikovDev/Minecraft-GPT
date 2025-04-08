@@ -348,7 +348,7 @@ export async function pickupNearbyItems(
     // bot.pathfinder.setMovements(new pf.Movements(bot));
     await bot.pathfinder.goto(
       new pf.goals.GoalFollow(nearestItem, 0.8),
-      () => {}
+      () => { }
     );
     await __actionsDelay(500);
     const prev = nearestItem;
@@ -362,29 +362,29 @@ export async function pickupNearbyItems(
   return true;
 }
 
-export async function useNearbyObject(objectType: string, maxDistance: number = 16, action: string = "use"): Promise<boolean> {
+export async function useNearbyObject(objectType: string, distance: number = 16, action: string = "use"): Promise<boolean> {
   console.log(`Looking to ${action} ${objectType}...`);
-  
+
   // Check if this is a dismount command
   if (action === "exit" || action === "leave" || action === "dismount" || action === "get out") {
     return await dismountFromVehicle();
   }
-  
+
   // Handle mountable entities
   const mountableEntities = [
     "boat", "minecart",  // Vehicles
     "horse", "camel", "donkey", "mule", "pig", "strider"  // Rideable animals
   ];
-  
-  if (mountableEntities.includes(objectType.toLowerCase()) || 
-      objectType.toLowerCase() === "animal" || 
-      objectType.toLowerCase() === "rideable" ||
-      objectType.toLowerCase() === "vehicle") {
-    return await mountEntity(objectType, maxDistance);
+
+  if (mountableEntities.includes(objectType.toLowerCase()) ||
+    objectType.toLowerCase() === "animal" ||
+    objectType.toLowerCase() === "rideable" ||
+    objectType.toLowerCase() === "vehicle") {
+    return await mountEntity(objectType, distance);
   }
-  
+
   // Handle interactive blocks
-  return await interactWithBlock(objectType, maxDistance);
+  return await interactWithBlock(objectType);
 }
 
 /**
@@ -392,12 +392,12 @@ export async function useNearbyObject(objectType: string, maxDistance: number = 
  */
 async function dismountFromVehicle(): Promise<boolean> {
   console.log('Attempting to dismount from current vehicle...');
-  
+
   if (!bot.vehicle) {
     console.log(`Not currently in any vehicle`);
     return false;
   }
-  
+
   try {
     console.log(`Currently in a vehicle of type: ${bot.vehicle.name || "unknown"}, dismounting...`);
     await bot.dismount();
@@ -405,7 +405,7 @@ async function dismountFromVehicle(): Promise<boolean> {
     return true;
   } catch (error) {
     console.log(`Failed to dismount: ${error}`);
-    
+
     return await tryAlternateDismount();
   }
 }
@@ -415,13 +415,13 @@ async function dismountFromVehicle(): Promise<boolean> {
  */
 async function tryAlternateDismount(): Promise<boolean> {
   console.log("Trying alternate dismount method...");
-  
+
   try {
     // In some versions, we can simulate pressing shift
     bot.setControlState('sneak', true);
     await __actionsDelay(500);
     bot.setControlState('sneak', false);
-    
+
     // Check if we're still in the vehicle
     if (!bot.vehicle) {
       console.log("Successfully dismounted using alternate method");
@@ -442,24 +442,24 @@ async function tryAlternateDismount(): Promise<boolean> {
 async function mountEntity(entityType: string, maxDistance: number): Promise<boolean> {
   // Define the entity types to look for based on user input
   let entityTypes: string[] = getEntityTypesToSearch(entityType);
-  
+
   // Find the nearest matching entity
   const targetEntity = findTargetEntity(entityTypes, maxDistance);
-  
+
   if (!targetEntity) {
     console.log(`No mountable entity found within ${maxDistance} blocks`);
     return false;
   }
-  
+
   // Move close to the entity if needed
   if (bot.entity.position.distanceTo(targetEntity.position) > 3) {
     await goToPosition(targetEntity.position.x, targetEntity.position.y, targetEntity.position.z, 2);
   }
-  
+
   try {
     // Look at the entity before mounting
     await bot.lookAt(targetEntity.position);
-    
+
     // Different mounting logic based on entity type
     if (entityType.toLowerCase() === "boat") {
       return await mountBoat(targetEntity);
@@ -494,10 +494,10 @@ function getEntityTypesToSearch(entityType: string): string[] {
 function findTargetEntity(entityTypes: string[], maxDistance: number) {
   for (const entityType of entityTypes) {
     const entity = world.getNearestEntityWhere(
-      (entity) => entity.name?.toLowerCase().includes(entityType),
+      (entity) => typeof entity.name === 'string' && entity.name.toLowerCase().includes(entityType),
       maxDistance
     );
-    
+
     if (entity) {
       console.log(`Found ${entityType} at ${entity.position.x}, ${entity.position.y}, ${entity.position.z}`);
       return entity;
@@ -517,10 +517,10 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
       await bot.mount(targetEntity);
       console.log(`Mounted as passenger in the ${targetEntity.name}`);
       return true;
-    } 
-    
+    }
+
     // No passengers yet, try different methods
-    
+
     // Method 1: Try activateEntity with sneaking (often helps get passenger seat)
     try {
       // @ts-ignore - Some Mineflayer versions have this method
@@ -528,7 +528,7 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
         // @ts-ignore
         await bot.activateEntity(targetEntity, true);
         console.log(`Attempted to mount as passenger using activateEntity`);
-        
+
         // Check if mounting was successful
         await __actionsDelay(500);
         if (bot.vehicle) {
@@ -538,14 +538,14 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
     } catch (e) {
       console.log(`Could not use activateEntity, trying regular mount`);
     }
-    
+
     // Method 2: Regular mounting (usually gets the driver's seat)
     await bot.mount(targetEntity);
     console.log(`Mounted the ${targetEntity.name} (likely as driver)`);
     return true;
   } catch (error) {
     console.log(`Failed specific boat mounting: ${error}`);
-    
+
     // Method 3: Fall back to simple mount as last resort
     try {
       await bot.mount(targetEntity);
@@ -561,7 +561,7 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
 /**
  * Interacts with a block based on the block type
  */
-async function interactWithBlock(blockType: string, maxDistance: number): Promise<boolean> {
+async function interactWithBlock(blockType: string): Promise<boolean> {
   // Map common terms to their block names in Minecraft
   const blockTypeMap: Record<string, string> = {
     "button": "button",
@@ -582,25 +582,25 @@ async function interactWithBlock(blockType: string, maxDistance: number): Promis
     "brewing_stand": "brewing_stand",
     "bed": "bed"
   };
-  
+
   // Determine the actual block type to look for
   const mappedBlockType = blockTypeMap[blockType.toLowerCase()] || blockType;
-  
+
   // Use the activateNearestBlock function
   return await activateNearestBlock(mappedBlockType);
 }
 
 export async function deployVehicle(vehicleType: string, maxDistance: number = 16): Promise<boolean> {
   console.log(`Attempting to deploy ${vehicleType}...`);
-  
+
   // Check if we have the vehicle/item in inventory
   const inventoryItem = findMatchingInventoryItem(vehicleType);
-  
+
   if (!inventoryItem) {
     console.log(`You don't have a ${vehicleType} in your inventory.`);
     return false;
   }
-  
+
   // Different deployment logic based on vehicle type
   if (vehicleType.toLowerCase() === "minecart" || vehicleType.toLowerCase().includes("cart")) {
     return await deployMinecart(inventoryItem, maxDistance);
@@ -611,7 +611,7 @@ export async function deployVehicle(vehicleType: string, maxDistance: number = 1
   else if (vehicleType.toLowerCase() === "saddle") {
     return await deploySaddle(inventoryItem, maxDistance);
   }
-  
+
   console.log(`Unrecognized vehicle type: ${vehicleType}`);
   return false;
 }
@@ -620,9 +620,9 @@ export async function deployVehicle(vehicleType: string, maxDistance: number = 1
  * Finds an item in the inventory matching the given type
  */
 function findMatchingInventoryItem(itemType: string) {
-  return bot.inventory.items().find(item => 
-    item.name.toLowerCase() === itemType.toLowerCase() || 
-    item.name.toLowerCase().includes(itemType.toLowerCase()) || 
+  return bot.inventory.items().find(item =>
+    item.name.toLowerCase() === itemType.toLowerCase() ||
+    item.name.toLowerCase().includes(itemType.toLowerCase()) ||
     (itemType === "saddle" && item.name === "saddle")
   );
 }
@@ -632,26 +632,27 @@ function findMatchingInventoryItem(itemType: string) {
  */
 async function deployMinecart(inventoryItem: any, maxDistance: number): Promise<boolean> {
   console.log(`Found ${inventoryItem.name} in inventory. Looking for rails to place it on...`);
-  
+
   // Find a suitable rail block
   const { railPosition, railBlock } = await findNearestRail(maxDistance);
-  
+
   if (!railPosition || !railBlock) {
     console.log(`Could not find rails within ${maxDistance} blocks to place the minecart.`);
     return false;
   }
-  
+
   // Move to the standing position
   try {
     console.log(`Moving to position near rails...`);
-    await goToPosition(railBlock.x, railBlock.y, railBlock.z);
-    await __actionsDelay(500);
-    
-    // Equip the minecart
-    console.log(`Equipping ${inventoryItem.name}...`);
-    await bot.equip(inventoryItem, "hand");
-    await __actionsDelay(300);
-    
+    if (railBlock) {
+      await goToPosition(railBlock.position.x, railBlock.position.y, railBlock.position.z);
+      await __actionsDelay(500);
+
+      // Equip the minecart
+      console.log(`Equipping ${inventoryItem.name}...`);
+      await bot.equip(inventoryItem, "hand");
+      await __actionsDelay(300);
+    }
     // Try multiple methods to place the minecart
     return await tryPlaceMinecart(railPosition, railBlock);
   } catch (error) {
@@ -666,20 +667,20 @@ async function deployMinecart(inventoryItem: any, maxDistance: number): Promise<
 async function findNearestRail(maxDistance: number): Promise<{ railPosition: Vec3 | null, railBlock: Block | null }> {
   // Search for all rail types
   const railTypes = ["rail", "powered_rail", "detector_rail", "activator_rail"];
-  
+
   for (const railType of railTypes) {
     const foundRails = bot.findBlocks({
       matching: (block) => block !== null && block.name.includes(railType),
       maxDistance: maxDistance,
       count: 100
     });
-    
+
     if (foundRails.length > 0) {
       // Sort by distance
       const sortedRails = foundRails
         .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
         .sort((a, b) => a.distance - b.distance);
-      
+
       for (const rail of sortedRails) {
         const block = bot.blockAt(rail.pos);
         if (block) {
@@ -689,7 +690,7 @@ async function findNearestRail(maxDistance: number): Promise<{ railPosition: Vec
       }
     }
   }
-  
+
   return { railPosition: null, railBlock: null };
 }
 
@@ -701,37 +702,37 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
   console.log(`Looking at rail at ${railPosition.x}, ${railPosition.y}, ${railPosition.z}...`);
   await bot.lookAt(railPosition.offset(0.5, 0.5, 0.5), true);
   await __actionsDelay(500);
-  
+
   try {
     // Output current bot position and where it's looking to help with debugging
     const currentPos = bot.entity.position;
     console.log(`Bot position: ${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}, ${currentPos.z.toFixed(2)}`);
     console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
-    
+
     console.log(`Activating rail block...`);
     await bot.activateBlock(railBlock);
     await __actionsDelay(1000);
-    
+
     // Check if the minecart was placed
     if (await checkEntityPlaced("minecart", 3)) {
       console.log(`Successfully placed minecart on rails!`);
       return true;
     }
-    
+
     // Method 2: Try using placeBlock instead
     console.log(`Method 1 failed, trying alternative placement method...`);
     const referenceBlock = bot.blockAt(railPosition.offset(0, -1, 0)); // Block below rail
-    
-    if (referenceBlock && referenceBlock.solid) {
+
+    if (referenceBlock && referenceBlock.diggable) {
       // Look directly at the top face of the block below the rail
       await bot.lookAt(referenceBlock.position.offset(0.5, 1, 0.5), true);
       await __actionsDelay(300);
-      
+
       try {
         // Try to use the minecart on the top face of the block below
         await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
         await __actionsDelay(1000);
-        
+
         // Check again if minecart was placed
         if (await checkEntityPlaced("minecart", 3)) {
           console.log(`Successfully placed minecart using method 2!`);
@@ -741,22 +742,22 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
         console.log(`Method 2 failed: ${e}`);
       }
     }
-    
+
     // Method 3: Try to use activateItem while looking at rail
     console.log(`Trying method 3: activateItem...`);
     await bot.lookAt(railPosition.offset(0.5, 0.6, 0.5), true);
     await __actionsDelay(300);
-    
+
     try {
       await bot.activateItem();
       await __actionsDelay(1000);
-      
+
       // Check again if minecart was placed
       if (await checkEntityPlaced("minecart", 3)) {
         console.log(`Successfully placed minecart using method 3!`);
         return true;
       }
-      
+
       console.log(`All methods failed. Could not place minecart on rail.`);
       return false;
     } catch (e) {
@@ -774,25 +775,25 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
  */
 async function deployBoat(inventoryItem: any, maxDistance: number): Promise<boolean> {
   console.log(`Found ${inventoryItem.name} in inventory. Looking for water to place it on...`);
-  
+
   try {
     // Find suitable water locations
     const suitableWaterBlocks = await findWaterBlocksWithAirAbove(maxDistance);
-    
+
     if (suitableWaterBlocks.length === 0) {
       console.log(`Could not find suitable water within ${maxDistance} blocks to place the boat.`);
       return false;
     }
-    
+
     console.log(`Found ${suitableWaterBlocks.length} suitable water blocks with air above.`);
-    
+
     // Try each suitable water block until successful
     for (const waterData of suitableWaterBlocks) {
       if (await tryPlaceBoatAtWaterLocation(inventoryItem, waterData.pos, waterData.distance)) {
         return true;
       }
     }
-    
+
     console.log(`Tried ${suitableWaterBlocks.length} water blocks but failed to place the boat.`);
     return false;
   } catch (error) {
@@ -804,37 +805,37 @@ async function deployBoat(inventoryItem: any, maxDistance: number): Promise<bool
 /**
  * Finds water blocks with air above them
  */
-async function findWaterBlocksWithAirAbove(maxDistance: number): Promise<{pos: Vec3, distance: number}[]> {
+async function findWaterBlocksWithAirAbove(maxDistance: number): Promise<{ pos: Vec3, distance: number }[]> {
   // First find water blocks without checking air above in the matcher
   const waterBlocks = bot.findBlocks({
     matching: (block) => block !== null && block.name === "water",
     maxDistance: maxDistance,
     count: 50
   });
-  
+
   if (waterBlocks.length === 0) {
     return [];
   }
-  
+
   // Sort water blocks by distance
   const sortedWaterPositions = waterBlocks
     .map(pos => ({ pos, distance: bot.entity.position.distanceTo(pos) }))
     .sort((a, b) => a.distance - b.distance);
-  
+
   // Now check if there's air above each water block
   const suitableWaterBlocks = [];
-  
+
   for (const waterData of sortedWaterPositions) {
     const waterPos = waterData.pos;
     const waterBlock = bot.blockAt(waterPos);
-    
+
     if (!waterBlock) continue;
-    
+
     // Check if there's air above this water block
     const abovePos = waterPos.clone();
     abovePos.y += 1;
     const blockAbove = bot.blockAt(abovePos);
-    
+
     if (blockAbove && blockAbove.name === "air") {
       suitableWaterBlocks.push({
         pos: waterPos,
@@ -842,7 +843,7 @@ async function findWaterBlocksWithAirAbove(maxDistance: number): Promise<{pos: V
       });
     }
   }
-  
+
   return suitableWaterBlocks;
 }
 
@@ -851,11 +852,11 @@ async function findWaterBlocksWithAirAbove(maxDistance: number): Promise<{pos: V
  */
 async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, distance: number): Promise<boolean> {
   const waterBlock = bot.blockAt(waterPos);
-  
+
   if (!waterBlock) return false;
-  
+
   console.log(`Trying to place boat at water: ${waterPos.x}, ${waterPos.y}, ${waterPos.z} (distance: ${distance.toFixed(1)})`);
-  
+
   // If we're already close enough, no need to move
   if (distance > 3) {
     try {
@@ -866,36 +867,36 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
       return false;
     }
   }
-  
+
   try {
     // Equip the boat
     await bot.equip(inventoryItem, "hand");
     await __actionsDelay(300);
-    
+
     // Look at the water surface
     const waterSurfacePos = new Vec3(waterPos.x + 0.5, waterPos.y + 0.5, waterPos.z + 0.5);
     await bot.lookAt(waterSurfacePos, true);
     await __actionsDelay(500);
-    
+
     console.log(`Looking at water at ${waterSurfacePos.x}, ${waterSurfacePos.y}, ${waterSurfacePos.z}`);
     console.log(`Bot position: ${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}`);
     console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
-    
+
     // Method 1: Try to place the boat using activateItem
     await bot.activateItem();
     await __actionsDelay(1000);
-    
+
     // Check if boat was placed
     if (await checkEntityPlaced("boat", 8)) {
       console.log(`Successfully deployed boat in water at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
       return true;
     }
-    
+
     // Method 2: Try activating the water block directly
     try {
       await bot.activateBlock(waterBlock);
       await __actionsDelay(1000);
-      
+
       // Check again
       if (await checkEntityPlaced("boat", 8)) {
         console.log(`Successfully deployed boat (method 2) at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}`);
@@ -904,7 +905,7 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
     } catch (e) {
       console.log(`Failed to activate water block: ${e}`);
     }
-    
+
     return false;
   } catch (error) {
     console.log(`Failed to place boat at ${waterPos.x}, ${waterPos.y}, ${waterPos.z}: ${error}`);
@@ -918,33 +919,33 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
 async function deploySaddle(inventoryItem: any, maxDistance: number): Promise<boolean> {
   // Find a rideable animal
   const rideable = world.getNearestEntityWhere(
-    entity => 
-      entity.name === "horse" || 
-      entity.name === "donkey" || 
-      entity.name === "mule" || 
-      entity.name === "pig" || 
+    entity =>
+      entity.name === "horse" ||
+      entity.name === "donkey" ||
+      entity.name === "mule" ||
+      entity.name === "pig" ||
       entity.name === "strider",
     maxDistance
   );
-  
+
   if (!rideable) {
     console.log(`Could not find any rideable animals within ${maxDistance} blocks.`);
     return false;
   }
-  
+
   // Move close to the animal
   if (bot.entity.position.distanceTo(rideable.position) > 3) {
     await goToPosition(rideable.position.x, rideable.position.y, rideable.position.z, 2);
   }
-  
+
   try {
     // Equip the saddle
     await bot.equip(inventoryItem, "hand");
-    
+
     // Look at the animal
     await bot.lookAt(rideable.position);
     await __actionsDelay(300);
-    
+
     // Try to use the saddle on the animal
     return await tryInteractWithEntity(rideable);
   } catch (error) {
@@ -969,15 +970,15 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
   } catch (e) {
     console.log(`activateEntity failed: ${e}`);
   }
-  
+
   // Alternative method: try looking at different parts of the entity
   const offsets = [
-    {x: 0, y: 0, z: 0},
-    {x: 0, y: 1, z: 0},
-    {x: 0.5, y: 0.5, z: 0.5},
-    {x: -0.5, y: 0.5, z: -0.5}
+    { x: 0, y: 0, z: 0 },
+    { x: 0, y: 1, z: 0 },
+    { x: 0.5, y: 0.5, z: 0.5 },
+    { x: -0.5, y: 0.5, z: -0.5 }
   ];
-  
+
   for (const offset of offsets) {
     try {
       const pos = entity.position.offset(offset.x, offset.y, offset.z);
@@ -985,7 +986,7 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
       await __actionsDelay(200);
       await bot.activateItem();
       await __actionsDelay(500);
-      
+
       // Check if action was successful
       // This is entity-specific and would need more detailed implementation
       console.log(`Successfully used item on ${entity.name} (alternative method)`);
@@ -994,7 +995,7 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
       continue;
     }
   }
-  
+
   console.log(`Failed to interact with ${entity.name} after multiple attempts`);
   return false;
 }
@@ -1004,9 +1005,9 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
  */
 async function checkEntityPlaced(entityType: string, distance: number): Promise<boolean> {
   const nearbyEntity = world.getNearestEntityWhere(
-    entity => entity && entity.name && entity.name.toLowerCase().includes(entityType),
+    entity => entity && typeof entity.name === 'string' && entity.name.toLowerCase().includes(entityType),
     distance
   );
-  
+
   return nearbyEntity !== null;
 }

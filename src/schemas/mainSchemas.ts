@@ -5,6 +5,7 @@ import { BotCommands } from "../commands/types";
 export const CommandSchema = z.object({
   id: z.string(),
   command: z.nativeEnum(BotCommands),
+  priority: z.number().default(5),
   args: z.any(),
   retryCount: z.number().default(3),
 });

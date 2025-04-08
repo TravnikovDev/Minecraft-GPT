@@ -77,6 +77,64 @@ The bot communicates with OpenAI through:
 - Function calling with GPT models to execute specific actions
 - Tools API for structured action handling
 
+## TypeScript Type Checking
+
+The project uses TypeScript for type safety. Always run type checking before submitting changes:
+
+```bash
+npm run tsc
+# or
+bun run tsc
+```
+
+### Common Type Issues and Solutions
+
+1. **Mineflayer Type Extensions**
+   - Some Mineflayer properties/methods might not be properly typed in @types
+   - For runtime-available properties not in types, use `// @ts-ignore` with comments
+   - Example: `// @ts-ignore - vehicle property exists at runtime but is not in type definition`
+
+2. **Command Queue Types**
+   - All commands must follow the `CommandType` interface from `schemas/types.ts`
+   - Required fields: `id`, `command`, `priority`, and optional `args` and `retryCount`
+   - When adding commands to queue, ensure all required fields are provided
+
+3. **Zod Schema Synchronization**
+   - Ensure Zod schemas in `schemas/mainSchemas.ts` match TypeScript types in `schemas/types.ts`
+   - The `CommandSchema` must include all fields used in the code
+
+4. **Unused Imports and Variables**
+   - TypeScript flags unused imports and variables as errors
+   - Remove unused code or use `// @ts-ignore` with explanatory comments if needed
+
+5. **Type-Safe Set Operations**
+   - The command queue uses a Set-like structure based on unique hash IDs
+   - Ensure proper type handling when working with `commandSet`
+
+### Type Safety Best Practices
+
+- Define explicit return types for all functions: `function example(): ReturnType {}`
+- Use type guards for runtime type checking: `if (typeof x === 'string') {}`
+- Avoid using `any` - use `unknown` with type assertions instead
+- Create interfaces/types for all complex data structures
+- Maintain proper type definitions for third-party libraries
+- Validate all external data using Zod schemas
+
+### Handling Advanced Type Issues
+
+For challenging type issues, you can create custom type definitions:
+
+```typescript
+// Example: Creating a module declaration for a missing plugin type
+declare module 'mineflayer-example-plugin' {
+  interface Bot {
+    examplePlugin: {
+      methodName(): void;
+    }
+  }
+}
+```
+
 ## Development Workflow
 1. Create new features in the appropriate module directory
 2. Ensure proper TypeScript typing and validation

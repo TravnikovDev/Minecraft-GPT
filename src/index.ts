@@ -1,13 +1,9 @@
 // Path: src/index.ts
 
-import mineflayer, { type Player } from "mineflayer";
+import mineflayer from "mineflayer";
 import { config } from "dotenv";
-import {
-  addCommandToQueue,
-  loadDb,
-  getAllCommands,
-} from "./managers/persistenceManager";
-import { executeCommands } from "./managers/actionManager";
+import { loadDb } from "./managers/persistenceManager";
+import { executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
 import { initiateActionFromAI } from "./managers/aiManager";
 import { Movements, pathfinder } from "mineflayer-pathfinder";
@@ -15,7 +11,6 @@ import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { BotCommands } from "./commands/types";
 
 // Load environment variables
 config();
@@ -65,7 +60,13 @@ bot.once("spawn", () => {
     offhand: true, // Use offhand for food
   };
   bot.autoEat.enable();
+  
+  console.log("Bot spawned and initialized successfully");
+  
+  // Call the handler for bot rejoining - this is important for relogging scenarios
+  handleBotRejoin();
 
+  // Example commented command
   // addCommandToQueue({
   //   id: "pickup",
   //   command: BotCommands.PickupNearbyItems,
@@ -81,10 +82,11 @@ bot.on("chat", async (username, message) => {
   initiateActionFromAI(username, message);
 });
 
-bot.on("playerJoined", (player: Player) => {
+bot.on("playerJoined", (player: mineflayer.Player) => {
   const playerUsername = player.username;
   if (playerUsername === bot.username) return;
   bot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
+  // Example commented command
   // addCommandToQueue({
   //   id: "go-to-player",
   //   command: BotCommands.GoToPlayer,
@@ -94,9 +96,10 @@ bot.on("playerJoined", (player: Player) => {
 });
 
 bot.on("health", () => {
-  const existingAction = getAllCommands().find(
-    (action) => action.id === "defend-self"
-  );
+  // Example commented check
+  // const existingAction = getAllCommands().find(
+  //   (action) => action.id === "defend-self"
+  // );
   // if (!existingAction) {
   //   addCommandToQueue({
   //     id: "defend-self",
@@ -111,9 +114,27 @@ bot.on("breath", () => {
   bot.respawn();
 });
 
-bot.on("end", () => {
-  console.log("Bot disconnected. Exiting...");
-  process.exit(1);
+bot.on("end", (reason) => {
+  console.log(`Bot disconnected: ${reason}. Attempting to reconnect...`);
+  
+  // Don't exit the process if the disconnection might be part of the relogging process
+  // Instead, wait briefly to see if reconnection happens via our unstuck mechanism
+  setTimeout(() => {
+    // If still disconnected after a timeout, then exit
+    if (!bot.entity) {
+      console.log("Bot failed to reconnect. Exiting...");
+      process.exit(1);
+    }
+  }, 10000); // Wait 10 seconds before force exiting
+});
+
+// Add explicit reconnect event to handle planned relog operations
+bot.on("spawn", () => {
+  // This will trigger on every spawn including the first one and after relogging
+  if (bot.entity) {
+    // If this is a respawn after initial connection, call the rejoin handler
+    handleBotRejoin();
+  }
 });
 
 /**
