@@ -31,9 +31,12 @@ export const bot: mineflayer.Bot = mineflayer.createBot(connectionOptions);
 bot.once("spawn", () => {
   // Load Plugins
   bot.loadPlugin(pathfinder);
+  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(pvp);
   bot.loadPlugin(autoEat);
+  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(tool);
+  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(armorManager);
 
   const defaultMove = new Movements(bot);
