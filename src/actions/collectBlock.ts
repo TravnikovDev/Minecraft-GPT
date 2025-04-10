@@ -68,7 +68,7 @@ export async function collectBlock(
       }
 
       // Implement vein mining
-      const veinBlocks = findVeinBlocks(block, 100, range, 1);
+      const veinBlocks = findVeinBlocks(block, num, range, 1);
 
       for (const veinBlock of veinBlocks) {
         if (collected >= num) break;
