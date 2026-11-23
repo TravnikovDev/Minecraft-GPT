@@ -76,6 +76,8 @@ The bot communicates with OpenAI through:
 - `aiManager.ts` - Handles message processing and API communication
 - Function calling with GPT models to execute specific actions
 - Tools API for structured action handling
+- Tool definitions rely on strict mode (`zodFunction` sets `strict: true`), so tool params must be `.nullable()`, not `.optional()`
+- Do not switch to OpenRouter or other non-OpenAI providers: they do not reliably enforce strict tool arguments (see README "AI Model and Providers")
 
 ## TypeScript Type Checking
 
