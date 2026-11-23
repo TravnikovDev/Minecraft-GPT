@@ -33,9 +33,20 @@ export async function execute(args: any) {
     return;
   }
 
-  let { toolCount } = parsed.data;
-  // Default values for toolCount
-  toolCount = toolCount || { pickaxe: 1, axe: 1, sword: 0, shovel: 0 };
+  // The model sends every field (null when unspecified). If no count is given,
+  // use the defaults; otherwise unspecified tools mean 0.
+  const requested = parsed.data.toolCount;
+  const anySpecified =
+    !!requested && Object.values(requested).some((count) => count != null);
+  const defaults = { pickaxe: 1, axe: 1, sword: 0, shovel: 0 };
+  const toolCount = anySpecified
+    ? {
+        pickaxe: requested?.pickaxe ?? 0,
+        axe: requested?.axe ?? 0,
+        sword: requested?.sword ?? 0,
+        shovel: requested?.shovel ?? 0,
+      }
+    : { ...defaults };
 
   try {
     // Check existing wooden tools and adjust toolCount

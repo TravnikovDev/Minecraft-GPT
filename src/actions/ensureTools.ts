@@ -4,7 +4,7 @@
 
 import { bot } from "..";
 import { craftRecipe } from "./crafting";
-import { ensureCraftingTable, ensurePlanks, ensureSticks } from "./ensure";
+import { ensureCraftingTable, ensurePlanks, ensureSticks, shouldGiveUp } from "./ensure";
 import { getItemCount } from "./inventory";
 
 // Define the valid tool types as a union type
@@ -56,7 +56,9 @@ const ensureTool = async (
     return true;
   }
 
+  let attempt = 0;
   while (toolCount < quantity) {
+    if (shouldGiveUp(++attempt, `${toolType}(s)`)) return false;
     // Iterate over the tool materials from best (diamond) to worst (wooden)
     for (const material of TOOLS_MATERIALS) {
       const toolRecipe = `${material}_${toolType}`; // Craft tool name like diamond_pickaxe, iron_sword
@@ -64,7 +66,7 @@ const ensureTool = async (
 
       // Check if we have enough material for the current tool
       if (hasResources) {
-        await ensureCraftingTable();
+        if (!(await ensureCraftingTable())) return false;
 
         const sticksEnsured = await ensureSticks(2);
 
@@ -92,7 +94,7 @@ const ensureTool = async (
       } else if (material === "wooden") {
         // Crafting planks if we don't have enough resources for wooden tools
         console.log(`Bot: Crafting planks for ${material} ${toolType}...`);
-        await ensurePlanks(4);
+        if (!(await ensurePlanks(4))) return false;
       }
     }
   }
