@@ -13,7 +13,7 @@ export const parameters = z.object({
   player_name: z.string().describe("The name of the player to follow."),
   distance: z
     .number()
-    .optional()
+    .nullable()
     .describe("The distance to keep from the player."),
 });
 

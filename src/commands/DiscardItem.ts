@@ -10,7 +10,7 @@ Example: "Discard the sword.", "Drop the pickaxe", "Get rid of the food.".`;
 // Define parameters for the DiscardItem action
 export const parameters = z.object({
   item_name: z.string().describe("The name of the item to discard"),
-  num: z.number().optional().describe("The number of items to discard."),
+  num: z.number().nullable().describe("The number of items to discard."),
 });
 
 // Implement the DiscardItem action

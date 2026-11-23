@@ -13,11 +13,11 @@ If the bot is stuck, it will attempt to move away by the specified distance. Exa
 export const parameters = z.object({
   distance: z
     .number()
-    .optional()
+    .nullable()
     .describe("The distance to move away when stuck."),
   maxStuckTime: z
     .number()
-    .optional()
+    .nullable()
     .describe(
       "Maximum time in seconds before considering the bot to be stuck."
     ),

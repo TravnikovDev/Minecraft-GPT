@@ -16,12 +16,12 @@ If no parameters are provided, the bot will craft 2 pickaxes, 1 axe, 0 sword, an
 export const parameters = z.object({
   toolCount: z
     .object({
-      pickaxe: z.number().optional(),
-      axe: z.number().optional(),
-      sword: z.number().optional(),
-      shovel: z.number().optional(),
+      pickaxe: z.number().nullable(),
+      axe: z.number().nullable(),
+      sword: z.number().nullable(),
+      shovel: z.number().nullable(),
     })
-    .optional()
+    .nullable()
     .describe("The number of each tool to craft."),
 });
 

@@ -15,9 +15,9 @@ Expected usage: "Show me the base" or "Show the base to the player name" or "Sho
 export const parameters = z.object({
   player_name: z
     .string()
-    .optional()
+    .nullable()
     .describe("The name of the player to go to."),
-  //   base_name: z.string().optional().describe("The name of the base to go to."),
+  //   base_name: z.string().nullable().describe("The name of the base to go to."),
 });
 
 // Implement the ShowMeBase action

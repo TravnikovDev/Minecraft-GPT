@@ -14,7 +14,7 @@ export const parameters = z.object({
   item_name: z.string().describe("The name of the item to give."),
   num: z
     .number()
-    .optional()
+    .nullable()
     .describe("The number of items to give to the player."),
 });
 

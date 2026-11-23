@@ -13,20 +13,20 @@ and dimensions, placing torches at the specified interval. If no parameters are 
 
 // Define parameters for DigDirectionalTunnel action
 export const parameters = z.object({
-  depth: z.number().optional().describe("Depth of the tunnel"),
-  torchInterval: z.number().optional().describe("Interval for torch placement"),
+  depth: z.number().nullable().describe("Depth of the tunnel"),
+  torchInterval: z.number().nullable().describe("Interval for torch placement"),
   tunnelSize: z
     .object({
       width: z.number(),
       height: z.number(),
     })
-    .optional()
+    .nullable()
     .describe("Dimensions of the tunnel"),
   direction: z
     .enum(["north", "south", "west", "east"])
-    .optional()
+    .nullable()
     .describe("Tunnel direction"),
-  tunnelName: z.string().optional().describe("Name of the tunnel"),
+  tunnelName: z.string().nullable().describe("Name of the tunnel"),
 });
 
 // Implement the DigDirectionalTunnel action
@@ -56,7 +56,7 @@ export async function execute(args: any) {
     depth,
     tunnelSize,
     startPosition,
-    tunnelName,
+    tunnelName ?? undefined,
     torchInterval
   );
 

@@ -1,8 +1,6 @@
 // Path: config/env.ts
 
-import { config } from "dotenv";
 
-config();
 
 // Environment Variables
 export const SERVER_HOST = process.env["SERVER_HOST"] || "localhost";

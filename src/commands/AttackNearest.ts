@@ -3,15 +3,15 @@
 import { z } from "zod";
 import { bot } from "../index";
 import { Entity } from "prismarine-entity";
-import { attackEntity, isHostile, getPriorityTargets } from "../actions/combat";
+import { attackEntity, getPriorityTargets } from "../actions/combat";
 
 export const description = `The user asks the bot to attack the nearest mob of a given type. The bot will search for the
 nearest mob of the given type and attack it using intelligent tactics. Example: "Attack the nearest zombie.", "Please hit the nearest creeper.", "Attack the closest hostile mob."`;
 
 // Define parameters for the AttackNearest action
 export const parameters = z.object({
-  mobType: z.string().optional().describe("The type of mob to attack."),
-  range: z.number().optional().describe("Maximum range to search for mobs. Default is 16 blocks."),
+  mobType: z.string().nullable().describe("The type of mob to attack."),
+  range: z.number().nullable().describe("Maximum range to search for mobs. Default is 16 blocks."),
 });
 
 // Implement the AttackNearest action
@@ -25,7 +25,8 @@ export async function execute(args: any) {
     return;
   }
 
-  const { mobType, range = 16 } = parsed.data;
+  const { mobType } = parsed.data;
+  const range = parsed.data.range ?? 16;
 
   let targetMob: Entity | null = null;
 

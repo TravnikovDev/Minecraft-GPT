@@ -39,7 +39,7 @@ export function isHostile(entity: Entity): boolean {
 export function getMobThreatInfo(entity: Entity) {
   if (!entity || !entity.name) return null;
   const mobName = entity.name.toLowerCase();
-  return hostileMobsInfo[mobName] || null;
+  return hostileMobsInfo[mobName as keyof typeof hostileMobsInfo] || null;
 }
 
 // Get entities sorted by priority (threat level and distance)

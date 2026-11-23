@@ -13,11 +13,11 @@ based on nearby threats or weapon type specified. Examples: "Equip the best weap
 export const parameters = z.object({
   weaponType: z
     .string()
-    .optional()
+    .nullable()
     .describe("Specific type of weapon to equip (sword, axe, bow, shield)"),
   offhand: z
     .boolean()
-    .optional()
+    .nullable()
     .describe("Whether to also equip a shield in the off-hand when appropriate"),
 });
 
@@ -32,7 +32,8 @@ export async function execute(args: any) {
     return;
   }
 
-  const { weaponType, offhand = true } = parsed.data;
+  const { weaponType } = parsed.data;
+  const offhand = parsed.data.offhand ?? true;
 
   try {
     // If a specific weapon type is requested

@@ -17,7 +17,7 @@ export const parameters = z.object({
       height: z.number(),
       length: z.number(),
     })
-    .optional()
+    .nullable()
     .describe("Dimensions of the basement room"),
 });
 

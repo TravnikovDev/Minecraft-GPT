@@ -6,7 +6,7 @@ export const CommandSchema = z.object({
   id: z.string(),
   command: z.nativeEnum(BotCommands),
   priority: z.number().default(5),
-  args: z.any(),
+  args: z.any().optional(),
   retryCount: z.number().default(3),
 });
 

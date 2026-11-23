@@ -10,7 +10,7 @@ Example: "Craft a diamond sword", "Craft 5 wooden planks", "Craft 10 torches", e
 // Define parameters for CraftItem action
 export const parameters = z.object({
   itemName: z.string().describe("The name of the item to craft."),
-  itemCount: z.number().optional().describe("The number of items to craft."),
+  itemCount: z.number().nullable().describe("The number of items to craft."),
 });
 
 // Implement the CraftItem action

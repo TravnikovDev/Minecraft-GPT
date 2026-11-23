@@ -9,8 +9,8 @@ specified type and move towards it. If no parameters are provided, the bot will 
 // Define parameters for the GoToBlock action
 export const parameters = z.object({
   blockType: z.string().describe("The type of block to go to."),
-  minDistance: z.number().optional().describe("Minimum distance to the block."),
-  range: z.number().optional().describe("Maximum search range for the block."),
+  minDistance: z.number().nullable().describe("Minimum distance to the block."),
+  range: z.number().nullable().describe("Maximum search range for the block."),
 });
 
 // Function to get the nearest block of a specific type

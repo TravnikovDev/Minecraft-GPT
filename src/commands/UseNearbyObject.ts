@@ -13,8 +13,8 @@ Expected usage:
 // Define parameters for the UseNearbyObject action
 export const parameters = z.object({
   objectType: z.string().describe("The type of object to interact with (boat, minecart, horse, camel, button, lever, door, etc.)"),
-  action: z.string().optional().describe("The action to perform (use, enter, exit, ride, mount, dismount, toggle, etc.)"),
-  maxDistance: z.number().optional().describe("Maximum distance to search for the object (default: 16 blocks)")
+  action: z.string().nullable().describe("The action to perform (use, enter, exit, ride, mount, dismount, toggle, etc.)"),
+  maxDistance: z.number().nullable().describe("Maximum distance to search for the object (default: 16 blocks)")
 });
 
 // Implement the UseNearbyObject action
@@ -28,7 +28,9 @@ export async function execute(args: any): Promise<void> {
     return;
   }
 
-  const { objectType, action = "use", maxDistance = 16 } = parsed.data;
+  const { objectType } = parsed.data;
+  const action = parsed.data.action ?? "use";
+  const maxDistance = parsed.data.maxDistance ?? 16;
   
   // Process action variants
   let normalizedAction = action.toLowerCase();

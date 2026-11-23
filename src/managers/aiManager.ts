@@ -2,7 +2,6 @@
 
 import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
-import { v4 as uuidv4 } from "uuid";
 import { bot } from "..";
 import { isBotAction } from "../commands/types";
 import { tools } from "./toolManager";
@@ -41,7 +40,8 @@ export async function sendMessageToOpenAI(
 ): Promise<OpenAI.Chat.Completions.ChatCompletion.Choice | null> {
   try {
     const openAiResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-6-luna",
+      reasoning_effort: "none",
       messages: [
         {
           role: "system",
@@ -77,7 +77,9 @@ export async function handleOpenAIResponse(
   }
 
   const response = openAiChoice.message?.content || null;
-  const toolCall = openAiChoice.message?.tool_calls?.[0].function || null;
+  const firstToolCall = openAiChoice.message?.tool_calls?.[0];
+  const toolCall =
+    firstToolCall?.type === "function" ? firstToolCall.function : null;
 
   console.log("Response:", response);
   console.log("Tool Call:", toolCall);
@@ -124,7 +126,7 @@ export async function initiateActionFromAI(
     const toolAction = await executeToolCall(toolCall);
     if (toolAction) {
       if (isBotAction(toolAction.action)) {
-        const actionId = uuidv4();
+        const actionId = crypto.randomUUID();
         // Log for debugging
         console.log(
           `Adding action to queue: ${

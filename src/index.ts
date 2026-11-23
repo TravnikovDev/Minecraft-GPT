@@ -1,7 +1,6 @@
 // Path: src/index.ts
 
 import mineflayer from "mineflayer";
-import { config } from "dotenv";
 import { loadDb } from "./managers/persistenceManager";
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { SERVER_HOST, SERVER_PORT } from "./config/env";
@@ -11,11 +10,10 @@ import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { nightDefense, defendSelf } from "./actions/combat";
+import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 
 // Load environment variables
-config();
 
 // Load Database before starting bot
 loadDb();
@@ -33,12 +31,9 @@ export const bot: mineflayer.Bot = mineflayer.createBot(connectionOptions);
 bot.once("spawn", () => {
   // Load Plugins
   bot.loadPlugin(pathfinder);
-  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(pvp);
   bot.loadPlugin(autoEat);
-  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(tool);
-  // @ts-ignore - Plugin type compatibility issue between different versions of mineflayer used by plugins
   bot.loadPlugin(armorManager);
 
   const defaultMove = new Movements(bot);

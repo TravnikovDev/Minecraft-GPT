@@ -15,9 +15,9 @@ export const description = `When user asks the bot to go to a player, the bot wi
 export const parameters = z.object({
   player_name: z
     .string()
-    .optional()
+    .nullable()
     .describe("The name of the player to go to."),
-  closeness: z.number().optional().describe("How close to get to the player."),
+  closeness: z.number().nullable().describe("How close to get to the player."),
 });
 
 // Implement the GoToPlayer action
@@ -49,11 +49,17 @@ export async function execute(args: any = {}) {
     }
   }
 
-  bot.chat(`Heading towards ${targetPlayer.username || targetPlayer.name}.`);
+  const targetName = targetPlayer.username || targetPlayer.name;
+  if (!targetName) {
+    bot.chat(`Could not determine the target player's name.`);
+    return;
+  }
+
+  bot.chat(`Heading towards ${targetName}.`);
   
   // Try to use the dedicated goToPlayer function first which uses GoalFollow
   try {
-    const success = await goToPlayer(targetPlayer.username || targetPlayer.name, closeness);
+    const success = await goToPlayer(targetName, closeness);
     if (success) {
       await bot.lookAt(targetPlayer.position.offset(0, 1.6, 0));
       return;

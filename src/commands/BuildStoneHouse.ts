@@ -10,9 +10,9 @@ walls, a wooden roof, and essential items inside the house. If no dimensions are
 
 // Define parameters for BuildStoneHouse action
 export const parameters = z.object({
-  width: z.number().optional().describe("Width of the house"),
-  length: z.number().optional().describe("Length of the house"),
-  height: z.number().optional().describe("Height of the house"),
+  width: z.number().nullable().describe("Width of the house"),
+  length: z.number().nullable().describe("Length of the house"),
+  height: z.number().nullable().describe("Height of the house"),
 });
 
 // Implement the BuildStoneHouse action

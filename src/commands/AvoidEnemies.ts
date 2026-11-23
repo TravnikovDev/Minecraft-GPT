@@ -4,8 +4,8 @@ import { z } from "zod";
 import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
-import { isHostile, getPriorityTargets } from "../actions/combat";
-import vec3 from "vec3";
+import { getPriorityTargets } from "../actions/combat";
+import vec3, { Vec3 } from "vec3";
 
 export const description = `The user asks the bot to avoid enemies within a certain distance. The bot will move away from 
 hostile mobs to maintain a safe distance. Example: "Avoid enemies within 10 blocks.", "Keep away from the zombies", "Run from creepers"`;
@@ -14,20 +14,20 @@ hostile mobs to maintain a safe distance. Example: "Avoid enemies within 10 bloc
 export const parameters = z.object({
   distance: z
     .number()
-    .optional()
+    .nullable()
     .describe("The distance to maintain from enemies (default 20)."),
   mobType: z
     .string()
-    .optional()
+    .nullable()
     .describe("Specific mob type to avoid (e.g., 'creeper'). If not specified, avoids all hostiles."),
   duration: z
     .number()
-    .optional()
+    .nullable()
     .describe("How long to keep avoiding enemies in seconds (default until no enemies found)."),
 });
 
 // Improve running away behavior to find safer locations
-async function findSafeLocation(threateningMobs: Entity[], distance: number): Promise<vec3> {
+async function findSafeLocation(threateningMobs: Entity[], distance: number): Promise<Vec3> {
   // Start with current position
   let safePosition = bot.entity.position.clone();
   
@@ -76,7 +76,8 @@ export async function execute(args: any) {
     return;
   }
 
-  const { distance = 20, mobType, duration } = parsed.data;
+  const { mobType, duration } = parsed.data;
+  const distance = parsed.data.distance ?? 20;
   const endTime = duration ? Date.now() + (duration * 1000) : null;
   
   bot.chat(`Avoiding hostile mobs by maintaining a distance of ${distance} blocks.`);

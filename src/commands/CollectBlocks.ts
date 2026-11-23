@@ -12,7 +12,7 @@ export const parameters = z.object({
   blockType: z.string().describe("The type of block to collect."),
   range: z
     .number()
-    .optional()
+    .nullable()
     .describe("The maximum distance to search for blocks."),
   num: z.number().describe("The number of blocks to collect."),
 });
@@ -28,9 +28,10 @@ export async function execute(args: any) {
     return;
   }
 
-  let { blockType, range, num } = parsed.data;
+  const { blockType, num } = parsed.data;
+  const range = parsed.data.range ?? 16;
 
-  const result = await collectBlock(blockType, range, num);
+  const result = await collectBlock(blockType, num, range);
 
   if (result) {
     bot.chat(`Collected ${num} ${blockType}.`);

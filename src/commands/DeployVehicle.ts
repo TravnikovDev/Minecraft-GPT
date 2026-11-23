@@ -14,7 +14,7 @@ Expected usage:
 // Define parameters for the DeployVehicle action
 export const parameters = z.object({
   vehicleType: z.string().describe("The type of vehicle to deploy (minecart, boat) or 'saddle' to saddle an animal"),
-  maxDistance: z.number().optional().describe("Maximum distance to search for a suitable placement location (default: 16 blocks)")
+  maxDistance: z.number().nullable().describe("Maximum distance to search for a suitable placement location (default: 16 blocks)")
 });
 
 // Implement the DeployVehicle action
@@ -28,7 +28,8 @@ export async function execute(args: any): Promise<void> {
     return;
   }
 
-  const { vehicleType, maxDistance = 16 } = parsed.data;
+  const { vehicleType } = parsed.data;
+  const maxDistance = parsed.data.maxDistance ?? 16;
   
   // Call the action to deploy the vehicle
   const result = await deployVehicle(vehicleType, maxDistance);

@@ -10,8 +10,8 @@ export const description = `When user asks the bot to move randomly, the bot wil
 
 // Define parameters for RandomMovement action
 export const parameters = z.object({
-  minDistance: z.number().optional().describe("Minimum distance to travel"),
-  maxDistance: z.number().optional().describe("Maximum distance to travel"),
+  minDistance: z.number().nullable().describe("Minimum distance to travel"),
+  maxDistance: z.number().nullable().describe("Maximum distance to travel"),
 });
 
 // Implement the RandomMovement action

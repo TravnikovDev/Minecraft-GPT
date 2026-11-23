@@ -11,7 +11,7 @@ If no parameters are provided, the bot will search for chests within a radius of
 
 // Define parameters for FindAndRememberNearChest action
 export const parameters = z.object({
-  radius: z.number().optional().describe("Radius to search for chests"),
+  radius: z.number().nullable().describe("Radius to search for chests"),
 });
 
 // Chest memory object to store locations and categories
@@ -89,7 +89,7 @@ export async function execute(args: any) {
         chestMemory[category] = [];
       }
       chestMemory[category].push(chestPosition);
-      chest.close();
+      await chest.close();
       bot.chat(`Found a chest categorized as ${category} at ${chestPosition}.`);
     } else {
       console.error(`No block found at position ${chestPosition}`);

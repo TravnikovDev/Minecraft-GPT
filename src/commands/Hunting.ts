@@ -13,7 +13,7 @@ Example: "Hunt for animals within 10 blocks.", "Attack the nearest cow.", "Gathe
 export const parameters = z.object({
   maxDistance: z
     .number()
-    .optional()
+    .nullable()
     .describe("The maximum distance to hunt for animals."),
 });
 
