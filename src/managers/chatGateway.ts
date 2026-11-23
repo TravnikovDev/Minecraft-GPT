@@ -1,0 +1,104 @@
+// Path: src/managers/chatGateway.ts
+// Single entry point for chat: only the configured owner is obeyed, and the
+// most common commands (stop, come, follow, status) are handled by code with
+// no LLM call, so they work instantly and even when OpenAI is unreachable.
+
+import { bot } from "..";
+import { OWNER_USERNAME } from "../config/env";
+import { BotCommands } from "../commands/types";
+import { initiateActionFromAI } from "./aiManager";
+import {
+  cancelCurrentCommand,
+  getCurrentCommandName,
+  stopEverything,
+} from "./actionManager";
+import { executeTool } from "./toolManager";
+import { addCommandToQueue, getAllCommands } from "./persistenceManager";
+
+// Owner commands handled without the LLM. Each pattern matches the whole
+// message (allowing "please", the bot's name and trailing punctuation).
+const PREFIX = String.raw`^(?:(?:hey|ok|okay|please)[,\s]+)*`;
+const SUFFIX = String.raw`[\s,]*(?:please)?[\s!.?]*$`;
+const STOP = new RegExp(`${PREFIX}(?:stop|halt|freeze|stand still)(?:\\s+(?:it|now|everything))?${SUFFIX}`, "i");
+const COME = new RegExp(`${PREFIX}(?:come(?:\\s+(?:here|to me|back))?)${SUFFIX}`, "i");
+const FOLLOW = new RegExp(`${PREFIX}(?:follow me)${SUFFIX}`, "i");
+const STATUS = new RegExp(`${PREFIX}(?:status|what are you doing|what're you doing|whats up|what's up)${SUFFIX}`, "i");
+
+/** True if this username is the configured owner (usernames are case-insensitive). */
+export function isOwner(username: string): boolean {
+  return username.toLowerCase() === OWNER_USERNAME.toLowerCase();
+}
+
+/** Strips a leading "BotName," / "@BotName" so "MinecraftGPT, stop" works too. */
+function stripBotName(message: string): string {
+  const name = bot.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return message.replace(new RegExp(`^@?${name}[,:\\s]+`, "i"), "").trim();
+}
+
+/** Builds a short status line from the bot's real state. */
+async function statusMessage(): Promise<string> {
+  const current = getCurrentCommandName();
+  const queued = (await getAllCommands()).filter((c) => c.command !== current).length;
+  const pos = bot.entity?.position;
+  const where = pos ? `at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}` : "somewhere";
+  const doing = current ? `Doing ${current}` : "Idle";
+  const next = queued > 0 ? `, ${queued} more queued` : "";
+  return `${doing}${next}. Health ${Math.round(bot.health)}/20, food ${bot.food}/20, ${where}.`;
+}
+
+/** Handles the owner's simple commands. Returns true if the message was handled. */
+async function tryFastPath(message: string): Promise<boolean> {
+  if (STOP.test(message)) {
+    console.log("Fast path: stop");
+    await stopEverything();
+    await executeTool(BotCommands.Stop, {});
+    return true;
+  }
+
+  if (COME.test(message) || FOLLOW.test(message)) {
+    const follow = FOLLOW.test(message);
+    console.log(`Fast path: ${follow ? "follow" : "come"}`);
+    // The owner calling outranks whatever the bot is doing right now
+    await cancelCurrentCommand(follow ? "owner asked to follow" : "owner called");
+    await addCommandToQueue({
+      id: crypto.randomUUID(),
+      command: follow ? BotCommands.FollowPlayer : BotCommands.GoToPlayer,
+      priority: 1,
+      retryCount: 0,
+      args: follow
+        ? { player_name: OWNER_USERNAME, distance: 3 }
+        : { player_name: OWNER_USERNAME, closeness: 2 },
+    });
+    bot.chat(follow ? "Following you!" : "Coming!");
+    return true;
+  }
+
+  if (STATUS.test(message)) {
+    console.log("Fast path: status");
+    bot.chat(await statusMessage());
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Handles a chat line or whisper. Messages from anyone but the owner are
+ * ignored; the owner's simple commands use the fast path, everything else
+ * goes to the LLM router.
+ */
+export async function handleChat(username: string, message: string): Promise<void> {
+  if (username === bot.username) return;
+  if (!isOwner(username)) {
+    console.log(`Ignoring chat from ${username} (only ${OWNER_USERNAME} can command the bot)`);
+    return;
+  }
+
+  const text = stripBotName(message);
+  try {
+    if (await tryFastPath(text)) return;
+    await initiateActionFromAI(username, text);
+  } catch (error) {
+    console.error("Error handling owner chat:", error);
+  }
+}

@@ -19,6 +19,10 @@ The project requires the following environment variables:
 - `OPENAI_API_KEY` - OpenAI API key for AI communication
 - `SERVER_HOST` - Minecraft server hostname/IP
 - `SERVER_PORT` - Minecraft server port
+- `OWNER_USERNAME` - The only player whose chat the bot obeys (required)
+- `AUTH` - `offline` (online-mode=false servers) or `microsoft`
+
+All settings are validated by the Zod schema in `src/config/env.ts`; the bot exits with a clear message when one is missing or invalid. Chat goes through `src/managers/chatGateway.ts`: non-owner messages are ignored, and `stop`, `come`, `follow me` and `status` are handled in code without an LLM call. Real-game test steps live in `docs/real-game-checklist.md`.
 
 ## Code Style Guidelines
 - **Imports**: Group imports by source (internal/external). Use named imports for specific functions.

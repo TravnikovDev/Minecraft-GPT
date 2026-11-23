@@ -58,9 +58,11 @@ A standout feature of Minecraft-GPT is its ability to interact naturally with ot
 
         ```sh
         OPENAI_API_KEY=your_openai_api_key
+        OWNER_USERNAME=YourMinecraftName   # the only player the bot obeys
         BOT_USERNAME=MinecraftGPT
         SERVER_HOST=localhost
         SERVER_PORT=25565
+        AUTH=offline                       # or "microsoft" for a real account login
         ```
 
 4. **Run the project**:

@@ -154,7 +154,9 @@ export const ensureSticks = async (neededAmount: number): Promise<boolean> => {
     if (planksCount >= planksNeeded) {
       try {
         const sticksId = getItemId("stick");
-        const recipe = await bot.recipesFor(sticksId, null, 1, null)[0];
+        if (sticksId === null) throw new Error("stick is not a known item");
+        const recipe = bot.recipesFor(sticksId, null, 1, null)[0];
+        if (!recipe) throw new Error("no stick recipe available from current inventory");
         await bot.craft(recipe, neededAmount - sticksCount);
         sticksCount = getItemCount("stick");
         bot.chat(`I have made ${Math.abs(neededAmount - sticksCount)} sticks.`);

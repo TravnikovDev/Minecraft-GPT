@@ -42,6 +42,11 @@ export function isCommandCancelled(): boolean {
   return commandSignal.getStore()?.aborted ?? false;
 }
 
+/** Name of the command currently running, or null when idle. */
+export function getCurrentCommandName(): string | null {
+  return currentCommand?.command ?? null;
+}
+
 /** Stops all bot movement, combat and digging immediately. */
 function haltBot(): void {
   try {
@@ -114,9 +119,12 @@ async function processCommand(nextCommand: CommandType) {
   } catch (error) {
     console.error(`Error executing command ${nextCommand.command}:`, error);
     
-    // Check if this is a retry-worthy error (cancelled commands are not retried)
+    // A failed command always leaves the queue; otherwise it would re-run every
+    // cycle forever (re-adding it was skipped as a duplicate of itself)
+    await removeCommand(nextCommand.id);
+
+    // Re-queue only if it has retries left (cancelled commands are not retried)
     if (!recoveryInProgress && !abort.signal.aborted) {
-      // Optionally adjust priority or add retry count
       nextCommand.retryCount = (nextCommand.retryCount || 0) - 1;
       if (nextCommand.retryCount >= 0) {
         // Increase priority slightly with each retry

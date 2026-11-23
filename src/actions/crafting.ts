@@ -48,11 +48,12 @@ export async function craftRecipe(
 
   if (itemName.endsWith("plank")) itemName += "s"; // Correct common mistakes
 
-  const itemId = gameData.getItemId(itemName);
-  if (itemId === null) {
+  const foundItemId = gameData.getItemId(itemName);
+  if (foundItemId === null) {
     console.log(`Invalid item name: ${itemName}`);
     return false;
   }
+  const itemId: number = foundItemId; // narrowed for use inside closures
 
   // Helper function to attempt crafting
   async function attemptCraft(

@@ -108,10 +108,13 @@ export function isHostile(mob: Entity): boolean {
   );
 }
 
-export function getItemId(itemName: string): number {
+/**
+ * Returns the item's numeric id for the connected server's version, or null
+ * if the name is unknown. (Unknown used to return 0, which is air.)
+ */
+export function getItemId(itemName: string): number | null {
   const item = gameData().itemsByName[itemName];
-
-  return item?.id || 0;
+  return item ? item.id : null;
 }
 
 export function getItemName(itemId: number): string {
@@ -119,9 +122,10 @@ export function getItemName(itemId: number): string {
   return item.name || "";
 }
 
-export function getBlockId(blockName: string): number {
+/** Returns the block's numeric id, or null if the name is unknown (never 0/air). */
+export function getBlockId(blockName: string): number | null {
   const block = gameData().blocksByName?.[blockName];
-  return block?.id || 0;
+  return block ? block.id : null;
 }
 
 export function getBlockName(blockId: number): string {

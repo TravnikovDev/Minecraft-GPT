@@ -1,30 +1,23 @@
-// Path: src/actions/Unstack.ts
+// Path: src/commands/Unstack.ts
 
 import { z } from "zod";
 import { bot } from "../index";
-import { Vec3 } from "vec3";
 import { moveAway } from "../actions/movement";
-import { __actionsDelay } from "../utils/utility";
 
-export const description = `When user asks the bot to unstack, the bot will check if it is stuck at the current position.
-If the bot is stuck, it will attempt to move away by the specified distance. Example: "Unstack", "Move away".`;
+export const description = `When the user says the bot is stuck or asks it to move away, the bot walks a short distance
+away from its current position. Example: "Unstack", "You're stuck", "Get out of there", "Move away".`;
 
 // Define parameters for the Unstack action
 export const parameters = z.object({
   distance: z
     .number()
     .nullable()
-    .describe("The distance to move away when stuck."),
-  maxStuckTime: z
-    .number()
-    .nullable()
-    .describe(
-      "Maximum time in seconds before considering the bot to be stuck."
-    ),
+    .describe("How far to move away, in blocks (default 10)."),
 });
 
-// Implement the Unstack action
-export async function execute(args: any) {
+// Implement the Unstack action: one attempt to move away. (It used to be an
+// endless monitoring loop whose delay was never awaited, which froze the bot.)
+export async function execute(args: any): Promise<void> {
   console.log(`Executing Unstack with args:`, args);
 
   // Validate arguments
@@ -34,34 +27,7 @@ export async function execute(args: any) {
     return;
   }
 
-  const { distance, maxStuckTime } = parsed.data;
-  let prevLocation: Vec3 | null = null;
-  let stuckTime = 0;
-  let lastTime = Date.now();
-
-  // Loop to keep checking if the bot is stuck
-  while (true) {
-    const delta = (Date.now() - lastTime) / 1000;
-    lastTime = Date.now();
-    const currentPosition = bot.entity.position;
-
-    if (
-      prevLocation &&
-      prevLocation.distanceTo(currentPosition) < (distance ?? 10)
-    ) {
-      stuckTime += delta;
-    } else {
-      prevLocation = currentPosition.clone();
-      stuckTime = 0;
-    }
-
-    if (stuckTime > (maxStuckTime ?? 1000)) {
-      // Default to 5 seconds if maxStuckTime is undefined
-      console.log("I'm stuck! Attempting to unstack.");
-      await moveAway(distance ?? 10);
-      stuckTime = 0;
-    }
-
-    __actionsDelay(1000);
-  }
+  const distance = parsed.data.distance ?? 10;
+  const moved = await moveAway(distance);
+  bot.chat(moved ? "I'm free!" : "I couldn't get out of here.");
 }

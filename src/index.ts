@@ -3,10 +3,10 @@
 // reconnects automatically after disconnects, and runs the command loop.
 
 import mineflayer from "mineflayer";
-import { loadDb } from "./managers/persistenceManager";
+import { loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
-import { SERVER_HOST, SERVER_PORT } from "./config/env";
-import { initiateActionFromAI } from "./managers/aiManager";
+import { AUTH, BOT_USERNAME, OWNER_USERNAME, SERVER_HOST, SERVER_PORT } from "./config/env";
+import { handleChat } from "./managers/chatGateway";
 import { Movements, pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
@@ -16,13 +16,19 @@ import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 
 // Load Database before starting bot
-loadDb();
+await loadDb();
+
+// One-off owner commands don't survive a restart: without fresh intent from
+// the owner they would resume on their own. Remembered places are kept.
+await removeAllCommands();
 
 const connectionOptions = {
   host: SERVER_HOST,
   port: SERVER_PORT,
-  username: process.env["BOT_USERNAME"] || "MinecraftGPT",
+  username: BOT_USERNAME,
+  auth: AUTH,
 };
+console.log(`Owner: ${OWNER_USERNAME} (the bot ignores everyone else's chat)`);
 
 // Reconnect with exponential backoff: 5s, 10s, 20s, 40s, then every 60s
 const RECONNECT_BASE_DELAY_MS = 5000;
@@ -99,22 +105,18 @@ function registerBotEvents(currentBot: mineflayer.Bot): void {
     handleBotRejoin();
   });
 
-  // Player chat interaction
-  currentBot.on("chat", async (username, message) => {
-    if (username === currentBot.username) return;
-
-    await currentBot.pathfinder?.stop();
-    initiateActionFromAI(username, message);
+  // Chat and whispers go through the gateway: owner only, fast path first
+  currentBot.on("chat", (username, message) => {
+    void handleChat(username, message);
+  });
+  currentBot.on("whisper", (username, message) => {
+    void handleChat(username, message);
   });
 
   currentBot.on("playerJoined", (player: mineflayer.Player) => {
     const playerUsername = player.username;
     if (playerUsername === currentBot.username) return;
     currentBot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
-  });
-
-  currentBot.on("breath", () => {
-    currentBot.respawn();
   });
 
   currentBot.on("kicked", (reason) => {
