@@ -1,7 +1,5 @@
-import { bot } from "../index";
+import { bot, relogBot } from "../index";
 import { moveAway } from "./movement";
-import { SERVER_HOST, SERVER_PORT } from "../config/env";
-import mineflayer from "mineflayer";
 
 // Keep track of unstuck attempts
 let unstuckAttempts = 0;
@@ -103,62 +101,25 @@ export async function unstuck(): Promise<boolean> {
  */
 async function relogToServer(): Promise<boolean> {
   isRelogging = true;
-  
+
   try {
     console.log("Starting relog procedure...");
-    
-    // Save the username before disconnecting
-    const username = bot.username;
-    
-    // End the current bot instance
-    bot.quit("Relogging to fix being stuck");
-    
-    // Wait a moment for the connection to fully close
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    console.log(`Reconnecting to server ${SERVER_HOST}:${SERVER_PORT} as ${username}...`);
-    
-    // Create a new bot instance with the same credentials
-    const connectionOptions = {
-      host: SERVER_HOST,
-      port: SERVER_PORT,
-      username: username,
-    };
-    
-    // Wait for the new bot to spawn
-    await new Promise<void>((resolve, reject) => {
-      const newBot = mineflayer.createBot(connectionOptions);
-      
-      newBot.once('spawn', () => {
-        console.log("Successfully reconnected to server!");
-        
-        // Reset the unstuck counter since we've successfully relogged
-        unstuckAttempts = 0;
-        isRelogging = false;
-        
-        // Note: The command queue is preserved because it's stored in the database
-        resolve();
-      });
-      
-      newBot.once('error', (err) => {
-        console.error("Error reconnecting to server:", err);
-        isRelogging = false;
-        reject(err);
-      });
-      
-      // Set a timeout in case the reconnection hangs
-      setTimeout(() => {
-        if (isRelogging) {
-          isRelogging = false;
-          reject(new Error("Reconnection timeout"));
-        }
-      }, 30000);
-    });
-    
-    return true;
+
+    // Disconnect and wait for index.ts to create and spawn a fresh bot instance.
+    // The command queue is preserved because it's stored in the database.
+    const success = await relogBot("Relogging to fix being stuck");
+
+    if (success) {
+      console.log("Successfully reconnected to server!");
+      unstuckAttempts = 0; // Reset the counter after a successful relog
+    } else {
+      console.error("Relog timed out; automatic reconnect will keep retrying.");
+    }
+    return success;
   } catch (error) {
     console.error("Failed to relog to the server:", error);
-    isRelogging = false;
     return false;
+  } finally {
+    isRelogging = false;
   }
 }

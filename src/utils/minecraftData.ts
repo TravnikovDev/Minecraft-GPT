@@ -2,19 +2,45 @@
 
 import minecraftData, {
   type Biome,
+  type IndexedData,
   type ShapedRecipe,
   type ShapelessRecipe,
 } from "minecraft-data";
 import prismarineItem from "prismarine-item";
 import { Entity } from "prismarine-entity";
 import type { Bot } from "mineflayer";
+import { bot } from "..";
 
-const GAME_VERSION = "1.20.4";
+/**
+ * Game data must match the server's Minecraft version: item/block IDs and
+ * recipes differ between versions. mineflayer sets `bot.registry` for the
+ * connected server's version once it logs in; before that (or if the bot is
+ * not created yet) we fall back to this version.
+ */
+const FALLBACK_VERSION = "1.21.4";
 
-export const gameData = minecraftData(GAME_VERSION);
-export const Item = prismarineItem(GAME_VERSION);
+let fallbackData: IndexedData | null = null;
+const itemClassCache = new Map<string, ReturnType<typeof prismarineItem>>();
 
-console.log(`Loaded Minecraft data for version ${GAME_VERSION}.`);
+/** Returns minecraft-data for the connected server's version. */
+function gameData(): IndexedData {
+  // bot.registry is a prismarine-registry, which extends minecraft-data's IndexedData
+  const registry = bot?.registry as unknown as IndexedData | undefined;
+  if (registry?.version) return registry;
+  fallbackData ??= minecraftData(FALLBACK_VERSION);
+  return fallbackData;
+}
+
+/** Returns the prismarine-item class for the connected server's version. */
+function itemClass(): ReturnType<typeof prismarineItem> {
+  const version = gameData().version.minecraftVersion ?? FALLBACK_VERSION;
+  let cls = itemClassCache.get(version);
+  if (!cls) {
+    cls = prismarineItem(version);
+    itemClassCache.set(version, cls);
+  }
+  return cls;
+}
 
 export const WOOD_TYPES: string[] = [
   "oak",
@@ -83,30 +109,30 @@ export function isHostile(mob: Entity): boolean {
 }
 
 export function getItemId(itemName: string): number {
-  const item = gameData.itemsByName[itemName];
+  const item = gameData().itemsByName[itemName];
 
   return item?.id || 0;
 }
 
 export function getItemName(itemId: number): string {
-  const item = gameData.items[itemId];
+  const item = gameData().items[itemId];
   return item.name || "";
 }
 
 export function getBlockId(blockName: string): number {
-  const block = gameData.blocksByName?.[blockName];
+  const block = gameData().blocksByName?.[blockName];
   return block?.id || 0;
 }
 
 export function getBlockName(blockId: number): string {
-  const block = gameData.blocks[blockId];
+  const block = gameData().blocks[blockId];
   return block.name || "";
 }
 
 export function getAllItems(ignore: string[] = []): any[] {
   const items: any[] = [];
-  for (const itemId in gameData.items) {
-    const item = gameData.items[itemId];
+  for (const itemId in gameData().items) {
+    const item = gameData().items[itemId];
     if (!ignore.includes(item.name)) {
       items.push(item);
     }
@@ -125,8 +151,8 @@ export function getAllItemIds(ignore: string[] = []): number[] {
 
 export function getAllBlocks(ignore: string[] = []): any[] {
   const blocks: any[] = [];
-  for (const blockId in gameData.blocks) {
-    const block = gameData.blocks[blockId];
+  for (const blockId in gameData().blocks) {
+    const block = gameData().blocks[blockId];
     if (!ignore.includes(block.name)) {
       blocks.push(block);
     }
@@ -144,17 +170,17 @@ export function getAllBlockIds(ignore: string[] = []): number[] {
 }
 
 export function getAllBiomes(): Record<number, Biome> {
-  return gameData.biomes;
+  return gameData().biomes;
 }
 
 export function getItemCraftingRecipes(itemName: string): any[] | null {
   const itemId = getItemId(itemName);
-  if (!itemId || !gameData.recipes[itemId]) {
+  if (!itemId || !gameData().recipes[itemId]) {
     return null;
   }
 
   const recipes: Record<string, number>[] = [];
-  for (const r of gameData.recipes[itemId]) {
+  for (const r of gameData().recipes[itemId]) {
     const recipe: Record<string, number> = {};
     let ingredients: number[] = [];
 
@@ -238,7 +264,7 @@ export function getItemAnimalSource(itemName: string): string | undefined {
 }
 
 export function getBlockTool(blockName: string): string | null {
-  const block = gameData.blocksByName[blockName];
+  const block = gameData().blocksByName[blockName];
   if (!block || !block.harvestTools) {
     return null;
   }
@@ -247,9 +273,13 @@ export function getBlockTool(blockName: string): string | null {
   return toolName || null; // Assuming the first tool is the simplest
 }
 
-export function makeItem(name: string, amount = 1): InstanceType<typeof Item> {
+export function makeItem(
+  name: string,
+  amount = 1
+): InstanceType<ReturnType<typeof prismarineItem>> {
   const itemId = getItemId(name);
-  if (itemId === null) throw new Error(`Item ${name} not found.`);
+  if (!itemId) throw new Error(`Item ${name} not found.`);
+  const Item = itemClass();
   return new Item(itemId, amount);
 }
 

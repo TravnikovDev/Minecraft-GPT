@@ -1,4 +1,6 @@
 // Path: src/index.ts
+// Entry point: creates the Minecraft bot, wires up plugins and events,
+// reconnects automatically after disconnects, and runs the command loop.
 
 import mineflayer from "mineflayer";
 import { loadDb } from "./managers/persistenceManager";
@@ -13,8 +15,6 @@ import armorManager from "mineflayer-armor-manager";
 import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 
-// Load environment variables
-
 // Load Database before starting bot
 loadDb();
 
@@ -24,31 +24,48 @@ const connectionOptions = {
   username: process.env["BOT_USERNAME"] || "MinecraftGPT",
 };
 
-// Create Bot
-export const bot: mineflayer.Bot = mineflayer.createBot(connectionOptions);
+// Reconnect with exponential backoff: 5s, 10s, 20s, 40s, then every 60s
+const RECONNECT_BASE_DELAY_MS = 5000;
+const RECONNECT_MAX_DELAY_MS = 60000;
+let reconnectAttempts = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Event: Bot spawned
-bot.once("spawn", () => {
-  // Load Plugins
-  bot.loadPlugin(pathfinder);
-  bot.loadPlugin(pvp);
-  bot.loadPlugin(autoEat);
-  bot.loadPlugin(tool);
-  bot.loadPlugin(armorManager);
+/**
+ * The active bot instance. It is replaced with a new instance on every
+ * reconnect; modules that `import { bot }` see the new instance through
+ * ES module live bindings, so always read `bot` at call time.
+ */
+export let bot: mineflayer.Bot = createBot();
 
-  const defaultMove = new Movements(bot);
-  defaultMove.allow1by1towers = true; // Do not build 1x1 towers when going up
-  defaultMove.canDig = true; // Disable breaking of blocks when pathing
+/** Creates a bot instance and registers all event handlers on it. */
+function createBot(): mineflayer.Bot {
+  console.log(`Connecting to ${SERVER_HOST}:${SERVER_PORT} as ${connectionOptions.username}...`);
+  const newBot = mineflayer.createBot(connectionOptions);
+  registerBotEvents(newBot);
+  return newBot;
+}
+
+/** Loads plugins and configures behavior once the bot first spawns. */
+function initializeBot(currentBot: mineflayer.Bot): void {
+  currentBot.loadPlugin(pathfinder);
+  currentBot.loadPlugin(pvp);
+  currentBot.loadPlugin(autoEat);
+  currentBot.loadPlugin(tool);
+  currentBot.loadPlugin(armorManager);
+
+  const defaultMove = new Movements(currentBot);
+  defaultMove.allow1by1towers = true; // Allow pillaring up with 1x1 towers
+  defaultMove.canDig = true; // Allow breaking blocks when pathing
   defaultMove.canOpenDoors = true; // Enable opening doors
   defaultMove.maxDropDown = 5;
   defaultMove.digCost = 6;
   defaultMove.placeCost = 6;
   defaultMove.entityCost = 6;
 
-  bot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
+  currentBot.pathfinder.setMovements(defaultMove); // Update the movement instance pathfinder uses
 
   // Configure auto-eat plugin settings
-  bot.autoEat.options = {
+  currentBot.autoEat.options = {
     priority: "foodPoints", // Prioritize foods that restore the most hunger points
     startAt: 14, // Start eating when hunger is at or below this level
     bannedFood: [], // No foods are banned by default
@@ -59,83 +76,102 @@ bot.once("spawn", () => {
     equipOldItem: true, // Equip old item after eating
     offhand: true, // Use offhand for food
   };
-  bot.autoEat.enable();
-  
-  // Enable night defense system - automatically defends against mobs during night
-  nightDefense(1000); // Check for hostiles every 1 seconds during nighttime
-  
-  // Enable health monitoring for self-defense
+  currentBot.autoEat.enable();
+
+  // Night defense: checks for hostiles every second at night (cleared on 'end')
+  nightDefense(1000);
+
+  // Health monitoring for self-defense (listener lives on this bot instance)
   monitorHealth();
-  
-  console.log("Bot spawned and initialized successfully");
-  
-  // Call the handler for bot rejoining - this is important for relogging scenarios
-  handleBotRejoin();
 
-  // Example commented command
-  // addCommandToQueue({
-  //   id: "pickup",
-  //   command: BotCommands.PickupNearbyItems,
-  //   priority: 4,
-  // });
-});
+  console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
+}
 
-// Event: Player chat interaction
-bot.on("chat", async (username, message) => {
-  if (username === bot.username) return;
+/** Registers event handlers on one bot instance. */
+function registerBotEvents(currentBot: mineflayer.Bot): void {
+  currentBot.once("spawn", () => {
+    reconnectAttempts = 0;
+    initializeBot(currentBot);
+  });
 
-  await bot.pathfinder.stop();
-  initiateActionFromAI(username, message);
-});
-
-bot.on("playerJoined", (player: mineflayer.Player) => {
-  const playerUsername = player.username;
-  if (playerUsername === bot.username) return;
-  bot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
-  // Example commented command
-  // addCommandToQueue({
-  //   id: "go-to-player",
-  //   command: BotCommands.GoToPlayer,
-  //   priority: 7,
-  //   args: { player_name: playerUsername, closeness: 5 },
-  // });
-});
-
-// Health handling moved to health.ts monitorHealth function
-
-bot.on("breath", () => {
-  bot.respawn();
-});
-
-bot.on("end", (reason) => {
-  console.log(`Bot disconnected: ${reason}. Attempting to reconnect...`);
-  
-  // Don't exit the process if the disconnection might be part of the relogging process
-  // Instead, wait briefly to see if reconnection happens via our unstuck mechanism
-  setTimeout(() => {
-    // If still disconnected after a timeout, then exit
-    if (!bot.entity) {
-      console.log("Bot failed to reconnect. Exiting...");
-      process.exit(1);
-    }
-  }, 10000); // Wait 10 seconds before force exiting
-});
-
-// Add explicit reconnect event to handle planned relog operations
-bot.on("spawn", () => {
-  // This will trigger on every spawn including the first one and after relogging
-  if (bot.entity) {
-    // If this is a respawn after initial connection, call the rejoin handler
+  // Fires on the first spawn and after every death/respawn
+  currentBot.on("spawn", () => {
     handleBotRejoin();
+  });
+
+  // Player chat interaction
+  currentBot.on("chat", async (username, message) => {
+    if (username === currentBot.username) return;
+
+    await currentBot.pathfinder?.stop();
+    initiateActionFromAI(username, message);
+  });
+
+  currentBot.on("playerJoined", (player: mineflayer.Player) => {
+    const playerUsername = player.username;
+    if (playerUsername === currentBot.username) return;
+    currentBot.chat(`Hello ${playerUsername}! I am MinecraftGPT. How can I help you?`);
+  });
+
+  currentBot.on("breath", () => {
+    currentBot.respawn();
+  });
+
+  currentBot.on("kicked", (reason) => {
+    console.error(`Bot was kicked: ${JSON.stringify(reason)}`);
+  });
+
+  // Without an 'error' listener, connection errors would crash the process
+  currentBot.on("error", (error) => {
+    console.error(`Bot error: ${error.message}`);
+  });
+
+  currentBot.on("end", (reason) => {
+    console.log(`Bot disconnected: ${reason}`);
+    scheduleReconnect();
+  });
+}
+
+/** Schedules creation of a new bot instance after a backoff delay. */
+function scheduleReconnect(): void {
+  if (reconnectTimer) return; // A reconnect is already pending
+
+  const delay = Math.min(
+    RECONNECT_BASE_DELAY_MS * 2 ** reconnectAttempts,
+    RECONNECT_MAX_DELAY_MS
+  );
+  reconnectAttempts++;
+  console.log(`Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts})...`);
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    isProcessing = false; // A command from the old connection may never settle
+    bot = createBot();
+  }, delay);
+}
+
+/**
+ * Disconnects and reconnects the bot with a fresh connection.
+ * Resolves true once the new instance has spawned, false on timeout.
+ */
+export async function relogBot(reason: string, timeoutMs = 60000): Promise<boolean> {
+  const oldBot = bot;
+  oldBot.quit(reason); // Triggers 'end', which schedules the reconnect
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (bot !== oldBot && bot.entity) return true;
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-});
+  return false;
+}
 
 /**
  * Main loop to execute commands in queue
  */
 let isProcessing = false;
 setInterval(async () => {
-  if (isProcessing) return;
+  if (isProcessing || !bot.entity) return; // Skip while disconnected
   isProcessing = true;
   try {
     await executeCommands();
