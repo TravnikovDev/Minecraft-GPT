@@ -8,7 +8,7 @@
         "mineflayer": "^4.39.0",
         "mineflayer-armor-manager": "^2.0.1",
         "mineflayer-auto-eat": "4.0.0",
-        "mineflayer-pathfinder": "^2.4.5",
+        "mineflayer-pathfinder": "github:PrismarineJS/mineflayer-pathfinder#0eb15c14c441df8a93501430ff42c2130cc11ec9",
         "mineflayer-pvp": "^1.3.2",
         "mineflayer-tool": "^1.2.0",
         "openai": "^7.62.0",
@@ -25,6 +25,7 @@
   },
   "overrides": {
     "mineflayer": "^4.39.0",
+    "mineflayer-pathfinder": "github:PrismarineJS/mineflayer-pathfinder#0eb15c14c441df8a93501430ff42c2130cc11ec9",
   },
   "packages": {
     "@azure/msal-common": ["@azure/msal-common@14.16.1", "", {}, "sha512-nyxsA6NA4SVKh5YyRpbSXiMr7oQbwark7JU9LMeg6tJYTSPyAGkdx61wPT4gyxZfxlSxMMEyAsWaubBlNyIa1w=="],
@@ -161,7 +162,7 @@
 
     "mineflayer-auto-eat": ["mineflayer-auto-eat@4.0.0", "", { "dependencies": { "mineflayer": "^4.20.1" } }, "sha512-Da9crqOoXIyg4nxKik3tZo0PpE9CL07WrrCUZIjQuBgBhqhdUsm5/vFJPdTFFMLN2wF22ujrIXJbItXRe4eqIw=="],
 
-    "mineflayer-pathfinder": ["mineflayer-pathfinder@2.4.5", "", { "dependencies": { "minecraft-data": "^3.5.1", "prismarine-block": "^1.16.3", "prismarine-entity": "^2.1.1", "prismarine-item": "^1.11.5", "prismarine-nbt": "^2.2.1", "prismarine-physics": "^1.5.2", "vec3": "^0.1.7" } }, "sha512-Jh3JnUgRLwhMh2Dugo4SPza68C41y+NPP5sdsgxRu35ydndo70i1JJGxauVWbXrpNwIxYNztUw78aFyb7icw8g=="],
+    "mineflayer-pathfinder": ["mineflayer-pathfinder@github:PrismarineJS/mineflayer-pathfinder#0eb15c1", { "dependencies": { "minecraft-data": "^3.5.1", "prismarine-block": "^1.16.3", "prismarine-entity": "^2.1.1", "prismarine-item": "^1.11.5", "prismarine-nbt": "^2.2.1", "prismarine-physics": "^1.5.2", "vec3": "^0.2.0" } }, "PrismarineJS-mineflayer-pathfinder-0eb15c1", "sha512-Oix5vrl46X5wNGhipW/u0/xChQjdQ3sazBEZdtZUFSZVht+HrqTMVKXqSM8GHOKJHaSPwuCKLGkzFlVfmtCdDA=="],
 
     "mineflayer-pvp": ["mineflayer-pvp@1.3.2", "", { "dependencies": { "mineflayer": "^4.0.0", "mineflayer-pathfinder": "^2.0.0", "mineflayer-utils": "^0.1.4" } }, "sha512-CI2T5w4ceiQdQRCFdrCs3OYmvO9G0cOx2qovUt6f27gknpVI90Ihe1qYhf+zBZJCg9uP1oJ1Pemlzw46Mm3wcA=="],
 
@@ -272,6 +273,8 @@
     "zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
     "@azure/msal-node/uuid": ["uuid@8.3.2", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg=="],
+
+    "mineflayer-pathfinder/vec3": ["vec3@0.2.0", "", {}, "sha512-jOjU4zbCNWOKOGLHop1I0J2Ar4h5Zz76455LJhJKhiOJwI21QP6d5TnKklNZDKG+c5h71zWtPAbd9wh+Va57OQ=="],
 
     "mineflayer-utils/@types/node": ["@types/node@14.18.63", "", {}, "sha512-fAtCfv4jJg+ExtXhvCkCqUKZ+4ok/JQk01qDKhL5BDDoS3AxKXhV5/MAVUZyQnSEd2GT92fkgZl0pz0Q0AzcIQ=="],
 

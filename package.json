@@ -8,7 +8,7 @@
     "mineflayer": "^4.39.0",
     "mineflayer-armor-manager": "^2.0.1",
     "mineflayer-auto-eat": "4.0.0",
-    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-pathfinder": "github:PrismarineJS/mineflayer-pathfinder#0eb15c14c441df8a93501430ff42c2130cc11ec9",
     "mineflayer-pvp": "^1.3.2",
     "mineflayer-tool": "^1.2.0",
     "openai": "^7.62.0",
@@ -19,7 +19,8 @@
     "typescript": "7.0.2"
   },
   "overrides": {
-    "mineflayer": "$mineflayer"
+    "mineflayer": "$mineflayer",
+    "mineflayer-pathfinder": "$mineflayer-pathfinder"
   },
   "patchedDependencies": {
     "mineflayer-pvp@1.3.2": "patches/mineflayer-pvp@1.3.2.patch"

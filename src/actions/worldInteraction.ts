@@ -346,10 +346,14 @@ export async function pickupNearbyItems(
   let pickedUp = 0;
   while (nearestItem) {
     // bot.pathfinder.setMovements(new pf.Movements(bot));
-    await bot.pathfinder.goto(
-      new pf.goals.GoalFollow(nearestItem, 0.8),
-      () => { }
-    );
+    try {
+      await bot.pathfinder.goto(new pf.goals.GoalFollow(nearestItem, 0.8));
+    } catch (err) {
+      // pathfinder rejects unreachable goals (e.g. an item on a ledge or in lava);
+      // skip the rest instead of failing the action that wanted the pickup
+      console.log(`Stopped picking up items: ${(err as Error).message}`);
+      break;
+    }
     await __actionsDelay(500);
     const prev = nearestItem;
     nearestItem = getNearestItem(bot);
