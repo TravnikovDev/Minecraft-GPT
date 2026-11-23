@@ -11,6 +11,8 @@ import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
+import { nightDefense, defendSelf } from "./actions/combat";
+import { monitorHealth } from "./actions/health";
 
 // Load environment variables
 config();
@@ -64,6 +66,12 @@ bot.once("spawn", () => {
   };
   bot.autoEat.enable();
   
+  // Enable night defense system - automatically defends against mobs during night
+  nightDefense(1000); // Check for hostiles every 1 seconds during nighttime
+  
+  // Enable health monitoring for self-defense
+  monitorHealth();
+  
   console.log("Bot spawned and initialized successfully");
   
   // Call the handler for bot rejoining - this is important for relogging scenarios
@@ -98,20 +106,7 @@ bot.on("playerJoined", (player: mineflayer.Player) => {
   // });
 });
 
-bot.on("health", () => {
-  // Example commented check
-  // const existingAction = getAllCommands().find(
-  //   (action) => action.id === "defend-self"
-  // );
-  // if (!existingAction) {
-  //   addCommandToQueue({
-  //     id: "defend-self",
-  //     command: BotCommands.DefendSelf,
-  //     priority: 9,
-  //     args: { range: 8 },
-  //   });
-  // }
-});
+// Health handling moved to health.ts monitorHealth function
 
 bot.on("breath", () => {
   bot.respawn();

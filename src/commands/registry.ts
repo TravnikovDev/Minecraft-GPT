@@ -7,7 +7,6 @@ import * as FollowPlayer from "./FollowPlayer";
 import * as GoToBlock from "./GoToBlock";
 import * as CollectBlocks from "./CollectBlocks";
 import * as AttackNearest from "./AttackNearest";
-import * as DefendSelf from "./DefendSelf";
 
 import { BotCommands } from "./types";
 import * as Hunting from "./Hunting";
@@ -53,7 +52,6 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.GoToBlock]: GoToBlock,
   [BotCommands.CollectBlocks]: CollectBlocks,
   [BotCommands.AttackNearest]: AttackNearest,
-  [BotCommands.DefendSelf]: DefendSelf,
   [BotCommands.Hunting]: Hunting,
   [BotCommands.AvoidEnemies]: AvoidEnemies,
   [BotCommands.EquipBestWeapon]: EquipBestWeapon,

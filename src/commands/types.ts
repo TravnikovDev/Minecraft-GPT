@@ -9,7 +9,6 @@ enum BotCommands {
   GoToBlock = "goToBlock",
   CollectBlocks = "collectBlocks",
   AttackNearest = "attackNearest",
-  DefendSelf = "defendSelf",
   Hunting = "hunting",
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",

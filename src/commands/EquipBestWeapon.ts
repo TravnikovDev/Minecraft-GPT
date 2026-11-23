@@ -1,13 +1,25 @@
-// Path: src/actions/EquipBestWeapon.ts
+// Path: src/commands/EquipBestWeapon.ts
 
 import { z } from "zod";
 import { bot } from "../index";
+import { equipBestMeleeWeapon, chooseWeaponForTarget } from "../actions/combat";
+import { getPriorityTargets } from "../actions/combat";
 
-export const description = `When user asks the bot to equip the best weapon, the bot will search for the best weapon 
-in its inventory and equip it. Example: "Equip the best weapon.", "Prepare to fight."`;
+export const description = `When user asks the bot to equip the best weapon, the bot will equip the most appropriate weapon 
+based on nearby threats or weapon type specified. Examples: "Equip the best weapon", "Prepare for combat", 
+"Get your bow ready", "Equip shield for defense", "Use sword and shield"`;
 
 // Define parameters for the EquipBestWeapon action
-export const parameters = z.object({});
+export const parameters = z.object({
+  weaponType: z
+    .string()
+    .optional()
+    .describe("Specific type of weapon to equip (sword, axe, bow, shield)"),
+  offhand: z
+    .boolean()
+    .optional()
+    .describe("Whether to also equip a shield in the off-hand when appropriate"),
+});
 
 // Implement the EquipBestWeapon action
 export async function execute(args: any) {
@@ -20,43 +32,127 @@ export async function execute(args: any) {
     return;
   }
 
+  const { weaponType, offhand = true } = parsed.data;
+
   try {
-    // Filter the weapons from inventory
-    let weapons = bot.inventory
-      .items()
-      .filter(
-        (item) =>
-          item.name.includes("sword") ||
-          (item.name.includes("axe") && !item.name.includes("pickaxe"))
-      );
-
-    // If no suitable weapons, filter for pickaxes or shovels
-    if (weapons.length === 0) {
-      weapons = bot.inventory
-        .items()
-        .filter(
-          (item) =>
-            item.name.includes("pickaxe") || item.name.includes("shovel")
+    // If a specific weapon type is requested
+    if (weaponType) {
+      if (weaponType.includes("bow")) {
+        // Try to equip bow
+        const bows = bot.inventory.items().filter(item => 
+          item.name.includes("bow") && !item.name.includes("crossbow")
         );
-    }
-
-    // If still no weapons, return
-    if (weapons.length === 0) {
-      console.log("No suitable weapon found in inventory.");
-      return;
-    }
-
-    // Sort weapons by attack damage (descending order)
-    // @ts-ignore
-    weapons.sort((a, b) => a.attackDamage < b.attackDamage);
-
-    // Equip the best weapon
-    const bestWeapon = weapons[0];
-    if (bestWeapon) {
-      await bot.equip(bestWeapon, "hand");
-      console.log(`Equipped the best weapon: ${bestWeapon.displayName}`);
+        
+        if (bows.length > 0) {
+          await bot.equip(bows[0], "hand");
+          bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
+          
+          // Check if we have arrows
+          const arrows = bot.inventory.items().filter(item => 
+            item.name.includes("arrow")
+          );
+          
+          if (arrows.length === 0) {
+            bot.chat("Warning: No arrows found in inventory!");
+          }
+          
+        } else {
+          // Try crossbow as fallback
+          const crossbows = bot.inventory.items().filter(item => 
+            item.name.includes("crossbow")
+          );
+          
+          if (crossbows.length > 0) {
+            await bot.equip(crossbows[0], "hand");
+            bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
+            
+            // Check if we have arrows
+            const arrows = bot.inventory.items().filter(item => 
+              item.name.includes("arrow")
+            );
+            
+            if (arrows.length === 0) {
+              bot.chat("Warning: No arrows found in inventory!");
+            }
+          } else {
+            bot.chat("No bow or crossbow found in inventory. Equipping best melee weapon instead.");
+            await equipBestMeleeWeapon();
+          }
+        }
+      } 
+      else if (weaponType.includes("sword")) {
+        // Try to equip sword
+        const swords = bot.inventory.items().filter(item => 
+          item.name.includes("sword")
+        );
+        
+        if (swords.length > 0) {
+          // Sort by quality
+          swords.sort((a, b) => {
+            const materials = ["wooden", "stone", "iron", "golden", "diamond", "netherite"];
+            const aMaterial = materials.findIndex(m => a.name.includes(m));
+            const bMaterial = materials.findIndex(m => b.name.includes(m));
+            return bMaterial - aMaterial;
+          });
+          
+          await bot.equip(swords[0], "hand");
+          bot.chat(`Equipped ${swords[0].displayName} for combat.`);
+          
+          // Equip shield in offhand if available and requested
+          if (offhand) {
+            const shields = bot.inventory.items().filter(item => 
+              item.name.includes("shield")
+            );
+            
+            if (shields.length > 0) {
+              await bot.equip(shields[0], "off-hand");
+              bot.chat(`Also equipped shield in off-hand for defense.`);
+            }
+          }
+        } else {
+          bot.chat("No sword found in inventory. Equipping best melee weapon instead.");
+          await equipBestMeleeWeapon();
+        }
+      }
+      else if (weaponType.includes("shield")) {
+        // Try to equip shield in offhand and best weapon in main hand
+        const shields = bot.inventory.items().filter(item => 
+          item.name.includes("shield")
+        );
+        
+        if (shields.length > 0) {
+          await bot.equip(shields[0], "off-hand");
+          bot.chat(`Equipped shield in off-hand for defense.`);
+          
+          // Equip best melee weapon in main hand
+          await equipBestMeleeWeapon();
+        } else {
+          bot.chat("No shield found in inventory. Equipping best melee weapon only.");
+          await equipBestMeleeWeapon();
+        }
+      }
+      else {
+        // Default to best melee weapon
+        await equipBestMeleeWeapon();
+      }
+    } 
+    else {
+      // No specific type requested, check for nearby enemies to make smart choice
+      const nearbyHostiles = getPriorityTargets(16);
+      
+      if (nearbyHostiles.length > 0) {
+        // Choose weapon based on nearest threat
+        const nearestThreat = nearbyHostiles[0];
+        bot.chat(`Choosing best weapon to fight ${nearestThreat.name}.`);
+        await chooseWeaponForTarget(nearestThreat);
+      } else {
+        // No threats nearby, just equip best melee weapon
+        bot.chat("No specific threats detected. Equipping best general-purpose weapon.");
+        await equipBestMeleeWeapon();
+      }
     }
   } catch (error) {
-    console.error("Failed to equip the best weapon:", error);
+    console.error("Failed to equip the weapon:", error);
+    bot.chat("Failed to equip the requested weapon.");
   }
 }
