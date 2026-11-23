@@ -5,6 +5,7 @@ import { bot } from "../index";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
 import { getPriorityTargets } from "../actions/combat";
+import { isCommandCancelled } from "../managers/actionManager";
 import vec3, { Vec3 } from "vec3";
 
 export const description = `The user asks the bot to avoid enemies within a certain distance. The bot will move away from 
@@ -85,6 +86,11 @@ export async function execute(args: any) {
   let keepRunning = true;
   
   while (keepRunning) {
+    if (isCommandCancelled()) {
+      console.log("AvoidEnemies cancelled.");
+      break;
+    }
+
     // Check if we've reached the duration limit
     if (endTime && Date.now() > endTime) {
       keepRunning = false;

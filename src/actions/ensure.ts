@@ -67,8 +67,12 @@ export const ensurePlanks = async (neededAmount: number): Promise<boolean> => {
 
     // If no logs available, gather more wood
     if (availableLogs.length === 0) {
-      await gatherWood(logsNeeded, 80);
-      console.error("Bot: Not enough logs for planks.");
+      const gathered = await gatherWood(logsNeeded, 80);
+      if (!gathered) {
+        // Avoid looping forever when no trees can be found or the command was cancelled
+        console.error("Bot: Not enough logs for planks and couldn't gather more.");
+        return false;
+      }
       continue;
     }
 

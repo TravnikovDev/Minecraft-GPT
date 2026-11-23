@@ -3,20 +3,27 @@
 import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
 import { bot } from "..";
-import { isBotAction } from "../commands/types";
-import { tools } from "./toolManager";
+import { BotCommands, isBotAction } from "../commands/types";
+import { executeTool, tools } from "./toolManager";
 import { addCommandToQueue } from "./persistenceManager";
+import { stopEverything } from "./actionManager";
+import { normalizeMinecraftName } from "../utils/utility";
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-const setupMessage = `You are a helpful Minecraft assistant. Use the supplied tools to assist the user.
-Act like you are a 12 years old kid playing in a Minecraft game. Try to play with the user.
-Here are some example commands you can understand and how to respond:
-Important: 
-- Always try to response with OPEN AI API "tool" and "message" object
+const setupMessage = `You are MinecraftGPT, a bot playing Minecraft together with the players who chat with you.
+Talk like a friendly, enthusiastic 12-year-old who loves Minecraft and wants to play along.
 
-If the user's request doesn't match one of these actions, politely ask them to clarify.`;
+How to respond:
+- When a player asks you to do something in the game, call the one tool that best matches the request.
+- Use exact Minecraft IDs for items, blocks and mobs, e.g. oak_log, oak_planks, cobblestone, zombie.
+- When you just talk, reply in plain text: one or two short sentences.
+- Never put JSON, code or markdown in your reply; it is shown as-is in Minecraft chat.
+- If a request is unclear or no tool fits, ask a short clarifying question.`;
+
+// Argument names that hold Minecraft item, block or mob IDs
+const MINECRAFT_ID_ARGS = new Set(["itemName", "item_name", "blockType", "mobType"]);
 
 interface ToolCallType {
   name: string;
@@ -125,8 +132,19 @@ export async function initiateActionFromAI(
   if (toolCall) {
     const toolAction = await executeToolCall(toolCall);
     if (toolAction) {
-      if (isBotAction(toolAction.action)) {
+      if (toolAction.action === BotCommands.Stop) {
+        // "stop" must interrupt the running command, so it skips the queue
+        console.log("Stop requested: cancelling current command and clearing the queue");
+        await stopEverything();
+        await executeTool(BotCommands.Stop, toolAction.arguments);
+      } else if (isBotAction(toolAction.action)) {
         const actionId = crypto.randomUUID();
+        // The model sometimes writes "oak planks" instead of the ID "oak_planks"
+        for (const [key, value] of Object.entries(toolAction.arguments ?? {})) {
+          if (MINECRAFT_ID_ARGS.has(key) && typeof value === "string") {
+            toolAction.arguments[key] = normalizeMinecraftName(value);
+          }
+        }
         // Log for debugging
         console.log(
           `Adding action to queue: ${

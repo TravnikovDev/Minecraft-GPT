@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { __actionsDelay } from "../utils/utility";
 import { gatherWood } from "../actions/gatherWood";
+import { isCommandCancelled } from "../managers/actionManager";
 import { bot } from "..";
 
 export const description = `When user asks the bot to gather wood, the bot will search for wood blocks nearby and gather them.
@@ -32,6 +33,7 @@ export async function execute(args: any) {
   num = num || 32;
 
   const result = await gatherWood(num, maxDistance);
+  if (isCommandCancelled()) return; // Stopped by the player; don't report failure
   if (result) {
     bot.chat(`Gathered ${num} wood.`);
   } else {

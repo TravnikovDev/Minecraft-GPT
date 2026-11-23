@@ -216,7 +216,7 @@ export async function sayItems(items: Array<Item> | null = null) {
   if (output) {
     bot.chat(`My inventory contains: ${output}`);
   } else {
-    bot.chat("My inventory is empty.`");
+    bot.chat("My inventory is empty.");
   }
 }
 

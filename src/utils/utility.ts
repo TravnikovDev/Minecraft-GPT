@@ -11,6 +11,18 @@ export function log(message: string, sendToChat = false): void {
   }
 }
 
+/**
+ * Converts a name like "Oak Planks", "oak-planks" or "minecraft:oak_planks"
+ * into the Minecraft ID format "oak_planks".
+ */
+export function normalizeMinecraftName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^minecraft:/, "")
+    .replace(/[\s-]+/g, "_");
+}
+
 // Utility function to introduce a delay
 // @ts-ignore
 export async function __actionsDelay(ms = 2500): Promise<void> {
