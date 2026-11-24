@@ -12,6 +12,7 @@ enum BotCommands {
   Hunting = "hunting",
   AvoidEnemies = "avoidEnemies",
   EquipBestWeapon = "equipBestWeapon",
+  WearArmor = "wearArmor",
   Unstack = "unstack",
   GatherWood = "gatherWood",
   CraftItem = "craftItem",

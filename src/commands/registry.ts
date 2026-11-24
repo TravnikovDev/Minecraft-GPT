@@ -13,6 +13,7 @@ import * as Hunting from "./Hunting";
 import * as AvoidEnemies from "./AvoidEnemies";
 import * as Unstack from "./Unstack";
 import * as EquipBestWeapon from "./EquipBestWeapon";
+import * as WearArmor from "./WearArmor";
 import * as GatherWood from "./GatherWood";
 import * as CraftWoodenTools from "./CraftWoodenTools";
 import * as RandomMovement from "./RandomMovement";
@@ -64,6 +65,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.Hunting]: Hunting,
   [BotCommands.AvoidEnemies]: AvoidEnemies,
   [BotCommands.EquipBestWeapon]: EquipBestWeapon,
+  [BotCommands.WearArmor]: WearArmor,
   [BotCommands.Unstack]: Unstack,
   [BotCommands.GatherWood]: GatherWood,
   [BotCommands.CraftItem]: CraftItem,

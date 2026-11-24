@@ -8,6 +8,7 @@ import { BotCommands } from "./types";
 import { isCommandCancelled } from "../core/commandContext";
 import { addCommandToQueue } from "../managers/persistenceManager";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
+import { isArmorPiece, wearBestArmor } from "../actions/armor";
 
 export const description = `When player is asking the bot to craft an item, the bot works out the recipe, makes the
 parts it can (planks from logs, sticks from planks), uses or places a crafting table, and crafts the item. If raw
@@ -221,4 +222,6 @@ export async function execute(args: any): Promise<void> {
     }
   }
   bot.chat(`Crafted ${count} ${pretty(item)}${parts.length ? ` (made ${listOf(parts)} first)` : ""}.`);
+  // Crafted armor goes on right away (the armor plugin only handles picked-up armor)
+  if (isArmorPiece(item)) await wearBestArmor();
 }

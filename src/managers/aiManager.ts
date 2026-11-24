@@ -10,6 +10,7 @@ import { cancelCurrentCommand, getCurrentCommandName, stopEverything } from "./a
 import { normalizeMinecraftName } from "../utils/utility";
 import { directionFromOwner, ownerDistance } from "./ownerDialog";
 import { recentConversation } from "../core/session";
+import { wornArmor } from "../actions/armor";
 
 // Questions answered from current state: they run immediately, even while the
 // bot is busy with something else, instead of waiting in the queue
@@ -18,6 +19,7 @@ const INSTANT_COMMANDS = new Set<string>([
   BotCommands.ListInventory,
   BotCommands.CheckForItem,
   BotCommands.DescribeSurroundings,
+  BotCommands.WearArmor, // a few clicks; fine in the middle of a task
 ]);
 
 // Requests that should interrupt the running task instead of waiting behind it:
@@ -38,7 +40,8 @@ function stateLine(): string {
   const owner = dist === null ? "not visible" : `${Math.round(dist)} blocks away (bot is ${directionFromOwner()} of owner)`;
   const task = getCurrentCommandName() ?? "idle";
   const held = bot.heldItem?.name ?? "nothing";
-  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
+  const worn = wornArmor().join(", ") || "no armor";
+  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; wearing ${worn}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
 }
 
 // Initialize OpenAI Client
