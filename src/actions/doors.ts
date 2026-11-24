@@ -11,8 +11,8 @@
 
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
-import { bot } from "../core/body";
-import { isWoodenDoor } from "../core/movements";
+import { bot, onConnectionEnd } from "../core/body";
+import { isWoodenDoor, markDoorSolid } from "../core/movements";
 import { pathing } from "../core/plugins";
 
 const CHECK_MS = 150;
@@ -26,8 +26,10 @@ type Opened = { pos: Vec3; axis: "x" | "z"; startSide: number };
 
 // Doors the bot opened (lower half positions), to close behind it
 const openedByBot = new Map<string, Opened>();
-// The pathfinder's current route (node positions), from its path updates
-let route: Vec3[] = [];
+// The pathfinder's live route. Kept by reference, not copied: the pathfinder
+// shifts nodes off this array as the bot walks, so it stays current between
+// replans (a copy goes stale, and a door further along was never "on route")
+let route: Array<{ x: number; y: number; z: number }> = [];
 let busy = false;
 
 const key = (p: Vec3): string => `${p.x},${p.y},${p.z}`;
@@ -53,7 +55,7 @@ function sideOf(opened: { pos: Vec3; axis: "x" | "z" }): { side: number; depth: 
 
 /** True when the bot's planned route (from where it stands) passes through this door. */
 function onRoute(door: Vec3): boolean {
-  const points = [bot.entity.position, ...route.slice(0, ROUTE_NODES)];
+  const points = [bot.entity.position, ...route.slice(0, ROUTE_NODES).map((p) => new Vec3(p.x, p.y, p.z))];
   for (let i = 0; i + 1 < points.length; i++) {
     const a = points[i]!;
     const b = points[i + 1]!;
@@ -84,6 +86,16 @@ function doorToOpen(): Block | null {
   return null;
 }
 
+/** Waits briefly for the server to show the door open. */
+async function becameOpen(pos: Vec3): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    const door = bot.blockAt(pos);
+    if (door && isWoodenDoor(door.name) && isOpen(door)) return true;
+    await new Promise((r) => setTimeout(r, 75));
+  }
+  return false;
+}
+
 /** Should the bot close a door it opened? Through it and clear, or gone elsewhere. */
 function shouldClose(opened: Opened, distance: number): boolean {
   if (pathing.isMoving() && onRoute(opened.pos)) return false; // still about to use it
@@ -103,8 +115,15 @@ async function tick(): Promise<void> {
         const opened = { pos: door.position.clone(), axis: crossingAxis(door), startSide: 0 };
         opened.startSide = sideOf(opened).side;
         await bot.activateBlock(door);
-        openedByBot.set(key(door.position), opened);
-        console.log(`Opened the door at ${door.position}.`);
+        if (await becameOpen(door.position)) {
+          openedByBot.set(key(door.position), opened);
+          console.log(`Opened the door at ${door.position}.`);
+        } else {
+          // The server refused (protected area, adventure mode): route around it
+          markDoorSolid(door.position);
+          if (bot.pathfinder?.movements) pathing.setMovements(bot.pathfinder.movements); // replan
+          console.log(`The door at ${door.position} won't open; finding another way.`);
+        }
       }
     }
     // Close doors behind the bot once it's through
@@ -134,7 +153,7 @@ export function registerDoorOpener(): void {
   route = [];
   busy = false;
   const onPath = (results: { path: Array<{ x: number; y: number; z: number }> }): void => {
-    route = results.path.map((p) => new Vec3(p.x, p.y, p.z));
+    route = results.path;
   };
   const onDone = (): void => {
     route = [];
@@ -143,7 +162,7 @@ export function registerDoorOpener(): void {
   bot.on("goal_reached", onDone);
   bot.on("path_stop", onDone);
   const timer = setInterval(() => void tick(), CHECK_MS);
-  bot.once("end", () => {
+  onConnectionEnd(bot, () => {
     clearInterval(timer);
     bot.off("path_update", onPath);
     bot.off("goal_reached", onDone);

@@ -4,7 +4,7 @@ import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
 import { goals } from "mineflayer-pathfinder";
-import { safeMovements } from "../core/movements";
+import { walkingRules } from "../core/movements";
 import vec3 from "vec3";
 import { fighting, pathing } from "../core/plugins";
 
@@ -89,47 +89,11 @@ export async function attackEntity(targetEntity: Entity): Promise<boolean> {
   }
 }
 
-// Defend Against Nearby Hostiles with prioritization
-export async function defendSelf(range = 16): Promise<boolean> {
-  try {
-    const priorityTargets = getPriorityTargets(range);
-    
-    if (priorityTargets.length > 0) {
-      const target = priorityTargets[0];
-      
-      // Choose appropriate weapon and tactics for highest priority target
-      await chooseWeaponForTarget(target);
-      await useTacticsForTarget(target);
-      
-      fighting.attack(target);
-      bot.chat(`Defending myself against ${target.name} (threat level: ${getMobThreatInfo(target)?.threatLevel})!`);
-      return true;
-    } else {
-      bot.chat(`No hostile entities found nearby to defend against.`);
-      return false;
-    }
-  } catch (error) {
-    console.error("Error while defending self:", error);
-    return false;
-  }
-}
-
-// Stop Combat
-export async function stopCombat(): Promise<void> {
-  try {
-    fighting.stop();
-    pathing.setGoal(null);
-    bot.chat("Stopping combat.");
-  } catch (error) {
-    console.error("Error while stopping combat:", error);
-  }
-}
-
 // Choose the best weapon for a specific target
 export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
   try {
     const threatInfo = getMobThreatInfo(target);
-    if (!threatInfo) return await equipBestWeapon(); // Default if no specific info
+    if (!threatInfo) return await equipBestMeleeWeapon(); // Default if no specific info
     
     const preferredWeapon = threatInfo.preferredWeapon;
     
@@ -256,7 +220,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
         await maintainDistance(target, preferredDistance);
       } else {
         // For melee, get close but use optimal fighting position
-        pathing.setMovements(safeMovements(bot));
+        pathing.setMovements(walkingRules(bot));
         pathing.setGoal(new goals.GoalFollow(target, 2), true);
       }
     }
@@ -279,7 +243,7 @@ async function maintainDistance(target: Entity, distance: number): Promise<void>
     const vectorAway = bot.entity.position.minus(target.position).normalize().scale(distance);
     const targetPosition = bot.entity.position.plus(vectorAway);
     
-    pathing.setMovements(safeMovements(bot));
+    pathing.setMovements(walkingRules(bot));
     pathing.setGoal(new goals.GoalBlock(
       targetPosition.x, 
       targetPosition.y, 
@@ -287,7 +251,7 @@ async function maintainDistance(target: Entity, distance: number): Promise<void>
     ), true);
   } else {
     // Too far, get closer
-    pathing.setMovements(safeMovements(bot));
+    pathing.setMovements(walkingRules(bot));
     pathing.setGoal(new goals.GoalFollow(target, distance), true);
   }
 }
@@ -304,7 +268,7 @@ async function strafeAroundTarget(target: Entity, distance: number): Promise<voi
   const direction = Date.now() % 6000 < 3000 ? 1 : -1; 
   const targetPosition = target.position.plus(strafeVector.scale(direction));
   
-  pathing.setMovements(safeMovements(bot));
+  pathing.setMovements(walkingRules(bot));
   pathing.setGoal(new goals.GoalBlock(
     targetPosition.x, 
     targetPosition.y, 
@@ -338,62 +302,4 @@ async function useShield(): Promise<boolean> {
     console.error("Error using shield:", error);
     return false;
   }
-}
-
-// Night time self-defense system
-export async function nightDefense(checkInterval = 10000): Promise<void> {
-  bot.chat("Enabling night defense system. Will defend against mobs during the night.");
-  
-  // Periodic check function
-  const checkForHostiles = async () => {
-    try {
-      // Check if it's night time (time between 13000 and 23000)
-      const timeOfDay = bot.time.timeOfDay;
-      const isNight = timeOfDay >= 13000 && timeOfDay < 23000;
-      
-      if (isNight) {
-        // In night time, check for hostiles
-        const hostiles = getPriorityTargets(16);
-        
-        if (hostiles.length > 0) {
-          bot.chat("Night defense activated! Hostile mobs detected.");
-          await defendSelf(16);
-        }
-      }
-    } catch (error) {
-      console.error("Error in night defense system:", error);
-    }
-  };
-  
-  // Run check immediately
-  await checkForHostiles();
-  
-  // Set interval to periodically check
-  const intervalId = setInterval(checkForHostiles, checkInterval);
-  
-  // Store interval ID so it can be cleared later
-  // @ts-ignore - adding a custom property
-  bot.nightDefenseInterval = intervalId;
-  
-  // Clear interval when bot is disconnected
-  bot.once('end', () => {
-    clearInterval(intervalId);
-  });
-}
-
-// Stop night defense system
-export function stopNightDefense(): void {
-  // @ts-ignore - accessing custom property
-  if (bot.nightDefenseInterval) {
-    // @ts-ignore
-    clearInterval(bot.nightDefenseInterval);
-    // @ts-ignore
-    bot.nightDefenseInterval = null;
-    bot.chat("Night defense system disabled.");
-  }
-}
-
-// Equip Best Weapon (general function - kept for backward compatibility)
-export async function equipBestWeapon(): Promise<boolean> {
-  return await equipBestMeleeWeapon();
 }

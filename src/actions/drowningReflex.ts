@@ -4,7 +4,7 @@
 // Without this the bot sinks and drowns as soon as a path fails in deep water
 // (nothing holds the jump key once the pathfinder gives up).
 
-import { bot } from "../core/body";
+import { bot, onConnectionEnd } from "../core/body";
 import { pathing } from "../core/plugins";
 import { setReflexActive } from "../core/reflexes";
 
@@ -34,11 +34,6 @@ function ownAir(): number {
 /** True while the bot is swimming up for air (other code should wait). */
 export function isDrowningReflexActive(): boolean {
   return active;
-}
-
-/** Waits until the bot has its breath back. */
-export async function waitForDrowningReflex(): Promise<void> {
-  while (active) await new Promise((r) => setTimeout(r, 250));
 }
 
 function isWaterAt(dy: number): boolean {
@@ -106,6 +101,6 @@ export function registerDrowningReflex(): void {
   floating = false;
   underwaterSince = null;
   const timer = setInterval(tick, CHECK_MS);
-  bot.once("end", () => clearInterval(timer));
+  onConnectionEnd(bot, () => clearInterval(timer));
   bot.on("death", finish);
 }

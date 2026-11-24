@@ -6,9 +6,9 @@
 
 import type { Entity } from "prismarine-entity";
 import type { Item } from "prismarine-item";
-import { bot } from "../core/body";
+import { bot, onConnectionEnd } from "../core/body";
 import { fighting, pathing } from "../core/plugins";
-import { setReflexActive } from "../core/reflexes";
+import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -26,10 +26,6 @@ export function isCreeperReflexActive(): boolean {
   return active;
 }
 
-/** Waits until any creeper encounter is over. */
-export async function waitForCreeperReflex(): Promise<void> {
-  while (active) await new Promise((r) => setTimeout(r, 250));
-}
 
 function isNight(): boolean {
   const t = bot.time?.timeOfDay ?? 0;
@@ -77,6 +73,10 @@ function finish(): void {
 
 async function tick(): Promise<void> {
   if (busy || !bot.entity || !(bot.health > 0)) return;
+  if (areReflexesMuted()) {
+    finish(); // the owner said stop (e.g. penned-in creepers at a mob farm)
+    return;
+  }
   const radius = isNight() ? NIGHT_RADIUS : DAY_RADIUS;
   const creeper = bot.nearestEntity(
     (e) => e.name === "creeper" && e.position.distanceTo(bot.entity.position) <= (active ? SAFE_DISTANCE + 4 : radius)
@@ -135,6 +135,7 @@ export function registerCreeperReflex(): void {
   busy = false;
   lastHitAt = 0;
   const timer = setInterval(() => void tick(), CHECK_MS);
-  bot.once("end", () => clearInterval(timer));
+  onConnectionEnd(bot, () => clearInterval(timer));
   bot.on("death", finish);
+  registerReflexStopper("creeper", finish);
 }

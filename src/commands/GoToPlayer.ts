@@ -6,7 +6,7 @@ import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions
 import { isCommandCancelled } from "../core/commandContext";
 import { lastKnownOwnerPosition, ridingWithOwner, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
-import { safeMovements } from "../core/movements";
+import { walkingRules } from "../core/movements";
 import { unstuck } from "../actions/unstuck";
 import { pathing } from "../core/plugins";
 
@@ -118,10 +118,8 @@ export async function execute(args: any = {}) {
 
   // If GoalFollow fails, try with enhanced GoalNear approach
   try {
-    // Same walking rules (never through the owner's walls), sprinting allowed
-    const movements = safeMovements(bot);
-    movements.allowSprinting = true;
-    pathing.setMovements(movements);
+    // The shared walking rules (never through the owner's walls; sprinting is on by default)
+    pathing.setMovements(walkingRules(bot));
     
     const success = await goToPosition(
       targetPlayer.position.x,

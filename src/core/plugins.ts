@@ -9,6 +9,7 @@ import type { Entity } from "prismarine-entity";
 import type { Movements, goals } from "mineflayer-pathfinder";
 import { bot } from "./body";
 import { isAnyReflexActive, reflexTakeovers, waitForReflexes } from "./reflexes";
+import { isCommandCancelled } from "./commandContext";
 
 type Goal = goals.Goal;
 
@@ -41,7 +42,10 @@ export const pathing = {
    */
   async goto(goal: Goal): Promise<void> {
     for (let retry = 0; ; retry++) {
-      await waitForReflexes();
+      // A stopped command must not walk on after a reflex lets go
+      if (isCommandCancelled()) throw new Error("Cancelled");
+      await waitForReflexes(isCommandCancelled);
+      if (isCommandCancelled()) throw new Error("Cancelled");
       if (!bot.pathfinder) throw new Error("pathfinder is not loaded yet");
       await leaveVehicle();
       const before = reflexTakeovers();
@@ -49,7 +53,7 @@ export const pathing = {
         return await bot.pathfinder.goto(goal);
       } catch (error) {
         const interrupted = isAnyReflexActive() || reflexTakeovers() !== before;
-        if (!interrupted || retry >= MAX_REFLEX_RETRIES) throw error;
+        if (!interrupted || isCommandCancelled() || retry >= MAX_REFLEX_RETRIES) throw error;
       }
     }
   },
@@ -74,9 +78,18 @@ export const pathing = {
   },
   /** Gets out of a boat or off an animal before walking. */
   leaveVehicle,
-  /** Stops at the next safe spot. */
+  /**
+   * Stops walking now. (The pathfinder's own stop() only sets a flag that the
+   * next setGoal consumes, silently cancelling whatever goal comes next, so
+   * it is never called.)
+   */
   stop(): void {
-    bot.pathfinder?.stop();
+    pausedFollow = null;
+    bot.pathfinder?.setGoal(null);
+  },
+  /** Forgets a follow paused by a reflex (a new connection; its entity is gone). */
+  resetPaused(): void {
+    pausedFollow = null;
   },
   isMoving(): boolean {
     return bot.pathfinder?.isMoving() ?? false;
@@ -103,8 +116,18 @@ export const fighting = {
     if (bot.pvp && bot.pathfinder?.movements) bot.pvp.movements = bot.pathfinder.movements;
     return Promise.resolve(bot.pvp?.attack(target));
   },
+  /**
+   * Stops fighting now. pvp.stop() is never used: it calls the pathfinder's
+   * deferred stop (dropping the next goal, e.g. following the owner) and, when
+   * nothing was walking, 5 s later clears the goal and every path_stop
+   * listener. forceStop() just clears pvp's target and the goal.
+   */
   stop(): void {
-    bot.pvp?.stop();
+    bot.pvp?.forceStop();
+  },
+  /** The mob pvp is attacking now, if any. */
+  target(): Entity | null {
+    return (bot.pvp?.target as Entity | undefined) ?? null;
   },
 };
 

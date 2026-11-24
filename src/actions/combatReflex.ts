@@ -8,10 +8,10 @@
 // fighting.
 
 import type { Entity } from "prismarine-entity";
-import { bot } from "../core/body";
+import { bot, onConnectionEnd } from "../core/body";
 import { on } from "../core/events";
 import { fighting, pathing } from "../core/plugins";
-import { setReflexActive } from "../core/reflexes";
+import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
 import { getAttackDamage } from "../utils/utility";
 import { getPriorityTargets } from "./combat";
 import { isCreeperReflexActive } from "./creeperReflex";
@@ -102,7 +102,12 @@ function tick(): void {
       finish(`gave up on ${target.name} (couldn't finish it)`);
       return;
     }
-    if (!over) return;
+    if (!over) {
+      // Re-assert every tick: if something else cleared pvp's target, attack
+      // again instead of standing "in combat" doing nothing
+      if (fighting.target()?.id !== target.id) void fighting.attack(target);
+      return;
+    }
     // Next mob, if another one is close
     const next = pickTarget(isNight() ? NIGHT_RANGE : HIT_BACK_RANGE);
     if (next) engage(next);
@@ -110,6 +115,7 @@ function tick(): void {
     return;
   }
 
+  if (areReflexesMuted()) return; // the owner said stop: leave nearby mobs alone
   const mob = pickTarget(isNight() ? NIGHT_RANGE : MELEE_RANGE);
   if (mob) engage(mob);
 }
@@ -120,8 +126,9 @@ export function registerCombatReflex(): void {
   ignored.clear();
   setReflexActive("combat", false);
   const timer = setInterval(tick, CHECK_MS);
-  bot.once("end", () => clearInterval(timer));
+  onConnectionEnd(bot, () => clearInterval(timer));
   bot.on("death", () => finish("died"));
+  registerReflexStopper("combat", () => finish("stopped by the owner"));
 
   // Hit back when hurt, even by a mob that isn't in melee range yet (skeletons)
   unsubscribe?.();

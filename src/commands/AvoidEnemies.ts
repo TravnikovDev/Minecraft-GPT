@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { goals } from "mineflayer-pathfinder";
-import { safeMovements } from "../core/movements";
+import { walkingRules } from "../core/movements";
 import { Entity } from "prismarine-entity";
 import { getPriorityTargets } from "../actions/combat";
 import { isCommandCancelled } from "../core/commandContext";
@@ -134,7 +134,7 @@ export async function execute(args: any) {
     
     // Move to the safe location
     bot.chat(`Moving away from ${threateningMobs.length} hostile mobs.`);
-    pathing.setMovements(safeMovements(bot));
+    pathing.setMovements(walkingRules(bot));
     pathing.setGoal(new goals.GoalBlock(
       safePosition.x, 
       safePosition.y, 

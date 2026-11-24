@@ -27,6 +27,22 @@ const NATURAL = [
 ];
 const isNatural = (name: string): boolean => !name.includes("glazed") && NATURAL.some((re) => re.test(name));
 
+// Doors that didn't open when the bot used them (a protected area, adventure
+// mode): the path search treats them as walls again until the next connection
+const solidDoors = new Set<string>();
+const posKey = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},${p.z}`;
+
+/** A door that wouldn't open: route around it (both halves). */
+export function markDoorSolid(lower: { x: number; y: number; z: number }): void {
+  solidDoors.add(posKey(lower));
+  solidDoors.add(posKey({ x: lower.x, y: lower.y + 1, z: lower.z }));
+}
+
+/** Forgets doors that wouldn't open (a new connection). */
+export function clearSolidDoors(): void {
+  solidDoors.clear();
+}
+
 /** Wooden doors (iron doors need redstone, so they stay walls). */
 export const isWoodenDoor = (name: string): boolean => name.endsWith("_door") && name !== "iron_door";
 
@@ -36,7 +52,24 @@ const safeRules = new WeakSet<object>();
 /** True when these are walking rules built by safeMovements. */
 export const isSafeMovements = (moves: unknown): boolean => typeof moves === "object" && moves !== null && safeRules.has(moves);
 
-/** Builds the walking rules for a bot. */
+// The bot's one shared set of walking rules (per connection: per Bot object)
+const sharedRules = new WeakMap<Bot, pf.Movements>();
+
+/**
+ * The walking rules everyone uses, built once per connection. Building them
+ * walks the whole block registry, so callers must not rebuild them; changing
+ * a setting on this object changes it for every walk.
+ */
+export function walkingRules(bot: Bot): pf.Movements {
+  let rules = sharedRules.get(bot);
+  if (!rules) {
+    rules = safeMovements(bot);
+    sharedRules.set(bot, rules);
+  }
+  return rules;
+}
+
+/** Builds a fresh copy of the walking rules (only for a one-off variant, e.g. no digging). */
 export function safeMovements(bot: Bot): pf.Movements {
   const doorIds = new Set(bot.registry.blocksArray.filter((b) => isWoodenDoor(b.name)).map((b) => b.id));
 
@@ -44,7 +77,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   class SafeMovements extends pf.Movements {
     getBlock(...args: Parameters<pf.Movements["getBlock"]>): ReturnType<pf.Movements["getBlock"]> {
       const block = super.getBlock(...args);
-      if (block && doorIds.has(block.type)) {
+      if (block && doorIds.has(block.type) && !solidDoors.has(posKey(block.position))) {
         block.safe = true;
         block.physical = false;
         block.replaceable = false;

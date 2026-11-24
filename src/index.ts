@@ -4,23 +4,24 @@
 
 import mineflayer from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
-import { isSafeMovements, safeMovements } from "./core/movements";
+import { clearSolidDoors, isSafeMovements, walkingRules } from "./core/movements";
 import { registerDoorOpener } from "./actions/doors";
 import { autoWearArmor } from "./actions/armor";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
+import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionEnd, onConnectionReady } from "./core/body";
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn, saveBed } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
-import { executeCommands, getCurrentCommandName, handleBotRejoin } from "./managers/actionManager";
+import { abortForDisconnect, executeCommands, getCurrentCommandName, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
 import { handleChat, isOwner } from "./managers/chatGateway";
 import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
+import { pathing } from "./core/plugins";
 import { monitorHealth } from "./actions/health";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
@@ -51,9 +52,6 @@ let restartRecoveryChecked = false;
 
 /** Loads plugins and per-connection behavior once a connection first spawns. */
 onConnectionReady((currentBot) => {
-  // Each timer and reflex adds an "end" listener to clean itself up; more than
-  // Node's default 10 is expected, not a leak
-  currentBot.setMaxListeners(40);
   currentBot.loadPlugin(pathfinder);
   currentBot.loadPlugin(pvp);
   currentBot.loadPlugin(autoEat);
@@ -63,9 +61,9 @@ onConnectionReady((currentBot) => {
   // One set of walking rules: natural terrain only, doors opened (core/movements).
   // mineflayer-pvp brings its own default rules (dig through anything) and
   // swaps them in on every attack, so it gets the same rules.
-  const walkingRules = safeMovements(currentBot);
-  currentBot.pathfinder.setMovements(walkingRules);
-  currentBot.pvp.movements = walkingRules;
+  const rules = walkingRules(currentBot);
+  currentBot.pathfinder.setMovements(rules);
+  currentBot.pvp.movements = rules;
 
   // Backstop: if anything ever swaps in other walking rules (a plugin's
   // defaults dig through walls), say so and put the safe ones back
@@ -73,8 +71,8 @@ onConnectionReady((currentBot) => {
     const current = currentBot.pathfinder?.movements;
     if (!current || isSafeMovements(current)) return;
     console.error("Walking rules were replaced by unsafe ones; restoring the safe rules.");
-    currentBot.pathfinder.setMovements(walkingRules);
-    if (currentBot.pvp) currentBot.pvp.movements = walkingRules;
+    currentBot.pathfinder.setMovements(rules);
+    if (currentBot.pvp) currentBot.pvp.movements = rules;
   });
 
   // Armor it carries but doesn't wear (crafted, given, or after a restart) goes on
@@ -101,12 +99,15 @@ onConnectionReady((currentBot) => {
   currentBot.autoEat.enable();
 
   resetReflexes(); // a new connection starts with no reflex running
+  pathing.resetPaused(); // a follow paused on the old connection points at a gone entity
+  onConnectionEnd(currentBot, abortForDisconnect); // a running task must not drive the next connection
   registerCombatReflex(); // fights back when mobs attack, pausing the task
   monitorHealth(); // self-defense on damage (per-connection state reset inside)
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
   registerDrowningReflex(); // and so is running out of air underwater
   registerDoorOpener(); // opens doors on the way and closes them behind
+  clearSolidDoors(); // doors that wouldn't open last connection may open now
   resetUnstuckState(); // stuck counters from an old connection don't apply
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);

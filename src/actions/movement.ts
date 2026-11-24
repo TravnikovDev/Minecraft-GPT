@@ -50,7 +50,7 @@ export async function travelTo(
   try {
     while (failures < MAX_LEG_FAILURES) {
       if (isCommandCancelled()) return false;
-      await waitForReflexes(); // creepers, mobs and running out of air come first
+      await waitForReflexes(isCommandCancelled); // creepers, mobs and running out of air come first
       const target = getTarget();
       if (!target) return false;
       const pos = bot.entity.position;

@@ -13,7 +13,10 @@ import { executeTool } from "./toolManager";
 import type { CommandType } from "../schemas/types";
 import { bot } from "../core/body";
 import { unstuck } from "../actions/unstuck";
-import { isAnyReflexActive } from "../core/reflexes";
+import { isAnyReflexActive, stopReflexes } from "../core/reflexes";
+
+// How long the owner's "stop" keeps fighting and creeper dodging quiet
+const STOP_MUTES_REFLEXES_MS = 60_000;
 import { fighting, pathing } from "../core/plugins";
 
 // "Doing nothing" watchdog: no movement and no inventory change for this long
@@ -83,7 +86,6 @@ export { getCurrentCommandName, isCommandCancelled };
 function haltBot(): void {
   try {
     pathing.stop();
-    pathing.setGoal(null);
     fighting.stop();
     bot.stopDigging();
     bot.clearControlStates();
@@ -111,6 +113,9 @@ export async function cancelCurrentCommand(reason: string): Promise<void> {
  * command: cancels the current command and clears the whole queue.
  */
 export async function stopEverything(): Promise<void> {
+  // The owner decides what's dangerous: stop ends fighting and creeper
+  // dodging too, and keeps them quiet for a minute (never running out of air)
+  stopReflexes(STOP_MUTES_REFLEXES_MS);
   await cancelCurrentCommand("Stopped by player");
   await removeAllCommands();
 }
@@ -299,6 +304,15 @@ async function handleStuckAction() {
 }
 
 // Event handler for when bot rejoins after a disconnect (to be attached in index.ts)
+/**
+ * The connection dropped: abort the running command now, not at the next
+ * spawn. Otherwise a task that's waiting or looping runs on through the
+ * reconnect delay and then drives the new connection.
+ */
+export function abortForDisconnect(): void {
+  currentAbort?.abort("disconnected");
+}
+
 export function handleBotRejoin() {
   console.log("Bot rejoined the server. Resetting action state and continuing execution.");
   currentAbort?.abort("bot rejoined");

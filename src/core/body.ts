@@ -88,6 +88,30 @@ export function listen(
   else target.on(event, guarded);
 }
 
+// Cleanup to run when a connection ends: one "end" listener per connection
+// instead of one per timer or reflex
+const disposers = new WeakMap<Bot, Array<() => void>>();
+
+/** Runs `dispose` once when this connection ends (stop a timer, drop a listener). */
+export function onConnectionEnd(currentBot: Bot, dispose: () => void): void {
+  let list = disposers.get(currentBot);
+  if (!list) {
+    const fresh: Array<() => void> = [];
+    disposers.set(currentBot, fresh);
+    currentBot.once("end", () => {
+      for (const fn of fresh.splice(0)) {
+        try {
+          fn();
+        } catch (error) {
+          console.error("Connection cleanup failed:", error);
+        }
+      }
+    });
+    list = fresh;
+  }
+  list.push(dispose);
+}
+
 /** A repeating timer that stops automatically when this connection ends. */
 export function everyWhileConnected(currentBot: Bot, ms: number, fn: () => unknown): void {
   const timer = setInterval(() => {
@@ -98,7 +122,7 @@ export function everyWhileConnected(currentBot: Bot, ms: number, fn: () => unkno
       console.error("Timer task failed:", error);
     }
   }, ms);
-  currentBot.once("end", () => clearInterval(timer));
+  onConnectionEnd(currentBot, () => clearInterval(timer));
 }
 
 // --- Chat pacing ----------------------------------------------------------
