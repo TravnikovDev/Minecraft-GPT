@@ -1,7 +1,9 @@
 {
   "scripts": {
     "start": "bun run src/index.ts",
-    "tsc": "tsc --noEmit"
+    "tsc": "tsc --noEmit",
+    "test": "bun test tests",
+    "check": "tsc --noEmit && bun run scripts/checkBoundaries.ts && bun test tests"
   },
   "dependencies": {
     "lowdb": "^7.0.1",
