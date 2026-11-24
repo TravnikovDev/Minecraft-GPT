@@ -16,6 +16,7 @@ import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { isCommandCancelled, trackCleanup } from "../core/commandContext";
 import { goTo } from "../core/primitives";
+import { dismountVehicle, equipItem, hitEntity, lookAt, mountEntity, useHeldItem } from "../core/primitives";
 import { expectOk } from "../core/result";
 
 /** Trips at least this long make the bot get a boat before it sets off. */
@@ -304,10 +305,10 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
   }
   if (isCommandCancelled()) return null;
 
-  await bot.equip(item, "hand");
-  await bot.lookAt(water.offset(0.5, 0.9, 0.5), true);
+  await equipItem(item.name, "hand");
+  await lookAt(water.offset(0.5, 0.9, 0.5));
   const spawned = waitForBoat(water.offset(0.5, 1, 0.5), 3000);
-  bot.activateItem(); // the server places the boat where the bot looks
+  useHeldItem(); // the server places the boat where the bot looks
   bot.deactivateItem();
   const boat = await spawned;
   if (!boat) {
@@ -324,7 +325,7 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
         // close enough to try anyway
       }
     }
-    bot.mount(boat);
+    void mountEntity(boat);
     await waitFor("mount", 2000);
   }
   if (!bot.vehicle) {
@@ -357,7 +358,7 @@ async function boardNearbyBoat(): Promise<{ boat: Entity; surfaceY: number } | n
         // close enough to try anyway
       }
     }
-    bot.mount(boat);
+    void mountEntity(boat);
     await waitFor("mount", 2000);
   }
   return bot.vehicle === boat ? boardedBoat() : null;
@@ -429,7 +430,7 @@ async function pickUpBoat(boat: Entity): Promise<void> {
         break; // drifted out of reach; leave it
       }
     }
-    bot.attack(boat);
+    hitEntity(boat);
     await sleep(350);
   }
   const { pickupNearbyItems } = await import("./worldInteraction");
@@ -474,7 +475,7 @@ export async function crossWaterByBoat(target: XZ): Promise<boolean> {
     // cancelled; the next command waits for it
     const landing = (async (): Promise<void> => {
       if (bot.vehicle) {
-        bot.dismount();
+        void dismountVehicle();
         await waitFor("dismount", 3000);
         await sleep(600); // the server puts the bot on the shore
       }

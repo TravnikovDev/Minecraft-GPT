@@ -8,11 +8,13 @@
 
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
+import type { Entity } from "prismarine-entity";
 import type { Recipe } from "prismarine-recipe";
 import type { goals } from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { bot } from "./body";
 import { guarded } from "./guard";
+import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
 import { placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
@@ -278,6 +280,7 @@ export async function craftWith(recipe: Recipe, times: number, table: Block | nu
   const resultName = bot.registry.items[resultId]?.name ?? String(resultId);
   if (table && !withinReach(table.position)) return fail("out_of_reach", `crafting table at ${table.position}`);
   const before = carried(resultName);
+  await paceClicks(); // a craft is several window clicks
   const done = await guarded(`crafting ${resultName}`, () => bot.craft(recipe, times, table ?? undefined), {
     timeoutMs: CRAFT_TIMEOUT_MS * Math.max(1, Math.ceil(times / 8)),
     onStop: () => {
@@ -306,4 +309,46 @@ export async function sleepIn(bed: Block): Promise<ActionResult> {
   if (!done.ok) return done;
   if (!(await until(() => bot.isSleeping, CONFIRM_MS))) return fail("refused", "not asleep");
   return ok();
+}
+
+// --- Riding and using things ---------------------------------------------------------
+
+/** Gets on a boat, minecart or animal and checks it's riding. */
+export async function mountEntity(entity: Entity): Promise<ActionResult> {
+  if (bot.vehicle === entity) return ok();
+  if (entity.position.distanceTo(bot.entity.position) > REACH + 1) return fail("out_of_reach", `${entity.name ?? "vehicle"} is too far`);
+  const done = await guarded(`getting on the ${entity.name ?? "vehicle"}`, async () => bot.mount(entity), { timeoutMs: USE_TIMEOUT_MS });
+  if (!done.ok) return done;
+  if (!(await until(() => Boolean(bot.vehicle), 2_000))) return fail("refused", `couldn't get on the ${entity.name ?? "vehicle"}`);
+  return ok();
+}
+
+/** Gets off whatever it rides and checks it's off. */
+export async function dismountVehicle(): Promise<ActionResult> {
+  if (!bot.vehicle) return ok();
+  const done = await guarded("getting off", async () => bot.dismount(), { timeoutMs: USE_TIMEOUT_MS });
+  if (!done.ok) return done;
+  if (!(await until(() => !bot.vehicle, 3_000))) return fail("refused", "still riding");
+  return ok();
+}
+
+/** Right-clicks with the held item (place a boat, a minecart; raise a shield with `offHand`). */
+export function useHeldItem(offHand = false): void {
+  bot.activateItem(offHand);
+}
+
+/** Right-clicks an entity (saddle a horse, push a boat). */
+export async function useEntity(entity: Entity): Promise<ActionResult> {
+  if (entity.position.distanceTo(bot.entity.position) > REACH + 1) return fail("out_of_reach", `${entity.name ?? "entity"} is too far`);
+  return guarded(`using the ${entity.name ?? "entity"}`, () => bot.activateEntity(entity), { timeoutMs: USE_TIMEOUT_MS });
+}
+
+/** Hits an entity once (breaking a boat to pick it up). */
+export function hitEntity(entity: Entity): void {
+  bot.attack(entity);
+}
+
+/** Holds or lets go of a movement key (sneak, jump, forward...). */
+export function setControl(control: "forward" | "back" | "left" | "right" | "jump" | "sprint" | "sneak", on: boolean): void {
+  bot.setControlState(control, on);
 }

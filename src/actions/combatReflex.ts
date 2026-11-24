@@ -11,6 +11,7 @@
 import type { Entity } from "prismarine-entity";
 import pf from "mineflayer-pathfinder";
 import { bot, onConnectionEnd } from "../core/body";
+import { equipItem } from "../core/primitives";
 import { on } from "../core/events";
 import { fighting, pathing } from "../core/plugins";
 import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
@@ -66,7 +67,7 @@ function pickTarget(range: number): Entity | null {
 async function equipWeapon(): Promise<void> {
   const best = bestMeleeWeapon(bot.inventory.items(), true);
   if (!best) return; // fists
-  if (bot.heldItem?.name !== best.name) await bot.equip(best, "hand");
+  if (bot.heldItem?.name !== best.name) await equipItem(best.name, "hand");
 }
 
 function engage(mob: Entity): void {

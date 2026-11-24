@@ -1,10 +1,5 @@
 {
-  "src/actions/armor.ts": 1,
-  "src/actions/boat.ts": 7,
-  "src/actions/combat.ts": 1,
-  "src/actions/combatReflex.ts": 1,
   "src/actions/creeperReflex.ts": 5,
   "src/actions/drowningReflex.ts": 6,
-  "src/actions/unstuck.ts": 5,
-  "src/actions/worldInteraction.ts": 25
+  "src/actions/unstuck.ts": 5
 }

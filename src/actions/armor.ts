@@ -3,6 +3,7 @@
 // crafted armor (or armor it already carried) needs an explicit equip.
 
 import { bot } from "../core/body";
+import { armor as armorPlugin } from "../core/plugins";
 import { unequipSlot, type EquipSlot } from "../core/primitives";
 import { describeFailure } from "../core/result";
 
@@ -20,7 +21,7 @@ export function wornArmor(): string[] {
 /** Puts on the best armor the bot carries for each slot. Returns what it wears afterwards. */
 export async function wearBestArmor(): Promise<string[]> {
   try {
-    if (bot.armorManager) await bot.armorManager.equipAll();
+    await armorPlugin.wearBest();
   } catch (error) {
     console.log(`Putting on armor failed: ${(error as Error).message}`);
   }

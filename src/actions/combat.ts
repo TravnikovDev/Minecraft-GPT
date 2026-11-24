@@ -2,6 +2,7 @@
 
 import { bot } from "../core/body";
 import { equipItem, lookAt } from "../core/primitives";
+import { useHeldItem } from "../core/primitives";
 import type { Item } from "prismarine-item";
 import { catalog } from "../core/catalog";
 import { Entity } from "prismarine-entity";
@@ -286,7 +287,7 @@ async function useShield(): Promise<boolean> {
       }
       
       // Activate shield (right click)
-      bot.activateItem(true); // true for offhand
+      useHeldItem(true); // true for offhand
       await __actionsDelay(500); // Block for a moment
       
       // Stop blocking

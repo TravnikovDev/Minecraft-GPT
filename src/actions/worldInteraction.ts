@@ -2,9 +2,7 @@
 
 import { collectDrops } from "./pickup";
 import { bot } from "../core/body";
-import { placingOnPurpose } from "../core/scaffold";
 import { catalog } from "../core/catalog";
-import { markSelfAction } from "../core/events";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
@@ -15,8 +13,9 @@ import type { Bot } from "mineflayer";
 import { __actionsDelay } from "../utils/utility.js";
 import { pathing, tools } from "../core/plugins";
 import { breakBlock, equipItem, goTo, isReplaceable, knownBlock, placeBlockAt, useBlock, withinReach } from "../core/primitives";
-import { describeFailure, fail, ok, wasStopped, type ActionResult } from "../core/result";
+import { describeFailure, expectOk, fail, ok, wasStopped, type ActionResult } from "../core/result";
 import { inChore } from "../core/chores";
+import { dismountVehicle, lookAt, mountEntity as rideEntity, setControl, useEntity, useHeldItem } from "../core/primitives";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 
@@ -301,7 +300,7 @@ async function dismountFromVehicle(): Promise<boolean> {
 
   try {
     console.log(`Currently in a vehicle of type: ${bot.vehicle.name || "unknown"}, dismounting...`);
-    await bot.dismount();
+    await dismountVehicle();
     console.log(`Successfully dismounted from ${bot.vehicle.name || "vehicle"}`);
     return true;
   } catch (error) {
@@ -319,9 +318,9 @@ async function tryAlternateDismount(): Promise<boolean> {
 
   try {
     // In some versions, we can simulate pressing shift
-    bot.setControlState('sneak', true);
+    setControl("sneak", true);
     await __actionsDelay(500);
-    bot.setControlState('sneak', false);
+    setControl("sneak", false);
 
     // Check if we're still in the vehicle
     if (!bot.vehicle) {
@@ -359,14 +358,14 @@ async function mountEntity(entityType: string, maxDistance: number): Promise<boo
 
   try {
     // Look at the entity before mounting
-    await bot.lookAt(targetEntity.position);
+    await lookAt(targetEntity.position);
 
     // Different mounting logic based on entity type
     if (entityType.toLowerCase() === "boat") {
       return await mountBoat(targetEntity);
     } else {
       // Regular mounting for other entities
-      await bot.mount(targetEntity);
+      expectOk(await rideEntity(targetEntity));
       console.log(`Successfully mounted the ${targetEntity.name}`);
       return true;
     }
@@ -415,7 +414,7 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
     // Check if the boat already has passengers
     if (targetEntity.passengers && targetEntity.passengers.length === 1) {
       // There's already one passenger, so we can directly mount as the second passenger
-      await bot.mount(targetEntity);
+      expectOk(await rideEntity(targetEntity));
       console.log(`Mounted as passenger in the ${targetEntity.name}`);
       return true;
     }
@@ -424,10 +423,8 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
 
     // Method 1: Try activateEntity with sneaking (often helps get passenger seat)
     try {
-      // @ts-ignore - Some Mineflayer versions have this method
-      if (bot.activateEntity) {
-        // @ts-ignore
-        await bot.activateEntity(targetEntity, true);
+      {
+        await useEntity(targetEntity);
         console.log(`Attempted to mount as passenger using activateEntity`);
 
         // Check if mounting was successful
@@ -441,7 +438,7 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
     }
 
     // Method 2: Regular mounting (usually gets the driver's seat)
-    await bot.mount(targetEntity);
+    expectOk(await rideEntity(targetEntity));
     console.log(`Mounted the ${targetEntity.name} (likely as driver)`);
     return true;
   } catch (error) {
@@ -449,7 +446,7 @@ async function mountBoat(targetEntity: any): Promise<boolean> {
 
     // Method 3: Fall back to simple mount as last resort
     try {
-      await bot.mount(targetEntity);
+      expectOk(await rideEntity(targetEntity));
       console.log(`Mounted the ${targetEntity.name} with fallback method`);
       return true;
     } catch (innerError) {
@@ -551,7 +548,7 @@ async function deployMinecart(inventoryItem: any, maxDistance: number): Promise<
 
       // Equip the minecart
       console.log(`Equipping ${inventoryItem.name}...`);
-      await bot.equip(inventoryItem, "hand");
+      await equipItem(inventoryItem.name, "hand");
       await __actionsDelay(300);
     }
     // Try multiple methods to place the minecart
@@ -601,7 +598,7 @@ async function findNearestRail(maxDistance: number): Promise<{ railPosition: Vec
 async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<boolean> {
   // Method 1: Look at center of rail and use activateBlock
   console.log(`Looking at rail at ${railPosition.x}, ${railPosition.y}, ${railPosition.z}...`);
-  await bot.lookAt(railPosition.offset(0.5, 0.5, 0.5), true);
+  await lookAt(railPosition.offset(0.5, 0.5, 0.5));
   await __actionsDelay(500);
 
   try {
@@ -611,7 +608,7 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
     console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
 
     console.log(`Activating rail block...`);
-    await bot.activateBlock(railBlock);
+    await useBlock(railBlock);
     await __actionsDelay(1000);
 
     // Check if the minecart was placed
@@ -626,13 +623,12 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
 
     if (referenceBlock && referenceBlock.diggable) {
       // Look directly at the top face of the block below the rail
-      await bot.lookAt(referenceBlock.position.offset(0.5, 1, 0.5), true);
+      await lookAt(referenceBlock.position.offset(0.5, 1, 0.5));
       await __actionsDelay(300);
 
       try {
         // Try to use the minecart on the top face of the block below
-        markSelfAction(referenceBlock.position.offset(0, 1, 0));
-        await placingOnPurpose(() => bot.placeBlock(referenceBlock, new Vec3(0, 1, 0)));
+        await useBlock(referenceBlock); // the minecart onto the rail
         await __actionsDelay(1000);
 
         // Check again if minecart was placed
@@ -647,11 +643,11 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
 
     // Method 3: Try to use activateItem while looking at rail
     console.log(`Trying method 3: activateItem...`);
-    await bot.lookAt(railPosition.offset(0.5, 0.6, 0.5), true);
+    await lookAt(railPosition.offset(0.5, 0.6, 0.5));
     await __actionsDelay(300);
 
     try {
-      await bot.activateItem();
+      useHeldItem();
       await __actionsDelay(1000);
 
       // Check again if minecart was placed
@@ -772,12 +768,12 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
 
   try {
     // Equip the boat
-    await bot.equip(inventoryItem, "hand");
+    await equipItem(inventoryItem.name, "hand");
     await __actionsDelay(300);
 
     // Look at the water surface
     const waterSurfacePos = new Vec3(waterPos.x + 0.5, waterPos.y + 0.5, waterPos.z + 0.5);
-    await bot.lookAt(waterSurfacePos, true);
+    await lookAt(waterSurfacePos);
     await __actionsDelay(500);
 
     console.log(`Looking at water at ${waterSurfacePos.x}, ${waterSurfacePos.y}, ${waterSurfacePos.z}`);
@@ -785,7 +781,7 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
     console.log(`Bot yaw: ${bot.entity.yaw.toFixed(2)}, pitch: ${bot.entity.pitch.toFixed(2)}`);
 
     // Method 1: Try to place the boat using activateItem
-    await bot.activateItem();
+    useHeldItem();
     await __actionsDelay(1000);
 
     // Check if boat was placed
@@ -796,7 +792,7 @@ async function tryPlaceBoatAtWaterLocation(inventoryItem: any, waterPos: Vec3, d
 
     // Method 2: Try activating the water block directly
     try {
-      await bot.activateBlock(waterBlock);
+      await useBlock(waterBlock);
       await __actionsDelay(1000);
 
       // Check again
@@ -842,10 +838,10 @@ async function deploySaddle(inventoryItem: any, maxDistance: number): Promise<bo
 
   try {
     // Equip the saddle
-    await bot.equip(inventoryItem, "hand");
+    await equipItem(inventoryItem.name, "hand");
 
     // Look at the animal
-    await bot.lookAt(rideable.position);
+    await lookAt(rideable.position);
     await __actionsDelay(300);
 
     // Try to use the saddle on the animal
@@ -865,7 +861,7 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
     // @ts-ignore - Some versions of Mineflayer have this method
     if (bot.activateEntity) {
       // @ts-ignore
-      await bot.activateEntity(entity);
+      await useEntity(entity);
       console.log(`Successfully used item on ${entity.name}`);
       return true;
     }
@@ -884,9 +880,9 @@ async function tryInteractWithEntity(entity: any): Promise<boolean> {
   for (const offset of offsets) {
     try {
       const pos = entity.position.offset(offset.x, offset.y, offset.z);
-      await bot.lookAt(pos);
+      await lookAt(pos);
       await __actionsDelay(200);
-      await bot.activateItem();
+      useHeldItem();
       await __actionsDelay(500);
 
       // Check if action was successful

@@ -9,6 +9,7 @@ import type { Item } from "prismarine-item";
 import type { Furnace } from "mineflayer";
 import { bot } from "./body";
 import { guarded } from "./guard";
+import { paceClicks } from "./pace";
 import { carried, withinReach } from "./primitives";
 import { fail, ok, type ActionResult } from "./result";
 
@@ -31,18 +32,9 @@ export const STORAGE_BLOCKS = new Set(["chest", "trapped_chest", "barrel"]);
 const OPEN_TIMEOUT_MS = 5_000;
 const TRANSFER_TIMEOUT_MS = 5_000;
 const CONFIRM_MS = 1_000;
-// Window clicks: Paper allows about 500 per 7 s; a transfer is several clicks
-const CLICK_GAP_MS = 120;
-let lastClickAt = 0;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Waits so window actions stay well under the server's packet limits. */
-export async function paceClicks(): Promise<void> {
-  const wait = lastClickAt + CLICK_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastClickAt = Date.now();
-}
 
 async function until(check: () => boolean, ms: number): Promise<boolean> {
   const end = Date.now() + ms;

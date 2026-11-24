@@ -182,3 +182,11 @@ test("making room puts away only the cheapest few stacks, about a tenth of the i
   // Materials, the coal and logs it works with, gems, food and gear all stay
   expect(plan.some(([n]: any) => ["leather", "raw_copper", "coal", "oak_log", "diamond", "bread"].includes(n))).toBe(false);
 });
+
+test("only mineral blocks count as precious; hay and bone blocks are ordinary", () => {
+  expect(itemValue("iron_block")).toBe(3);
+  expect(itemValue("diamond_block")).toBe(3);
+  expect(itemValue("hay_block")).toBe(2);
+  expect(itemValue("bone_block")).toBe(2);
+  expect(itemValue("dripstone_block")).toBe(1);
+});

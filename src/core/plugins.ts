@@ -197,6 +197,13 @@ export const eating = {
   },
 };
 
+/** Wearing the best armor carried (mineflayer-armor-manager). */
+export const armor = {
+  async wearBest(): Promise<void> {
+    if (bot.armorManager) await bot.armorManager.equipAll();
+  },
+};
+
 /** Picking the right tool (mineflayer-tool). */
 export const tools = {
   equipForBlock(block: Block): Promise<void> {

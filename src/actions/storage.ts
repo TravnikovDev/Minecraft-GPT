@@ -53,8 +53,9 @@ function gearRank(name: string): number {
 
 // Bulk blocks and common drops: cheap, quick to get again
 const BULK = /^(dirt|coarse_dirt|rooted_dirt|cobblestone|cobbled_deepslate|netherrack|gravel|sand|red_sand|stone|deepslate|andesite|diorite|granite|tuff|calcite|dripstone_block|clay_ball|kelp|stick|[a-z_]+_seeds|[a-z_]+_sapling|mangrove_propagule|dandelion|poppy|short_grass|fern|vine)$/;
-// Precious: kept on the bot, never stored as "less valuable"
-const PRECIOUS = /^(diamond|emerald|lapis_lazuli|redstone|quartz|amethyst_shard|ender_pearl|blaze_rod|netherite_scrap|ancient_debris|golden_apple|enchanted_golden_apple|enchanted_book|experience_bottle|name_tag|saddle|totem_of_undying|nether_star|heart_of_the_sea|[a-z_]+_ingot|raw_gold|gold_nugget|[a-z_]+_block)$/;
+// Precious: kept on the bot, never stored as "less valuable" (mineral blocks by
+// exact name: "_block" alone also matches hay, bone and dripstone blocks)
+const PRECIOUS = /^(diamond|emerald|lapis_lazuli|redstone|quartz|amethyst_shard|ender_pearl|blaze_rod|netherite_scrap|ancient_debris|golden_apple|enchanted_golden_apple|enchanted_book|experience_bottle|name_tag|saddle|totem_of_undying|nether_star|heart_of_the_sea|[a-z_]+_ingot|raw_gold|gold_nugget|(?:iron|gold|diamond|emerald|lapis|redstone|netherite|copper|raw_iron|raw_gold|raw_copper)_block)$/;
 
 /**
  * How much an item is worth keeping: 0 junk, 1 bulk blocks and common bits,
