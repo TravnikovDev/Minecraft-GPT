@@ -33,6 +33,20 @@ export async function execute(args: any) {
   }
 
   let { player_name, item_name, num } = parsed.data;
+  item_name = item_name.trim().toLowerCase().replace(/\s+/g, "_");
+
+  // A loose name ("pressure plate", "planks"): match what the bot really carries or wears
+  const have = [...new Set([...bot.inventory.items().map((i) => i.name), ...wornArmor()])];
+  if (!have.includes(item_name)) {
+    const singular = item_name.replace(/s$/, "");
+    const matches = have.filter((n) => n.endsWith(`_${item_name}`) || n.endsWith(`_${singular}`) || n === singular);
+    if (matches.length === 1) item_name = matches[0]!;
+    else if (matches.length > 1) {
+      const names = matches.map((n) => n.replace(/_/g, " "));
+      bot.chat(`I have ${names.slice(0, -1).join(", ")} and ${names.at(-1)}. Which one?`);
+      return;
+    }
+  }
   const pretty = item_name.replace(/_/g, " ");
   let carried = bot.inventory.items().filter((i) => i.name === item_name).reduce((n, i) => n + i.count, 0);
 
