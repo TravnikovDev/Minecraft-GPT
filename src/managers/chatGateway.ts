@@ -14,7 +14,7 @@ import {
 } from "./actionManager";
 import { executeTool } from "./toolManager";
 import { addCommandToQueue, getAllCommands } from "./persistenceManager";
-import { answerPending, hasPendingQuestion } from "./ownerDialog";
+import { answerPending, hasPendingQuestion, rememberOwnerPosition } from "./ownerDialog";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
 // message (allowing "please", the bot's name and trailing punctuation).
@@ -74,6 +74,7 @@ async function tryFastPath(message: string): Promise<boolean> {
   if (coords) {
     const [x, y, z] = coords.slice(1, 4).map(Number) as [number, number, number];
     console.log(`Fast path: go to ${x} ${y} ${z}`);
+    rememberOwnerPosition(x, y, z); // the owner almost always sends their own position
     await cancelCurrentCommand("owner gave coordinates");
     await addCommandToQueue({
       id: crypto.randomUUID(),

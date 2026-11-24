@@ -23,6 +23,23 @@ export function ownerEntity(): Entity | null {
   return name ? bot.players[name]?.entity ?? null : null;
 }
 
+// Where the owner was last seen or said they are, for "come here" when out of sight
+const LAST_KNOWN_TTL_MS = 30 * 60 * 1000;
+let lastKnown: { x: number; y: number; z: number; at: number } | null = null;
+
+/** Records where the owner is (seen, or coordinates they typed). */
+export function rememberOwnerPosition(x: number, y: number, z: number): void {
+  lastKnown = { x, y, z, at: Date.now() };
+}
+
+/** The owner's last known position (within 30 minutes), or null. */
+export function lastKnownOwnerPosition(): { x: number; y: number; z: number } | null {
+  const seen = ownerEntity();
+  if (seen) rememberOwnerPosition(seen.position.x, seen.position.y, seen.position.z);
+  if (!lastKnown || Date.now() - lastKnown.at > LAST_KNOWN_TTL_MS) return null;
+  return { x: lastKnown.x, y: lastKnown.y, z: lastKnown.z };
+}
+
 /** Distance to the owner in blocks, or null if the bot can't see them. */
 export function ownerDistance(): number | null {
   const owner = ownerEntity();

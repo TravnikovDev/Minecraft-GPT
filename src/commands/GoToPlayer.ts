@@ -4,7 +4,7 @@ import { z } from "zod";
 import { bot } from "../index";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { isCommandCancelled } from "../managers/actionManager";
-import { tellOwner } from "../managers/ownerDialog";
+import { lastKnownOwnerPosition, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
 import { Movements } from "mineflayer-pathfinder";
 import { unstuck } from "../actions/unstuck";
@@ -35,6 +35,20 @@ export async function execute(args: any = {}) {
   if (player_name) {
     targetPlayer = bot.players[player_name]?.entity;
     if (!targetPlayer) {
+      const known = lastKnownOwnerPosition();
+      if (bot.players[player_name] && known) {
+        // Out of sight, but we know where they were or said they are: go there
+        const x = Math.round(known.x), z = Math.round(known.z);
+        const far = Math.round(Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z));
+        tellOwner(`I can't see you yet; heading to where you last were (${x}, ${z}), ${far} blocks away.`);
+        const arrived = await travelTo(() => ({ x: known.x, y: known.y, z: known.z }), {
+          range: closeness,
+          onProgress: (percent) => tellOwner(`Coming: ${percent}% of the way.`),
+        });
+        if (isCommandCancelled()) return;
+        tellOwner(arrived ? "I'm here! Where are you?" : "I got stuck on the way.");
+        return;
+      }
       if (bot.players[player_name]) {
         // Online but out of sight: ask for coordinates, which the fast path turns into a trip
         tellOwner(
