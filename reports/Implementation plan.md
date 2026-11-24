@@ -27,7 +27,7 @@ Phases 8 and 9 both build on Phase 7 and can run in either order, or interleaved
 | Phase | Goal in one line | Size |
 |---|---|---|
 | 0 | The bot obeys only you, in your real world, and stop always works | S |
-| 1 | One object owns the connection; reconnects leave no stale state | M |
+| 1 | One object owns the connection; reconnects leave no stale state; it remembers recent chat and its death spot | M |
 | 2 | Item and block names are validated and categorised in one place | M |
 | 3 | No action reports success unless the server agrees | M |
 | 4 | One arbiter decides what runs; reflexes and commands stop fighting | L |
@@ -80,6 +80,8 @@ Sizes are relative effort (S < M < L < XL), not calendar estimates.
 **Deliverable (done when).**
 - All `bot.*` calls go through the Body adapter.
 - After a server restart, the bot comes back with clean state: no leftover health tracking, timers or listeners from the old connection.
+- **Its death spot and your last known position survive a bot restart**, so death recovery and "come here" still work after it restarts.
+- **It remembers the recent conversation**, so follow-ups like "do that again", "no, the other one" or "let's start from the beginning" make sense to it.
 - Behaviour is otherwise unchanged.
 
 **Actions**
@@ -90,10 +92,18 @@ Sizes are relative effort (S < M < L < XL), not calendar estimates.
 5. **Add a typed event bus.** The Body turns mineflayer events into typed events, tagged *self-caused* (from our own dig or place) or *external*. Listeners must stay O(1) and never throw; wrap them in a guard that logs instead.
 6. **Write plugin adapters** for pathfinder (pinned commit), pvp, tool, auto-eat and armor-manager, so each can later be leased, paused or replaced.
 7. **Break the action-module import cycles.** Actions receive the Body or Session instead of importing `index.ts`.
+8. **Persist the recovery state.** The Session saves the last death (position, dimension, time, item count) and the owner's last known position (seen, or typed as coordinates) to `db.json`, and reloads them at startup. Today both are held in memory only (`recovery.ts`, `ownerDialog.ts`) and are lost when the bot restarts. Respect the 5-minute item despawn: a death older than that is kept for the diary, not recovered.
+9. **Add conversation memory.** The Session keeps the last ~6 owner messages and bot replies (text plus which command was run and its outcome), and sends them with each AI request, along with the existing one-line state summary.
+   - Old turns expire after ~15 minutes of silence.
+   - This adds roughly 300 input tokens per message, well under $1 a month at current usage.
+   - It is a short-term memory. Day summaries and the diary stay in Phase 7.
 
 **In-game check.**
 - Restart your server while the bot is gathering. It reconnects, stays idle, and nothing fires twice.
 - Kill and restart the bot process. It comes back the same.
+- Kill the bot, then restart the bot process straight away: after it rejoins, it still goes back for its items.
+- Send coordinates, restart the bot, then say `come here` while it can't see you: it heads to those coordinates instead of asking again.
+- Ask for something, then follow up with "do that again" or "no, the other one": it understands what you mean.
 
 ---
 
