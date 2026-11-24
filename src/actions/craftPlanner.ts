@@ -176,5 +176,10 @@ export function resolveCraftable(requested: string, count: number): string | nul
   const missingTotal = (name: string): number =>
     planCraft(name, count).missing.reduce((sum, m) => sum + m.count, 0);
   const preferred = (name: string): number => (/^(white|oak)_/.test(name) ? 0 : 1);
-  return candidates.sort((a, b) => missingTotal(a) - missingTotal(b) || preferred(a) - preferred(b))[0]!;
+  // Among equally possible tools/armor, the best material wins (stone over wood)
+  const TIERS = ["wooden", "golden", "stone", "iron", "diamond", "netherite"];
+  const tier = (name: string): number => TIERS.findIndex((t) => name.startsWith(`${t}_`));
+  return candidates.sort(
+    (a, b) => missingTotal(a) - missingTotal(b) || tier(b) - tier(a) || preferred(a) - preferred(b)
+  )[0]!;
 }
