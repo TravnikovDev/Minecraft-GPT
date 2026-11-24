@@ -6,6 +6,7 @@ import * as world from "./world.js";
 import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
 import { Item } from "prismarine-item";
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import type { InventoryItemType } from "../schemas/types.js";
 
 /**
@@ -269,10 +270,25 @@ export async function transferAllToChest(): Promise<boolean> {
  * @param itemName - The name of the item to count.
  * @returns number
  */
+/**
+ * How many of an item the bot carries: an exact name ("stick", "chest"), or a
+ * Catalog category ("planks", "logs", "pickaxe", "axe", "food"). Never a
+ * substring match: "chest" used to count chestplates, "axe" pickaxes.
+ */
 export const getItemCount = (itemName: string): number => {
+  const c = catalog();
+  const name = c.normalize(itemName);
+  const matches = (item: string): boolean => {
+    if (c.isItem(name)) return item === name;
+    if (name === "planks") return c.isPlanks(item);
+    if (name === "logs" || name === "log") return c.isLog(item);
+    if (name === "food") return c.isFood(item);
+    if (["pickaxe", "axe", "shovel", "hoe", "sword"].includes(name)) return c.toolKind(item) === name;
+    return false;
+  };
   return bot.inventory
     .items()
-    .filter((item) => item.name.includes(itemName))
+    .filter((item) => matches(item.name))
     .reduce((acc, item) => acc + item.count, 0);
 };
 

@@ -18,7 +18,7 @@ const craftingTiers: CraftingTier[] = [
     level: 1, 
     description: "Basic Survival",
     requiredItems: [], // Already unlocked
-    unlockedRecipes: ["crafting_table", "wooden_planks", "stick", "wooden_pickaxe"]
+    unlockedRecipes: ["crafting_table", "oak_planks", "stick", "wooden_pickaxe"]
   },
   { 
     level: 2, 

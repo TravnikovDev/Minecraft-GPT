@@ -10,6 +10,7 @@ import prismarineItem from "prismarine-item";
 import { Entity } from "prismarine-entity";
 import type { Bot } from "mineflayer";
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 
 /**
  * Game data must match the server's Minecraft version: item/block IDs and
@@ -42,29 +43,8 @@ function itemClass(): ReturnType<typeof prismarineItem> {
   return cls;
 }
 
-export const WOOD_TYPES: string[] = [
-  "oak",
-  "spruce",
-  "birch",
-  "jungle",
-  "acacia",
-  "dark_oak",
-];
-
-export const MATCHING_WOOD_BLOCKS: string[] = [
-  "log",
-  "planks",
-  "sign",
-  "boat",
-  "fence_gate",
-  "door",
-  "fence",
-  "slab",
-  "stairs",
-  "button",
-  "pressure_plate",
-  "trapdoor",
-];
+// Wood types come from the Catalog now (catalog().woodTypes()): the old fixed
+// list missed mangrove, cherry, bamboo, crimson, warped and pale oak.
 
 export const WOOL_COLORS: string[] = [
   "white",
@@ -85,27 +65,23 @@ export const WOOL_COLORS: string[] = [
   "black",
 ];
 
-export function isHuntable(mob: Entity): boolean {
-  if (!mob || !mob.name) return false;
-  const animals: string[] = [
-    "chicken",
-    "cow",
-    "llama",
-    "mooshroom",
-    "pig",
-    "rabbit",
-    "sheep",
-  ];
-  return animals.includes(mob.name.toLowerCase()) && !mob.metadata[16]; // metadata[16] indicates baby status
+/** True for a baby animal or mob (by the registry's metadata key, not a fixed index). */
+export function isBaby(mob: Entity): boolean {
+  const keys = bot.registry.entitiesByName[mob.name ?? ""]?.metadataKeys as string[] | undefined;
+  const index = keys?.indexOf("baby") ?? -1;
+  return index >= 0 && Boolean(mob.metadata?.[index]);
 }
 
+/** A grown animal worth hunting (by entity type from the game data). */
+export function isHuntable(mob: Entity): boolean {
+  if (!mob?.name) return false;
+  return catalog().isHuntable(mob.name) && !isBaby(mob);
+}
+
+/** A hostile mob, by entity type from the game data. */
 export function isHostile(mob: Entity): boolean {
-  if (!mob || !mob.name) return false;
-  return (
-    (mob.type === "mob" || mob.type === "hostile") &&
-    mob.name !== "iron_golem" &&
-    mob.name !== "snow_golem"
-  );
+  if (!mob?.name) return false;
+  return catalog().isHostile(mob.name);
 }
 
 /**

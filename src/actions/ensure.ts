@@ -3,6 +3,7 @@
 */
 
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { getItemId } from "../utils/minecraftData";
 import { collectBlock } from "./collectBlock";
 import { craftRecipe } from "./crafting";
@@ -82,10 +83,8 @@ export const ensurePlanks = async (neededAmount: number): Promise<boolean> => {
     if (shouldGiveUp(++attempt, "planks")) return false;
     const logsNeeded = Math.ceil((neededAmount - planksCount) / PLANKS_PER_LOG);
 
-    // Get all available log types in inventory
-    const availableLogs = bot.inventory
-      .items()
-      .filter((item) => item.name.includes("log"));
+    // Logs of every wood type (stems, stripped, bamboo blocks too)
+    const availableLogs = bot.inventory.items().filter((item) => catalog().isLog(item.name));
 
     // If no logs available, gather more wood
     if (availableLogs.length === 0) {
@@ -100,18 +99,15 @@ export const ensurePlanks = async (neededAmount: number): Promise<boolean> => {
 
     // Iterate over each log type to craft planks
     for (const log of availableLogs) {
-      const logType = log.name.replace("_log", ""); // Get log type without "_log" suffix
+      // stripped_oak_log -> oak_planks (it used to try "stripped_oak_planks")
+      const planks = catalog().planksFor(log.name)!;
+      const logType = planks.replace(/_planks$/, "");
       const logsToCraft = Math.min(log.count, logsNeeded);
 
-      console.log(
-        `Trying to make ${logsToCraft * PLANKS_PER_LOG} ${logType}_planks`
-      );
+      console.log(`Trying to make ${logsToCraft * PLANKS_PER_LOG} ${planks}`);
       console.log(`NeededAmount: ${neededAmount}, while I have ${planksCount}`);
 
-      const crafted = await craftRecipe(
-        `${logType}_planks`,
-        logsToCraft * PLANKS_PER_LOG
-      );
+      const crafted = await craftRecipe(planks, logsToCraft * PLANKS_PER_LOG);
       if (crafted) {
         planksCount = getItemCount("planks");
         bot.chat(
