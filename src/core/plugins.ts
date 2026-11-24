@@ -98,6 +98,9 @@ export const pathing = {
 /** Melee combat (mineflayer-pvp). */
 export const fighting = {
   attack(target: Entity): Promise<void> {
+    // mineflayer-pvp swaps its own walking rules in on every attack (its
+    // defaults dig through walls): make it use the bot's current safe ones
+    if (bot.pvp && bot.pathfinder?.movements) bot.pvp.movements = bot.pathfinder.movements;
     return Promise.resolve(bot.pvp?.attack(target));
   },
   stop(): void {

@@ -4,7 +4,7 @@
 
 import mineflayer from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
-import { safeMovements } from "./core/movements";
+import { isSafeMovements, safeMovements } from "./core/movements";
 import { registerDoorOpener } from "./actions/doors";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
@@ -15,7 +15,7 @@ import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn, saveBed } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
-import { executeCommands, handleBotRejoin } from "./managers/actionManager";
+import { executeCommands, getCurrentCommandName, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
 import { handleChat, isOwner } from "./managers/chatGateway";
 import { registerCombatReflex } from "./actions/combatReflex";
@@ -56,8 +56,28 @@ onConnectionReady((currentBot) => {
   currentBot.loadPlugin(tool);
   currentBot.loadPlugin(armorManager);
 
-  // One set of walking rules: natural terrain only, doors opened (core/movements)
-  currentBot.pathfinder.setMovements(safeMovements(currentBot));
+  // One set of walking rules: natural terrain only, doors opened (core/movements).
+  // mineflayer-pvp brings its own default rules (dig through anything) and
+  // swaps them in on every attack, so it gets the same rules.
+  const walkingRules = safeMovements(currentBot);
+  currentBot.pathfinder.setMovements(walkingRules);
+  currentBot.pvp.movements = walkingRules;
+
+  // Backstop: if anything ever swaps in other walking rules (a plugin's
+  // defaults dig through walls), say so and put the safe ones back
+  everyWhileConnected(currentBot, 2000, () => {
+    const current = currentBot.pathfinder?.movements;
+    if (!current || isSafeMovements(current)) return;
+    console.error("Walking rules were replaced by unsafe ones; restoring the safe rules.");
+    currentBot.pathfinder.setMovements(walkingRules);
+    if (currentBot.pvp) currentBot.pvp.movements = walkingRules;
+  });
+
+  // Every block the bot breaks, with what it was doing, so a broken wall can be traced
+  currentBot.on("diggingCompleted", (block) => {
+    const moving = currentBot.pathfinder.isMoving() ? "while walking" : "standing";
+    console.log(`Broke ${block.name} at ${block.position} (${moving}, task ${getCurrentCommandName() ?? "idle"}).`);
+  });
 
   // Configure auto-eat plugin settings
   currentBot.autoEat.options = {

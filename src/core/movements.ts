@@ -30,6 +30,12 @@ const isNatural = (name: string): boolean => !name.includes("glazed") && NATURAL
 /** Wooden doors (iron doors need redstone, so they stay walls). */
 export const isWoodenDoor = (name: string): boolean => name.endsWith("_door") && name !== "iron_door";
 
+// Every walking-rules object built here (anything else digs through walls)
+const safeRules = new WeakSet<object>();
+
+/** True when these are walking rules built by safeMovements. */
+export const isSafeMovements = (moves: unknown): boolean => typeof moves === "object" && moves !== null && safeRules.has(moves);
+
 /** Builds the walking rules for a bot. */
 export function safeMovements(bot: Bot): pf.Movements {
   const doorIds = new Set(bot.registry.blocksArray.filter((b) => isWoodenDoor(b.name)).map((b) => b.id));
@@ -58,5 +64,6 @@ export function safeMovements(bot: Bot): pf.Movements {
   moves.digCost = 6;
   moves.placeCost = 6;
   moves.entityCost = 6;
+  safeRules.add(moves);
   return moves;
 }
