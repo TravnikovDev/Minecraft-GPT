@@ -48,12 +48,20 @@ export function safeMovements(bot: Bot): pf.Movements {
         block.safe = true;
         block.physical = false;
         block.replaceable = false;
+        // The pathfinder clicks "openable" blocks that have a shape; a door has
+        // one open or closed, so it would shut an open door in the bot's face.
+        // actions/doors.ts opens and closes doors instead.
+        block.openable = false;
       }
       return block;
     }
   }
 
   const moves = new SafeMovements(bot);
+  // In the pathfinder's openable set, a door is walked through at the middle
+  // of its floor; otherwise the bot aims at the top of the swung-open door
+  // leaf, can never get there and stands in the doorway until "stuck"
+  for (const id of doorIds) moves.openable.add(id);
   for (const block of bot.registry.blocksArray) {
     if (!isNatural(block.name)) moves.blocksCantBreak.add(block.id);
   }
