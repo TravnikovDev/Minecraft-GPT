@@ -79,6 +79,11 @@ export async function craftRecipe(
         return false;
       }
     }
+    // Say why, so a failed craft is never silent in the log
+    const carried = bot.inventory.items().map((i) => `${i.count} ${i.name}`).join(", ");
+    console.log(
+      `No ${itemName} recipe fits the inventory${craftingTable ? " (with a crafting table)" : ""}. Carrying: ${carried || "nothing"}.`
+    );
     return false;
   }
 

@@ -169,7 +169,11 @@ export function resolveCraftable(requested: string, count: number): string | nul
   if (items[singular]) return singular;
 
   const candidates = Object.keys(items).filter(
-    (name) => name.endsWith(`_${singular}`) && bot.recipesAll(items[name]!.id, null, true).length > 0
+    (name) =>
+      name.endsWith(`_${singular}`) &&
+      // "armor" is never horse armor unless the owner says horse
+      (!name.includes("horse") || singular.includes("horse")) &&
+      bot.recipesAll(items[name]!.id, null, true).length > 0
   );
   if (candidates.length === 0) return null;
 

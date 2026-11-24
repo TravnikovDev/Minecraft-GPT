@@ -12,8 +12,11 @@ import { askOwner, tellOwner } from "../managers/ownerDialog";
 export const description = `When player is asking the bot to craft an item, the bot works out the recipe, makes the
 parts it can (planks from logs, sticks from planks), uses or places a crafting table, and crafts the item. If raw
 materials are missing it says what is missing and offers to go and get them.
-Generic names are fine ("bed", "planks"); the bot picks the variant it can make.
-Example: "Craft a diamond sword", "Craft 5 planks", "Craft 10 torches", "Make me a bed".`;
+Generic names are fine ("bed", "planks", "helmet"); the bot picks the variant it can make (the best material
+for tools and armor). Sets are fine too: "armor" / "iron armor" means helmet, chestplate, leggings and boots,
+"tools" / "stone tools" means pickaxe, axe, shovel and sword. Pass the owner's words for these as they are.
+Example: "Craft a diamond sword", "Craft 5 planks", "Craft 10 torches", "Make me a bed", "Craft iron armor",
+"Make stone tools".`;
 
 // Define parameters for CraftItem action
 export const parameters = z.object({
@@ -22,6 +25,45 @@ export const parameters = z.object({
 });
 
 const pretty = (name: string): string => name.replace(/_/g, " ");
+
+// Sets: "armor", "iron armor", "full diamond armor", "stone tools", "set of iron tools"...
+const SET_REQUEST = /^(?:full[ _])?(?:set[ _]of[ _])?(?:([a-z]+)[ _])?(armou?rs?|tools)(?:[ _]set)?$/i;
+const SET_PIECES: Record<string, string[]> = {
+  armor: ["helmet", "chestplate", "leggings", "boots"],
+  tools: ["pickaxe", "axe", "shovel", "sword"],
+};
+const MATERIALS: Record<string, string> = {
+  wood: "wooden", wooden: "wooden", stone: "stone", iron: "iron", gold: "golden", golden: "golden",
+  diamond: "diamond", netherite: "netherite", leather: "leather", chain: "chainmail", chainmail: "chainmail",
+};
+
+/** The pieces of a set request ("iron tools" -> iron_pickaxe...), or null if it isn't one. */
+function setPieces(requested: string): string[] | null {
+  const match = SET_REQUEST.exec(requested.trim());
+  if (!match) return null;
+  const kind = match[2]!.toLowerCase().startsWith("tool") ? "tools" : "armor";
+  const word = match[1]?.toLowerCase();
+  if (word && !MATERIALS[word]) return null;
+  const material = word ? MATERIALS[word] : null;
+  return SET_PIECES[kind]!.map((piece) => (material ? `${material}_${piece}` : piece));
+}
+
+// Multi-word variant prefixes that are still just a color or wood type
+const PLAIN_PREFIXES = new Set(["dark_oak", "light_blue", "light_gray"]);
+
+/**
+ * True when a loose name turned into something the owner may not mean:
+ * "armor" -> leather_horse_armor is unusual, "bed" -> white_bed is not.
+ */
+function isUnusualMatch(requested: string, item: string): boolean {
+  const asked = requested.trim().toLowerCase().replace(/\s+/g, "_");
+  const singular = asked.replace(/s$/, "");
+  if (item === asked || item === singular) return false;
+  const kind = item.endsWith(`_${singular}`) ? singular : item.endsWith(`_${asked}`) ? asked : null;
+  if (!kind) return true;
+  const prefix = item.slice(0, -kind.length - 1);
+  return prefix.includes("_") && !PLAIN_PREFIXES.has(prefix);
+}
 
 // When the bot last went to gather materials for an item; if the retry still
 // lacks them, it explains instead of asking the same question again
@@ -56,9 +98,40 @@ export async function execute(args: any): Promise<void> {
   }
 
   const count = Math.max(1, parsed.data.itemCount ?? 1);
+
+  // A set ("armor", "iron tools"): one craft per piece, each picking the best material it can make
+  const pieces = setPieces(parsed.data.itemName);
+  if (pieces) {
+    tellOwner(`Making ${pieces.map(pretty).join(", ")}.`);
+    for (const piece of pieces) {
+      await addCommandToQueue({
+        id: crypto.randomUUID(),
+        command: BotCommands.CraftItem,
+        priority: 3,
+        retryCount: 0,
+        args: { itemName: piece, itemCount: count },
+      });
+    }
+    return;
+  }
+
   const item = resolveCraftable(parsed.data.itemName, count);
   if (!item) {
     bot.chat(`I don't know how to craft "${pretty(parsed.data.itemName)}".`);
+    return;
+  }
+
+  // A loose name that matched something odd: check with the owner first
+  if (isUnusualMatch(parsed.data.itemName, item)) {
+    askOwner(`Did you mean ${count} ${pretty(item)}?`, async () => {
+      await addCommandToQueue({
+        id: crypto.randomUUID(),
+        command: BotCommands.CraftItem,
+        priority: 3,
+        retryCount: 0,
+        args: { itemName: item, itemCount: count },
+      });
+    });
     return;
   }
 
