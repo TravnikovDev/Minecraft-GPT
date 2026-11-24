@@ -82,6 +82,20 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | Cooking | ✅ 9 potatoes on 3 campfires at once, all 9 collected (first version used one campfire and couldn't reach the food) |
 | Give with no amount | ❌→fixed, not yet re-tested: "give me dark oak" gave one plank; now gives all |
 
+### Phase 1 real-world run: 2026-11-24, fourth session (same world, village)
+
+| Check | Result |
+|---|---|
+| Give with no amount | ✅ jungle planks, stone bricks, bricks: each gave everything carried |
+| Creeper reflex | ✅ fired and cleared several times while following |
+| "Craft armor" | ❌→fixed: made leather horse armor; now "armor"/"iron armor" makes the set, horse armor only on request, odd matches ask "Did you mean ...?" |
+| "Craft a helmet" with iron and leather | ❌→fixed: silently picked iron; now asks which one when several can be made |
+| Crafting table | ❌→fixed: nearest table was unreachable, so it left its own table next to the house; now tries up to 3 reachable tables and picks its own table back up (not yet re-tested) |
+| Wear the helmet | ❌→✅ there was no wear command and crafted armor was never put on; now it puts on carried armor by itself (wore the iron helmet right after reconnecting) and "put on your armor" works |
+| Built blocks after hunting | ❌→fixed: after hunting sheep it dug into a village house. mineflayer-pvp swapped in its own dig-anything walking rules on every attack; pvp now gets the safe rules, a 2 s backstop restores them, and every broken block is logged |
+| Doors | ❌→✅ stood in the open doorway (the pathfinder aimed at the top of the open door leaf), then flapped a double door open and shut while following; now it walks through the middle of the doorway, opens only doors on its route, and closes them only once through. It passed through the door |
+| "Give me the plate" | ❌→fixed: claimed "Gave 1 iron_chestplate" three times while giving nothing; give now tosses the exact item, says when it has none, matches loose names against what it carries, and can hand over worn armor (not yet re-tested) |
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.
