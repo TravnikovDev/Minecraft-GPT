@@ -33,6 +33,6 @@ export async function execute(args: any) {
   if (result) {
     bot.chat(`Crafted ${itemCount} ${itemName}.`);
   } else {
-    bot.chat(`Failed to collect ${itemCount} ${itemName}.`);
+    bot.chat(`I couldn't craft ${itemCount} ${itemName}, probably missing materials.`);
   }
 }

@@ -62,8 +62,12 @@ export async function craftRecipe(
   ): Promise<boolean> {
     if (recipes && recipes.length > 0) {
       const recipe = recipes[0];
+      // bot.craft's count is how many times to run the recipe, not how many
+      // items to make: one stick recipe yields 4 sticks, so 12 sticks = 3 crafts
+      const perCraft = recipe.result?.count ?? 1;
+      const times = Math.max(1, Math.ceil(num / perCraft));
       try {
-        await bot.craft(recipe, num, craftingTable ?? undefined);
+        await bot.craft(recipe, times, craftingTable ?? undefined);
         console.log(
           `Successfully crafted ${num} ${itemName}${
             craftingTable ? " using crafting table" : ""

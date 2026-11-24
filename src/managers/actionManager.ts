@@ -92,7 +92,7 @@ async function processCommand(nextCommand: CommandType) {
     currentCommand = nextCommand;
     currentAbort = abort;
     actionStartTime = Date.now();
-    lastBotPosition = bot.entity.position.clone();
+    lastBotPosition = bot.entity?.position.clone() ?? lastBotPosition;
     recoveriesForCurrentCommand = 0;
     
     // Start monitoring this action
@@ -166,6 +166,10 @@ function startActionMonitoring() {
 // Check if the current action is making progress
 async function checkActionProgress() {
   if (!currentCommand || !actionStartTime || recoveryInProgress) return;
+
+  // Disconnected (bot.entity is gone until the reconnect spawns): the
+  // reconnect handler resets command state, so just stop watching
+  if (!bot.entity) return;
   
   const currentTime = Date.now();
   const executionTime = currentTime - actionStartTime;
@@ -230,7 +234,7 @@ async function handleStuckAction() {
       // If unstuck was successful, don't remove the command - let it continue execution
       // Just reset the monitoring variables
       actionStartTime = Date.now(); // Reset timer
-      lastBotPosition = bot.entity.position.clone();
+      lastBotPosition = bot.entity?.position.clone() ?? lastBotPosition;
       botStuckCounter = 0;
       // Keep monitoring the resumed command
       setTimeout(checkActionProgress, ACTION_CHECK_INTERVAL);

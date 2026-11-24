@@ -15,6 +15,15 @@ import armorManager from "mineflayer-armor-manager";
 import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 
+// A long-running bot must not die on one stray async error (for example a
+// timer firing while disconnected); log it and keep going
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection (bot keeps running):", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception (bot keeps running):", error);
+});
+
 // Load Database before starting bot
 await loadDb();
 

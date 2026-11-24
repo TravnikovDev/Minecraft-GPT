@@ -43,7 +43,17 @@ async function statusMessage(): Promise<string> {
   const where = pos ? `at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}` : "somewhere";
   const doing = current ? `Doing ${current}` : "Idle";
   const next = queued > 0 ? `, ${queued} more queued` : "";
-  return `${doing}${next}. Health ${Math.round(bot.health)}/20, food ${bot.food}/20, ${where}.`;
+  const owner = bot.players[OWNER_USERNAME]?.entity;
+  const ownerInfo = owner && pos
+    ? ` You're ${Math.round(owner.position.distanceTo(pos))} blocks away.`
+    : " I can't see you from here.";
+
+  console.log(
+    `[status] pos=${pos?.toString()} owner=${owner ? owner.position.toString() : "not visible"} ` +
+      `pathfinderMoving=${bot.pathfinder?.isMoving()}`
+  );
+
+  return `${doing}${next}. Health ${Math.round(bot.health)}/20, food ${bot.food}/20, ${where}.${ownerInfo}`;
 }
 
 /** Handles the owner's simple commands. Returns true if the message was handled. */
