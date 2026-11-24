@@ -4,7 +4,9 @@ import * as gameData from "../utils/minecraftData";
 import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
-import { placeBlock } from "./worldInteraction";
+import { pickupNearbyItems, placeBlock } from "./worldInteraction";
+import { markSelfAction } from "../core/events";
+import { tools } from "../core/plugins";
 import { goToNearestBlock, goToPosition } from "./movement";
 import { bot } from "../core/body";
 import { collectBlock } from "./collectBlock";
@@ -40,6 +42,40 @@ Possible Scenarios:
 6. **Invalid Item Name**:
    - If the provided item name is invalid, the function logs the error and returns `false`.
 */
+// Crafting tables the bot couldn't walk to recently (skipped for a while)
+const unreachableTables = new Map<string, number>();
+const UNREACHABLE_FOR_MS = 5 * 60 * 1000;
+const MAX_TABLES_TRIED = 3;
+const tableKey = (b: Block): string => `${b.position.x},${b.position.y},${b.position.z}`;
+
+/** Crafting tables nearby, nearest first, minus the ones it recently couldn't reach. */
+function nearbyTables(range: number): Block[] {
+  const id = bot.registry.blocksByName["crafting_table"]?.id;
+  if (id === undefined) return [];
+  const now = Date.now();
+  return bot
+    .findBlocks({ matching: id, maxDistance: range, count: 16 })
+    .map((p) => bot.blockAt(p))
+    .filter((b): b is Block => b !== null && (unreachableTables.get(tableKey(b)) ?? 0) < now)
+    .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+}
+
+/** Breaks the crafting table the bot put down for a craft and picks it up again. */
+async function pickUpOwnTable(position: Block["position"]): Promise<void> {
+  const table = bot.blockAt(position);
+  if (table?.name !== "crafting_table") return;
+  try {
+    await tools.equipForBlock(table);
+    markSelfAction(position);
+    await bot.dig(table);
+    await new Promise((r) => setTimeout(r, 250)); // the drop lands first
+    await pickupNearbyItems(bot, 4);
+    console.log(`Picked my crafting table back up from ${position}.`);
+  } catch (error) {
+    console.log(`Couldn't pick my crafting table back up: ${(error as Error).message}`);
+  }
+}
+
 export async function craftRecipe(
   incomingItemName: string,
   num = 1
@@ -89,77 +125,70 @@ export async function craftRecipe(
 
   // Helper function to move to a crafting table and attempt crafting with retry logic
   async function moveToAndCraft(craftingTable: Block): Promise<boolean> {
-    console.log(`Crafting table found, moving to it.`);
-    let maxRetries = 2;
-    let attempts = 0;
-    let success = false;
-
-    while (attempts < maxRetries && !success) {
-      try {
-        await goToPosition(
-          craftingTable.position.x,
-          craftingTable.position.y,
-          craftingTable.position.z,
-          1
-        );
-        // Opening the table only works within reach; don't wait 20 s on a
-        // window that can't open
-        if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) {
-          console.log(`Can't reach the crafting table at ${craftingTable.position}.`);
-          attempts++;
-          continue;
-        }
-        const recipes = bot.recipesFor(itemId, null, 1, craftingTable);
-        success = await attemptCraft(recipes, craftingTable);
-      } catch (err) {
-        console.log(
-          `Attempt ${attempts + 1} to move to crafting table failed: ${
-            (err as Error).message
-          }`
-        );
+    console.log(`Crafting table at ${craftingTable.position}, moving to it.`);
+    try {
+      // One walk: pathing already retries when a reflex (creeper, fight) cuts in
+      if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) {
+        const p = craftingTable.position;
+        await goToPosition(p.x, p.y, p.z, 1);
       }
-      attempts++;
+      // Opening the table only works within reach; don't wait 20 s on a
+      // window that can't open
+      if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) return false;
+      const recipes = bot.recipesFor(itemId, null, 1, craftingTable);
+      return await attemptCraft(recipes, craftingTable);
+    } catch (err) {
+      console.log(`Using the crafting table failed: ${(err as Error).message}`);
+      return false;
     }
-
-    return success;
   }
 
   // Helper function to find and use or place a crafting table
   async function findAndUseCraftingTable(
     craftingTableRange: number
   ): Promise<boolean> {
-    let craftingTable = getNearestBlock("crafting_table", craftingTableRange);
-    if (craftingTable) {
-      if (await moveToAndCraft(craftingTable)) return true;
-      // Unreachable (inside a building, up high...): place our own instead
-      console.log(`Couldn't use the nearby crafting table, placing my own.`);
-    } else {
-      console.log(`No crafting table nearby, attempting to place one.`);
+    // Use a table already there: the nearest ones the bot can walk to
+    const tables = nearbyTables(craftingTableRange).slice(0, MAX_TABLES_TRIED);
+    for (const table of tables) {
+      if (await moveToAndCraft(table)) return true;
+      if (bot.entity.position.distanceTo(table.position) <= 4.5) {
+        // Reached it and still couldn't craft: another table won't help
+        console.log(`Couldn't craft ${itemName} at the crafting table at ${table.position}.`);
+        return false;
+      }
+      unreachableTables.set(tableKey(table), Date.now() + UNREACHABLE_FOR_MS);
+      console.log(`Can't get to the crafting table at ${table.position} (without breaking anything).`);
     }
+    console.log(
+      tables.length > 0
+        ? `No crafting table I can reach, using my own.`
+        : `No crafting table nearby, using my own.`
+    );
+
+    // Our own table: put it down, craft, and take it back with us
     const hasCraftingTable = await ensureCraftingTable();
     if (!hasCraftingTable) {
       console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
       return false;
     }
-
     const pos = getNearestFreeSpace(1, 10);
-    if (pos) {
-      console.log(
-        `Placing crafting table at position (${pos.x}, ${pos.y}, ${pos.z}).`
-      );
-      await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-      // Use the table we just placed, not whichever one is "nearest"
-      const placed = bot.blockAt(pos);
-      if (placed?.name === "crafting_table") {
-        return await moveToAndCraft(placed);
-      }
-      console.log("Placing the crafting table failed.");
-    } else {
+    if (!pos) {
       console.log("No suitable position found to place the crafting table.");
       return false;
     }
-
-    return false;
+    console.log(`Placing crafting table at position (${pos.x}, ${pos.y}, ${pos.z}).`);
+    await placeBlock("crafting_table", pos.x, pos.y, pos.z);
+    // Use the table we just placed, not whichever one is "nearest"
+    const placed = bot.blockAt(pos);
+    if (placed?.name !== "crafting_table") {
+      console.log("Placing the crafting table failed.");
+      return false;
+    }
+    try {
+      return await moveToAndCraft(placed);
+    } finally {
+      await pickUpOwnTable(placed.position);
+    }
   }
 
   // Step 1: Try to craft without a crafting table
