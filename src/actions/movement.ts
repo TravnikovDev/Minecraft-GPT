@@ -8,7 +8,7 @@ import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 import { isCommandCancelled } from "../core/commandContext";
 import { isAnyReflexActive, waitForReflexes } from "../core/reflexes";
 import { pathing } from "../core/plugins";
-import { BOAT_TRIP_BLOCKS, boatItem, crossWaterByBoat, ensureBoat, waterAhead } from "./boat";
+import { BOAT_TRIP_BLOCKS, crossWaterByBoat, ensureBoat, hasBoat, waterAhead } from "./boat";
 
 /** Distance beyond which a trip is walked in legs instead of one path search. */
 export const LONG_TRIP_BLOCKS = 48;
@@ -41,7 +41,7 @@ export async function travelTo(
 
   // A long trip: take a boat along for any water on the way (much faster
   // than swimming, and no drowning)
-  if (total >= BOAT_TRIP_BLOCKS && !boatItem()) {
+  if (total >= BOAT_TRIP_BLOCKS && !hasBoat()) {
     console.log("Long trip: making a boat first.");
     if (!(await ensureBoat())) console.log("Long trip: no boat (no wood); going without.");
     if (isCommandCancelled()) return false;
@@ -67,7 +67,7 @@ export async function travelTo(
       if (remaining <= range + 1) return true;
 
       // Water in the way: row across instead of swimming
-      if (remaining > 24 && crossings < MAX_BOAT_CROSSINGS && boatItem() && waterAhead(target)) {
+      if (remaining > 24 && crossings < MAX_BOAT_CROSSINGS && hasBoat() && waterAhead(target)) {
         crossings++;
         if (await crossWaterByBoat(target)) {
           failures = 0;

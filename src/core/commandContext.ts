@@ -24,6 +24,25 @@ export function isCommandCancelled(): boolean {
   return commandSignal.getStore()?.aborted ?? false;
 }
 
+// Cleanup a cancelled command still has to finish (e.g. getting out of a boat
+// and picking it up) before the next command may start
+let pendingCleanup: Promise<unknown> | null = null;
+
+/** Registers cleanup the next command should wait for if this one is cancelled. */
+export function trackCleanup(cleanup: Promise<unknown>): void {
+  pendingCleanup = cleanup;
+  void cleanup.finally(() => {
+    if (pendingCleanup === cleanup) pendingCleanup = null;
+  });
+}
+
+/** Waits (up to maxMs) for a cancelled command's cleanup to finish. */
+export async function waitForCleanup(maxMs: number): Promise<void> {
+  const cleanup = pendingCleanup;
+  if (!cleanup) return;
+  await Promise.race([cleanup.catch(() => undefined), new Promise((r) => setTimeout(r, maxMs))]);
+}
+
 /** Name of the command currently running, or null when idle. */
 export function getCurrentCommandName(): string | null {
   return currentCommandName;

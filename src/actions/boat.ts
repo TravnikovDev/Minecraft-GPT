@@ -14,7 +14,7 @@ import type { Item } from "prismarine-item";
 import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
-import { isCommandCancelled } from "../core/commandContext";
+import { isCommandCancelled, trackCleanup } from "../core/commandContext";
 import { pathing } from "../core/plugins";
 
 /** Trips at least this long make the bot get a boat before it sets off. */
@@ -38,6 +38,16 @@ async function tell(message: string): Promise<void> {
 }
 
 // --- Boat items --------------------------------------------------------------
+
+/** True when the bot is sitting in a boat. */
+export function inBoat(): boolean {
+  return /boat|raft/.test(bot.vehicle?.name ?? "");
+}
+
+/** A boat to travel with: one in the inventory or the one the bot sits in. */
+export function hasBoat(): boolean {
+  return inBoat() || boatItem() !== null;
+}
 
 /** A boat (or raft) in the inventory, if any. */
 export function boatItem(): Item | null {
@@ -459,12 +469,18 @@ export async function crossWaterByBoat(target: XZ): Promise<boolean> {
       if (distXZ(route.best, target) <= 4 || route.exhausted) break;
     }
   } finally {
-    if (bot.vehicle) {
-      bot.dismount();
-      await waitFor("dismount", 3000);
-      await sleep(600); // the server puts the bot on the shore
-    }
-    await pickUpBoat(boat);
+    // Getting out and taking the boat back also runs when the trip was
+    // cancelled; the next command waits for it
+    const landing = (async (): Promise<void> => {
+      if (bot.vehicle) {
+        bot.dismount();
+        await waitFor("dismount", 3000);
+        await sleep(600); // the server puts the bot on the shore
+      }
+      await pickUpBoat(boat);
+    })();
+    trackCleanup(landing);
+    await landing;
   }
 
   const gained = startDistance - distXZ(bot.entity.position, target);

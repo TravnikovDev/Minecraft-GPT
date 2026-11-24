@@ -8,7 +8,7 @@ import {
   removeAllCommands,
   removeCommand,
 } from "./persistenceManager";
-import { getCurrentCommandName, isCommandCancelled, runWithSignal, setCurrentCommandName } from "../core/commandContext";
+import { getCurrentCommandName, isCommandCancelled, runWithSignal, setCurrentCommandName, waitForCleanup } from "../core/commandContext";
 import { executeTool } from "./toolManager";
 import type { CommandType } from "../schemas/types";
 import { bot } from "../core/body";
@@ -144,6 +144,7 @@ async function processCommand(nextCommand: CommandType) {
     clearTimeout(timeoutId);
     if (outcome === "aborted") {
       console.log(`Command ${nextCommand.command} was cancelled.`);
+      await waitForCleanup(10_000); // e.g. getting out of a boat first
       return; // cancelCurrentCommand already removed it from the queue
     }
     success = true;
