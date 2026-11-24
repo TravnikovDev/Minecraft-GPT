@@ -13,8 +13,8 @@ import pf from "mineflayer-pathfinder";
 import { bot, onConnectionEnd } from "../core/body";
 import { equipItem } from "../core/primitives";
 import { on } from "../core/events";
-import { fighting, pathing } from "../core/plugins";
-import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
+import { fighting, pathing, takeOverBody } from "../core/plugins";
+import { areReflexesMuted, asReflex, registerReflexStopper, setReflexActive } from "../core/reflexes";
 import { bestMeleeWeapon, getPriorityTargets } from "./combat";
 import { isCreeperReflexActive } from "./creeperReflex";
 import { isDrowningReflexActive } from "./drowningReflex";
@@ -77,7 +77,7 @@ function engage(mob: Entity): void {
   startedAt = Date.now(); // each mob gets its own time limit
   if (first) {
     setReflexActive("combat", true);
-    pathing.takeOver(); // pause the task's walking; it resumes when we're done
+    takeOverBody(); // pause the task's walking; it resumes when we're done
     console.log(`Combat reflex: fighting ${mob.name} ${distanceTo(mob).toFixed(1)} blocks away.`);
   }
   void equipWeapon()
@@ -103,7 +103,7 @@ function retreat(threat: Entity): void {
     fighting.stop();
   } else if (!fleeing) {
     setReflexActive("combat", true);
-    pathing.takeOver();
+    takeOverBody();
   }
   if (fleeing?.id !== threat.id) {
     pathing.setReflexGoal(new pf.goals.GoalInvert(new pf.goals.GoalFollow(threat, FLEE_DISTANCE)), true);
@@ -193,13 +193,16 @@ export function registerCombatReflex(): void {
   target = null; // fresh state for this connection
   ignored.clear();
   setReflexActive("combat", false);
-  const timer = setInterval(tick, CHECK_MS);
+  // Its moves run as the combat reflex: they never wait for the task it paused
+  const timer = setInterval(() => asReflex("combat", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
   fleeing = null;
-  bot.on("death", () => {
-    finish("died");
-    stopRetreat("died");
-  });
+  bot.on("death", () =>
+    asReflex("combat", () => {
+      finish("died");
+      stopRetreat("died");
+    })
+  );
   registerReflexStopper("combat", () => {
     finish("stopped by the owner");
     stopRetreat("stopped by the owner");
@@ -207,9 +210,11 @@ export function registerCombatReflex(): void {
 
   // Hit back when hurt, even by a mob that isn't in melee range yet (skeletons)
   unsubscribe?.();
-  unsubscribe = on("bot:damaged", () => {
-    if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
-    const mob = pickTarget(HIT_BACK_RANGE);
-    if (mob) engage(mob);
-  });
+  unsubscribe = on("bot:damaged", () =>
+    asReflex("combat", () => {
+      if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
+      const mob = pickTarget(HIT_BACK_RANGE);
+      if (mob) engage(mob);
+    })
+  );
 }

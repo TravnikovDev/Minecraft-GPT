@@ -5,8 +5,7 @@ import { OPENAI_API_KEY } from "../config/env";
 import { bot } from "../core/body";
 import { BotCommands, isBotAction } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
-import { addCommandToQueue } from "./persistenceManager";
-import { cancelCurrentCommand, getCurrentCommandName, stopEverything } from "./actionManager";
+import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
 import { directionFromOwner, ownerDistance } from "./ownerDialog";
 import { recentConversation } from "../core/session";
@@ -229,11 +228,10 @@ export async function initiateActionFromAI(
 
         // Movement/unstuck requests from the owner take over right away;
         // anything else waits, and the owner is told so
+        // (it cuts in; what it was doing carries on afterwards)
         const busyWith = getCurrentCommandName();
         const interrupts = INTERRUPTING_COMMANDS.has(toolAction.action);
-        if (busyWith && interrupts) {
-          await cancelCurrentCommand(`owner asked for ${toolAction.action}`);
-        } else if (busyWith && !response) {
+        if (busyWith && !interrupts && !response) {
           bot.chat(`Okay, I'll do that after I finish ${busyWith}.`);
         }
         // Log for debugging
@@ -243,7 +241,7 @@ export async function initiateActionFromAI(
           }, with args: ${JSON.stringify(toolAction.arguments)}`
         );
         // Add the parsed action to the queue (interrupting requests go first)
-        await addCommandToQueue({
+        queueCommand({
           command: toolAction.action,
           id: actionId,
           priority: interrupts ? 1 : 3,

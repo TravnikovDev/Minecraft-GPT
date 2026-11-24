@@ -10,6 +10,8 @@ import type { Furnace } from "mineflayer";
 import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
+import { beginUse, waitTurn } from "./leases";
+import { currentSignal } from "./commandContext";
 import { carried, syncInventory, withinReach } from "./primitives";
 import { fail, ok, type ActionResult } from "./result";
 
@@ -46,7 +48,7 @@ async function until(check: () => boolean, ms: number): Promise<boolean> {
 }
 
 /** Opens a chest or barrel within reach, with a time limit. */
-export async function openStorage(block: Block): Promise<ActionResult<OpenContainer>> {
+async function openStorageNow(block: Block): Promise<ActionResult<OpenContainer>> {
   if (!STORAGE_BLOCKS.has(block.name)) return fail("not_found", `${block.name} is not a chest or barrel`);
   if (!withinReach(block.position)) return fail("out_of_reach", `${block.name} at ${block.position}`);
   await paceClicks();
@@ -82,7 +84,7 @@ function roomInContainer(open: OpenContainer, item: { type: number; stackSize: n
 }
 
 /** Puts `count` of the exact stack `item` (from the bot's inventory) in the container, and recounts. */
-export async function depositInto(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+async function depositIntoNow(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
   const n = Math.min(count, item.count);
   if (roomInContainer(open, item) < n) return fail("full", "the chest is full");
   const before = carried(item.name);
@@ -100,7 +102,7 @@ export async function depositInto(open: OpenContainer, item: Item, count: number
 }
 
 /** Takes `count` of the exact stack `item` (from the container) into the bot's inventory, and recounts. */
-export async function withdrawFrom(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+async function withdrawFromNow(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
   const n = Math.min(count, item.count);
   const room =
     bot.inventory.emptySlotCount() * item.stackSize +
@@ -127,7 +129,7 @@ export async function withdrawFrom(open: OpenContainer, item: Item, count: numbe
 export type OpenFurnace = Furnace;
 
 /** Opens a furnace (or smoker, blast furnace) within reach, with a time limit. */
-export async function openFurnaceAt(block: Block): Promise<ActionResult<OpenFurnace>> {
+async function openFurnaceAtNow(block: Block): Promise<ActionResult<OpenFurnace>> {
   if (!withinReach(block.position)) return fail("out_of_reach", `${block.name} at ${block.position}`);
   await paceClicks();
   return guarded(`opening the ${block.name}`, () => bot.openFurnace(block), {
@@ -153,5 +155,61 @@ export function closeWindow(window: { id?: number } | null | undefined): void {
     if (window) bot.closeWindow(window as never);
   } catch (error) {
     console.log(`Closing the window failed: ${(error as Error).message}`);
+  }
+}
+
+/** openStorage, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export async function openStorage(block: Block): Promise<ActionResult<OpenContainer>> {
+  const signal = currentSignal();
+  for (const r of ["window", "hands"] as const) {
+    if (!(await waitTurn(r, () => Boolean(signal?.aborted)))) return fail("aborted", "stopped while waiting for my turn");
+  }
+  const ends = [beginUse("window"), beginUse("hands")];
+  try {
+    return await openStorageNow(block);
+  } finally {
+    for (const end of ends) end();
+  }
+}
+
+/** depositInto, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export async function depositInto(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+  const signal = currentSignal();
+  for (const r of ["window", "hands"] as const) {
+    if (!(await waitTurn(r, () => Boolean(signal?.aborted)))) return fail("aborted", "stopped while waiting for my turn");
+  }
+  const ends = [beginUse("window"), beginUse("hands")];
+  try {
+    return await depositIntoNow(open, item, count);
+  } finally {
+    for (const end of ends) end();
+  }
+}
+
+/** withdrawFrom, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export async function withdrawFrom(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+  const signal = currentSignal();
+  for (const r of ["window", "hands"] as const) {
+    if (!(await waitTurn(r, () => Boolean(signal?.aborted)))) return fail("aborted", "stopped while waiting for my turn");
+  }
+  const ends = [beginUse("window"), beginUse("hands")];
+  try {
+    return await withdrawFromNow(open, item, count);
+  } finally {
+    for (const end of ends) end();
+  }
+}
+
+/** openFurnaceAt, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export async function openFurnaceAt(block: Block): Promise<ActionResult<OpenFurnace>> {
+  const signal = currentSignal();
+  for (const r of ["window", "hands"] as const) {
+    if (!(await waitTurn(r, () => Boolean(signal?.aborted)))) return fail("aborted", "stopped while waiting for my turn");
+  }
+  const ends = [beginUse("window"), beginUse("hands")];
+  try {
+    return await openFurnaceAtNow(block);
+  } finally {
+    for (const end of ends) end();
   }
 }

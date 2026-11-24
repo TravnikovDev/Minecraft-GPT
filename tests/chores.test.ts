@@ -18,6 +18,8 @@ const fake: any = Object.assign(new EventEmitter(), {
   inventory: { emptySlotCount: () => 30, items: () => [] },
   world: { raycast: () => null, getBlock: () => null },
   players: {},
+  stopDigging: () => {},
+  clearControlStates: () => {},
   pathfinder: {
     goal: null,
     isMoving: () => false,

@@ -11,22 +11,23 @@ import { autoWearArmor } from "./actions/armor";
 import { tidyUpWhileIdle } from "./actions/pickup";
 import { replantWhenIdle } from "./actions/forestry";
 import { cleanUpScaffoldingWhenIdle } from "./actions/scaffolding";
-import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionEnd, onConnectionReady } from "./core/body";
+import { bot, connect, everyWhileConnected, listen, onBotCreated, onChatSent, onConnectionEnd, onConnectionReady } from "./core/body";
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn, saveBed } from "./core/session";
 import { on } from "./core/events";
-import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
-import { abortForDisconnect, executeCommands, handleBotRejoin } from "./managers/actionManager";
+import { loadDb, removeAllCommands } from "./managers/persistenceManager";
+import { queueCommand } from "./managers/actionManager";
+import { abortForDisconnect, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
 import { handleChat, isOwner } from "./managers/chatGateway";
 import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
 import { pathing } from "./core/plugins";
-import { monitorHealth } from "./actions/health";
+import { eatWhenHungry } from "./actions/upkeep";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
 import { registerDrowningReflex } from "./actions/drowningReflex";
-import { resetUnstuckState } from "./actions/unstuck";
+import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
 
@@ -70,14 +71,15 @@ onConnectionReady((currentBot) => {
   pathing.resetPaused(); // a follow paused on the old connection points at a gone entity
   onConnectionEnd(currentBot, abortForDisconnect); // a running task must not drive the next connection
   registerCombatReflex(); // fights back when mobs attack, pausing the task
-  monitorHealth(); // self-defense on damage (per-connection state reset inside)
+  everyWhileConnected(currentBot, 2_000, eatWhenHungry); // eats between the task's actions (actions/upkeep)
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
   registerDrowningReflex(); // and so is running out of air underwater
   registerDoorOpener(); // opens doors on the way and closes them behind
   clearSolidDoors(); // doors that wouldn't open last connection may open now
   clearScaffolds(); // scaffolding from before may have been changed since
-  resetUnstuckState(); // stuck counters from an old connection don't apply
+  resetStuckWatch(); // stuck counters from an old connection don't apply
+  everyWhileConnected(currentBot, 5_000, checkProgress); // nudge, replan, give up (managers/stuckWatch)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 
@@ -156,7 +158,7 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
     steps.push({ command: BotCommands.GoToPlayer, args: { player_name: OWNER_USERNAME, closeness: 3 } });
   }
   for (const step of steps) {
-    await addCommandToQueue({ id: crypto.randomUUID(), priority: 0, retryCount: 0, ...step });
+    queueCommand({ id: crypto.randomUUID(), priority: 0, retryCount: 0, ...step });
   }
   console.log(`Recovery queued: ${steps.map((s) => s.command).join(" -> ")}`);
 }
@@ -169,20 +171,5 @@ onChatSent((text, whisperTo) => {
   if (whisperTo === null || isOwner(whisperTo)) recordTurn("bot", text);
 });
 
-let isProcessing = false;
-// A command from the old connection may never settle; don't let it block the loop
-onBeforeReconnect(() => {
-  isProcessing = false;
-});
-
+// No command loop: the arbiter (core/arbiter) runs tasks as they're proposed
 connect();
-
-setInterval(async () => {
-  if (isProcessing || !bot?.entity) return; // Skip while disconnected
-  isProcessing = true;
-  try {
-    await executeCommands();
-  } finally {
-    isProcessing = false;
-  }
-}, 1500);

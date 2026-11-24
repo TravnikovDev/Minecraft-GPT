@@ -77,10 +77,11 @@ The bot leverages several Mineflayer plugins:
 - `mineflayer-armor-manager` - Automatic armor equipment
 
 ## Command System
-Bot commands follow a priority-based queue system:
-1. Commands are added to the queue with a unique ID and priority level
-2. The action manager processes commands based on priority
-3. New AI responses may generate additional commands
+Everything the bot does is a task in one arbiter (`src/core/arbiter.ts`), by priority bucket: 0 survival, 1 threats, 2 owner commands, 3 roles, 4 upkeep, 5 self-directed, 6 idle chores. There is no queue in the database and no polling loop.
+1. Owner commands go through `queueCommand` (`src/managers/actionManager.ts`); priority 1 (the owner calling the bot) cuts in, and the task it cut off resumes afterwards with what's left (counted work reports progress with `reportProgress`).
+2. Reflexes (creeper, drowning, combat) don't cancel tasks: they take the body's resources urgently (`src/core/leases.ts`), and the task waits at its next action. Upkeep (eating, armor) borrows the hands between actions.
+3. Reflex code runs inside `asReflex(name, ...)`; tasks never call `bot.*` directly (`core/primitives.ts` waits its turn for them).
+4. Idle chores are lowest-priority tasks (`src/core/chores.ts`); a task with no progress is nudged, replanned, then given up (`src/managers/stuckWatch.ts`).
 
 ## OpenAI Integration
 The bot communicates with OpenAI through:

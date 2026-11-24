@@ -7,13 +7,9 @@ import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { BotCommands } from "../commands/types";
 import { initiateActionFromAI } from "./aiManager";
-import {
-  cancelCurrentCommand,
-  getCurrentCommandName,
-  stopEverything,
-} from "./actionManager";
+import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
 import { executeTool } from "./toolManager";
-import { addCommandToQueue, getAllCommands } from "./persistenceManager";
+import { Bucket, pendingTasks } from "../core/arbiter";
 import { answerPending, hasPendingQuestion, ownerDistance, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
 import { pathing } from "../core/plugins";
@@ -46,7 +42,7 @@ function stripBotName(message: string): string {
 /** Builds a short status line from the bot's real state. */
 async function statusMessage(): Promise<string> {
   const current = getCurrentCommandName();
-  const queued = (await getAllCommands()).filter((c) => c.command !== current).length;
+  const queued = pendingTasks().filter((t) => t.bucket <= Bucket.Self).length;
   const pos = bot.entity?.position;
   const where = pos ? `at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}` : "somewhere";
   const doing = current ? `Doing ${current}` : "Idle";
@@ -77,8 +73,8 @@ async function tryFastPath(message: string): Promise<boolean> {
     const [x, y, z] = coords.slice(1, 4).map(Number) as [number, number, number];
     console.log(`Fast path: go to ${x} ${y} ${z}`);
     rememberOwnerPosition(x, y, z, true); // the owner almost always sends their own position
-    await cancelCurrentCommand("owner gave coordinates");
-    await addCommandToQueue({
+    // Cuts in on what it's doing (priority 1); that carries on afterwards
+    queueCommand({
       id: crypto.randomUUID(),
       command: BotCommands.GoToCoordinates,
       priority: 1,
@@ -112,9 +108,8 @@ async function tryFastPath(message: string): Promise<boolean> {
       bot.chat(follow ? "I'm following you!" : `On my way${dist === null ? "" : `, ${Math.round(dist)} blocks to go`}!`);
       return true;
     }
-    // The owner calling outranks whatever the bot is doing right now
-    await cancelCurrentCommand(follow ? "owner asked to follow" : "owner called");
-    await addCommandToQueue({
+    // The owner calling outranks whatever the bot is doing right now (it carries on afterwards)
+    queueCommand({
       id: crypto.randomUUID(),
       command: follow ? BotCommands.FollowPlayer : BotCommands.GoToPlayer,
       priority: 1,

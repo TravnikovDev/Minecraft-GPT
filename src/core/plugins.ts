@@ -171,6 +171,19 @@ export function haltBody(): void {
   }
 }
 
+/**
+ * A reflex takes over the body: stops the task's walking (a follow resumes
+ * afterwards) and any dig in progress; the task waits its turn (core/leases).
+ */
+export function takeOverBody(): void {
+  pathing.takeOver();
+  try {
+    bot.stopDigging();
+  } catch {
+    // not digging
+  }
+}
+
 /** Melee combat (mineflayer-pvp). */
 export const fighting = {
   attack(target: Entity): Promise<void> {
@@ -191,26 +204,6 @@ export const fighting = {
   /** The mob pvp is attacking now, if any. */
   target(): Entity | null {
     return (bot.pvp?.target as Entity | undefined) ?? null;
-  },
-};
-
-/** Automatic eating (mineflayer-auto-eat v4). */
-export const eating = {
-  enable(): void {
-    bot.autoEat?.enable();
-  },
-  disable(): void {
-    bot.autoEat?.disable();
-  },
-  eat(): Promise<unknown> {
-    return Promise.resolve(bot.autoEat?.eat());
-  },
-};
-
-/** Wearing the best armor carried (mineflayer-armor-manager). */
-export const armor = {
-  async wearBest(): Promise<void> {
-    if (bot.armorManager) await bot.armorManager.equipAll();
   },
 };
 

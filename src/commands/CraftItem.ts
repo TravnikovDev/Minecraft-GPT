@@ -6,7 +6,7 @@ import { planCraft, readyVariants, resolveCraftable, type CraftStep } from "../a
 import { bot } from "../core/body";
 import { BotCommands } from "./types";
 import { isCommandCancelled } from "../core/commandContext";
-import { addCommandToQueue } from "../managers/persistenceManager";
+import { queueCommand } from "../managers/actionManager";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
 import { inventoryFull } from "../actions/storage";
 import { makeRoom } from "../actions/overflow";
@@ -126,7 +126,7 @@ export async function execute(args: any): Promise<void> {
     }
     tellOwner(`Making ${pieces.map(pretty).join(", ")}.`);
     for (const piece of pieces) {
-      await addCommandToQueue({
+      queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.CraftItem,
         priority: 3,
@@ -153,7 +153,7 @@ export async function execute(args: any): Promise<void> {
   // A loose name that matched something odd: check with the owner first
   if (isUnusualMatch(parsed.data.itemName, item)) {
     askOwner(`Did you mean ${count} ${pretty(item)}?`, async () => {
-      await addCommandToQueue({
+      queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.CraftItem,
         priority: 3,
@@ -191,7 +191,7 @@ export async function execute(args: any): Promise<void> {
       tellOwner("Okay, going to get them!");
       lastGatherFor.set(item, Date.now());
       for (const { gather } of gathers) {
-        await addCommandToQueue({
+        queueCommand({
           id: crypto.randomUUID(),
           command: gather!.command,
           priority: 3,
@@ -200,7 +200,7 @@ export async function execute(args: any): Promise<void> {
         });
       }
       // Then try the craft again (it re-plans with the new inventory)
-      await addCommandToQueue({
+      queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.CraftItem,
         priority: 3,

@@ -17,6 +17,9 @@ import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
 import { isAnyReflexActive } from "./reflexes";
+import { placeKey, recentFailure } from "./failures";
+import { beginUse, takeoverCount, waitTurn, type Resource } from "./leases";
+import { currentSignal } from "./commandContext";
 import { placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
 import { fail, ok, type ActionResult } from "./result";
@@ -115,7 +118,23 @@ function walkWatchdog(): { signal: AbortSignal; stop: () => void } {
  * no progress for a while, a time limit or a dropped connection end it with
  * the matching reason. A goal changed by something else is "interrupted".
  */
+// Where the last walk was headed (the stuck watcher remembers it when giving up)
+let lastGoal: Pos | null = null;
+
+/** The spot the last walk was headed for, if its goal has one. */
+export function lastWalkGoal(): Pos | null {
+  return lastGoal;
+}
+
 export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise<ActionResult> {
+  const g = goal as unknown as Partial<Pos>;
+  const spot = typeof g.x === "number" && typeof g.y === "number" && typeof g.z === "number" ? { x: g.x, y: g.y, z: g.z } : null;
+  if (spot) {
+    // Got stuck going there a little while ago: don't walk into the same dead end
+    const failed = recentFailure(placeKey(spot));
+    if (failed) return fail("unreachable", `${failed} a little while ago`);
+    lastGoal = spot;
+  }
   const watchdog = walkWatchdog();
   try {
     const walked = await guarded("walking", (signal) => pathing.goto(goal, signal), {
@@ -144,7 +163,7 @@ export type BreakOptions = {
  * really gone. The bot must already be within reach. Air, water and lava are
  * "nothing to break" (ok, with `alreadyGone`).
  */
-export async function breakBlock(pos: Pos, options: BreakOptions = {}): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
+async function breakBlockNow(pos: Pos, options: BreakOptions = {}): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
   const at = floor(pos);
   const block = knownBlock(at);
   if (!block) return fail("unknown_block", `${at} isn't loaded`);
@@ -204,7 +223,7 @@ export type PlaceOptions = {
  * The spot must be free, the bot within reach, and something solid next to
  * it. A server that refuses (a protected area) gives "refused".
  */
-export async function placeBlockAt(itemName: string, pos: Pos, options: PlaceOptions = {}): Promise<ActionResult<{ name: string }>> {
+async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions = {}): Promise<ActionResult<{ name: string }>> {
   const at = floor(pos);
   const item = bot.inventory.items().find((i) => i.name === itemName);
   if (!item) return fail("missing_items", `no ${itemName} to place`);
@@ -251,7 +270,7 @@ function equippedIn(slot: EquipSlot): Item | null {
 }
 
 /** Puts the exact item `itemName` in a hand or armor slot and checks it's there. */
-export async function equipItem(itemName: string, slot: EquipSlot = "hand"): Promise<ActionResult> {
+async function equipItemNow(itemName: string, slot: EquipSlot = "hand"): Promise<ActionResult> {
   if (equippedIn(slot)?.name === itemName) return ok();
   const item = bot.inventory.items().find((i) => i.name === itemName);
   if (!item) return fail("missing_items", `no ${itemName}`);
@@ -262,7 +281,7 @@ export async function equipItem(itemName: string, slot: EquipSlot = "hand"): Pro
 }
 
 /** Takes off what's in an equipment slot. */
-export async function unequipSlot(slot: EquipSlot): Promise<ActionResult> {
+async function unequipSlotNow(slot: EquipSlot): Promise<ActionResult> {
   if (!equippedIn(slot)) return ok();
   if (bot.inventory.emptySlotCount() === 0) return fail("full", "no room to take it off");
   const done = await guarded(`taking off ${slot}`, () => bot.unequip(slot), { timeoutMs: EQUIP_TIMEOUT_MS });
@@ -277,7 +296,7 @@ export function carried(itemName: string): number {
 }
 
 /** Eats or drinks the exact item `itemName` and checks one is gone. */
-export async function consumeItem(itemName: string): Promise<ActionResult> {
+async function consumeItemNow(itemName: string): Promise<ActionResult> {
   const before = carried(itemName);
   if (before === 0) return fail("missing_items", `no ${itemName}`);
   const equipped = await equipItem(itemName, "hand");
@@ -292,7 +311,7 @@ export async function consumeItem(itemName: string): Promise<ActionResult> {
 }
 
 /** Throws `count` of the exact item stack `item` on the ground in front, and checks they left. */
-export async function tossStack(item: Item, count: number): Promise<ActionResult<number>> {
+async function tossStackNow(item: Item, count: number): Promise<ActionResult<number>> {
   const before = carried(item.name);
   const n = Math.min(count, item.count);
   const done = await guarded(`throwing ${item.name}`, () => bot.toss(item.type, null, n), { timeoutMs: TOSS_TIMEOUT_MS });
@@ -333,7 +352,7 @@ export async function lookAt(point: Pos): Promise<ActionResult> {
 }
 
 /** Right-clicks a block within reach (a lever, a door, a bed, a farmland with seeds in hand). */
-export async function useBlock(block: Block): Promise<ActionResult> {
+async function useBlockNow(block: Block): Promise<ActionResult> {
   if (!withinReach(block.position)) return fail("out_of_reach", `${block.name} at ${block.position}`);
   return guarded(`using ${block.name}`, () => bot.activateBlock(block), { timeoutMs: USE_TIMEOUT_MS });
 }
@@ -345,7 +364,7 @@ export async function useBlock(block: Block): Promise<ActionResult> {
  * checks the result appeared. mineflayer waits for the crafting window with
  * no time limit; this gives up and closes the window instead.
  */
-export async function craftWith(recipe: Recipe, times: number, table: Block | null): Promise<ActionResult<number>> {
+async function craftWithNow(recipe: Recipe, times: number, table: Block | null): Promise<ActionResult<number>> {
   const resultId = recipe.result.id;
   const resultName = bot.registry.items[resultId]?.name ?? String(resultId);
   if (table && !withinReach(table.position)) return fail("out_of_reach", `crafting table at ${table.position}`);
@@ -431,4 +450,78 @@ export function hitEntity(entity: Entity): void {
 /** Holds or lets go of a movement key (sneak, jump, forward...). */
 export function setControl(control: "forward" | "back" | "left" | "right" | "jump" | "sprint" | "sneak", on: boolean): void {
   bot.setControlState(control, on);
+}
+
+/** Turns to a direction (yaw, pitch in radians). */
+export async function lookToward(yaw: number, pitch: number): Promise<ActionResult> {
+  return guarded("turning", () => bot.look(yaw, pitch, true), { timeoutMs: 2_000 });
+}
+
+// --- Taking turns with reflexes (core/leases) --------------------------------------
+
+/**
+ * Runs a hands/window action when it's this code's turn: waits while a reflex
+ * (or a borrower, eating) has the resource, marks it in use so borrowers wait
+ * for it to finish, and if a reflex cut in mid-way (a creeper: the dig was
+ * stopped), waits for it to let go and tries again (up to 3 times).
+ */
+async function using<T>(resources: Resource[], act: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  const signal = currentSignal();
+  let result: ActionResult<T> = fail("interrupted", "never ran");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    for (const r of resources) {
+      if (!(await waitTurn(r, () => Boolean(signal?.aborted)))) return fail("aborted", "stopped while waiting for my turn");
+    }
+    const before = resources.map((r) => takeoverCount(r));
+    const ends = resources.map((r) => beginUse(r));
+    try {
+      result = await act();
+    } finally {
+      for (const end of ends) end();
+    }
+    const cutIn = resources.some((r, i) => takeoverCount(r) !== before[i]);
+    if (result.ok || !cutIn || signal?.aborted) return result;
+    console.log(`A reflex cut in (${result.reason}); trying again once it's done.`);
+  }
+  return result;
+}
+
+/** breakBlock, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function breakBlock(pos: Pos, options: BreakOptions = {}): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
+  return using(["hands"], () => breakBlockNow(pos, options));
+}
+
+/** placeBlockAt, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function placeBlockAt(itemName: string, pos: Pos, options: PlaceOptions = {}): Promise<ActionResult<{ name: string }>> {
+  return using(["hands"], () => placeBlockAtNow(itemName, pos, options));
+}
+
+/** equipItem, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function equipItem(itemName: string, slot: EquipSlot = "hand"): Promise<ActionResult> {
+  return using(["hands"], () => equipItemNow(itemName, slot));
+}
+
+/** unequipSlot, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function unequipSlot(slot: EquipSlot): Promise<ActionResult> {
+  return using(["hands"], () => unequipSlotNow(slot));
+}
+
+/** consumeItem, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function consumeItem(itemName: string): Promise<ActionResult> {
+  return using(["hands"], () => consumeItemNow(itemName));
+}
+
+/** tossStack, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function tossStack(item: Item, count: number): Promise<ActionResult<number>> {
+  return using(["hands"], () => tossStackNow(item, count));
+}
+
+/** useBlock, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function useBlock(block: Block): Promise<ActionResult> {
+  return using(["hands"], () => useBlockNow(block));
+}
+
+/** craftWith, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function craftWith(recipe: Recipe, times: number, table: Block | null): Promise<ActionResult<number>> {
+  return using(["hands", "window"], () => craftWithNow(recipe, times, table));
 }

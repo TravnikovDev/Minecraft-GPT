@@ -1,15 +1,14 @@
 // Path: src/core/setup.ts
 // Per-connection setup of the plugins and the game-call hooks, run once when a
 // connection first spawns. Kept in core/ with the other code that touches the
-// mineflayer bot directly: the plugins, one set of safe walking rules, and the
-// wrappers that log every broken block and record scaffolding.
+// mineflayer bot directly: the plugins (pathfinder, pvp, tool), one set of
+// safe walking rules, and the wrappers that log every broken block and record
+// scaffolding.
 
 import type { Bot } from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
-import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
-import armorManager from "mineflayer-armor-manager";
 import { everyWhileConnected } from "./body";
 import { getCurrentCommandName } from "./commandContext";
 import { isSafeMovements, walkingRules } from "./movements";
@@ -19,9 +18,7 @@ import { forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./scaffold";
 export function installPlugins(currentBot: Bot): void {
   currentBot.loadPlugin(pathfinder);
   currentBot.loadPlugin(pvp);
-  currentBot.loadPlugin(autoEat);
   currentBot.loadPlugin(tool);
-  currentBot.loadPlugin(armorManager);
 
   // One set of walking rules: natural terrain only, doors opened (core/movements).
   // mineflayer-pvp brings its own default rules (dig through anything) and
@@ -69,17 +66,6 @@ export function installPlugins(currentBot: Bot): void {
     }
   }) as typeof currentBot.placeBlock;
 
-  // Eating: when hungry, or hurt and able to heal by eating
-  currentBot.autoEat.options = {
-    priority: "foodPoints", // Prioritize foods that restore the most hunger points
-    startAt: 14, // Start eating when hunger is at or below this level
-    bannedFood: [], // No foods are banned by default
-    healthThreshold: 10, // Start eating when health is at or below this level
-    eatingTimeout: 3000, // Timeout for eating in milliseconds
-    ignoreInventoryCheck: false, // Do not ignore inventory check
-    checkOnItemPickup: true, // Check food on item pickup
-    equipOldItem: true, // Equip old item after eating
-    offhand: true, // Use offhand for food
-  };
-  currentBot.autoEat.enable();
+  // Eating and armor are the bot's own upkeep (actions/upkeep.ts, actions/armor.ts):
+  // the auto-eat and armor-manager plugins grabbed the hands whenever they liked
 }

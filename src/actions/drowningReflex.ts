@@ -5,8 +5,9 @@
 // (nothing holds the jump key once the pathfinder gives up).
 
 import { bot, onConnectionEnd } from "../core/body";
-import { pathing } from "../core/plugins";
-import { setReflexActive } from "../core/reflexes";
+import { lookToward, setControl } from "../core/primitives";
+import { pathing, takeOverBody } from "../core/plugins";
+import { asReflex, setReflexActive } from "../core/reflexes";
 
 const CHECK_MS = 250;
 // Air in ticks (full is 300 = 15 s). mineflayer's bot.oxygenLevel can't be
@@ -48,8 +49,8 @@ const headUnderwater = (): boolean => isWaterAt(1.62);
 function finish(): void {
   if (!active) return;
   active = false;
-  bot.setControlState("jump", false);
-  bot.setControlState("forward", false);
+  setControl("jump", false);
+  setControl("forward", false);
   setReflexActive("drowning", false);
   pathing.resumeAfterReflex();
   console.log("Drowning reflex: breathing again.");
@@ -67,7 +68,7 @@ function tick(): void {
   const shouldFloat = !active && !bot.vehicle && isWaterAt(0.2) && !pathing.isMoving();
   if (shouldFloat !== floating) {
     floating = shouldFloat;
-    bot.setControlState("jump", shouldFloat);
+    setControl("jump", shouldFloat);
   }
 
   if (!active) {
@@ -81,7 +82,7 @@ function tick(): void {
         `jump ${bot.getControlState("jump")}, pathing ${pathing.isMoving()}, vy ${bot.entity.velocity.y.toFixed(2)}).`
     );
     setReflexActive("drowning", true);
-    pathing.takeOver(); // take over movement from whatever task is running
+    takeOverBody(); // take over movement from whatever task is running
   }
 
   if (!underwater && air >= SAFE_AIR) {
@@ -90,9 +91,9 @@ function tick(): void {
   }
   // Swim up: jump is "swim up" in water; looking up and pushing forward
   // slides the bot out from under overhangs and onto the shore
-  void bot.look(bot.entity.yaw, Math.PI / 4, true);
-  bot.setControlState("jump", true);
-  bot.setControlState("forward", true);
+  void lookToward(bot.entity.yaw, Math.PI / 4);
+  setControl("jump", true);
+  setControl("forward", true);
 }
 
 /** Starts the reflex for the current bot instance. */
@@ -100,7 +101,8 @@ export function registerDrowningReflex(): void {
   active = false; // fresh state for this connection
   floating = false;
   underwaterSince = null;
-  const timer = setInterval(tick, CHECK_MS);
+  // Its moves run as the drowning reflex: they never wait for the task it paused
+  const timer = setInterval(() => asReflex("drowning", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
-  bot.on("death", finish);
+  bot.on("death", () => asReflex("drowning", finish));
 }

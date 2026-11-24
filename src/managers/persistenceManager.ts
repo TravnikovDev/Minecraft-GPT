@@ -6,7 +6,6 @@ import { resolve } from "path";
 import { z } from "zod";
 import type {
   ChestType,
-  CommandType,
   DbSchemaType,
   InventoryItemType,
   MemoryType,
@@ -14,7 +13,6 @@ import type {
   PositionType,
 } from "../schemas/types";
 import {
-  CommandSchema,
   DbSchema,
   InventorySchema,
   MineSchema,
@@ -64,59 +62,11 @@ export async function saveDb() {
   }
 }
 
-// Add Command to Database
-export async function addCommandToQueue(newCommand: CommandType) {
-  try {
-    console.log("Adding command to queue:", newCommand.command);
-    
-    // Ensure retryCount is set
-    if (newCommand.retryCount === undefined) {
-      newCommand.retryCount = 3; // Default to 3 retries
-    }
-    
-    const parsedCommand = CommandSchema.safeParse(newCommand);
-    if (!parsedCommand.success) {
-      throw new Error("Command validation failed: " + parsedCommand.error);
-    } else {
-      console.log(
-        `- Adding command ${parsedCommand.data.command} with priority ${parsedCommand.data.priority} to queue.`
-      );
-    }
-    
-    // Check if this is a duplicate command
-    if (db.data?.commands) {
-      const isDuplicate = db.data.commands.some(cmd => 
-        cmd.command === parsedCommand.data.command && 
-        JSON.stringify(cmd.args) === JSON.stringify(parsedCommand.data.args)
-      );
-      
-      if (isDuplicate) {
-        console.log(`Command ${parsedCommand.data.command} already in queue. Skipping.`);
-        return;
-      }
-    }
-    
-    db.data?.commands.push(parsedCommand.data);
-    await saveDb();
-  } catch (error) {
-    console.error("Error adding command to database:", error);
-  }
-}
-
-// Remove command from Database
-export async function removeCommand(id: string) {
-  try {
-    if (db.data) {
-      db.data.commands = db.data.commands.filter(
-        (command: { id: string }) => command.id !== id
-      );
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error removing command from database:", error);
-  }
-}
-
+/**
+ * Clears the old command queue kept in db.json (commands now live in the
+ * arbiter, in memory, and never survive a restart). Kept so a db.json from
+ * before Phase 4 doesn't carry stale commands around.
+ */
 export async function removeAllCommands() {
   try {
     if (db.data) {
@@ -128,10 +78,6 @@ export async function removeAllCommands() {
   }
 }
 
-// Get All commands from Database
-export function getAllCommands() {
-  return db.data?.commands || [];
-}
 
 // Add Lore Event to Database
 export async function addLoreEvent(event: string) {

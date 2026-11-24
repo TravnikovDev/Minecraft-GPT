@@ -12,7 +12,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { fighting } from "../core/plugins";
 import { countList, isGame, lookForAnimals, planHunt, SIGHT_RANGE, KEEP_PER_KIND } from "../actions/hunting";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
-import { addCommandToQueue } from "../managers/persistenceManager";
+import { queueCommand } from "../managers/actionManager";
 import { BotCommands } from "./types";
 
 export const description = `When user asks the bot to hunt, the bot looks around (what it can see within 60 blocks),
@@ -91,7 +91,7 @@ export async function execute(args: any): Promise<void> {
     }
     // The owner named the kind: their call whether to take the last ones
     askOwner(`I only see ${countList(plan.seen)}; if I hunt ${them}, none are left to breed. Hunt ${them} anyway?`, async () => {
-      await addCommandToQueue({
+      queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.Hunting,
         priority: 3,
@@ -139,7 +139,7 @@ export async function execute(args: any): Promise<void> {
   const more = planHunt(lookForAnimals(), mobType, null);
   if (more.total > 0) {
     askOwner(`${catchReport} I still see ${countList(more.take)} to hunt. Keep hunting?`, async () => {
-      await addCommandToQueue({
+      queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.Hunting,
         priority: 3,

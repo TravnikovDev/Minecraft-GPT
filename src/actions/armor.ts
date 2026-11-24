@@ -3,8 +3,9 @@
 // crafted armor (or armor it already carried) needs an explicit equip.
 
 import { bot } from "../core/body";
-import { armor as armorPlugin } from "../core/plugins";
-import { unequipSlot, type EquipSlot } from "../core/primitives";
+import { catalog } from "../core/catalog";
+import { borrow } from "../core/leases";
+import { equipItem, unequipSlot, type EquipSlot } from "../core/primitives";
 import { describeFailure } from "../core/result";
 
 // Inventory window slots worn on the body: head, chest, legs, feet
@@ -18,12 +19,25 @@ export function wornArmor(): string[] {
   return ARMOR_SLOTS.map((slot) => bot.inventory.slots[slot]?.name).filter((n): n is string => Boolean(n));
 }
 
-/** Puts on the best armor the bot carries for each slot. Returns what it wears afterwards. */
+const EQUIP_SLOT: Record<string, EquipSlot> = { head: "head", chest: "torso", torso: "torso", legs: "legs", feet: "feet" };
+const SLOT_INDEX: Record<EquipSlot, number> = { head: 5, torso: 6, legs: 7, feet: 8, hand: -1, "off-hand": 45 };
+
+/**
+ * Puts on the best armor the bot carries for each slot (better than what it
+ * wears). Returns what it wears afterwards. Done by the bot itself, not the
+ * armor plugin, so it never grabs the hands in the middle of a task.
+ */
 export async function wearBestArmor(): Promise<string[]> {
-  try {
-    await armorPlugin.wearBest();
-  } catch (error) {
-    console.log(`Putting on armor failed: ${(error as Error).message}`);
+  const c = catalog();
+  for (const slot of ["head", "torso", "legs", "feet"] as const) {
+    const worn = bot.inventory.slots[SLOT_INDEX[slot]];
+    const best = bot.inventory
+      .items()
+      .filter((i) => isArmorPiece(i.name) && EQUIP_SLOT[c.armorSlot(i.name) ?? ""] === slot)
+      .sort((a, b) => c.armorTier(b.name) - c.armorTier(a.name))[0];
+    if (!best || (worn && c.armorTier(worn.name) >= c.armorTier(best.name))) continue;
+    const result = await equipItem(best.name, slot);
+    if (!result.ok) console.log(`Putting on ${best.name} failed: ${describeFailure(result)}`);
   }
   return wornArmor();
 }
@@ -57,6 +71,7 @@ export async function autoWearArmor(): Promise<void> {
   if (Date.now() < noAutoWearUntil || bot.currentWindow) return;
   if (!bot.inventory.items().some((i) => isArmorPiece(i.name))) return;
   const before = wornArmor().join(",");
-  const after = await wearBestArmor();
+  // Between the task's actions, never in the middle of one
+  const after = (await borrow({ name: "wearing armor", bucket: 4 }, ["hands"], wearBestArmor, 5_000)) ?? wornArmor();
   if (after.join(",") !== before) console.log(`Put on armor: now wearing ${after.join(", ")}.`);
 }

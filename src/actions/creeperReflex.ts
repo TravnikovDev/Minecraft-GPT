@@ -8,8 +8,9 @@ import type { Entity } from "prismarine-entity";
 import { bestMeleeWeapon } from "./combat";
 import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
-import { fighting, pathing } from "../core/plugins";
-import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
+import { equipItem, hitEntity, lookAt, lookToward, setControl } from "../core/primitives";
+import { fighting, pathing, takeOverBody } from "../core/plugins";
+import { areReflexesMuted, asReflex, registerReflexStopper, setReflexActive } from "../core/reflexes";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -45,14 +46,14 @@ function isFusing(creeper: Entity): boolean {
 
 function setOnly(states: Partial<Record<"forward" | "back" | "sprint" | "jump", boolean>>): void {
   for (const control of ["forward", "back", "left", "right", "sprint", "jump"] as const) {
-    bot.setControlState(control, Boolean(states[control as keyof typeof states]));
+    setControl(control, Boolean(states[control as keyof typeof states]));
   }
 }
 
 async function faceAwayFrom(creeper: Entity): Promise<void> {
   const dx = bot.entity.position.x - creeper.position.x;
   const dz = bot.entity.position.z - creeper.position.z;
-  await bot.look(Math.atan2(-dx, -dz), 0, true);
+  await lookToward(Math.atan2(-dx, -dz), 0);
 }
 
 function finish(): void {
@@ -86,7 +87,7 @@ async function tick(): Promise<void> {
       active = true;
       console.log(`Creeper reflex: creeper ${distance.toFixed(1)} blocks away${isNight() ? " (night)" : ""}.`);
       setReflexActive("creeper", true);
-      pathing.takeOver(); // take over movement from whatever task is running
+      takeOverBody(); // take over movement from whatever task is running
       fighting.stop();
     }
 
@@ -100,13 +101,13 @@ async function tick(): Promise<void> {
       return;
     }
 
-    if (bot.heldItem?.name !== weapon!.name) await bot.equip(weapon!, "hand");
-    await bot.lookAt(creeper.position.offset(0, 1.2, 0), true);
+    if (bot.heldItem?.name !== weapon!.name) await equipItem(weapon!.name, "hand");
+    await lookAt(creeper.position.offset(0, 1.2, 0));
 
     if (distance <= HIT_RANGE) {
       if (Date.now() - lastHitAt >= HIT_COOLDOWN_MS) {
         lastHitAt = Date.now();
-        bot.attack(creeper);
+        hitEntity(creeper);
       }
       setOnly({ back: true }); // step back after the hit, out of blast range
     } else if (distance < HIT_RANGE + 1.5) {
@@ -127,8 +128,9 @@ export function registerCreeperReflex(): void {
   active = false;
   busy = false;
   lastHitAt = 0;
-  const timer = setInterval(() => void tick(), CHECK_MS);
+  // Its moves run as the creeper reflex: they never wait for the task it paused
+  const timer = setInterval(() => void asReflex("creeper", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
-  bot.on("death", finish);
+  bot.on("death", () => asReflex("creeper", finish));
   registerReflexStopper("creeper", finish);
 }

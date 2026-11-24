@@ -10,7 +10,7 @@ import { pathing, tools } from "../core/plugins";
 import { goTo } from "../core/primitives";
 import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/result";
 import { canSee, type SightWorld } from "./sight";
-import { isCommandCancelled } from "../core/commandContext";
+import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { tunnelTo } from "./digging";
 import { makeRoom } from "./overflow";
 
@@ -137,6 +137,7 @@ export async function collectBlock(
         }
         if (mined.value.alreadyGone) continue; // someone else got it
         collected++;
+        reportProgress(collected); // cut off now, it collects only what's left
         failures = 0;
 
         // Full: put things away (in a chest it knows, or one it makes) and go on

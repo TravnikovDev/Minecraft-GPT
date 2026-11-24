@@ -4,7 +4,7 @@ import { catalog } from "../core/catalog";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
-import { isCommandCancelled } from "../core/commandContext";
+import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { findTrunk, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
 import { takeDownScaffolding } from "./scaffolding";
 
@@ -105,6 +105,7 @@ export async function gatherWood(
         const newCount = getLogsCount();
         failedAttempts = newCount > logsCount ? 0 : failedAttempts + 1;
         logsCount = newCount;
+        reportProgress(logsCount - startingLogs); // cut off now, it gathers only what's left
         console.log(`Collected logs. Total logs now: ${logsCount}.`);
       } catch (digError) {
         console.error("Failed to break the wood block:", digError);

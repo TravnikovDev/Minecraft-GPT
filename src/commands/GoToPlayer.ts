@@ -8,7 +8,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { lastKnownOwnerPosition, ridingWithOwner, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
 import { walkingRules } from "../core/movements";
-import { unstuck } from "../actions/unstuck";
+import { nudge } from "../actions/unstuck";
 import { pathing } from "../core/plugins";
 
 export const description = `When user asks the bot to go to a player, the bot will navigate to the player's location. 
@@ -134,7 +134,7 @@ export async function execute(args: any = {}) {
     } else {
       // If still failed, try unstuck procedure
       bot.chat("Had trouble reaching the player. Trying to get unstuck...");
-      await unstuck();
+      await nudge();
     }
   } catch (error) {
     bot.chat(`Failed to reach the player: ${error}`);

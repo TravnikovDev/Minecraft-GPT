@@ -25,6 +25,21 @@ export function isCommandCancelled(): boolean {
   return commandSignal.getStore()?.aborted ?? false;
 }
 
+// How much of a counted task is done ("collected 4 of 10"), so a task cut
+// off half-way can carry on with what's left
+const progress = new WeakMap<AbortSignal, number>();
+
+/** A counted task reports how many it has done so far. */
+export function reportProgress(done: number): void {
+  const signal = commandSignal.getStore();
+  if (signal) progress.set(signal, done);
+}
+
+/** How many the task running with `signal` reported done. */
+export function progressOf(signal: AbortSignal): number {
+  return progress.get(signal) ?? 0;
+}
+
 /** The abort signal of the command or chore this code runs for, if any. */
 export function currentSignal(): AbortSignal | undefined {
   return commandSignal.getStore();
