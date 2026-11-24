@@ -1,6 +1,7 @@
 // Path: src/actions/GiveItemToAPlayer.ts
 
 import { z } from "zod";
+import { catalog } from "../core/catalog";
 import { giveToPlayer } from "../actions/inventory";
 import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
@@ -38,8 +39,7 @@ export async function execute(args: any) {
   // A loose name ("pressure plate", "planks"): match what the bot really carries or wears
   const have = [...new Set([...bot.inventory.items().map((i) => i.name), ...wornArmor()])];
   if (!have.includes(item_name)) {
-    const singular = item_name.replace(/s$/, "");
-    const matches = have.filter((n) => n.endsWith(`_${item_name}`) || n.endsWith(`_${singular}`) || n === singular);
+    const matches = catalog().resolveLoose(item_name, have);
     if (matches.length === 1) item_name = matches[0]!;
     else if (matches.length > 1) {
       const names = matches.map((n) => n.replace(/_/g, " "));

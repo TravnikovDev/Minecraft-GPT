@@ -5,6 +5,7 @@
 // At night it engages from farther away.
 
 import type { Entity } from "prismarine-entity";
+import { bestMeleeWeapon } from "./combat";
 import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
 import { fighting, pathing } from "../core/plugins";
@@ -33,15 +34,7 @@ function isNight(): boolean {
 }
 
 function bestWeapon(): Item | null {
-  const tiers = ["wooden", "golden", "stone", "iron", "diamond", "netherite"];
-  const score = (name: string): number =>
-    (name.endsWith("_sword") ? 10 : 0) + Math.max(0, tiers.findIndex((t) => name.startsWith(t)));
-  return (
-    bot.inventory
-      .items()
-      .filter((i) => i.name.endsWith("_sword") || i.name.endsWith("_axe"))
-      .sort((a, b) => score(b.name) - score(a.name))[0] ?? null
-  );
+  return bestMeleeWeapon(bot.inventory.items());
 }
 
 /** Best effort: creeper "state" metadata is 1 while its fuse is burning. */

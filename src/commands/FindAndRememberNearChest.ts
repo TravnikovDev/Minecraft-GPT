@@ -1,6 +1,7 @@
 // Path: src/actions/FindAndRememberNearChest.ts
 
 import { z } from "zod";
+import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 
@@ -21,31 +22,25 @@ const chestMemory: { [category: string]: Vec3[] } = {};
 function categorizeChest(contents: any[]): string {
   if (
     contents.some(
-      (item) =>
-        item.name.includes("pickaxe") ||
-        item.name.includes("shovel") ||
-        item.name.includes("sword")
+      (item) => catalog().toolKind(item.name) !== null
     )
   ) {
     return "Tools";
   } else if (
     contents.some(
-      (item) => item.name.includes("log") || item.name.includes("ore")
+      (item) => catalog().isLog(item.name) || catalog().isOre(item.name) || catalog().oresFor(item.name).length > 0
     )
   ) {
     return "RawResources";
   } else if (
     contents.some(
-      (item) => item.name.includes("plank") || item.name.includes("ingot")
+      (item) => catalog().isPlanks(item.name) || /_ingot$/.test(item.name)
     )
   ) {
     return "RefinedMaterials";
   } else if (
     contents.some(
-      (item) =>
-        item.name.includes("food") ||
-        item.name.includes("apple") ||
-        item.name.includes("bread")
+      (item) => catalog().isFood(item.name)
     )
   ) {
     return "Food";

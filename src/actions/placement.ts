@@ -2,6 +2,7 @@
 // Putting items from the inventory down in the world (beds, chests, tables...).
 
 import type { Block } from "prismarine-block";
+import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
 import { placeBlock } from "./worldInteraction";
 import { getNearestFreeSpace } from "./world";
@@ -21,7 +22,7 @@ export function findPlaceableItem(requested: string): string | null {
 
 /** Beds need two free blocks in a row; everything else one. */
 function footprint(itemName: string): number {
-  return itemName.endsWith("_bed") ? 2 : 1;
+  return catalog().isBed(itemName) ? 2 : 1;
 }
 
 /**
@@ -45,6 +46,6 @@ export async function placeItemNear(itemName: string): Promise<Block | null> {
 
 /** The nearest bed block within range, if any. */
 export function findNearestBed(maxDistance = 24): Block | null {
-  const bedIds = bot.registry.blocksArray.filter((b) => b.name.endsWith("_bed")).map((b) => b.id);
+  const bedIds = bot.registry.blocksArray.filter((b) => catalog().isBed(b.name)).map((b) => b.id);
   return bot.findBlock({ matching: bedIds, maxDistance });
 }

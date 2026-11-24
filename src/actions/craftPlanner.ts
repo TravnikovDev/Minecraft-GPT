@@ -5,6 +5,7 @@
 // planks), and lists the raw materials it is still missing.
 
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 
 /** How deep to plan intermediate parts (bed -> planks -> logs is depth 2). */
 const MAX_DEPTH = 3;
@@ -30,13 +31,13 @@ const itemName = (id: number): string => bot.registry.items[id]?.name ?? `item#$
 
 /** Parts the bot should always make itself from their inputs when missing. */
 function alwaysExpand(name: string): boolean {
-  return name === "stick" || name.endsWith("_planks") || name === "crafting_table";
+  return name === "stick" || catalog().isPlanks(name) || name === "crafting_table";
 }
 
 /** Raw-material groups reported (and gathered) as one thing, e.g. any log. */
 export function materialGroup(name: string): string {
-  if (name.endsWith("_log") || name.endsWith("_stem")) return "logs";
-  if (name.endsWith("_planks")) return "planks";
+  if (catalog().isLog(name)) return "logs";
+  if (catalog().isPlanks(name)) return "planks";
   return name;
 }
 
@@ -193,8 +194,7 @@ export function resolveCraftable(requested: string, count: number): string | nul
 
   const preferred = (name: string): number => (/^(white|oak)_/.test(name) ? 0 : 1);
   // Among equally possible tools/armor, the best material wins (stone over wood)
-  const TIERS = ["wooden", "golden", "stone", "iron", "diamond", "netherite"];
-  const tier = (name: string): number => TIERS.findIndex((t) => name.startsWith(`${t}_`));
+  const tier = (name: string): number => Math.max(catalog().toolTier(name), catalog().armorTier(name));
   return candidates.sort(
     (a, b) => missingTotal(a, count) - missingTotal(b, count) || tier(b) - tier(a) || preferred(a) - preferred(b)
   )[0]!;

@@ -52,7 +52,7 @@ export async function collectBlock(
         const itemId = bot.heldItem ? bot.heldItem.type : null;
         if (!block.canHarvest(itemId)) {
           console.log(`Don't have right tools to harvest ${block.name}.`);
-          if (block.name.includes("ore") || block.name.includes("stone")) {
+          if (catalog().toolKindFor(block.name) === "pickaxe") {
             await ensurePickaxe();
           }
           throw new Error("Don't have right tools to harvest block.");

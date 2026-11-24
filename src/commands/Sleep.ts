@@ -1,6 +1,7 @@
 // Path: src/commands/Sleep.ts
 
 import { z } from "zod";
+import { catalog } from "../core/catalog";
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
@@ -82,7 +83,7 @@ async function rememberBed(bed: Block): Promise<void> {
   await saveBed({ x: p.x, y: p.y, z: p.z, dimension: bot.game.dimension, at: Date.now() });
 }
 
-const isBed = (block: Block | null): block is Block => Boolean(block?.name.endsWith("_bed"));
+const isBed = (block: Block | null): block is Block => Boolean(block && catalog().isBed(block.name));
 
 /**
  * The bot's own bed: walks back to it if it's far. Returns the bed, null when
@@ -126,7 +127,7 @@ export async function execute(args: any = {}): Promise<void> {
   }
   bed ??= findNearestBed(24);
   if (!bed) {
-    const bedItem = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
+    const bedItem = bot.inventory.items().find((i) => catalog().isBed(i.name));
     if (!bedItem) {
       bot.chat("I don't have a bed. Say \"make me a bed\" and I'll craft one.");
       return;

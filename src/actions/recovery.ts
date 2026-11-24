@@ -3,6 +3,7 @@
 // for 5 minutes), and helpers for getting back on its feet afterwards.
 
 import { Vec3 } from "vec3";
+import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
 import { loadDeath, saveDeath } from "../core/session";
 
@@ -87,12 +88,12 @@ export function canReachBeforeDespawn(death: DeathRecord): boolean {
 
 /** True if the bot carries a sword or axe. */
 export function hasWeapon(): boolean {
-  return bot.inventory.items().some((i) => i.name.endsWith("_sword") || i.name.endsWith("_axe"));
+  return bot.inventory.items().some((i) => catalog().isMeleeWeapon(i.name));
 }
 
 /** True if the bot carries a pickaxe. */
 export function hasPickaxe(): boolean {
-  return bot.inventory.items().some((i) => i.name.endsWith("_pickaxe"));
+  return bot.inventory.items().some((i) => catalog().toolKind(i.name) === "pickaxe");
 }
 
 /** Total count of edible items carried. */

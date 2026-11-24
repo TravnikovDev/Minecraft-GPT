@@ -1,6 +1,7 @@
 // src/actions/worldInteraction.ts
 
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { markSelfAction } from "../core/events";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
@@ -28,13 +29,12 @@ export async function placeBlock(
 
   const targetDest = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
 
-  let block = bot.inventory
-    .items()
-    .find((item) => item.name.includes(blockType));
+  // The exact block to place: "stone" must never pick a stone pickaxe
+  let block = bot.inventory.items().find((item) => item.name === blockType);
   if (!block && bot.game.gameMode === "creative") {
     // TODO: Rework
     await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
-    block = bot.inventory.items().find((item) => item.name.includes(blockType));
+    block = bot.inventory.items().find((item) => item.name === blockType);
   }
   if (!block) {
     console.log(`Don't have any ${blockType} to place.`);
@@ -315,7 +315,7 @@ export async function tillAndSow(
     await goToPosition(x, y, z, 4);
   }
   if (block.name !== "farmland") {
-    const hoe = bot.inventory.items().find((item) => item.name.includes("hoe"));
+    const hoe = bot.inventory.items().find((item) => catalog().toolKind(item.name) === "hoe");
     if (!hoe) {
       console.log(`Cannot till, no hoes.`);
       return false;
@@ -332,7 +332,7 @@ export async function tillAndSow(
       seedType += "s"; // Fixes common mistake
     const seeds = bot.inventory
       .items()
-      .find((item) => item.name.includes(seedType || "seed"));
+      .find((item) => (seedType ? item.name === seedType : /_seeds$/.test(item.name)));
     if (!seeds) {
       console.log(`No ${seedType} to plant.`);
       return false;

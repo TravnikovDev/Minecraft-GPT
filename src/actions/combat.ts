@@ -1,6 +1,8 @@
 // Path: src/actions/combat.ts
 
 import { bot } from "../core/body";
+import type { Item } from "prismarine-item";
+import { catalog } from "../core/catalog";
 import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
 import { goals } from "mineflayer-pathfinder";
@@ -100,14 +102,12 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
     // Try to equip preferred weapon type first
     if (preferredWeapon === "bow") {
       // Try to equip bow
-      const bows = bot.inventory.items().filter(item => 
-        item.name.includes("bow") && !item.name.includes("crossbow"));
+      const bows = bot.inventory.items().filter(item => item.name === "bow"); // includes("bow") matched bowls
       
       if (bows.length > 0) {
         await bot.equip(bows[0], "hand");
         // Check if we have arrows
-        const arrows = bot.inventory.items().filter(item => 
-          item.name.includes("arrow"));
+        const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
         
         if (arrows.length > 0) {
           bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
@@ -116,10 +116,9 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       }
       
       // If no bow or arrows, try crossbow
-      const crossbows = bot.inventory.items().filter(item => 
-        item.name.includes("crossbow"));
+      const crossbows = bot.inventory.items().filter(item => item.name === "crossbow");
       
-      if (crossbows.length > 0 && bot.inventory.items().some(item => item.name.includes("arrow"))) {
+      if (crossbows.length > 0 && bot.inventory.items().some(item => catalog().isArrow(item.name))) {
         await bot.equip(crossbows[0], "hand");
         bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
         return true;
@@ -127,7 +126,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
     } 
     else if (preferredWeapon === "shield") {
       // Try to equip shield in offhand and best melee weapon in main hand
-      const shields = bot.inventory.items().filter(item => item.name.includes("shield"));
+      const shields = bot.inventory.items().filter(item => item.name === "shield");
       if (shields.length > 0) {
         await bot.equip(shields[0], "off-hand");
         bot.chat(`Equipped shield for defense.`);
@@ -144,30 +143,26 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
   }
 }
 
+/**
+ * The hardest-hitting sword or axe among `items`; with `orTools`, a pickaxe or
+ * shovel when there's no weapon. Null when there's nothing (fists).
+ */
+export function bestMeleeWeapon(items: Item[], orTools = false): Item | null {
+  const c = catalog();
+  let weapons = items.filter((i) => c.isMeleeWeapon(i.name));
+  if (weapons.length === 0 && orTools) weapons = items.filter((i) => ["pickaxe", "shovel"].includes(c.toolKind(i.name) ?? ""));
+  return weapons.sort((a, b) => getAttackDamage(b) - getAttackDamage(a))[0] ?? null;
+}
+
 // Equip best melee weapon
 export async function equipBestMeleeWeapon(): Promise<boolean> {
   try {
-    let weapons = bot.inventory
-      .items()
-      .filter(
-        (item) =>
-          item.name.includes("sword") ||
-          (item.name.includes("axe") && !item.name.includes("pickaxe"))
-      );
-    if (weapons.length === 0) {
-      weapons = bot.inventory
-        .items()
-        .filter(
-          (item) =>
-            item.name.includes("pickaxe") || item.name.includes("shovel")
-        );
-    }
-    if (weapons.length === 0) {
+    const best = bestMeleeWeapon(bot.inventory.items(), true);
+    if (!best) {
       bot.chat("No weapon available to equip.");
       return false;
     }
-
-    weapons.sort((a, b) => getAttackDamage(b) - getAttackDamage(a));
+    const weapons = [best];
     const bestWeapon = weapons[0];
     await bot.equip(bestWeapon, "hand");
     bot.chat(`Equipped ${bestWeapon.displayName} for combat.`);
@@ -214,7 +209,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
     else {
       // For other mobs: approach to attack or maintain optimal distance for ranged
       const equipment = bot.inventory.slots[bot.getEquipmentDestSlot('hand')];
-      const isRanged = equipment && (equipment.name.includes("bow") || equipment.name.includes("crossbow"));
+      const isRanged = equipment && (equipment.name === "bow" || equipment.name === "crossbow");
       
       if (isRanged) {
         await maintainDistance(target, preferredDistance);
@@ -280,12 +275,12 @@ async function strafeAroundTarget(target: Entity, distance: number): Promise<voi
 async function useShield(): Promise<boolean> {
   try {
     // Check if we have a shield in inventory
-    const shields = bot.inventory.items().filter(item => item.name.includes("shield"));
+    const shields = bot.inventory.items().filter(item => item.name === "shield");
     
     if (shields.length > 0) {
       // Equip shield in off-hand if not already equipped
       const currentOffhand = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
-      if (!currentOffhand || !currentOffhand.name.includes("shield")) {
+      if (!currentOffhand || currentOffhand.name !== "shield") {
         await bot.equip(shields[0], "off-hand");
       }
       

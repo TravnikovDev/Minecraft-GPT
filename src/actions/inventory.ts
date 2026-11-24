@@ -15,18 +15,13 @@ import type { InventoryItemType } from "../schemas/types.js";
  * @returns Whether the item was successfully equipped.
  */
 export async function equip(itemName: string): Promise<boolean> {
-  const item = bot.inventory
-    .items()
-    .find((item) => item.name.includes(itemName));
+  const matches = itemMatcher(itemName);
+  const item = bot.inventory.items().find((item) => matches(item.name));
   if (!item) {
     console.log(`You do not have any ${itemName} to equip.`);
     return false;
   }
-  let destination: "hand" | "head" | "torso" | "legs" | "feet" = "hand";
-  if (itemName.includes("leggings")) destination = "legs";
-  else if (itemName.includes("boots")) destination = "feet";
-  else if (itemName.includes("helmet")) destination = "head";
-  else if (itemName.includes("chestplate")) destination = "torso";
+  const destination = catalog().armorSlot(item.name) ?? "hand";
 
   await bot.equip(item, destination);
   return true;
@@ -39,11 +34,11 @@ export async function equip(itemName: string): Promise<boolean> {
  * @returns Whether the item was successfully discarded.
  */
 export async function discard(itemName: string, num = -1): Promise<boolean> {
+  // Exact name or category: discarding "stone" must never toss a stone pickaxe
+  const matches = itemMatcher(itemName);
   let discarded = 0;
   while (true) {
-    const item = bot.inventory
-      .items()
-      .find((item) => item.name.includes(itemName));
+    const item = bot.inventory.items().find((item) => matches(item.name));
     if (!item) {
       break;
     }
@@ -69,9 +64,8 @@ export async function putInChest(itemName: string, num = -1): Promise<boolean> {
     console.log(`Could not find a chest nearby.`);
     return false;
   }
-  const item = bot.inventory
-    .items()
-    .find((item) => item.name.includes(itemName));
+  const matches = itemMatcher(itemName);
+  const item = bot.inventory.items().find((item) => matches(item.name));
   if (!item) {
     console.log(`You do not have any ${itemName} to put in the chest.`);
     return false;
@@ -96,9 +90,8 @@ export async function takeFromChest(
   }
   await goToPosition(chest.position.x, chest.position.y, chest.position.z);
   const chestContainer = await bot.openContainer(chest);
-  const item = chestContainer
-    .containerItems()
-    .find((item) => item.name.includes(itemName));
+  const matches = itemMatcher(itemName);
+  const item = chestContainer.containerItems().find((item) => matches(item.name));
   if (!item) {
     console.log(`Could not find any ${itemName} in the chest.`);
     await chestContainer.close();
@@ -146,7 +139,8 @@ export async function eat(foodName = ""): Promise<boolean> {
   let item: Item | undefined;
   let name: string;
   if (foodName) {
-    item = bot.inventory.items().find((item) => item.name.includes(foodName));
+    const matches = itemMatcher(foodName);
+    item = bot.inventory.items().find((item) => matches(item.name) && catalog().isFood(item.name));
     name = foodName;
   } else {
     // @ts-ignore
@@ -212,7 +206,14 @@ export async function listInventory(): Promise<InventoryItemType[]> {
 
 export async function checkForItem(itemName: string): Promise<void> {
   const items = await bot.inventory.items();
-  const searchableItems = items.filter((item) => item.name.includes(itemName));
+  // "do you have iron?": items whose name has those whole words (raw_iron,
+  // iron_ingot, iron_pickaxe), or the category/exact item
+  const c = catalog();
+  const words = c.normalize(itemName).split("_");
+  const matches = itemMatcher(itemName);
+  const searchableItems = items.filter(
+    (item) => matches(item.name) || words.every((w) => item.name.split("_").includes(w))
+  );
   sayItems(searchableItems);
 }
 
@@ -276,21 +277,28 @@ export async function transferAllToChest(): Promise<boolean> {
  * substring match: "chest" used to count chestplates, "axe" pickaxes.
  */
 export const getItemCount = (itemName: string): number => {
-  const c = catalog();
-  const name = c.normalize(itemName);
-  const matches = (item: string): boolean => {
-    if (c.isItem(name)) return item === name;
-    if (name === "planks") return c.isPlanks(item);
-    if (name === "logs" || name === "log") return c.isLog(item);
-    if (name === "food") return c.isFood(item);
-    if (["pickaxe", "axe", "shovel", "hoe", "sword"].includes(name)) return c.toolKind(item) === name;
-    return false;
-  };
+  const matches = itemMatcher(itemName);
   return bot.inventory
     .items()
     .filter((item) => matches(item.name))
     .reduce((acc, item) => acc + item.count, 0);
 };
+
+/**
+ * What a name means for items the bot carries: the exact item, or a Catalog
+ * category ("planks", "logs", "food", "pickaxe", "axe"...). Never a substring.
+ */
+export function itemMatcher(itemName: string): (name: string) => boolean {
+  const c = catalog();
+  const name = c.normalize(itemName);
+  if (c.isItem(name)) return (item) => item === name;
+  if (name === "planks") return (item) => c.isPlanks(item);
+  if (name === "logs" || name === "log" || name === "wood") return (item) => c.isLog(item);
+  if (name === "food") return (item) => c.isFood(item);
+  if (["pickaxe", "axe", "shovel", "hoe", "sword"].includes(name)) return (item) => c.toolKind(item) === name;
+  const one = c.validate(name);
+  return one.ok ? (item) => item === one.name : () => false; // plural ("torches")
+}
 
 /**
  * Organize the bot's inventory.

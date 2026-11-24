@@ -1,6 +1,7 @@
 // Path: src/commands/EquipBestWeapon.ts
 
 import { z } from "zod";
+import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
 import { equipBestMeleeWeapon, chooseWeaponForTarget } from "../actions/combat";
 import { getPriorityTargets } from "../actions/combat";
@@ -40,18 +41,14 @@ export async function execute(args: any) {
     if (weaponType) {
       if (weaponType.includes("bow")) {
         // Try to equip bow
-        const bows = bot.inventory.items().filter(item => 
-          item.name.includes("bow") && !item.name.includes("crossbow")
-        );
+        const bows = bot.inventory.items().filter(item => item.name === "bow");
         
         if (bows.length > 0) {
           await bot.equip(bows[0], "hand");
           bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
           
           // Check if we have arrows
-          const arrows = bot.inventory.items().filter(item => 
-            item.name.includes("arrow")
-          );
+          const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
           
           if (arrows.length === 0) {
             bot.chat("Warning: No arrows found in inventory!");
@@ -59,18 +56,14 @@ export async function execute(args: any) {
           
         } else {
           // Try crossbow as fallback
-          const crossbows = bot.inventory.items().filter(item => 
-            item.name.includes("crossbow")
-          );
+          const crossbows = bot.inventory.items().filter(item => item.name === "crossbow");
           
           if (crossbows.length > 0) {
             await bot.equip(crossbows[0], "hand");
             bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
             
             // Check if we have arrows
-            const arrows = bot.inventory.items().filter(item => 
-              item.name.includes("arrow")
-            );
+            const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
             
             if (arrows.length === 0) {
               bot.chat("Warning: No arrows found in inventory!");
@@ -83,27 +76,18 @@ export async function execute(args: any) {
       } 
       else if (weaponType.includes("sword")) {
         // Try to equip sword
-        const swords = bot.inventory.items().filter(item => 
-          item.name.includes("sword")
-        );
+        const swords = bot.inventory.items().filter(item => catalog().toolKind(item.name) === "sword");
         
         if (swords.length > 0) {
           // Sort by quality
-          swords.sort((a, b) => {
-            const materials = ["wooden", "stone", "iron", "golden", "diamond", "netherite"];
-            const aMaterial = materials.findIndex(m => a.name.includes(m));
-            const bMaterial = materials.findIndex(m => b.name.includes(m));
-            return bMaterial - aMaterial;
-          });
+          swords.sort((a, b) => catalog().toolTier(b.name) - catalog().toolTier(a.name));
           
           await bot.equip(swords[0], "hand");
           bot.chat(`Equipped ${swords[0].displayName} for combat.`);
           
           // Equip shield in offhand if available and requested
           if (offhand) {
-            const shields = bot.inventory.items().filter(item => 
-              item.name.includes("shield")
-            );
+            const shields = bot.inventory.items().filter(item => item.name === "shield");
             
             if (shields.length > 0) {
               await bot.equip(shields[0], "off-hand");
@@ -117,9 +101,7 @@ export async function execute(args: any) {
       }
       else if (weaponType.includes("shield")) {
         // Try to equip shield in offhand and best weapon in main hand
-        const shields = bot.inventory.items().filter(item => 
-          item.name.includes("shield")
-        );
+        const shields = bot.inventory.items().filter(item => item.name === "shield");
         
         if (shields.length > 0) {
           await bot.equip(shields[0], "off-hand");

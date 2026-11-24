@@ -4,6 +4,7 @@
 // in hand after pickups, instead of whatever item landed in the hand slot.
 
 import type { Item } from "prismarine-item";
+import { catalog } from "../core/catalog";
 import { bot, listen } from "../core/body";
 import { on } from "../core/events";
 import { getCurrentCommandName } from "../core/commandContext";
@@ -18,14 +19,12 @@ const pretty = (name: string): string => name.replace(/_/g, " ");
 
 /** True for items that belong in the main hand by default. */
 function isWeapon(name: string): boolean {
-  return name.endsWith("_sword") || name.endsWith("_axe");
+  return catalog().isMeleeWeapon(name);
 }
 
 /** Damage ranking for picking the best weapon. */
 function weaponRank(name: string): number {
-  const tiers = ["wooden", "golden", "stone", "iron", "diamond", "netherite"];
-  const tier = tiers.findIndex((t) => name.startsWith(t));
-  return (name.endsWith("_sword") ? 10 : 0) + Math.max(0, tier);
+  return (catalog().toolKind(name) === "sword" ? 10 : 0) + Math.max(0, catalog().toolTier(name));
 }
 
 /**

@@ -12,8 +12,7 @@ import { bot, onConnectionEnd } from "../core/body";
 import { on } from "../core/events";
 import { fighting, pathing } from "../core/plugins";
 import { areReflexesMuted, registerReflexStopper, setReflexActive } from "../core/reflexes";
-import { getAttackDamage } from "../utils/utility";
-import { getPriorityTargets } from "./combat";
+import { bestMeleeWeapon, getPriorityTargets } from "./combat";
 import { isCreeperReflexActive } from "./creeperReflex";
 import { isDrowningReflexActive } from "./drowningReflex";
 
@@ -53,11 +52,8 @@ function pickTarget(range: number): Entity | null {
 
 /** Takes out the best sword or axe (a pickaxe or shovel if that's all there is). */
 async function equipWeapon(): Promise<void> {
-  const items = bot.inventory.items();
-  let weapons = items.filter((i) => i.name.endsWith("_sword") || i.name.endsWith("_axe"));
-  if (weapons.length === 0) weapons = items.filter((i) => i.name.endsWith("_pickaxe") || i.name.endsWith("_shovel"));
-  if (weapons.length === 0) return; // fists
-  const best = weapons.sort((a, b) => getAttackDamage(b) - getAttackDamage(a))[0];
+  const best = bestMeleeWeapon(bot.inventory.items(), true);
+  if (!best) return; // fists
   if (bot.heldItem?.name !== best.name) await bot.equip(best, "hand");
 }
 

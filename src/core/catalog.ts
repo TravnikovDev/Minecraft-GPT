@@ -63,11 +63,21 @@ export interface Catalog {
   /** Logs, stems, wood and hyphae (stripped too) and bamboo blocks: anything that makes planks. */
   isLog(name: string): boolean;
   logs(): string[];
+  /** Logs and stems as they grow on trees (not stripped, not bark blocks): what wood gathering cuts. */
+  isTreeLog(name: string): boolean;
   isPlanks(name: string): boolean;
+  /** Any bed (never bedrock). */
+  isBed(name: string): boolean;
+  /** Ore blocks (stone, deepslate and nether variants, ancient debris). */
+  isOre(name: string): boolean;
   planks(): string[];
   /** The planks a log makes (stripped_cherry_log -> cherry_planks), or null. */
   planksFor(log: string): string | null;
 
+  /** Swords and axes (the main-hand weapons). */
+  isMeleeWeapon(name: string): boolean;
+  /** Arrows of any kind (plain, spectral, tipped). */
+  isArrow(name: string): boolean;
   /** pickaxe / axe / shovel / hoe / sword, by exact suffix (an axe is never a pickaxe). */
   toolKind(name: string): ToolKind | null;
   /** 0 wooden ... 5 netherite, or -1 when it isn't a tiered tool. */
@@ -262,11 +272,16 @@ export function createCatalog(registry: Registry): Catalog {
     woodTypes,
     isLog,
     logs: () => Object.keys(items).filter(isLog),
+    isTreeLog: (name) => /^(?!stripped_)[a-z_]+_(log|stem)$/.test(name) && planksFor(name) !== null,
     isPlanks: (name) => name.endsWith("_planks") && name in items,
+    isBed: (name) => /_bed$/.test(name) && (name in items || name in blocks),
+    isOre: (name) => isOre(name),
     planks: () => woodTypes().map((w) => `${w}_planks`),
     planksFor,
     toolKind,
     toolTier,
+    isMeleeWeapon: (name) => toolKind(name) === "sword" || toolKind(name) === "axe",
+    isArrow: (name) => /^(arrow|spectral_arrow|tipped_arrow)$/.test(name),
     toolKindFor,
     canHarvest,
     bestToolFor,

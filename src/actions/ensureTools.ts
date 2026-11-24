@@ -3,6 +3,7 @@
 */
 
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { craftRecipe } from "./crafting";
 import { ensureCraftingTable, ensurePlanks, ensureSticks, shouldGiveUp } from "./ensure";
 import { getItemCount } from "./inventory";
@@ -49,7 +50,7 @@ const ensureTool = async (
   // Check how many of the tool the bot currently has
   let toolCount = bot.inventory
     .items()
-    .filter((item) => item.name.includes(toolType)).length;
+    .filter((item) => catalog().toolKind(item.name) === toolType).length; // an axe is never a pickaxe
 
   if (toolCount >= quantity) {
     console.log(`Bot: Already has ${quantity} or more ${toolType}(s).`);

@@ -1,4 +1,5 @@
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { Vec3 } from "vec3"; // Add this import statement
 import { isHuntable } from "../utils/minecraftData";
 import { moveAway } from "./movement";
@@ -45,7 +46,7 @@ export async function ensureLocation(
 
     // Scan for resources using helper functions
     const woodBlocks = bot.findBlocks({
-      matching: (block) => block.name.includes("log"),
+      matching: (block) => catalog().isTreeLog(block.name),
       maxDistance: radius,
       count: wood,
     });

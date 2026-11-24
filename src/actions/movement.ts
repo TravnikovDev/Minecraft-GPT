@@ -1,6 +1,7 @@
 // src/actions/movement.ts
 
 import pf from "mineflayer-pathfinder";
+import { catalog } from "../core/catalog";
 import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { bot } from "../core/body";
@@ -307,7 +308,7 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
 
 export async function goToBed(): Promise<boolean> {
   const beds = bot.findBlocks({
-    matching: (block) => block.name.includes("bed"),
+    matching: (block) => catalog().isBed(block.name), // includes("bed") matched bedrock
     maxDistance: 32,
     count: 1,
   });

@@ -93,7 +93,7 @@ export async function digDiagonalTunnel(
 
   /* const cobblestoneCount = bot.inventory
     .items()
-    .filter((item) => item.name.includes("cobblestone"))
+    .filter((item) => item.name === "cobblestone")
     .reduce((acc, item) => acc + item.count, 0);
   const stairsNeeded = Math.floor(depth * tunnelSize.width);
   const cobblestonesNeeded = Math.ceil(stairsNeeded / 0.66);

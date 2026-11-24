@@ -1,4 +1,5 @@
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
@@ -47,7 +48,7 @@ export async function gatherWood(
       console.log(`Looking for wood blocks nearby... (${logsCount}/${targetLogs})`);
 
       const woodBlock = bot.findBlock({
-        matching: (block) => block.name.includes("log"),
+        matching: (block) => catalog().isTreeLog(block.name), // nether stems too, never stripped logs in builds
         maxDistance,
       });
 
@@ -113,6 +114,6 @@ export async function gatherWood(
 export function getLogsCount(): number {
   return bot.inventory
     .items()
-    .filter((item) => item.name.includes("log"))
+    .filter((item) => catalog().isLog(item.name))
     .reduce((acc, item) => acc + item.count, 0);
 }
