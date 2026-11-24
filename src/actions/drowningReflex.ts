@@ -9,13 +9,26 @@ import { pathing } from "../core/plugins";
 import { setReflexActive } from "../core/reflexes";
 
 const CHECK_MS = 250;
-const LOW_AIR = 12; // of 20; about 9 seconds of air left
-const SAFE_AIR = 18;
+// Air in ticks (full is 300 = 15 s). mineflayer's bot.oxygenLevel can't be
+// trusted: it is overwritten by the air of every entity around (fish, mobs),
+// so the bot's own value is read from its metadata (index 1, air_supply)
+const FULL_AIR = 300;
+const LOW_AIR = 180; // about 9 seconds left
+const SAFE_AIR = 270;
+// Backup when the air value is missing: underwater this long counts as low
+const MAX_UNDERWATER_MS = 5000;
 
 // Blocks the bot's head can be "in water" inside of
 const WATER_BLOCKS = new Set(["water", "bubble_column", "kelp", "kelp_plant", "seagrass", "tall_seagrass"]);
 
 let active = false;
+let underwaterSince: number | null = null;
+
+/** The bot's own air in ticks (300 when full or unknown). */
+function ownAir(): number {
+  const value = (bot.entity.metadata as unknown[] | undefined)?.[1];
+  return typeof value === "number" ? value : FULL_AIR;
+}
 
 /** True while the bot is swimming up for air (other code should wait). */
 export function isDrowningReflexActive(): boolean {
@@ -46,13 +59,15 @@ function finish(): void {
 
 function tick(): void {
   if (!bot.entity || !(bot.health > 0)) return;
-  const air = bot.oxygenLevel ?? 20;
+  const air = ownAir();
   const underwater = headUnderwater();
+  underwaterSince = underwater ? (underwaterSince ?? Date.now()) : null;
+  const longUnderwater = underwaterSince !== null && Date.now() - underwaterSince > MAX_UNDERWATER_MS;
 
   if (!active) {
-    if (!underwater || air > LOW_AIR) return;
+    if (!underwater || (air > LOW_AIR && !longUnderwater)) return;
     active = true;
-    console.log(`Drowning reflex: underwater with ${air}/20 air, swimming up.`);
+    console.log(`Drowning reflex: underwater with ${Math.round(air / 15)}/20 air, swimming up.`);
     setReflexActive("drowning", true);
     pathing.takeOver(); // take over movement from whatever task is running
   }
@@ -71,6 +86,7 @@ function tick(): void {
 /** Starts the reflex for the current bot instance. */
 export function registerDrowningReflex(): void {
   active = false; // fresh state for this connection
+  underwaterSince = null;
   const timer = setInterval(tick, CHECK_MS);
   bot.once("end", () => clearInterval(timer));
   bot.on("death", finish);
