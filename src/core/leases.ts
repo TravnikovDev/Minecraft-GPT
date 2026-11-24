@@ -129,13 +129,21 @@ export function beginUse(resource: Resource): () => void {
  * Borrows resources politely for a short job (eating, putting armor on): waits
  * until nobody more urgent holds them and no use is in progress, holds them
  * while `job` runs (the task waits at its next use), then gives them back.
- * Gives up (returns null) after `maxWaitMs`.
+ * `ready` adds a condition (the bot isn't walking, no window is open: the
+ * pathfinder and windows use the hands on their own). Gives up (returns
+ * null) after `maxWaitMs`.
  */
-export async function borrow<T>(holder: Holder, resources: Resource[], job: () => Promise<T>, maxWaitMs = 10_000): Promise<T | null> {
+export async function borrow<T>(
+  holder: Holder,
+  resources: Resource[],
+  job: () => Promise<T>,
+  maxWaitMs = 10_000,
+  ready: () => boolean = () => true
+): Promise<T | null> {
   const end = Date.now() + maxWaitMs;
   for (const r of resources) borrowersWaiting.set(r, (borrowersWaiting.get(r) ?? 0) + 1);
   try {
-    while (resources.some((r) => (inUse.get(r) ?? 0) > 0 || isTakenUrgently(r))) {
+    while (resources.some((r) => (inUse.get(r) ?? 0) > 0 || isTakenUrgently(r)) || !ready()) {
       if (Date.now() > end) return null;
       await sleep(25);
     }

@@ -10,6 +10,7 @@ import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { borrow, release, runAs, takeUrgently, type Holder } from "../core/leases";
 import { consumeItem } from "../core/primitives";
+import { bodyAtRest, takeOverBody } from "../core/plugins";
 import { describeFailure } from "../core/result";
 
 const HUNGRY_AT = 14; // food points (of 20), like auto-eat's default
@@ -52,17 +53,25 @@ export async function eatWhenHungry(): Promise<void> {
     else console.log(`Couldn't eat ${food}: ${describeFailure(result)}`);
   };
   try {
-    const done = await borrow(holder, ["hands"], async () => {
-      await job();
-      return true;
-    }, starving || hurt ? 3_000 : 10_000);
+    const done = await borrow(
+      holder,
+      ["hands"],
+      async () => {
+        await job();
+        return true;
+      },
+      starving || hurt ? 3_000 : 10_000,
+      bodyAtRest
+    );
     if (done === null && (starving || hurt)) {
-      // No gap came: starving or badly hurt, eat now
-      takeUrgently(holder, ["hands"]);
+      // No gap came: starving or badly hurt, stop and eat now (walking resumes after)
+      const all = ["movement", "hands", "window"] as const;
+      takeUrgently(holder, [...all]);
       try {
+        takeOverBody();
         await runAs(holder, job);
       } finally {
-        release(holder, ["hands"]);
+        release(holder, [...all]);
       }
     }
   } finally {

@@ -46,27 +46,45 @@ const GO_AGAIN = new Set<string>([
   BotCommands.GoToNamedLocation,
   BotCommands.ReturnToBase,
   BotCommands.GoToBlock,
-  BotCommands.Hunting, // looks around again
   BotCommands.DigToSurface,
+  BotCommands.FollowPlayer,
 ]);
-// Counted work: cut off, it does what's left (the count it reported done is taken off)
+// Counted work: cut off, it does what's left (the count it reported done is
+// taken off); with no count given, it starts over from where it is
 const COUNTED: Partial<Record<string, string>> = {
   [BotCommands.CollectBlocks]: "num",
   [BotCommands.GatherWood]: "num",
+  [BotCommands.Hunting]: "count",
 };
+// Going somewhere: a newer one replaces an older one (no going back to the old trip)
+const MOVES = new Set<string>([
+  BotCommands.GoToCoordinates,
+  BotCommands.GoToNamedLocation,
+  BotCommands.ReturnToBase,
+  BotCommands.GoToBlock,
+  BotCommands.GoToPlayer,
+  BotCommands.FollowPlayer,
+  BotCommands.GoByBoat,
+  BotCommands.DigToSurface,
+]);
+// Following lasts until something else needs the bot: the next command goes
+// first and following carries on after it; standing still with the owner isn't "stuck"
+const FOLLOW = BotCommands.FollowPlayer as string;
 
 const pretty = (name: string): string => name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 
 /** How a cut-off command carries on later (rebuilt from where things stand then), or null to drop it. */
-function resumeFor(command: CommandType, signal: () => AbortSignal | undefined): (() => TaskSpec | null) | undefined {
-  if (GO_AGAIN.has(command.command)) return () => commandTask(command, true);
+function resumeFor(command: CommandType, signal: () => AbortSignal | undefined): ((cutInBy: { name: string } | null) => TaskSpec | null) | undefined {
+  // A newer trip (or "come here") replaces this one
+  const replacedBy = (cutInBy: { name: string } | null): boolean => MOVES.has(command.command) && cutInBy !== null && MOVES.has(cutInBy.name);
+  if (GO_AGAIN.has(command.command)) return (cutInBy) => (replacedBy(cutInBy) ? null : commandTask(command, true));
   const countArg = COUNTED[command.command];
   if (countArg) {
     return () => {
+      const raw = (command.args as Record<string, unknown> | undefined)?.[countArg];
+      if (raw === null || raw === undefined) return commandTask(command, true); // "all of them": look again
       const s = signal();
-      const done = s ? progressOf(s) : 0;
-      const total = Number((command.args as Record<string, unknown> | undefined)?.[countArg] ?? 1);
-      const left = total - done;
+      const left = Number(raw) - (s ? progressOf(s) : 0);
       if (left <= 0) return null;
       return commandTask({ ...command, args: { ...(command.args as object), [countArg]: left } }, true);
     };
@@ -76,23 +94,25 @@ function resumeFor(command: CommandType, signal: () => AbortSignal | undefined):
 
 // The same command with the same arguments isn't queued twice
 const waiting = new Set<string>();
-let runningKey: string | null = null;
 const keyOf = (command: CommandType): string => `${command.command}:${JSON.stringify(command.args ?? {})}`;
 
 /** The arbiter task for an owner command. */
 function commandTask(command: CommandType, resumed = false): TaskSpec {
   let signal: AbortSignal | undefined;
   const key = keyOf(command);
+  const follow = command.command === FOLLOW;
   return {
     name: command.command,
     bucket: Bucket.Owner,
-    // The owner calling the bot outranks what it's doing (priority 1)
-    interrupts: (command.priority ?? 3) <= 1 && command.priority !== 0,
-    maxMs: LONG_RUNNING_LIMITS[command.command as BotCommands] ?? DEFAULT_LIMIT_MS,
+    // The owner calling the bot outranks what it's doing (priority 1); a
+    // resumed task never cuts in again (it would cut off what cut it off)
+    interrupts: !resumed && (command.priority ?? 3) <= 1 && command.priority !== 0,
+    yields: follow,
+    watchProgress: !follow,
+    maxMs: follow ? undefined : LONG_RUNNING_LIMITS[command.command as BotCommands] ?? DEFAULT_LIMIT_MS,
     resume: resumeFor(command, () => signal),
     onStart: (wasResumed) => {
       waiting.delete(key);
-      runningKey = key;
       if (wasResumed || resumed) bot.chat(`Back to ${pretty(command.command)}.`);
     },
     run: async () => {
@@ -100,7 +120,6 @@ function commandTask(command: CommandType, resumed = false): TaskSpec {
       await executeTool(command.command, command.args);
     },
     onEnd: (outcome) => {
-      if (runningKey === key) runningKey = null;
       // A command that threw gets its retries (a cancelled one never does)
       if (outcome === "failed" && (command.retryCount ?? 0) > 0) {
         console.log(`Retrying ${command.command} (${command.retryCount} left).`);
@@ -124,8 +143,10 @@ export function queueCommand(input: CommandType): void {
   }
   const command = parsed.data as CommandType;
   const key = keyOf(command);
-  if (waiting.has(key) || runningKey === key) {
-    console.log(`Command ${command.command} is already ${runningKey === key ? "running" : "waiting"}. Skipping.`);
+  // The same command still waiting: once is enough (running it again later is fine)
+  if (waiting.has(key)) {
+    console.log(`Command ${command.command} is already waiting. Skipping.`);
+    if ((command.priority ?? 3) > 0) bot.chat("That's already on my list.");
     return;
   }
   waiting.add(key);
@@ -163,7 +184,6 @@ export function abortForDisconnect(): void {
 export function handleBotRejoin(): void {
   console.log("Bot rejoined the server. Starting with a clean slate.");
   waiting.clear();
-  runningKey = null;
   resetArbiter();
   resetChores();
   resetLeases();

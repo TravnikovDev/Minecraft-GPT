@@ -36,8 +36,9 @@ export function asReflex<T>(name: string, fn: () => T): T {
 
 /** A reflex takes the body (true) or lets go (false). */
 export function setReflexActive(name: string, on: boolean): void {
-  if (on) takeUrgently(reflexHolder(name), ["movement", "hands"]);
-  else release(reflexHolder(name), ["movement", "hands"]);
+  // Movement, hands, and any open window (it closes it: hands can't swap items in a chest)
+  if (on) takeUrgently(reflexHolder(name), ["movement", "hands", "window"]);
+  else release(reflexHolder(name), ["movement", "hands", "window"]);
 }
 
 /** True while any reflex has the body. */

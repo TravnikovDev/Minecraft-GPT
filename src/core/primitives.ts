@@ -145,6 +145,8 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
     if (!walked.ok) return walked;
   } finally {
     watchdog.stop();
+    // Only a walk in progress can be blamed for being stuck (not one that ended, at a chest or a table)
+    if (spot && lastGoal === spot) lastGoal = null;
   }
   if (!bot.entity) return fail("disconnected", "no body after walking");
   if (!atGoal(goal)) return fail("unreachable", "stopped short of the goal");

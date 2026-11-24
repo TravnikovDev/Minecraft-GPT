@@ -424,3 +424,63 @@ The owner can't test in the game right now, so everything is checked by tests on
   - whether `stop` should also end running from mobs when badly hurt is the owner's decision (today it doesn't)
 - **In-game checks:** all in `docs/testing-backlog.md`, newest first.
 - **Next:** Phase 4, the arbiter and reflexes.
+
+## Entry 11: Phase 4, the arbiter and reflexes (2026-11-25)
+
+**Planned.** The plan's Phase 4:
+- priority buckets
+- leases on movement, hands, the window and chat
+- cancel before starting, waiting for cleanup
+- resume by replanning
+- reflexes as proposals
+- unstuck as a service
+- inertia within a bucket
+- no 1.5 s polling loop
+
+The owner can't test in the game right now; the checks are in `docs/testing-backlog.md`.
+
+**What happened**
+- **Built:** the arbiter, leases, own upkeep and the stuck watcher (`b77aa9e`). Reflexes now hold the body through leases instead of a flag only walking checked, and nothing outside `core/` calls the game directly any more (16 → 0).
+- **Design choice:** reflexes *pause* a task rather than cancel it, because tasks stop at their next action while a reflex holds the body. Only owner commands cut in by cancelling, and the cut-off task resumes with what's left. This keeps one-off tasks (give, store, craft) from being redone or lost when a creeper shows up.
+- **Plugins removed:** mineflayer-auto-eat refuses to eat while disabled, so it and armor-manager were replaced by the bot's own upkeep.
+- **Found by tests:**
+  - the task that cut in and the resumed one could keep cutting each other off;
+  - the resume count could be taken before the old task had stopped;
+  - eating never found a gap, because the next dig started at once.
+- **Found by the architect review:**
+  - A resumed task kept the old "cut in" flag: two "go to" commands looped, and "come here" was dropped for the old trip.
+  - "stop" during a cut-in's cleanup let the old task resume.
+  - mineflayer-pvp stops itself through the pathfinder's deferred stop when its target dies, which drops the next goal (the next mob, the owner to follow again) and can later strip the door opener's listener.
+  - Cancelling a task also cleared a reflex's flee goal.
+  - Borrowers ate while the pathfinder was digging on its own, and inside open furnace windows.
+  - The stuck watcher blamed a spot the bot had already reached.
+  - Following ended at once, so it was invisible to everything else.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Arbiter | `src/core/arbiter.ts`: buckets 0 survival … 6 idle; a more urgent task cuts in, and the old one is aborted, the body stopped (except what a reflex holds), and its cleanup waited for (10 s cap) before the next starts; what's left is worked out after it stopped; a resumed task never cuts in again; stop, stuck and "took too long" are never resumed (an epoch guards a cut-in in progress) |
+| Commands | `src/managers/actionManager.ts` `queueCommand`: priority 1 cuts in; trips are walked again from where it is, unless a newer trip replaced them; counted work (collect, gather wood, hunt) resumes with what's left (`reportProgress`); one-off commands are not redone; a command still waiting isn't queued twice ("That's already on my list") |
+| Following | a lasting task that yields: the next command goes first and following carries on after it ("Back to follow player."); never "stuck" while the owner stands still |
+| Leases | `src/core/leases.ts`: reflexes take movement, hands and the window urgently, so the task waits at its next action and a dig cut off by a reflex is tried again; borrowers (eating, armor, weapon in hand) wait for a gap while the bot isn't walking and no window is open, and the task's next action lets a waiting borrower go first |
+| Reflexes | creeper, drowning and combat run as their own holders (`asReflex`) and act through primitives; a reflex closes an open window; the door opener works for whoever is walking |
+| pvp | its stop is replaced with the immediate one, so a kill no longer drops the next goal or the door opener's listener |
+| Upkeep | `src/actions/upkeep.ts`: eats the most filling food (junk only when starving), between actions; starving or badly hurt it stops and eats at once; `src/actions/armor.ts` wears its best armor itself |
+| Unstuck | `src/managers/stuckWatch.ts`: 45 s without moving or items changing → a nudge (jump, step aside), then a replan, then giving up; a spot it was walking to when it gave up is unreachable for 10 minutes (`src/core/failures.ts`, exact block), so walking there fails at once |
+| Chores | idle chores are bucket-6 tasks; any task cuts in; the owner's stop mutes them for a minute |
+| Loop | no polling loop and no command queue in `db.json` |
+
+**Outcome and what follows**
+- **Tests:** 126 pass. New ones cover:
+  - the arbiter (8): cutting in, cleanup before the next task, resume with what's left, stop, priority order, time limit;
+  - leases (6): a reflex pauses a task, a dig cut off by a reflex is retried, eating waits for a gap, urgency order, food choice;
+  - commands (5): a newer trip replaces an older one, "come here" mid-gathering, stop during a cut-in, following steps aside and returns, duplicates.
+- **Decisions taken (the owner can change them):**
+  - a newer trip replaces an older one instead of resuming it;
+  - while the owner's stop keeps reflexes quiet, a mob that actually hits the bot is still fought (as decided in entry 6).
+- **Open:**
+  - the chat lease isn't used yet (the Narrator is Phase 5);
+  - leases are waited on by polling every 25–100 ms, not by events;
+  - "status" counts waiting tasks but not the ones paused by a reflex.
+- **Next:** Phase 5, perception, memory and the Narrator.

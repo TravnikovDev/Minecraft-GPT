@@ -39,8 +39,16 @@ export type TaskSpec = {
   run: () => Promise<void>;
   /** May cut in on a running task of the same bucket (an owner's "come here", "follow me"). */
   interrupts?: boolean;
-  /** Cut off by a more urgent task: the task to carry on with later, from where things stand then, or null to drop it. */
-  resume?: () => TaskSpec | null;
+  /**
+   * Cut off by a more urgent task (`cutInBy`): the task to carry on with
+   * later, from where things stand then, or null to drop it. Never called
+   * when the owner said stop, or the task got stuck or took too long.
+   */
+  resume?: (cutInBy: { name: string; bucket: number } | null) => TaskSpec | null;
+  /** Any new task of the same bucket may cut in (following the owner: the next command goes first). */
+  yields?: boolean;
+  /** False for tasks that legitimately stand still (following an owner who stands still): the stuck watcher leaves them alone. */
+  watchProgress?: boolean;
   /** Gives up after this long (a backstop; tasks have their own checks). */
   maxMs?: number;
   /** Called when it starts (e.g. "Back to gathering wood"). */
@@ -50,7 +58,7 @@ export type TaskSpec = {
 };
 
 type Entry = { id: number; spec: TaskSpec; resumed: boolean; front?: boolean };
-type Running = Entry & { abort: AbortController; done: Promise<Outcome>; startedAt: number };
+type Running = Entry & { abort: AbortController; done: Promise<Outcome>; startedAt: number; noResume?: boolean };
 
 /** How long a cancelled task gets to clean up before the next one starts anyway. */
 const CLEANUP_MS = 10_000;
@@ -59,6 +67,8 @@ let nextId = 1;
 const pending: Entry[] = [];
 let running: Running | null = null;
 let scheduling = false;
+// Bumped by stopAll: a cut-in that was cleaning up when the owner said stop must not start anything
+let epoch = 0;
 let again = false;
 const startHooks: Array<(task: { name: string; bucket: number }) => void> = [];
 const endHooks: Array<(task: { name: string; bucket: number }, outcome: Outcome) => void> = [];
@@ -81,8 +91,10 @@ export function propose(spec: TaskSpec, options: { front?: boolean } = {}): numb
 }
 
 /** The running task (name and bucket), if any. */
-export function currentTask(): { name: string; bucket: number; startedAt: number } | null {
-  return running ? { name: running.spec.name, bucket: running.spec.bucket, startedAt: running.startedAt } : null;
+export function currentTask(): { name: string; bucket: number; startedAt: number; watchProgress: boolean } | null {
+  return running
+    ? { name: running.spec.name, bucket: running.spec.bucket, startedAt: running.startedAt, watchProgress: running.spec.watchProgress !== false }
+    : null;
 }
 
 /** Tasks waiting to run, most urgent first. */
@@ -105,7 +117,7 @@ function ordered(): Entry[] {
 
 /** Whether `next` may cut in on `current`. */
 function cutsIn(next: TaskSpec, current: TaskSpec): boolean {
-  return next.bucket < current.bucket || (next.bucket === current.bucket && Boolean(next.interrupts));
+  return next.bucket < current.bucket || (next.bucket === current.bucket && Boolean(next.interrupts || current.yields));
 }
 
 async function schedule(): Promise<void> {
@@ -128,9 +140,11 @@ async function step(): Promise<void> {
   const next = ordered()[0];
   if (!next) return;
   let now = next;
+  const startedIn = epoch;
   if (running) {
     if (!cutsIn(next.spec, running.spec)) return;
-    await cancelRunning(`${next.spec.name} cut in`, true);
+    await cancelRunning(`${next.spec.name} cut in`, true, CLEANUP_MS, { name: next.spec.name, bucket: next.spec.bucket });
+    if (epoch !== startedIn) return; // the owner said stop meanwhile
     // The task that cut in goes first (the one it cut off waits at the front
     // of the queue), unless something more urgent came in while it cleaned up
     const first = ordered()[0];
@@ -149,7 +163,7 @@ function start(entry: Entry): void {
   setTaskHolder(task);
   if (visible(spec)) setCurrentCommandName(spec.name);
   let limit: ReturnType<typeof setTimeout> | undefined;
-  if (spec.maxMs) {
+  if (spec.maxMs && Number.isFinite(spec.maxMs)) {
     limit = setTimeout(() => {
       if (running?.id !== entry.id) return;
       console.log(`Task ${spec.name} ran longer than ${Math.round(spec.maxMs! / 60_000)} min; stopping it.`);
@@ -196,20 +210,31 @@ function finish(id: number, outcome: Outcome): void {
  * CLEANUP_MS) for it to wind down. With `resume`, a task that can be resumed
  * goes back to the front of the queue, rebuilt from where things stand now.
  */
-export async function cancelRunning(reason: string, resume = false, cleanupMs = CLEANUP_MS): Promise<void> {
+export async function cancelRunning(
+  reason: string,
+  resume = false,
+  cleanupMs = CLEANUP_MS,
+  cutInBy: { name: string; bucket: number } | null = null
+): Promise<void> {
   const victim = running;
   if (!victim) return;
+  // Stop, stuck or too long: never resumed, even if a cut-in is also ending it
+  if (!resume) victim.noResume = true;
+  if (victim.abort.signal.aborted) {
+    await Promise.race([victim.done, sleep(cleanupMs)]); // already being cancelled: just wait
+    return;
+  }
   console.log(`Cancelling task ${victim.spec.name}: ${reason}.`);
   victim.abort.abort(reason);
-  haltBody();
+  haltBody({ keepUrgent: true }); // a reflex holding the body (running from mobs) keeps it
   await Promise.race([victim.done, sleep(cleanupMs)]);
   await waitForCleanup(cleanupMs); // e.g. getting out of a boat first
   // Never settled: don't let it block the next task
   if (running?.id === victim.id) finish(victim.id, "cancelled");
   // What's left is worked out only now that it has stopped (a step that
   // finished while it wound down counts as done, not as left to do)
-  if (resume && victim.spec.resume) {
-    const again = safely(() => victim.spec.resume!());
+  if (resume && !victim.noResume && victim.spec.resume) {
+    const again = safely(() => victim.spec.resume!(cutInBy));
     if (again) pending.unshift({ id: nextId++, spec: again, resumed: true, front: true });
   }
 }
@@ -228,6 +253,7 @@ export function dropPending(which: (task: { name: string; bucket: number }) => b
 
 /** The owner's stop, or a dropped connection: cancel the running task and drop everything waiting. */
 export async function stopAll(reason: string): Promise<void> {
+  epoch++;
   dropPending();
   await cancelRunning(reason, false);
   dropPending(); // anything a cancelled task proposed on its way out

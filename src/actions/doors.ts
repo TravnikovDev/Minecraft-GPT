@@ -15,6 +15,7 @@ import { bot, onConnectionEnd } from "../core/body";
 import { isWoodenDoor, markDoorSolid } from "../core/movements";
 import { pathing } from "../core/plugins";
 import { useBlock } from "../core/primitives";
+import { holderOf, runAs } from "../core/leases";
 
 const CHECK_MS = 150;
 const OPEN_RANGE = 2.2; // open a door on the route this close to the bot
@@ -162,7 +163,9 @@ export function registerDoorOpener(): void {
   bot.on("path_update", onPath);
   bot.on("goal_reached", onDone);
   bot.on("path_stop", onDone);
-  const timer = setInterval(() => void tick(), CHECK_MS);
+  // Doors are opened for whoever is walking: the task, or a reflex running
+  // from mobs (which would otherwise wait for itself to finish)
+  const timer = setInterval(() => void runAs(holderOf("movement") ?? { name: "idle", bucket: 6 }, tick), CHECK_MS);
   onConnectionEnd(bot, () => {
     clearInterval(timer);
     bot.off("path_update", onPath);

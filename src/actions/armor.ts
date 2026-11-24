@@ -5,6 +5,7 @@
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { borrow } from "../core/leases";
+import { bodyAtRest } from "../core/plugins";
 import { equipItem, unequipSlot, type EquipSlot } from "../core/primitives";
 import { describeFailure } from "../core/result";
 
@@ -72,6 +73,6 @@ export async function autoWearArmor(): Promise<void> {
   if (!bot.inventory.items().some((i) => isArmorPiece(i.name))) return;
   const before = wornArmor().join(",");
   // Between the task's actions, never in the middle of one
-  const after = (await borrow({ name: "wearing armor", bucket: 4 }, ["hands"], wearBestArmor, 5_000)) ?? wornArmor();
+  const after = (await borrow({ name: "wearing armor", bucket: 4 }, ["hands"], wearBestArmor, 5_000, bodyAtRest)) ?? wornArmor();
   if (after.join(",") !== before) console.log(`Put on armor: now wearing ${after.join(", ")}.`);
 }

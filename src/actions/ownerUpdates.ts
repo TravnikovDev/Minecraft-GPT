@@ -8,6 +8,7 @@ import { catalog } from "../core/catalog";
 import { bot, listen } from "../core/body";
 import { equipItem, unequipSlot } from "../core/primitives";
 import { borrow } from "../core/leases";
+import { bodyAtRest } from "../core/plugins";
 import { describeFailure } from "../core/result";
 import { on } from "../core/events";
 import { getCurrentCommandName } from "../core/commandContext";
@@ -47,7 +48,7 @@ export async function keepWeaponInHand(): Promise<void> {
     // Between the task's actions, never in the middle of one
     const result = await borrow({ name: "weapon in hand", bucket: 4 }, ["hands"], async () =>
       best ? await equipItem(best.name, "hand") : held && bot.registry.foodsByName?.[held.name] ? await unequipSlot("hand") : null
-    , 3_000);
+    , 3_000, bodyAtRest);
     if (result && !result.ok) console.log(`Could not switch held item: ${describeFailure(result)}`);
   } catch (error) {
     console.error("Could not switch held item:", error);

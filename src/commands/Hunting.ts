@@ -8,7 +8,7 @@ import type { Entity } from "prismarine-entity";
 import { bot } from "../core/body";
 import { attackEntity } from "../actions/combat";
 import { collectDrops } from "../actions/pickup";
-import { isCommandCancelled } from "../core/commandContext";
+import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { fighting } from "../core/plugins";
 import { countList, isGame, lookForAnimals, planHunt, SIGHT_RANGE, KEEP_PER_KIND } from "../actions/hunting";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
@@ -118,6 +118,7 @@ export async function execute(args: any): Promise<void> {
     if (!(await attackEntity(prey, false))) break;
     if (await waitUntilGone(prey)) {
       killed++;
+      reportProgress(killed); // cut off now, it hunts only what's left
       misses = 0;
       taken.set(prey.name, (taken.get(prey.name) ?? 0) + 1);
       await collectDrops(8); // all of this kill's drops before the next animal

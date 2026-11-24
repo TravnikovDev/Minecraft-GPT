@@ -23,10 +23,9 @@ export function recentFailure(key: string): string | null {
   return fact.reason;
 }
 
-/** The key for a walking goal's spot (blocks within 2 of each other count as the same place). */
+/** The key for a walking goal's exact block (a chest next to a table is another place). */
 export function placeKey(p: { x: number; y: number; z: number }): string {
-  const r = (n: number): number => Math.round(n / 2) * 2;
-  return `place:${r(p.x)},${r(p.y)},${r(p.z)}`;
+  return `place:${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
 }
 
 /** Forgets everything (tests). */

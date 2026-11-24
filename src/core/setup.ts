@@ -23,6 +23,14 @@ export function installPlugins(currentBot: Bot): void {
   // One set of walking rules: natural terrain only, doors opened (core/movements).
   // mineflayer-pvp brings its own default rules (dig through anything) and
   // swaps them in on every attack, so it gets the same rules.
+  // mineflayer-pvp stops itself when its target despawns (a kill) through the
+  // pathfinder's deferred stop, which silently drops the next goal (the next
+  // mob, or the owner to follow again) and, with nothing walking, later
+  // strips every path_stop listener (the door opener's). Make its own stop
+  // the immediate one.
+  const pvpPlugin = currentBot.pvp as unknown as { stop: () => Promise<void>; forceStop: () => void };
+  pvpPlugin.stop = async () => pvpPlugin.forceStop();
+
   const rules = walkingRules(currentBot);
   currentBot.pathfinder.setMovements(rules);
   currentBot.pvp.movements = rules;

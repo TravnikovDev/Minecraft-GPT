@@ -4,6 +4,34 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 4: arbiter and reflexes (2026-11-25, not yet run)
+
+One arbiter now decides what the bot does. Reflexes pause a task instead of fighting it; the owner calling the bot cuts in, and what it was doing carries on afterwards with what's left. The bot eats and puts armor on by itself, between its own actions (the auto-eat and armor plugins are gone).
+
+**The plan's checks**
+- [ ] "gather 10 wood", then lead a creeper to it → it deals with the creeper (or runs), then goes back to chopping; in the end it has 10 new logs, not more
+- [ ] "gather 10 wood", then `come here` halfway → "Coming!", it comes; then "Back to gather wood." and it gathers only the rest
+- [ ] Mid-fight (or while it dodges a creeper) say `stop` → it stops fighting at once and stays quiet for about a minute
+
+**Pausing, not fighting over the body**
+- [ ] While it mines, let a zombie attack it → it stops digging, fights, then finishes the same block and carries on (no "failed" in the log)
+- [ ] Let it get hungry (food 14 or below) while it mines → it eats between two blocks, never in the middle of one; log "Ate cooked beef (food …)"
+- [ ] Hurt it badly while it carries food → it eats straight away even mid-task
+- [ ] With only rotten flesh and full-ish food → it doesn't eat it; starving → it does
+- [ ] Give it better armor while it works → it puts it on between actions
+- [ ] It stands in deep water idle → it treads water; underwater with little air while walking → it swims up, then walks on
+
+**Order and resuming**
+- [ ] "craft a chest" then "put the cobblestone in the chest" → the second waits ("Okay, I'll do that after I finish craftItem") and then runs
+- [ ] "go to x y z" far away, then "follow me" → it follows; when you say `stop`, it doesn't go back to the old trip
+- [ ] "status" while it works and more is waiting → "Doing …, N more queued"
+- [ ] It dies while you've queued things → it goes back for its things, makes a starter kit, then comes to you (in that order)
+
+**Getting unstuck**
+- [ ] Trap it in a 1-block hole with a task to walk somewhere → after about 45 s it jumps and steps aside; later it plans again; finally "I'm stuck, so I gave up on …"
+- [ ] Right after it gave up, ask it to go to the same spot → it says it can't get there at once (it remembers for 10 minutes)
+- [ ] Ask it to smelt (a long wait at the furnace) → it does **not** give up as "stuck" while waiting
+
 ## Phase 3: verified actions (2026-11-25, not yet run)
 
 Every action now checks the world afterwards and says why it failed: *I can't find a way there*, *it's out of my reach*, *the server didn't let me (a protected area?)*, *it took too long*, *I stopped*, *there's no room*, *I don't have the right tool*.

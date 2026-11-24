@@ -9,6 +9,7 @@ import type { Entity } from "prismarine-entity";
 import type { Movements, goals } from "mineflayer-pathfinder";
 import { bot } from "./body";
 import { isAnyReflexActive, reflexTakeovers, waitForReflexes } from "./reflexes";
+import { isTakenUrgently } from "./leases";
 import { isCommandCancelled } from "./commandContext";
 
 type Goal = goals.Goal;
@@ -160,15 +161,29 @@ export const pathing = {
  * Stops everything the body is doing right now: walking, fighting, digging,
  * and any held movement keys (the owner's stop, a cancelled command).
  */
-export function haltBody(): void {
+export function haltBody(options: { keepUrgent?: boolean } = {}): void {
+  // With keepUrgent, what a reflex holds (running from mobs, swimming up) keeps going
+  const movement = !options.keepUrgent || !isTakenUrgently("movement");
+  const hands = !options.keepUrgent || !isTakenUrgently("hands");
   try {
-    pathing.stop();
-    bot.pvp?.forceStop();
-    bot.stopDigging();
-    bot.clearControlStates();
+    if (movement) {
+      pathing.stop();
+      bot.pvp?.forceStop();
+      bot.clearControlStates();
+    }
+    if (hands) bot.stopDigging();
   } catch (error) {
     console.error("Error while halting the bot:", error);
   }
+}
+
+/**
+ * True when nothing is using the hands on its own: not walking (the
+ * pathfinder digs and places by itself) and no window open (items can't be
+ * swapped in a chest). Polite borrowers (eating, armor) wait for this.
+ */
+export function bodyAtRest(): boolean {
+  return !(bot.pathfinder?.isMoving() ?? false) && !bot.currentWindow;
 }
 
 /**
@@ -179,8 +194,10 @@ export function takeOverBody(): void {
   pathing.takeOver();
   try {
     bot.stopDigging();
+    // Hands can't swap items with a window open (a chest, a furnace): close it
+    if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
   } catch {
-    // not digging
+    // not digging, no window
   }
 }
 

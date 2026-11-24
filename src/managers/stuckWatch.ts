@@ -57,7 +57,7 @@ function madeProgress(): boolean {
 /** Called every few seconds: checks the running task and escalates when it's stuck. */
 export async function checkProgress(): Promise<void> {
   const task = currentTask();
-  if (!task || busy || !bot.entity) return;
+  if (!task || !task.watchProgress || busy || !bot.entity) return;
   if (madeProgress()) {
     lastProgressAt = Date.now();
     level = 0;
@@ -76,7 +76,8 @@ export async function checkProgress(): Promise<void> {
       level = 2;
       pathing.replan();
     } else {
-      const goal = lastWalkGoal();
+      // Blame the place only if it's walking there right now
+      const goal = pathing.isMoving() ? lastWalkGoal() : null;
       if (goal) rememberFailure(placeKey(goal), `got stuck going there`, FORGET_AFTER_MS);
       console.log(`Still stuck on ${task.name}: giving up${goal ? ` (${goal.x}, ${goal.y}, ${goal.z} unreachable for a while)` : ""}.`);
       if (task.bucket < 6) bot.chat(`I'm stuck, so I gave up on ${task.name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}.`);

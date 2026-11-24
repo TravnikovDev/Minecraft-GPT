@@ -5,6 +5,9 @@ import { followPlayer } from "../actions/movement";
 import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
 import { ridingWithOwner } from "../managers/ownerDialog";
+import { isCommandCancelled } from "../core/commandContext";
+import { isAnyReflexActive } from "../core/reflexes";
+import { pathing } from "../core/plugins";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
 Example: "Follow player Steve at a distance of 2 blocks.", "Follow me", "Let' go", "Let' go together".`;
@@ -48,9 +51,17 @@ export async function execute(args: any) {
   }
 
   const result = await followPlayer(userToFollow, distance);
-  if (result) {
-    bot.chat(`Following ${player_name}`);
-  } else {
+  if (!result) {
     bot.chat(`Failed to follow ${player_name}`);
+    return;
+  }
+  bot.chat(`Following ${player_name}`);
+  // Following is a task that lasts: it ends when the owner says stop or
+  // something else needs the bot (the arbiter cancels it, and it carries on
+  // after). If the follow goal is lost (the player left and came back), set it again.
+  while (!isCommandCancelled()) {
+    await new Promise((r) => setTimeout(r, 1_000));
+    if (isCommandCancelled()) break;
+    if (!pathing.hasGoal() && !isAnyReflexActive() && bot.players[userToFollow]?.entity) await followPlayer(userToFollow, distance);
   }
 }
