@@ -1,5 +1,7 @@
 # Implementation Plan
 
+What actually happened in each phase (events, fixes, decisions) is recorded in the [Implementation log](Implementation%20log.md).
+
 This plan turns [Minecraft AI bot architecture](Minecraft%20AI%20bot%20architecture.md) into ten phases, from Phase 0 to Phase 9. Each phase ends in something you can **see working in your own game**, so the bot stays playable the whole way and no phase is a "big bang" rewrite. The order follows the layer dependencies: safety and control first, then the body and the identifiers, then verified actions and one arbiter, then memory, skills and progression, and only then the LLM planner, the roles and the late game.
 
 **Ground rules for every phase**

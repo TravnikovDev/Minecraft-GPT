@@ -1,0 +1,228 @@
+# Implementation Log
+
+This log runs alongside the [Implementation plan](Implementation%20plan.md). The plan says what we *intend* to build. This log records what *actually happened* in each step.
+
+Each entry has four parts:
+1. **Planned:** what this step set out to do, quoting the plan.
+2. **What happened:** events from the real game, reviews and surprises.
+3. **How we handled it:** the fix or decision for each event, with the commit.
+4. **Outcome and what follows:** where it left the bot and what changes next.
+
+In-game test results are recorded in detail in [docs/real-game-checklist.md](../docs/real-game-checklist.md). This log keeps the story and the decisions.
+
+**Adding an entry:** add it at the bottom. Keep events factual ("the bot dug into a village house after hunting"), not judgements. Every fix names its commit. Anything left open goes under "Outcome and what follows".
+
+---
+
+## Entry 1: Before the plan (2026-11-23 to 24)
+
+**Planned.** Nothing yet: the plan didn't exist. The aim was to bring an old codebase (last touched April 2025) back to life and decide how the bot should be built.
+
+**What happened**
+- The dependencies were years behind (mineflayer, openai, zod, TypeScript).
+- "stop" didn't interrupt commands, and wood gathering never ended.
+- The npm release of mineflayer-pathfinder was stale and buggy.
+- The owner rejected generic "app" advice and set the design positions:
+  - the LLM is a slow, diary-driven day planner, at about $10/month
+  - real-time behavior lives in code
+  - the bot obeys only its owner
+  - testing happens in the owner's real game
+
+**How we handled it**
+
+| Event | Handling | Commit |
+|---|---|---|
+| Old dependencies | Upgraded to mineflayer 4.39, openai 7, zod 4, TypeScript 7 | `ced4490` |
+| Game data didn't match the server | Use the server's version; reconnect after disconnects | `639fd28` |
+| Stop and endless gathering | Stop interrupts commands; gathering ends | `78e3409` |
+| Stale pathfinder | Pinned mineflayer-pathfinder to GitHub commit `0eb15c1` | `69e51bb` |
+| No direction | Architecture research report, then a 10-phase plan | `15b0d97` |
+
+**Outcome and what follows.** We had the [architecture](Minecraft%20AI%20bot%20architecture.md) and a phased plan, Phases 0 to 9, each ending in something visible in the real game.
+
+---
+
+## Entry 2: Phase 0, real-game baseline and owner control (2026-11-24)
+
+**Planned.** "The bot obeys only you, in your real world, and stop always works." This meant:
+- a validated config
+- owner-only chat
+- a fast path without the LLM for `stop`, `come`, `follow me` and `status`
+- the queue cleared on restart
+- four suspected bugs confirmed and fixed
+- a checklist for real-game tests
+
+**What happened**
+- The bot joined the owner's 1.20.4 LAN world with offline login; the plan had expected that LAN would need a real account.
+- Crafting made the wrong count: bot.craft's count is how many times to run the recipe, not how many items to make.
+- A crash in the stuck watcher showed up during a server kick.
+- "come here" failed on a trip of about 1,400 blocks.
+
+**How we handled it**
+
+| Event | Handling | Commit |
+|---|---|---|
+| All of the planned Phase 0 work | Owner-only control, fast path, validated config, the four bugs fixed | `4d22144` |
+| Craft count, stuck-watcher crash | Fixed while testing | `6316b97` |
+| Long trips | Deferred to Phase 3 (trips split into legs) | n/a |
+
+**Outcome and what follows.** 12 of 15 checks passed in the real game; 3 weren't run (Wi-Fi off, "you're stuck", drowning). Results: `eb10806`. Phase 0 was accepted.
+
+---
+
+## Entry 3: Owner feedback, second real-game session (2026-11-24)
+
+**Planned.** Nothing new: this was a play session after Phase 0.
+
+**What happened.** The owner asked for things from later phases:
+- instant answers to "where are you"
+- describing its surroundings
+- long trips
+- personal updates
+- crafting that makes its own sticks and picks the better material
+
+In the game:
+- The bot got kicked for chat spam.
+- It couldn't find the owner once the owner was out of sight.
+- It died to a creeper.
+
+**How we handled it**
+
+| Event | Handling | Commit |
+|---|---|---|
+| Owner wishes | Instant answers, surroundings, trips in legs with progress, updates, smart crafting | `44a9731`, `abaef90` |
+| Chat spam kicks | Chat paced to one line every 1.2 s | `abaef90` |
+| Owner out of sight | Remember the owner's last position; ask for F3 coordinates | `f87c8e0` |
+| "Pickaxe" built from wood | Generic tool names pick the best material it can make | `01ada8e` |
+| Nearby table unreachable | It places its own table | `e9b87dd` |
+| Creeper deaths, lost items | Recovery mode: creeper reflex, death recovery, starter kit, hang watchdog | `048ecfa` |
+| "Move away" waited behind gathering | Movement and unstuck requests interrupt the current task | `f2fbf24` |
+
+**Outcome and what follows.**
+- **First pull-forward:** reflexes (Phase 4) and long travel (Phase 3) arrived early.
+- **Plan change:** the plan gained persisted recovery state and conversation memory for Phase 1 (`5e9a0a8`), because both proved necessary in play.
+
+---
+
+## Entry 4: Phase 1, Session and Body, plus the third and fourth real-game sessions (2026-11-24)
+
+**Planned.** "One object owns the connection; reconnects leave no stale state; it remembers recent chat and its death spot." This meant:
+- a Body (one connection) and a Session (memory that survives restarts)
+- all `bot.*` calls going through the Body
+- per-connection resets
+- a version check
+- a typed event bus
+- plugin adapters
+- breaking the import cycles
+- persisted death spot and owner position
+- conversation memory
+
+**What happened.** The planned core was built first (`e163b40`, `9e61d97`). Then two long sessions in the owner's world produced a stream of events, almost all from features belonging to later phases.
+
+*Third session:*
+- The bot didn't use a bed, then claimed "I set my spawn point" when it hadn't.
+- It drowned twice: mineflayer's `oxygenLevel` is overwritten by any nearby fish or mob.
+- Mobs hit it while it was busy, and its task cancelled the fight.
+- The owner asked for boats on long trips and for harvesting and cooking.
+- It sat stuck as a passenger in the owner's boat.
+- It used only one of three campfires.
+- "Give me X" gave only one.
+- It broke the owner's wall (and a dragon egg) to reach the nearest bed, and couldn't use doors.
+
+*Fourth session:*
+- "Craft armor" made leather horse armor.
+- "Helmet" quietly picked iron over leather.
+- It left a crafting table next to the house.
+- There was no way to wear armor.
+- After hunting, it dug into a village house: mineflayer-pvp swaps in its own dig-anything walking rules on every attack.
+- It stood in an open doorway: the pathfinder aimed at the top of the open door leaf.
+- It flapped a double door open and shut while following.
+- It answered "Gave 1 iron_chestplate" three times while giving nothing.
+
+**How we handled it**
+
+| Event | Handling | Commit |
+|---|---|---|
+| Planned Phase 1 core | Body, Session, adapters, event bus, per-connection resets, cycles | `e163b40`, `9e61d97` |
+| Bed and false spawn claim | Use the bed by day and repeat the server's own answer; remember its own bed | `550603a`, `1f8ba54`, `0551e0f` |
+| Owner position checks | Every 5 s at first, then 3 times a minute at the owner's request | `97470bf`, `0548038` |
+| Drowning | Reflex reads the bot's own air; treads water when idle | `376962a`, `adf464a`, `d674adb` |
+| Mobs while busy | Combat reflex pauses the task and fights back | `cc1bea7` |
+| Boats | Crafts a boat, rows across water, lands before the next command | `0562009`, `f1d1f6c`, `29bd1d3`, `7ef626d` |
+| Harvest, cooking | Harvests and replants; cooks on every campfire at once | `909fafa`, `6824cf2`, `4fdcb12` |
+| Give only one | No amount means all of it | `434e4a0` |
+| Broken wall and dragon egg | Walks only through natural terrain; opens doors | `0551e0f` |
+| Horse armor, silent "iron" choice | Armor and tool sets; asks before odd matches and when several kinds can be made | `2084f7a`, `6684ee2` |
+| Crafting table left behind | Tries reachable tables; takes its own table back | `c48938f` |
+| Can't wear armor | Wear command; puts on carried armor by itself | `7445ed2`, `418a499` |
+| Village house dug after hunting | pvp gets the safe rules; a backstop restores them; every broken block logged | `f135ad1` |
+| Stuck in the open doorway | Doors put in the pathfinder's doorway set | `8621c0b` |
+| Door flapping | Opens only doors on its route; closes only once through | `95d80b3` |
+| False "Gave" | Gives the exact item, reports what was really given, can hand over worn armor | `0b0a880`, `bfa797d`, `418a499` |
+
+**Outcome and what follows**
+- **Confirmed in the owner's game:**
+  - creeper reflex
+  - respawn at the bed
+  - death recovery (148 items)
+  - rowing 258 blocks
+  - harvest
+  - cooking on 3 campfires
+  - give-all
+  - wearing the helmet by itself
+  - walking through the door
+- **Planned Phase 1:** mostly met. The exception is "all `bot.*` calls go through the Body": about 72 files still call the bot directly.
+- **Branch:** 36 commits on `phase-1/session-body`, not merged to master. The plan asked for small commits on master.
+- **Lesson:** every serious bug came from a feature built ahead of the layer it depended on.
+  - reflexes without the Phase 4 arbiter
+  - names guessed without the Phase 2 Catalog
+  - success claimed without Phase 3 checked actions
+
+---
+
+## Entry 5: Architecture review and the direction from here (2026-11-24)
+
+**Planned.** Get a senior architect's independent view of the branch against the plan, and decide two things:
+- whether to follow the phases strictly
+- whether to move everything behind the Body
+
+**What happened**
+- A `technical-architect` review agent was added (`.claude/agents/technical-architect.md`) and reviewed `master..HEAD`. Full text: [Architecture review 2026-11-24](Architecture%20review%202026-11-24.md).
+- Its findings:
+  - **Critical, confirmed against the code and library sources:**
+    - "stop" doesn't reach the walk-retry loop that waits out reflexes.
+    - mineflayer-pvp's `stop()` leaves a delayed pathfinder stop that silently drops following the owner, and can cancel the next command's walk.
+  - **Major:** the combat reflex can freeze for 30 s; reflexes only pause walking (no leases on hands, windows or keys); a task from an old connection can drive the new one; two door-opener bugs.
+- An audit of the 72 files found about 365 state reads, 165 chat calls and about 100 calls that change the game.
+
+**How we handled it.** No code changes; the owner chose to commit the working state first and decide the direction.
+
+| Question | Decision (proposed, awaiting the owner) |
+|---|---|
+| Follow the phases strictly? | **No, but follow the order between foundations.** A feature may come early only if the foundation it leans on comes with it, at least in a thin form. The plan is a map of dependencies, not a schedule. |
+| Move everything behind the Body? | **No.** Reads stay direct (the singleton is accepted). The ~100 game-changing calls go through a gate in Phase 3 (server confirmation) and Phase 4 (leases). Chat goes through the Narrator in Phase 5. Phase 1's deliverable becomes "the Body owns connections and plugins, and a script blocks new direct calls that change the game". |
+| Alignment with the settled design | **Held:** slow LLM, cost, code-driven behavior, owner-only, one bot. **Drifted:** no arbiter (about six informal flags instead), no Catalog (three loose matchers), only some actions confirmed by the server, no automated tests in the repo. |
+
+**Outcome and what follows.** The proposed order:
+1. **Close Phase 1 (small).**
+   - Reword the Body deliverable.
+   - One set of walking rules per connection.
+   - Remove dead code and `.DS_Store`.
+   - Move the tests into the repo.
+   - Add the script that blocks new direct calls.
+   - Merge to master.
+2. **Phase 4a: control layer.**
+   - Leases on movement, hands and windows.
+   - One reflex scheduler, where each reflex re-asserts what it wants every tick.
+   - This absorbs the stop and follow bugs and the armor/give race.
+   - Decide here whether to keep mineflayer-pvp or write our own melee loop.
+3. **Phase 2: Catalog.** One loose-name resolver and proper categories.
+4. **Phase 3: checked actions.** Game-changing calls go through the gate and are confirmed by the server.
+5. **Back to features:** Phases 5, 6 and 7.
+
+**Rule until step 2 lands:** no new features that move the bot or use its hands. Small fixes from real games are still fine.
+
+**Open questions for the owner**
+- Should "stop" end a fight (but never fleeing or drowning)?
+- Keep mineflayer-pvp, or replace it?
+- Should the bot close a door behind it while the owner follows through it?
