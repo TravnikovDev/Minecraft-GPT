@@ -14,6 +14,7 @@ import type { CommandType } from "../schemas/types";
 import { bot } from "../core/body";
 import { unstuck } from "../actions/unstuck";
 import { isCreeperReflexActive } from "../actions/creeperReflex";
+import { isDrowningReflexActive } from "../actions/drowningReflex";
 import { fighting, pathing } from "../core/plugins";
 
 // "Doing nothing" watchdog: no movement and no inventory change for this long
@@ -37,7 +38,7 @@ function noteProgress(): void {
   if (!pos) return;
   const moved = Math.hypot(pos.x - lastProgressPos.x, pos.y - lastProgressPos.y, pos.z - lastProgressPos.z) > 1;
   const signature = inventorySignature();
-  if (moved || signature !== lastInventorySignature || isCreeperReflexActive()) {
+  if (moved || signature !== lastInventorySignature || isCreeperReflexActive() || isDrowningReflexActive()) {
     lastProgressAt = Date.now();
     lastProgressPos = { x: pos.x, y: pos.y, z: pos.z };
     lastInventorySignature = signature;

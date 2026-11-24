@@ -20,6 +20,7 @@ import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
+import { registerDrowningReflex } from "./actions/drowningReflex";
 import { resetUnstuckState } from "./actions/unstuck";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
@@ -80,6 +81,7 @@ onConnectionReady((currentBot) => {
   monitorHealth(); // self-defense on damage (per-connection state reset inside)
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
+  registerDrowningReflex(); // and so is running out of air underwater
   resetUnstuckState(); // stuck counters from an old connection don't apply
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
