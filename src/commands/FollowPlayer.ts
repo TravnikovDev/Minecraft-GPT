@@ -4,6 +4,7 @@ import { z } from "zod";
 import { followPlayer } from "../actions/movement";
 import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
+import { ridingWithOwner } from "../managers/ownerDialog";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
 Example: "Follow player Steve at a distance of 2 blocks.", "Follow me", "Let' go", "Let' go together".`;
@@ -19,6 +20,11 @@ export const parameters = z.object({
 
 // Implement the FollowPlayer action
 export async function execute(args: any) {
+  // Riding in the owner's boat: getting out would leave the bot in the water
+  if (ridingWithOwner()) {
+    bot.chat("I'm right here in the boat with you.");
+    return;
+  }
   console.log(`Executing FollowPlayer with args:`, args);
 
   // Validate arguments

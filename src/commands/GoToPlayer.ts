@@ -4,7 +4,7 @@ import { z } from "zod";
 import { bot } from "../core/body";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { isCommandCancelled } from "../core/commandContext";
-import { lastKnownOwnerPosition, tellOwner } from "../managers/ownerDialog";
+import { lastKnownOwnerPosition, ridingWithOwner, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
 import { Movements } from "mineflayer-pathfinder";
 import { unstuck } from "../actions/unstuck";
@@ -25,6 +25,11 @@ export const parameters = z.object({
 
 // Implement the GoToPlayer action
 export async function execute(args: any = {}) {
+  // Riding in the owner's boat: getting out would leave the bot in the water
+  if (ridingWithOwner()) {
+    bot.chat("I'm right here in the boat with you.");
+    return;
+  }
   // Validate arguments
   const parsed = parameters.parse(args);
 

@@ -33,6 +33,20 @@ export function rememberOwnerPosition(x: number, y: number, z: number, typed = f
   void saveOwnerPosition({ x, y, z, at: Date.now() }, typed);
 }
 
+/** True when the bot is riding in the same boat (or vehicle) as the owner. */
+export function ridingWithOwner(): boolean {
+  const vehicle = bot.vehicle;
+  if (!vehicle) return false;
+  const name = ownerName();
+  return vehicle.passengers.some((p) => p.username === name) || ownerEntity()?.vehicle === vehicle;
+}
+
+/** While riding, the bot is wherever its vehicle is (mineflayer doesn't move it). */
+export function syncRidingPosition(): void {
+  const vehicle = bot.vehicle;
+  if (vehicle && bot.entity) bot.entity.position.set(vehicle.position.x, vehicle.position.y, vehicle.position.z);
+}
+
 /** Saves where the owner is while the bot can see them (saving is throttled). */
 export function trackOwnerPosition(): void {
   const seen = ownerEntity();

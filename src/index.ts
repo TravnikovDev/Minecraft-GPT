@@ -9,7 +9,7 @@ import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
-import { trackOwnerPosition } from "./managers/ownerDialog";
+import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
@@ -131,6 +131,7 @@ onBotCreated((currentBot) => {
   // Keep the owner's position fresh, so "come here" works after a death or
   // restart takes the bot out of sight
   everyWhileConnected(currentBot, 20_000, trackOwnerPosition); // 3 times a minute
+  everyWhileConnected(currentBot, 500, syncRidingPosition); // riding: the bot is where its boat is
 
   listen(currentBot, "playerJoined", (player: mineflayer.Player) => {
     if (player.username === currentBot.username) return;

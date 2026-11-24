@@ -324,6 +324,34 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
   return { boat, surfaceY: water.y };
 }
 
+/** The boat the bot is already sitting in (e.g. the owner put it there). */
+function boardedBoat(): { boat: Entity; surfaceY: number } | null {
+  const boat = bot.vehicle;
+  if (!boat) return null;
+  const surfaceY = surfaceAt(Math.floor(boat.position.x), Math.floor(boat.position.z), boat.position.y + 1);
+  return surfaceY === null ? null : { boat, surfaceY };
+}
+
+/** An empty boat floating nearby (e.g. one the owner left), boarded if found. */
+async function boardNearbyBoat(): Promise<{ boat: Entity; surfaceY: number } | null> {
+  const boat = bot.nearestEntity(
+    (e) => /boat|raft/.test(e.name ?? "") && e.passengers.length === 0 && e.position.distanceTo(bot.entity.position) < 10
+  );
+  if (!boat) return null;
+  for (let attempt = 0; attempt < 3 && !bot.vehicle; attempt++) {
+    if (bot.entity.position.distanceTo(boat.position) > 2.5) {
+      try {
+        await pathing.goto(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 1));
+      } catch {
+        // close enough to try anyway
+      }
+    }
+    bot.mount(boat);
+    await waitFor("mount", 2000);
+  }
+  return bot.vehicle === boat ? boardedBoat() : null;
+}
+
 type RowResult = "done" | "stuck" | "cancelled" | "lost";
 
 /** Rows the boat through the route's cells, one small move per tick. */
@@ -404,9 +432,14 @@ async function pickUpBoat(boat: Entity): Promise<void> {
  * Returns true if it got meaningfully closer to the target.
  */
 export async function crossWaterByBoat(target: XZ): Promise<boolean> {
-  if (!boatItem() || bot.vehicle) return false;
+  const inBoat = /boat|raft/.test(bot.vehicle?.name ?? "");
+  if (bot.vehicle && !inBoat) return false;
   const startDistance = distXZ(bot.entity.position, target);
-  const launched = await launchBoat(target);
+  const launched = inBoat
+    ? boardedBoat()
+    : boatItem()
+      ? await launchBoat(target)
+      : await boardNearbyBoat();
   if (!launched) return false;
   const { boat, surfaceY } = launched;
   const boatY = boat.position.y;
@@ -444,6 +477,10 @@ export async function crossWaterByBoat(target: XZ): Promise<boolean> {
  * was no boat, no water nearby, or no way closer by water.
  */
 export async function goByBoat(target: XZ): Promise<boolean> {
-  if (!(await ensureBoat())) return false;
+  const inBoat = /boat|raft/.test(bot.vehicle?.name ?? "");
+  const boatNearby = bot.nearestEntity(
+    (e) => /boat|raft/.test(e.name ?? "") && e.passengers.length === 0 && e.position.distanceTo(bot.entity.position) < 10
+  );
+  if (!inBoat && !boatNearby && !(await ensureBoat())) return false;
   return crossWaterByBoat(target);
 }
