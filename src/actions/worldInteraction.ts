@@ -12,7 +12,7 @@ import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";
 import { __actionsDelay } from "../utils/utility.js";
 import { pathing, tools } from "../core/plugins";
-import { breakBlock, equipItem, goTo, isReplaceable, knownBlock, placeBlockAt, useBlock, withinReach } from "../core/primitives";
+import { breakBlock, equipItem, giveCreativeItem, goTo, isReplaceable, knownBlock, placeBlockAt, useBlock, withinReach } from "../core/primitives";
 import { describeFailure, expectOk, fail, ok, wasStopped, type ActionResult } from "../core/result";
 import { inChore } from "../core/chores";
 import { dismountVehicle, lookAt, mountEntity as rideEntity, setControl, useEntity, useHeldItem } from "../core/primitives";
@@ -54,7 +54,7 @@ export async function placeBlockResult(blockType: string, x: number, y: number, 
 
   // The exact block to place: "stone" must never pick a stone pickaxe
   if (!bot.inventory.items().some((item) => item.name === blockType) && bot.game.gameMode === "creative") {
-    await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
+    await giveCreativeItem(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
   }
   if (!bot.inventory.items().some((item) => item.name === blockType)) return done(fail("missing_items", `no ${blockType}`));
 

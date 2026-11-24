@@ -16,6 +16,7 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
+import { isAnyReflexActive } from "./reflexes";
 import { placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
 import { fail, ok, type ActionResult } from "./result";
@@ -25,14 +26,19 @@ type Pos = { x: number; y: number; z: number };
 
 /** How far the bot can touch a block (from its eyes to the block's middle). */
 export const REACH = 4.5;
-const DIG_TIMEOUT_MS = 15_000;
+const DIG_SLACK_MS = 3_000; // on top of the dig's own time (bot.digTime), which already counts water and air
 const PLACE_TIMEOUT_MS = 5_000;
 const EQUIP_TIMEOUT_MS = 5_000;
 const CONSUME_TIMEOUT_MS = 5_000;
 const TOSS_TIMEOUT_MS = 3_000;
-const CRAFT_TIMEOUT_MS = 10_000; // mineflayer waits for the crafting window with no limit
+// mineflayer gives up waiting for a crafting table's window after 20 s; waiting
+// longer than that lets its own timeout fire first, so no stale wait is left
+// to grab the next window that opens (a chest)
+const CRAFT_TIMEOUT_MS = 25_000;
+const CRAFT_BATCH = 8; // recipe runs per craft call (each run is several window clicks)
 const USE_TIMEOUT_MS = 5_000;
 const CONFIRM_MS = 1_000; // how long the server gets to show the change
+const WALK_NO_PROGRESS_MS = 20_000; // a walk that gets no closer for this long has given up
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const floor = (p: Pos): Vec3 => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
@@ -71,26 +77,58 @@ export function withinReach(pos: Pos, reach = REACH): boolean {
 
 // --- Walking -----------------------------------------------------------------
 
-/** A time limit for a walk: generous for the distance, never endless. */
-function walkTimeout(goal: Goal): number {
-  const g = goal as unknown as Partial<Pos>;
-  if (typeof g.x !== "number" || typeof g.z !== "number") return 60_000;
-  const distance = Math.hypot(g.x - bot.entity.position.x, g.z - bot.entity.position.z);
-  return Math.min(300_000, Math.max(30_000, 20_000 + distance * 1_500));
+/** The server's round trip, for how long to wait before trusting what the world shows. */
+function settleMs(): number {
+  const ping = (bot.player as { ping?: number } | undefined)?.ping ?? 100;
+  return Math.max(100, 2 * ping + 50);
+}
+
+/** True when the bot stands at the goal, as the pathfinder itself judges it (a slab, farmland or a chest is fine). */
+function atGoal(goal: Goal): boolean {
+  const feet = bot.entity.position.floored();
+  return goal.isEnd(feet as never) || goal.isEnd(feet.offset(0, 1, 0) as never);
+}
+
+/**
+ * Watches a walk: gives up when the bot gets no closer for a while (not
+ * counting time a reflex holds it: running from a creeper, a fight).
+ */
+function walkWatchdog(): { signal: AbortSignal; stop: () => void } {
+  const controller = new AbortController();
+  let last = bot.entity.position.clone();
+  let lastProgress = Date.now();
+  const timer = setInterval(() => {
+    if (!bot.entity) return;
+    const here = bot.entity.position;
+    if (here.distanceTo(last) > 0.5 || isAnyReflexActive()) {
+      last = here.clone();
+      lastProgress = Date.now();
+    } else if (Date.now() - lastProgress > WALK_NO_PROGRESS_MS) {
+      controller.abort(`no progress for ${WALK_NO_PROGRESS_MS / 1000}s`);
+    }
+  }, 1_000);
+  return { signal: controller.signal, stop: () => clearInterval(timer) };
 }
 
 /**
  * Walks to a goal and checks it really got there. Unreachable goals, a stop,
- * a time limit or a dropped connection end it with the matching reason.
+ * no progress for a while, a time limit or a dropped connection end it with
+ * the matching reason. A goal changed by something else is "interrupted".
  */
 export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise<ActionResult> {
-  const walked = await guarded("walking", () => pathing.goto(goal), {
-    timeoutMs: options.timeoutMs ?? walkTimeout(goal),
-    onStop: () => pathing.stop(),
-  });
-  if (!walked.ok) return walked;
+  const watchdog = walkWatchdog();
+  try {
+    const walked = await guarded("walking", (signal) => pathing.goto(goal, signal), {
+      timeoutMs: options.timeoutMs ?? 10 * 60_000, // the watchdog ends stuck walks long before this
+      watchdog: watchdog.signal,
+      onStop: () => pathing.stopIf(goal), // never clear a reflex's goal or a paused follow
+    });
+    if (!walked.ok) return walked;
+  } finally {
+    watchdog.stop();
+  }
   if (!bot.entity) return fail("disconnected", "no body after walking");
-  if (!goal.isEnd(bot.entity.position.floored() as never)) return fail("unreachable", "stopped short of the goal");
+  if (!atGoal(goal)) return fail("unreachable", "stopped short of the goal");
   return ok();
 }
 
@@ -115,7 +153,8 @@ export async function breakBlock(pos: Pos, options: BreakOptions = {}): Promise<
   }
   if (!withinReach(at)) return fail("out_of_reach", `${block.name} at ${at}`);
   if (bot.game.gameMode !== "creative") {
-    await tools.equipForBlock(block);
+    const tool = await guarded("taking a tool", () => tools.equipForBlock(block), { timeoutMs: CONFIRM_MS * 5 });
+    if (!tool.ok && tool.reason !== "error") return tool;
     const held = bot.heldItem ? bot.heldItem.type : null;
     if (!options.allowWithoutHarvest && !block.canHarvest(held)) return fail("no_tool", `nothing I carry harvests ${block.name}`);
   }
@@ -123,13 +162,15 @@ export async function breakBlock(pos: Pos, options: BreakOptions = {}): Promise<
   const before = block.stateId;
   markSelfAction(at);
   const dug = await guarded(`digging ${block.name}`, () => bot.dig(block, true), {
-    timeoutMs: DIG_TIMEOUT_MS,
+    timeoutMs: bot.digTime(block) * 1.5 + DIG_SLACK_MS,
     onStop: () => bot.stopDigging(),
   });
   if (!dug.ok) return dug;
-  // The server must agree: a protected area puts the block straight back
-  const gone = await until(() => knownBlock(at)?.stateId !== before, CONFIRM_MS);
-  if (!gone) return fail("refused", `${block.name} at ${at} came back`);
+  // mineflayer writes air into its own world copy the moment the dig ends;
+  // the server's answer comes a round trip later, and a protected area puts
+  // the block back then. Only the state after that counts.
+  await sleep(settleMs());
+  if (knownBlock(at)?.stateId === before) return fail("refused", `${block.name} at ${at} came back`);
   return ok({ name: block.name, alreadyGone: false });
 }
 
@@ -173,8 +214,9 @@ export async function placeBlockAt(itemName: string, pos: Pos, options: PlaceOpt
   const support = supportFor(at, options.against);
   if (!support) return fail("no_support", `nothing solid next to ${at}`);
   if (!withinReach(support.reference.position)) return fail("out_of_reach", `${at}`);
-  // Torches, rails and the like can go where the bot stands; solid blocks can't
-  if (standingIn(at) && bot.registry.blocksByName[itemName]?.boundingBox !== "empty") return fail("occupied", "I'm standing there");
+  // A solid block can't go where the bot stands; torches, rails, seeds and the
+  // like can (an item that isn't a block by the same name is never solid here)
+  if (standingIn(at) && bot.registry.blocksByName[itemName]?.boundingBox === "block") return fail("occupied", "I'm standing there");
   const equipped = await equipItem(itemName, "hand");
   if (!equipped.ok) return equipped;
   await guarded("looking", () => bot.lookAt(middle(support.reference.position), true), { timeoutMs: 2_000 });
@@ -184,11 +226,15 @@ export async function placeBlockAt(itemName: string, pos: Pos, options: PlaceOpt
     timeoutMs: PLACE_TIMEOUT_MS,
   });
   // mineflayer throws when the server's answer doesn't show the block; check the world either way
-  const now = await until(() => {
+  // Torches, rails and flowers have no collision box, so "a different block,
+  // not air" is the test (water rising or falling there doesn't count)
+  const changed = (): boolean => {
     const b = knownBlock(at);
-    // Torches, rails and flowers have no collision box, so "changed and not air" is the test
-    return b !== null && b.stateId !== before && b.name !== "air" && b.name !== "cave_air";
-  }, placed.ok ? CONFIRM_MS : 300);
+    return b !== null && b.stateId !== before && b.name !== target.name && b.name !== "air" && b.name !== "cave_air";
+  };
+  await until(changed, placed.ok ? CONFIRM_MS : 300);
+  if (changed()) await sleep(settleMs()); // the server may still take it back
+  const now = changed();
   if (now) return ok({ name: knownBlock(at)!.name });
   if (!placed.ok && placed.reason !== "error") return placed;
   return fail("refused", `${itemName} at ${at} didn't stay`);
@@ -251,8 +297,32 @@ export async function tossStack(item: Item, count: number): Promise<ActionResult
   const n = Math.min(count, item.count);
   const done = await guarded(`throwing ${item.name}`, () => bot.toss(item.type, null, n), { timeoutMs: TOSS_TIMEOUT_MS });
   if (!done.ok) return done;
+  // A toss is window clicks mineflayer applies to its own copy right away;
+  // ask the server for the real inventory before counting
+  await syncInventory();
   if (!(await until(() => carried(item.name) <= before - n, CONFIRM_MS))) return fail("refused", `the ${item.name} came back`);
   return ok(n);
+}
+
+/**
+ * Asks the server for the true contents of a window (the inventory by
+ * default). On 1.17.1+ mineflayer applies clicks to its own copy and the
+ * server stays silent about clicks it ignored; this makes it answer.
+ */
+export async function syncInventory(window: unknown = bot.inventory): Promise<void> {
+  const sync = (bot as unknown as { _syncWindow?: (w: unknown) => Promise<void> })._syncWindow;
+  if (!sync) return;
+  await guarded("checking the inventory", () => sync(window), { timeoutMs: 2_000 });
+}
+
+/** Lets go of the item being used (lowers a shield, stops eating, after placing a boat). */
+export function stopUsingItem(): void {
+  bot.deactivateItem();
+}
+
+/** Creative mode only: puts an item straight into a hotbar slot. */
+export async function giveCreativeItem(slot: number, item: Item): Promise<ActionResult> {
+  return guarded("taking it from the creative menu", () => bot.creative.setInventorySlot(slot, item), { timeoutMs: USE_TIMEOUT_MS });
 }
 
 // --- Using blocks and looking -------------------------------------------------------
@@ -280,14 +350,23 @@ export async function craftWith(recipe: Recipe, times: number, table: Block | nu
   const resultName = bot.registry.items[resultId]?.name ?? String(resultId);
   if (table && !withinReach(table.position)) return fail("out_of_reach", `crafting table at ${table.position}`);
   const before = carried(resultName);
-  await paceClicks(); // a craft is several window clicks
-  const done = await guarded(`crafting ${resultName}`, () => bot.craft(recipe, times, table ?? undefined), {
-    timeoutMs: CRAFT_TIMEOUT_MS * Math.max(1, Math.ceil(times / 8)),
-    onStop: () => {
-      if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
-    },
-  });
-  if (!done.ok) return done;
+  // In batches: each recipe run is several window clicks, and servers kick
+  // players who click too fast
+  for (let left = times; left > 0; left -= CRAFT_BATCH) {
+    const batch = Math.min(CRAFT_BATCH, left);
+    await paceClicks();
+    const done = await guarded(`crafting ${resultName}`, () => bot.craft(recipe, batch, table ?? undefined), {
+      timeoutMs: CRAFT_TIMEOUT_MS,
+      onStop: () => {
+        if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
+      },
+    });
+    if (!done.ok) {
+      const made = carried(resultName) - before;
+      return made > 0 && !(done.reason === "aborted" || done.reason === "disconnected") ? ok(made) : done;
+    }
+  }
+  // mineflayer resyncs the window after crafting, so the inventory is the server's
   const expected = (recipe.result.count ?? 1) * times;
   if (!(await until(() => carried(resultName) >= before + expected, CONFIRM_MS))) {
     const made = carried(resultName) - before;
@@ -306,7 +385,8 @@ export async function craftWith(recipe: Recipe, times: number, table: Block | nu
 export async function sleepIn(bed: Block): Promise<ActionResult> {
   if (!withinReach(bed.position)) return fail("out_of_reach", `bed at ${bed.position}`);
   const done = await guarded("going to bed", () => bot.sleep(bed), { timeoutMs: USE_TIMEOUT_MS });
-  if (!done.ok) return done;
+  // "it's not night", "monsters nearby", "occupied": the server's answer is the detail
+  if (!done.ok) return done.reason === "error" ? fail("refused", done.detail) : done;
   if (!(await until(() => bot.isSleeping, CONFIRM_MS))) return fail("refused", "not asleep");
   return ok();
 }

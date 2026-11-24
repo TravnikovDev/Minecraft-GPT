@@ -41,6 +41,8 @@ const fake: any = Object.assign(new EventEmitter(), {
   inventory: { items: () => inv, emptySlotCount: () => 36 - inv.length, slots: [] as any[] },
   blockAt,
   canDigBlock: () => true,
+  digTime: () => 50,
+  player: { ping: 5 },
   lookAt: async () => {},
   stopDigging: () => stoppedDigging++,
   get currentWindow() {
@@ -57,8 +59,14 @@ const fake: any = Object.assign(new EventEmitter(), {
   pathfinder: {
     goal: null,
     isMoving: () => false,
-    setGoal: () => pathStops++,
-    goto: (g: any) => (server.goto ? server.goto(g) : Promise.resolve()),
+    setGoal: (g: any) => {
+      fake.pathfinder.goal = g;
+      pathStops++;
+    },
+    goto: (g: any) => {
+      fake.pathfinder.goal = g;
+      return server.goto ? server.goto(g) : Promise.resolve();
+    },
   },
 });
 useFakeBot(fake);
@@ -77,6 +85,13 @@ const { guarded } = await import(`${ROOT}/src/core/guard.ts`);
 const { runWithSignal } = await import(`${ROOT}/src/core/commandContext.ts`);
 const { depositInto } = await import(`${ROOT}/src/core/containers.ts`);
 const never = () => new Promise<never>(() => {});
+// A stop after `ms`, like the owner's (an AbortController: Bun cancels an
+// AbortSignal.timeout's timer once its last listener is removed)
+function stopAfter(ms: number): AbortSignal {
+  const c = new AbortController();
+  setTimeout(() => c.abort("Stopped by player"), ms);
+  return c.signal;
+}
 
 // --- The guard: nothing hangs --------------------------------------------------------
 
@@ -110,7 +125,12 @@ test("breaking: success only once the block is gone", async () => {
 
 test("breaking in a protected area: the server puts the block back, so it's refused", async () => {
   world.set("1,64,0", "dirt");
-  server.dig = async () => {}; // the dig "finishes", but the block stays
+  // Like mineflayer: the dig ends by writing air locally; the server's answer
+  // (the block put back) arrives a round trip later
+  server.dig = async (b) => {
+    world.set(key(b.position), "air");
+    setTimeout(() => world.set(key(b.position), "dirt"), 100);
+  };
   const r = await P.breakBlock({ x: 1, y: 64, z: 0 });
   expect(r).toMatchObject({ ok: false, reason: "refused" });
 });
@@ -125,7 +145,7 @@ test("breaking: unknown (not loaded), out of reach, and no tool are told apart",
 test("a dig that never finishes times out and stops digging", async () => {
   world.set("1,64,0", "dirt");
   server.dig = never;
-  const r = await runWithSignal(AbortSignal.timeout(200), () => P.breakBlock({ x: 1, y: 64, z: 0 }));
+  const r = await runWithSignal(stopAfter(200), () => P.breakBlock({ x: 1, y: 64, z: 0 }));
   expect(r).toMatchObject({ ok: false, reason: "aborted" });
   expect(stoppedDigging).toBe(1);
 });
@@ -179,7 +199,7 @@ test("crafting: the items must appear", async () => {
 test("crafting at a table that never opens times out and closes the window", async () => {
   server.craft = never;
   const table = blockAt({ x: 1, y: 63, z: 0 });
-  const r = await runWithSignal(AbortSignal.timeout(200), () => P.craftWith(stickRecipe, 1, table));
+  const r = await runWithSignal(stopAfter(200), () => P.craftWith(stickRecipe, 1, table));
   expect(r).toMatchObject({ ok: false, reason: "aborted" });
   expect(closedWindows).toBe(1);
 });
@@ -206,7 +226,7 @@ test("walking: arriving is checked, and a stop ends the walk", async () => {
   };
   expect(await P.goTo(new pf.goals.GoalNear(10, 64, 0, 1))).toMatchObject({ ok: true });
   server.goto = never;
-  const r = await runWithSignal(AbortSignal.timeout(100), () => P.goTo(new pf.goals.GoalNear(20, 64, 0, 1)));
+  const r = await runWithSignal(stopAfter(100), () => P.goTo(new pf.goals.GoalNear(20, 64, 0, 1)));
   expect(r).toMatchObject({ ok: false, reason: "aborted" });
   expect(pathStops).toBeGreaterThan(0);
 });
@@ -230,4 +250,20 @@ test("storing: a full chest is 'full', and a deposit is recounted", async () => 
     withdraw: async () => {},
   };
   expect(await depositInto(working, stack as any, 64)).toMatchObject({ ok: true, value: 64 });
+});
+
+test("only the stop signal means 'stopped': a changed goal or a reset path is 'interrupted'", async () => {
+  const { classifyError } = await import(`${ROOT}/src/core/result.ts`);
+  const named = (name: string, message: string) => Object.assign(new Error(message), { name });
+  expect(classifyError(named("GoalChanged", "The goal was changed before it could be completed!")).reason).toBe("interrupted");
+  expect(classifyError(named("PathStopped", "Path was stopped before it could be completed!")).reason).toBe("interrupted");
+  expect(classifyError(new Error("Digging aborted")).reason).toBe("interrupted");
+  expect(classifyError(named("NoPath", "No path to the goal!")).reason).toBe("unreachable");
+});
+
+test("arriving while standing on farmland (or a slab) counts, as the pathfinder judges it", async () => {
+  server.goto = async () => {
+    fake.entity.position = new Vec3(10.5, 63.9375, 0.5); // feet inside the farmland block's space
+  };
+  expect(await P.goTo(new pf.goals.GoalBlock(10, 64, 0))).toMatchObject({ ok: true });
 });

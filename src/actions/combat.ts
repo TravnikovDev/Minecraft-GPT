@@ -2,7 +2,7 @@
 
 import { bot } from "../core/body";
 import { equipItem, lookAt } from "../core/primitives";
-import { useHeldItem } from "../core/primitives";
+import { stopUsingItem, useHeldItem } from "../core/primitives";
 import type { Item } from "prismarine-item";
 import { catalog } from "../core/catalog";
 import { Entity } from "prismarine-entity";
@@ -291,7 +291,7 @@ async function useShield(): Promise<boolean> {
       await __actionsDelay(500); // Block for a moment
       
       // Stop blocking
-      bot.deactivateItem();
+      stopUsingItem();
       return true;
     }
     return false;

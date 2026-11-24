@@ -2,6 +2,8 @@
 
 Run this in **your own Minecraft world** after every phase of the [implementation plan](../reports/Implementation%20plan.md). The bot connects to your game; you play as the owner.
 
+Everything not yet seen working in the game is collected in the [testing backlog](testing-backlog.md); start there.
+
 ## Setup
 
 - [ ] **Version.** The world runs Minecraft **26.1 or older**. mineflayer 4.39 does not support 26.2 or 26.3 yet; the bot refuses to connect to them.

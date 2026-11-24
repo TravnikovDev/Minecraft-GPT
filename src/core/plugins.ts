@@ -40,12 +40,14 @@ export const pathing = {
    * A survival reflex (creeper, drowning, combat) pauses the walk instead of
    * failing it: this waits for the reflex to finish and walks on.
    */
-  async goto(goal: Goal): Promise<void> {
+  async goto(goal: Goal, signal?: AbortSignal): Promise<void> {
+    // Stopped: the command or chore was, or the caller gave up on this walk
+    const stopped = (): boolean => isCommandCancelled() || Boolean(signal?.aborted);
     for (let retry = 0; ; retry++) {
       // A stopped command must not walk on after a reflex lets go
-      if (isCommandCancelled()) throw new Error("Cancelled");
-      await waitForReflexes(isCommandCancelled);
-      if (isCommandCancelled()) throw new Error("Cancelled");
+      if (stopped()) throw new Error("Cancelled");
+      await waitForReflexes(stopped);
+      if (stopped()) throw new Error("Cancelled");
       if (!bot.pathfinder) throw new Error("pathfinder is not loaded yet");
       await leaveVehicle();
       const before = reflexTakeovers();
@@ -53,7 +55,7 @@ export const pathing = {
         return await bot.pathfinder.goto(goal);
       } catch (error) {
         const interrupted = isAnyReflexActive() || reflexTakeovers() !== before;
-        if (!interrupted || isCommandCancelled() || retry >= MAX_REFLEX_RETRIES) throw error;
+        if (!interrupted || stopped() || retry >= MAX_REFLEX_RETRIES) throw error;
       }
     }
   },
@@ -93,6 +95,14 @@ export const pathing = {
   stop(): void {
     pausedFollow = null;
     bot.pathfinder?.setGoal(null);
+  },
+  /**
+   * Stops walking only if `goal` is still the one being walked: a walk that
+   * timed out must not clear a reflex's goal (running from mobs) or a
+   * paused follow.
+   */
+  stopIf(goal: Goal): void {
+    if (bot.pathfinder?.goal === goal) bot.pathfinder.setGoal(null);
   },
   /** Forgets a follow paused by a reflex (a new connection; its entity is gone). */
   resetPaused(): void {

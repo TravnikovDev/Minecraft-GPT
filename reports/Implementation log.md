@@ -371,3 +371,56 @@ In the game:
 - scaffolding is still remembered by position only
 - whether `stop` should also end fleeing at low health (the owner's call)
 - splitting the branch: Phase 2 commits to master after the Phase 2 checks; `32d0952` waits
+
+## Entry 10: Phase 3, verified actions (2026-11-25)
+
+**Planned.** The plan's Phase 3:
+- a result type with failure reasons that reach chat
+- checked primitives (walk, break, place, equip, eat, craft, containers) with a precondition check, a time limit, abort support and a check afterwards
+- "unknown is unknown"
+- paced clicks
+- the most-used actions moved onto them
+
+The owner can't test in the game right now, so everything is checked by tests only; the in-game checks are in `docs/testing-backlog.md`.
+
+**What happened**
+- The primitives went in, and the actions moved onto them: walking, breaking, placing, chests, crafting, smelting, cooking, farming, inventory, doors, beds, weapons and riding (`da14972`, `5b9beba`).
+- The architect review found the checks could still be fooled:
+  - **Digs:** mineflayer writes air into its own world copy the moment a dig ends, so "is the block gone?" passed before the server could refuse.
+  - **Containers and tosses:** mineflayer counts a click as done before the server answers.
+  - **Abandoned work:**
+    - A timed-out walk could resume after a reflex and fight the next walk.
+    - A walk that timed out cleared a reflex's goal.
+    - A craft at a table that never opened left mineflayer waiting for a window, and that wait could grab the next window opened.
+  - **Wrong "stopped":** a changed goal or a reset path counted as the owner's stop, so long trips ended with "I stopped".
+  - **Arrival check:** stricter than the pathfinder's own; standing on farmland or a slab failed.
+  - **Mining count:** collectBlock counted blocks it never broke.
+- **A test-harness surprise:** in Bun, removing the last listener of an `AbortSignal.timeout` signal cancels its timer. Real stop signals come from an `AbortController` and are not affected; the tests now use one.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Result type | `src/core/result.ts`: `ok`, or one of aborted, interrupted, timeout, disconnected, unreachable, out_of_reach, unknown_block, not_found, no_tool, refused, occupied, no_support, full, missing_items, error; `describeFailure` for chat; `ActionError`/`expectOk` for code that works with exceptions |
+| No call can hang | `src/core/guard.ts`: each call ends on success, the command's or chore's stop, a time limit, a watchdog or a dropped connection. The call gets its own signal, so the work it started (a walk) ends too |
+| Walking | `goTo`: arrival checked the way the pathfinder checks it; a no-progress watchdog (20 s, not counting time a reflex holds it) instead of a fixed limit; on giving up it clears only its own goal |
+| Breaking | `breakBlock`: the time limit comes from the dig time; it waits one server round trip (at least 100 ms) and only then judges whether the block is gone, so a protected area that puts it back is "refused" |
+| Placing | `placeBlockAt`: free spot, support, reach; success means a different block that isn't air, and it stayed after a round trip. Torches count though they have no collision box |
+| Crafting | `craftWith`: batches of 8 runs with paced clicks; a 25 s limit, longer than mineflayer's own 20 s window wait, so no stale wait is left; the items must appear |
+| Containers | `src/core/containers.ts`: opening with a time limit; deposits and withdrawals paced, then the server is asked for the real contents before recounting; furnace steps guarded |
+| Unknown is unknown | `knownBlock` is null for unloaded blocks, and every primitive treats null as "unknown_block", never air |
+| Riding, using, looking, sleeping | `mountEntity`, `dismountVehicle`, `useEntity`, `useHeldItem`, `useBlock`, `lookAt`, `sleepIn` (the server's reason when it refuses) |
+| Plugin setup | moved from `index.ts` to `src/core/setup.ts`; the boundary check now also catches `currentBot.`, `bot.creative.*` and `deactivateItem` |
+| Commands | walking, place, give, discard, store, take and check-chest say why they failed and report real counts ("Gave 12 of 20 coal") |
+| Earlier review findings | busy flags after a disconnect: closed (guards end on disconnect); scaffolding remembers what it placed, keeps the water/lava/falling-block checks, and is forgotten when someone else changes the block |
+| Fixed on the way | seeds were "planted" under the farmland; the toss listener detached from the wrong bot after a reconnect; precious items matched hay and bone blocks |
+
+**Outcome and what follows**
+- **Tests:** 107 pass; 19 test the primitives against a fake server that refuses, never answers, or drops the connection.
+- **Direct game calls outside core/:** 117 → 16. The 16 left are the creeper and drowning reflexes and the unstuck routine, which Phase 4 turns into proposals and a service.
+- **Not done:**
+  - the plan's "every reason reaches chat" holds for the commands above, but not yet for the ensure chains (Phase 6)
+  - recent conversation still records text only, not the command and its result (a Phase 1 gap)
+  - whether `stop` should also end running from mobs when badly hurt is the owner's decision (today it doesn't)
+- **In-game checks:** all in `docs/testing-backlog.md`, newest first.
+- **Next:** Phase 4, the arbiter and reflexes.

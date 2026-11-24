@@ -27,6 +27,8 @@ The project requires the following environment variables:
 - `OWNER_USERNAME` - The only player whose chat the bot obeys (required)
 - `AUTH` - `offline` (online-mode=false servers) or `microsoft`
 
+Game-changing calls go through `src/core/`: `core/primitives.ts` (walk, break, place, equip, craft, use, ride...) and `core/containers.ts` (chests, furnaces) check the world afterwards and return an `ActionResult` with a typed reason (`core/result.ts`); use `describeFailure` for chat. Never call `bot.dig`, `bot.placeBlock`, `bot.equip`... from actions or commands (the boundary check only lets that count go down). Untested in-game work is listed in `docs/testing-backlog.md`.
+
 All settings are validated by the Zod schema in `src/config/env.ts`; the bot exits with a clear message when one is missing or invalid. Chat goes through `src/managers/chatGateway.ts`: non-owner messages are ignored, and `stop`, `come`, `follow me` and `status` are handled in code without an LLM call. Real-game test steps live in `docs/real-game-checklist.md`.
 
 ## Code Style Guidelines

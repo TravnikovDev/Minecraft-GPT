@@ -4,11 +4,11 @@ import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
 import * as world from "./world.js";
 import { __actionsDelay } from "../utils/utility.js";
-import { breakBlockAt, pickupNearbyItems, replaceBrokenTool } from "./worldInteraction.js";
+import { breakBlockAtResult, pickupNearbyItems, replaceBrokenTool } from "./worldInteraction.js";
 import { tellOwner } from "../managers/ownerDialog";
 import { pathing, tools } from "../core/plugins";
 import { goTo } from "../core/primitives";
-import { expectOk } from "../core/result";
+import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/result";
 import { canSee, type SightWorld } from "./sight";
 import { isCommandCancelled } from "../core/commandContext";
 import { tunnelTo } from "./digging";
@@ -127,9 +127,15 @@ export async function collectBlock(
         // ore instead of timing out (the walking rules forbid shafts)
         expectOk(await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
 
-        // Break the block and collect drops
-        await mineAndCollect(veinBlock);
-
+        // Break the block and collect drops; only a block really broken counts
+        const mined = await mineAndCollect(veinBlock);
+        if (!mined.ok) {
+          if (wasStopped(mined)) break;
+          // A protected area (or one it can't harvest): don't come back to it
+          badTargets.add(veinBlock.position.toString());
+          throw new ActionError(mined);
+        }
+        if (mined.value.alreadyGone) continue; // someone else got it
         collected++;
         failures = 0;
 
@@ -150,12 +156,11 @@ export async function collectBlock(
   return collected; // how many it really got (0: none)
 }
 
-// Helper function to mine a block and collect drops
-async function mineAndCollect(block: Block): Promise<void> {
-  // Break the block
-  await breakBlockAt(block.position.x, block.position.y, block.position.z);
-  // Use your existing function to pick up nearby items
-  await pickupNearbyItems(bot, 5);
+/** Mines one block (checked) and picks up what it drops. */
+async function mineAndCollect(block: Block): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
+  const broken = await breakBlockAtResult(block.position.x, block.position.y, block.position.z);
+  if (broken.ok && !broken.value.alreadyGone) await pickupNearbyItems(bot, 5);
+  return broken;
 }
 
 // Function to find connected blocks (vein mining)

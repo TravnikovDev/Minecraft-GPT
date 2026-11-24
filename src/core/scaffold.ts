@@ -8,6 +8,7 @@
 // run inside placingOnPurpose and are never counted as scaffolding.
 
 import { bot } from "./body";
+import { on } from "./events";
 
 type Placed = { x: number; y: number; z: number; name: string | null };
 const placed = new Map<string, Placed>();
@@ -67,3 +68,10 @@ export function ownScaffolds(): { x: number; y: number; z: number }[] {
 export function clearScaffolds(): void {
   placed.clear();
 }
+
+// Someone else changed the block (the owner broke it, or built on the spot):
+// it's not the bot's scaffolding any more. The bot's own digs and placements
+// don't count (they're marked self-caused, or recorded right after).
+on("block:changed", ({ position, selfCaused }) => {
+  if (!selfCaused) forgetScaffold(position);
+});

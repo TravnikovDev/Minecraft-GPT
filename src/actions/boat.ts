@@ -16,7 +16,7 @@ import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { isCommandCancelled, trackCleanup } from "../core/commandContext";
 import { goTo } from "../core/primitives";
-import { dismountVehicle, equipItem, hitEntity, lookAt, mountEntity, useHeldItem } from "../core/primitives";
+import { dismountVehicle, equipItem, hitEntity, lookAt, mountEntity, stopUsingItem, useHeldItem } from "../core/primitives";
 import { expectOk } from "../core/result";
 
 /** Trips at least this long make the bot get a boat before it sets off. */
@@ -309,7 +309,7 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
   await lookAt(water.offset(0.5, 0.9, 0.5));
   const spawned = waitForBoat(water.offset(0.5, 1, 0.5), 3000);
   useHeldItem(); // the server places the boat where the bot looks
-  bot.deactivateItem();
+  stopUsingItem();
   const boat = await spawned;
   if (!boat) {
     console.log(`Boat: placing it on the water at ${water} failed.`);

@@ -8,6 +8,7 @@
 /** Why an action didn't happen. */
 export type FailReason =
   | "aborted" // the owner said stop, or another command took over
+  | "interrupted" // something else cut in (a reflex, a path reset, death): worth trying again
   | "timeout" // it took too long (the server never answered)
   | "disconnected" // the connection dropped mid-action
   | "unreachable" // no way to walk there (or it stopped short)
@@ -43,6 +44,7 @@ export function wasStopped(result: ActionResult<unknown>): boolean {
 
 const SAY: Record<FailReason, string> = {
   aborted: "I stopped",
+  interrupted: "something interrupted me",
   timeout: "it took too long, so I gave up",
   disconnected: "I lost the connection",
   unreachable: "I can't find a way there",
@@ -64,13 +66,20 @@ export function describeFailure(result: Failed): string {
 }
 
 /**
- * Sorts an error from mineflayer or a plugin into a reason, by its message.
- * Messages come from mineflayer 4.39 and mineflayer-pathfinder.
+ * Sorts an error from mineflayer or a plugin into a reason. "aborted" is never
+ * guessed from a message (the guard decides that from the stop signal):
+ * a changed goal, a reset path or a dig cut off by death is "interrupted".
+ * Pathfinder errors carry a name (lib/goto.js); others are read by message
+ * (mineflayer 4.39).
  */
 export function classifyError(error: unknown): Failed {
+  const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : String(error);
+  if (name === "NoPath" || name === "Timeout") return fail("unreachable", message);
+  if (name === "GoalChanged" || name === "PathStopped") return fail("interrupted", message);
   const m = message.toLowerCase();
-  if (m === "cancelled" || m.includes("goal was changed") || m.includes("aborted")) return fail("aborted", message);
+  if (m === "cancelled") return fail("interrupted", message);
+  if (m.includes("digging aborted") || m.includes("goal was changed") || m.includes("path was stopped")) return fail("interrupted", message);
   if (m.includes("no path") || m.includes("took to long to decide path")) return fail("unreachable", message);
   if (m.includes("timeout") || m.includes("timed out") || m.includes("took longer")) return fail("timeout", message);
   if (m.includes("no block has been placed") || m.includes("block is still") || m.includes("server rejected") || m.includes("not allowed")) {

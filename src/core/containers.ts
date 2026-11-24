@@ -10,7 +10,7 @@ import type { Furnace } from "mineflayer";
 import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
-import { carried, withinReach } from "./primitives";
+import { carried, syncInventory, withinReach } from "./primitives";
 import { fail, ok, type ActionResult } from "./result";
 
 /** An open chest or barrel. */
@@ -91,6 +91,7 @@ export async function depositInto(open: OpenContainer, item: Item, count: number
     timeoutMs: TRANSFER_TIMEOUT_MS,
   });
   if (!done.ok) return done;
+  await syncInventory(open); // the server's view, not mineflayer's optimistic one
   if (!(await until(() => carried(item.name) <= before - n, CONFIRM_MS))) {
     const moved = before - carried(item.name);
     return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't go in`);
@@ -112,6 +113,7 @@ export async function withdrawFrom(open: OpenContainer, item: Item, count: numbe
     timeoutMs: TRANSFER_TIMEOUT_MS,
   });
   if (!done.ok) return done;
+  await syncInventory(open); // the server's view, not mineflayer's optimistic one
   if (!(await until(() => carried(item.name) >= before + take, CONFIRM_MS))) {
     const moved = carried(item.name) - before;
     return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't come out`);

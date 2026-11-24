@@ -2,9 +2,12 @@
 // (digDiagonalTunnelUp) to go up and out, and straight tunnels
 // (digStraightTunnel) along a level. Runs the real functions in a fake stone
 // world and checks exactly which blocks get dug.
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, mock, setDefaultTimeout, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
+// Each dig waits a moment for the server's answer (a protected area puts the
+// block back), so a long tunnel takes several seconds
+setDefaultTimeout(30_000);
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
 const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
@@ -62,6 +65,8 @@ const fake: any = {
   blockAt,
   world: { getBlock: blockAt, raycast: () => null },
   canDigBlock: () => true,
+  digTime: () => 50,
+  player: { ping: 5 },
   lookAt: async () => {},
   chat: (m: string) => said.push(m),
   equip: async (item: any) => {

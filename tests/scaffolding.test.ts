@@ -38,6 +38,8 @@ const fake: any = {
   blockAt,
   world: { getBlock: blockAt, raycast: () => null },
   canDigBlock: () => true,
+  digTime: () => 50,
+  player: { ping: 5 },
   lookAt: async () => {},
   chat: () => {},
   dig: async (b: any) => {
