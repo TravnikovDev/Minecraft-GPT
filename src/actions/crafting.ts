@@ -5,7 +5,7 @@ import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
 import { placeBlock } from "./worldInteraction";
-import { goToNearestBlock, goToPosition, moveAway } from "./movement";
+import { goToNearestBlock, goToPosition } from "./movement";
 import { bot } from "..";
 import { collectBlock } from "./collectBlock";
 import { ensureCraftingTable } from "./ensure";
@@ -97,6 +97,13 @@ export async function craftRecipe(
           craftingTable.position.z,
           1
         );
+        // Opening the table only works within reach; don't wait 20 s on a
+        // window that can't open
+        if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) {
+          console.log(`Can't reach the crafting table at ${craftingTable.position}.`);
+          attempts++;
+          continue;
+        }
         const recipes = bot.recipesFor(itemId, null, 1, craftingTable);
         success = await attemptCraft(recipes, craftingTable);
       } catch (err) {
@@ -118,10 +125,12 @@ export async function craftRecipe(
   ): Promise<boolean> {
     let craftingTable = getNearestBlock("crafting_table", craftingTableRange);
     if (craftingTable) {
-      return await moveToAndCraft(craftingTable);
+      if (await moveToAndCraft(craftingTable)) return true;
+      // Unreachable (inside a building, up high...): place our own instead
+      console.log(`Couldn't use the nearby crafting table, placing my own.`);
+    } else {
+      console.log(`No crafting table nearby, attempting to place one.`);
     }
-
-    console.log(`No crafting table nearby, attempting to place one.`);
     const hasCraftingTable = await ensureCraftingTable();
     if (!hasCraftingTable) {
       console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
@@ -130,18 +139,18 @@ export async function craftRecipe(
 
     const pos = getNearestFreeSpace(1, 10);
     if (pos) {
-      moveAway(4);
       console.log(
         `Placing crafting table at position (${pos.x}, ${pos.y}, ${pos.z}).`
       );
       await placeBlock("crafting_table", pos.x, pos.y, pos.z);
-      craftingTable = getNearestBlock("crafting_table", craftingTableRange);
-      if (craftingTable) {
-        return await moveToAndCraft(craftingTable);
+      // Use the table we just placed, not whichever one is "nearest"
+      const placed = bot.blockAt(pos);
+      if (placed?.name === "crafting_table") {
+        return await moveToAndCraft(placed);
       }
+      console.log("Placing the crafting table failed.");
     } else {
       console.log("No suitable position found to place the crafting table.");
-      moveAway(5);
       return false;
     }
 
