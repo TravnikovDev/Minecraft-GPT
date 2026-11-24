@@ -62,6 +62,13 @@ export const pathing = {
     pausedFollow = null; // a new goal or a stop replaces anything paused
     bot.pathfinder?.setGoal(goal, dynamic);
   },
+  /**
+   * A reflex steers (running away from mobs): sets or clears its goal while
+   * keeping the paused follow, which resumes when the reflex ends.
+   */
+  setReflexGoal(goal: Goal | null, dynamic = false): void {
+    bot.pathfinder?.setGoal(goal, dynamic);
+  },
   /** A reflex takes over movement; following a player resumes afterwards. */
   takeOver(): void {
     const goal = bot.pathfinder?.goal as (Goal & { entity?: { type?: string } }) | null;
@@ -94,8 +101,34 @@ export const pathing = {
   isMoving(): boolean {
     return bot.pathfinder?.isMoving() ?? false;
   },
+  /** True while any goal is set (walking, or following someone). */
+  hasGoal(): boolean {
+    return Boolean(bot.pathfinder?.goal);
+  },
   setMovements(movements: Movements): void {
     bot.pathfinder?.setMovements(movements);
+  },
+  /**
+   * Runs `fn` with some walking-rule settings changed, then puts them back.
+   * The rules object is shared, so this is the only way to change them for
+   * one task (e.g. mining digs cheaply; plain walking prefers to go around).
+   */
+  async withRules<T>(
+    patch: Partial<Pick<Movements, "digCost" | "placeCost" | "allowSprinting" | "allow1by1towers">>,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const rules = bot.pathfinder?.movements as unknown as Record<string, unknown> | undefined;
+    if (!rules) return fn();
+    const saved: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      saved[key] = rules[key];
+      rules[key] = value;
+    }
+    try {
+      return await fn();
+    } finally {
+      Object.assign(rules, saved);
+    }
   },
   getPathTo(movements: Movements, goal: Goal, timeout?: number) {
     return bot.pathfinder.getPathTo(movements, goal, timeout);

@@ -4,18 +4,48 @@ import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
 import * as world from "./world.js";
 import { __actionsDelay } from "../utils/utility.js";
-import { breakBlockAt, pickupNearbyItems } from "./worldInteraction.js";
-import { ensurePickaxe } from "./ensureTools.js";
+import { breakBlockAt, pickupNearbyItems, replaceBrokenTool } from "./worldInteraction.js";
+import { tellOwner } from "../managers/ownerDialog";
 import { pathing, tools } from "../core/plugins";
+import { canSee, type SightWorld } from "./sight";
+import { isCommandCancelled } from "../core/commandContext";
+import { tunnelTo } from "./digging";
+import { makeRoom } from "./overflow";
+
+// Walking prefers to go around (digCost 6); a miner expects to dig
+const MINING_DIG_COST = 1;
+// How far it notices an open ore, and how many candidates it checks for that
+const SIGHT_RANGE = 48;
+// Give up after this many failed tries in a row (unreachable, wrong tool...)
+const MAX_FAILURES = 5;
+const MAX_SIGHT_CHECKS = 200;
+
+/**
+ * Which block to go for, like a player: the nearest one it can see (open to
+ * air, clear line from its eyes), and only when none is in sight the nearest
+ * one overall, which it tunnels to. `blocks` is sorted nearest first.
+ */
+function chooseTarget(blocks: Block[], blockType: string): { block: Block; seen: boolean } {
+  // @ts-ignore - eyeHeight exists at runtime (mineflayer sets it) but is not in the Entity type
+  const eyes = bot.entity.position.offset(0, bot.entity.eyeHeight ?? 1.62, 0);
+  const world = bot.world as unknown as SightWorld;
+  const seen = blocks.slice(0, MAX_SIGHT_CHECKS).find((b) => canSee(world, eyes, b, SIGHT_RANGE));
+  if (seen) {
+    console.log(`Going for the ${seen.name} I can see at ${seen.position}.`);
+    return { block: seen, seen: true };
+  }
+  console.log(`No ${blockType} in sight; tunnelling to the nearest one at ${blocks[0].position}.`);
+  return { block: blocks[0], seen: false };
+}
 
 export async function collectBlock(
   blockType: string,
   num = 1,
   range = 16
-): Promise<boolean> {
+): Promise<number> {
   if (num < 1) {
     console.log(`Invalid number of blocks to collect: ${num}.`);
-    return false;
+    return 0;
   }
 
   // A block by name, or an item that comes from ores ("diamond", "raw_iron",
@@ -26,16 +56,29 @@ export async function collectBlock(
   if (c.isBlock(`deepslate_${blockType}`) && blockType.endsWith("_ore")) blockTypes.push(`deepslate_${blockType}`);
   if (blockTypes.length === 0) {
     console.log(`"${blockType}" is not a block or anything ores drop.`);
-    return false;
+    return 0;
   }
   if (blockType === "dirt") {
     blockTypes.push("grass_block");
   }
 
   let collected = 0;
+  let failures = 0;
+  // Ores its tunnel couldn't reach (lava, something built in the way)
+  const badTargets = new Set<string>();
 
   while (collected < num) {
-    let blocks = world.getNearestBlocks(blockTypes, range);
+    // A stopped command must end here; otherwise every retry fails with
+    // "Cancelled" and the loop spins forever (seen in the game after "stop")
+    if (isCommandCancelled()) {
+      console.log(`Collecting ${blockType} cancelled.`);
+      break;
+    }
+    if (failures >= MAX_FAILURES) {
+      console.log(`Giving up on ${blockType} after ${failures} failed tries.`);
+      break;
+    }
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()));
 
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);
@@ -43,7 +86,7 @@ export async function collectBlock(
       break;
     }
 
-    const block = blocks[0];
+    const { block, seen } = chooseTarget(blocks, blockType);
 
     try {
       // Equip appropriate tool
@@ -52,11 +95,18 @@ export async function collectBlock(
         const itemId = bot.heldItem ? bot.heldItem.type : null;
         if (!block.canHarvest(itemId)) {
           console.log(`Don't have right tools to harvest ${block.name}.`);
-          if (catalog().toolKindFor(block.name) === "pickaxe") {
-            await ensurePickaxe();
-          }
-          throw new Error("Don't have right tools to harvest block.");
+          // The pickaxe broke (or it never had the right one): make one and go on
+          if (catalog().toolKindFor(block.name) === "pickaxe" && (await replaceBrokenTool(block))) continue;
+          tellOwner(`I need a better pickaxe to mine ${block.name.replace(/_/g, " ")}, and I can't make one from what I have.`);
+          break;
         }
+      }
+
+      // Buried: tunnel to it like a miner (diagonal tunnel to its level,
+      // then straight), instead of letting the path search dig its own way
+      if (!seen && !(await tunnelTo(block.position, block.name.replace(/_/g, " ")))) {
+        badTargets.add(block.position.toString());
+        throw new Error(`couldn't tunnel to the ${block.name} at ${block.position}`);
       }
 
       // Implement vein mining
@@ -71,27 +121,31 @@ export async function collectBlock(
           veinBlock.position.y,
           veinBlock.position.z
         );
-        await pathing.goto(goal);
+        // Mining digs cheaply, so the path search finds stairs down to an
+        // ore instead of timing out (the walking rules forbid shafts)
+        await pathing.withRules({ digCost: MINING_DIG_COST }, () => pathing.goto(goal));
 
         // Break the block and collect drops
         await mineAndCollect(veinBlock);
 
         collected++;
+        failures = 0;
 
-        // Check if inventory is full
-        if (bot.inventory.emptySlotCount() === 0) {
+        // Full: put things away (in a chest it knows, or one it makes) and go on
+        if (bot.inventory.emptySlotCount() === 0 && !(await makeRoom(`collect more ${blockType.replace(/_/g, " ")}`, blockTypes.flatMap((b) => [b, ...c.dropsOf(b)])))) {
           console.log("Inventory is full, cannot collect more items.");
           break;
         }
       }
     } catch (err) {
       console.log(`Failed to collect ${blockType}: ${err}.`);
+      failures++;
       continue;
     }
   }
 
   console.log(`Collected ${collected} ${blockType}(s).`);
-  return collected > 0;
+  return collected; // how many it really got (0: none)
 }
 
 // Helper function to mine a block and collect drops

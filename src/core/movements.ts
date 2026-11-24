@@ -8,12 +8,16 @@
 // - While walking, the bot may only dig through natural terrain (dirt, stone,
 //   sand, leaves...). Anything built (planks, cobblestone, glass, bricks,
 //   doors, beds, chests, decorations) is never broken to get somewhere.
+// - No vertical shafts: it never digs the block under its feet to go
+//   straight down, or the block over its head to go straight up. Like a
+//   player, it digs stairs (one forward, one down or up) instead.
 // - Wooden doors count as passable; actions/doors.ts opens them as the bot
 //   walks through and closes them behind it. Fence gates use the pathfinder's
 //   own gate opening.
 
 import type { Bot } from "mineflayer";
 import pf from "mineflayer-pathfinder";
+import { isOwnScaffold } from "./scaffold";
 
 // Natural blocks the bot may dig through when its path needs it
 const NATURAL = [
@@ -25,7 +29,7 @@ const NATURAL = [
   /_leaves$/,
   /^(short_grass|grass|tall_grass|fern|large_fern|dead_bush|vine|glow_lichen|hanging_roots|sweet_berry_bush)$/,
 ];
-const isNatural = (name: string): boolean => !name.includes("glazed") && NATURAL.some((re) => re.test(name));
+export const isNatural = (name: string): boolean => !name.includes("glazed") && NATURAL.some((re) => re.test(name));
 
 // Doors that didn't open when the bot used them (a protected area, adventure
 // mode): the path search treats them as walls again until the next connection
@@ -69,6 +73,18 @@ export function walkingRules(bot: Bot): pf.Movements {
   return rules;
 }
 
+/**
+ * Runs a move generator and drops the move it added if that move digs, unless
+ * all it digs is the bot's own scaffolding (climbing down its own pillar is
+ * how a player gets off one).
+ */
+function withoutDigging(neighbors: { toBreak: { x: number; y: number; z: number }[] }[], generate: () => void): void {
+  const before = neighbors.length;
+  generate();
+  const added = neighbors[neighbors.length - 1];
+  if (neighbors.length > before && added.toBreak.some((p) => !isOwnScaffold(p))) neighbors.pop();
+}
+
 /** Builds a fresh copy of the walking rules (only for a one-off variant, e.g. no digging). */
 export function safeMovements(bot: Bot): pf.Movements {
   const doorIds = new Set(bot.registry.blocksArray.filter((b) => isWoodenDoor(b.name)).map((b) => b.id));
@@ -88,6 +104,26 @@ export function safeMovements(bot: Bot): pf.Movements {
       }
       return block;
     }
+
+    // Its own scaffolding (cobblestone, dirt) may be taken down, though it
+    // looks built: nothing else it placed or anyone built is ever broken
+    safeToBreak(...args: Parameters<pf.Movements["safeToBreak"]>): boolean {
+      const [block] = args;
+      if (block?.position && isOwnScaffold(block.position)) return this.canDig;
+      return super.safeToBreak(...args);
+    }
+
+    // Straight down by digging the block underfoot: a 1x1 shaft no player
+    // digs. Falling into an existing hole or climbing down a ladder is fine.
+    getMoveDown(...args: Parameters<pf.Movements["getMoveDown"]>): void {
+      withoutDigging(args[1], () => super.getMoveDown(...args));
+    }
+
+    // Straight up by digging the block overhead (pillaring through the
+    // ceiling). Climbing a ladder or pillaring in the open is fine.
+    getMoveUp(...args: Parameters<pf.Movements["getMoveUp"]>): void {
+      withoutDigging(args[1], () => super.getMoveUp(...args));
+    }
   }
 
   const moves = new SafeMovements(bot);
@@ -100,7 +136,9 @@ export function safeMovements(bot: Bot): pf.Movements {
   }
   moves.canDig = true; // natural terrain only (see above)
   moves.canOpenDoors = true; // fence gates
-  moves.allow1by1towers = true;
+  // No pillaring just to get somewhere (following, walking up to the owner):
+  // a player walks around. Reaching a block up high turns it on for that walk
+  moves.allow1by1towers = false;
   moves.maxDropDown = 5;
   moves.digCost = 6;
   moves.placeCost = 6;

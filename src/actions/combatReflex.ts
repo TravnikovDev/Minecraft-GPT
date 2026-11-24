@@ -5,9 +5,11 @@
 // an attack but the running task kept setting new walking goals, cancelling
 // the fight while zombies and spiders hit the bot.
 // Creepers are left to the creeper reflex, and running out of air wins over
-// fighting.
+// fighting. Losing a fight (4 hearts or less) it backs off like a player:
+// stops swinging and runs from the mobs until they're far or it has healed.
 
 import type { Entity } from "prismarine-entity";
+import pf from "mineflayer-pathfinder";
 import { bot, onConnectionEnd } from "../core/body";
 import { on } from "../core/events";
 import { fighting, pathing } from "../core/plugins";
@@ -24,6 +26,16 @@ const GIVE_UP_RANGE = 14; // stop chasing a mob that runs this far
 const MAX_FIGHT_MS = 30_000; // a mob the bot can't reach (on a wall, behind a fence)
 
 const IGNORE_MS = 60_000; // after giving up on a mob, leave it alone this long
+const RETREAT_HEALTH = 8; // 4 hearts: losing, back off
+const SAFE_HEALTH = 14; // healed enough to fight again
+const FLEE_DISTANCE = 16; // how far to get from the mobs
+const CORNERED_RANGE = 1.5; // a mob this close while running: hit it
+const MAX_FLEE_MS = 25_000;
+const RETREAT_NOTICE_MS = 60_000;
+
+let fleeing: Entity | null = null; // the mob it's running from
+let fleeStartedAt = 0;
+let lastRetreatNotice = 0;
 
 let target: Entity | null = null;
 // Mobs the bot gave up on (id -> until when), so it doesn't re-engage forever
@@ -83,12 +95,71 @@ function finish(reason: string): void {
   console.log(`Combat reflex: ${reason}.`);
 }
 
+/** Losing: stops fighting and runs from `threat` (the task stays paused). */
+function retreat(threat: Entity): void {
+  if (target) {
+    target = null;
+    fighting.stop();
+  } else if (!fleeing) {
+    setReflexActive("combat", true);
+    pathing.takeOver();
+  }
+  if (fleeing?.id !== threat.id) {
+    pathing.setReflexGoal(new pf.goals.GoalInvert(new pf.goals.GoalFollow(threat, FLEE_DISTANCE)), true);
+  }
+  if (!fleeing) {
+    fleeStartedAt = Date.now();
+    console.log(`Combat reflex: health ${Math.round(bot.health)}, backing off from ${threat.name}.`);
+    if (Date.now() - lastRetreatNotice > RETREAT_NOTICE_MS) {
+      lastRetreatNotice = Date.now();
+      bot.chat("I'm badly hurt, backing off!");
+    }
+  }
+  fleeing = threat;
+}
+
+function stopRetreat(reason: string): void {
+  if (!fleeing) return;
+  fleeing = null;
+  pathing.setReflexGoal(null);
+  setReflexActive("combat", false);
+  pathing.resumeAfterReflex();
+  console.log(`Combat reflex: ${reason}.`);
+}
+
+/** The nearest hostile mob within `range` (ignored ones too: they still hurt). */
+function nearestThreat(range: number): Entity | null {
+  return getPriorityTargets(range).find(isAlive) ?? null;
+}
+
 function tick(): void {
   if (!bot.entity || !(bot.health > 0)) return;
   if (bot.vehicle) return; // no melee from a boat (and rowing owns movement)
   if (isCreeperReflexActive() || isDrowningReflexActive()) {
     finish("stepping aside for another reflex");
+    stopRetreat("stepping aside for another reflex");
     return;
+  }
+
+  // Running from a fight it was losing
+  if (fleeing) {
+    const threat = nearestThreat(FLEE_DISTANCE);
+    if (!threat || bot.health >= SAFE_HEALTH) return stopRetreat(threat ? "healed, fighting again if needed" : "got away");
+    if (Date.now() - fleeStartedAt > MAX_FLEE_MS) return stopRetreat("can't get away, standing my ground");
+    if (distanceTo(threat) <= CORNERED_RANGE) {
+      stopRetreat(`cornered by ${threat.name}`);
+      engage(threat);
+      return;
+    }
+    retreat(threat); // the nearest one may have changed
+    return;
+  }
+  if (bot.health <= RETREAT_HEALTH) {
+    const threat = nearestThreat(HIT_BACK_RANGE);
+    if (threat && distanceTo(threat) > CORNERED_RANGE) {
+      retreat(threat);
+      return;
+    }
   }
 
   if (target) {
@@ -123,13 +194,20 @@ export function registerCombatReflex(): void {
   setReflexActive("combat", false);
   const timer = setInterval(tick, CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
-  bot.on("death", () => finish("died"));
-  registerReflexStopper("combat", () => finish("stopped by the owner"));
+  fleeing = null;
+  bot.on("death", () => {
+    finish("died");
+    stopRetreat("died");
+  });
+  registerReflexStopper("combat", () => {
+    finish("stopped by the owner");
+    stopRetreat("stopped by the owner");
+  });
 
   // Hit back when hurt, even by a mob that isn't in melee range yet (skeletons)
   unsubscribe?.();
   unsubscribe = on("bot:damaged", () => {
-    if (target || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
+    if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
     const mob = pickTarget(HIT_BACK_RANGE);
     if (mob) engage(mob);
   });

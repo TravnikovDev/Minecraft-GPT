@@ -67,6 +67,19 @@ export const MemorySchema = z.object({
     .optional(),
   ownerPosition: z.object({ x: z.number(), y: z.number(), z: z.number(), at: z.number() }).optional(),
   bed: z.object({ x: z.number(), y: z.number(), z: z.number(), dimension: z.string(), at: z.number() }).optional(),
+  // Chests the bot knows: where, and what was inside when it last looked
+  chests: z
+    .array(
+      z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number(),
+        dimension: z.string(),
+        contents: z.record(z.string(), z.number()),
+        seenAt: z.number(),
+      })
+    )
+    .optional(),
   conversation: z
     .array(z.object({ role: z.enum(["owner", "bot"]), text: z.string(), at: z.number() }))
     .optional(),

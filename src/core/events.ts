@@ -16,7 +16,8 @@ export interface BotEvents {
   /** A block changed; selfCaused when it was the bot's own dig/place. */
   "block:changed": { position: Vec3; from: string; to: string; selfCaused: boolean };
   /** The bot picked up an item (from the ground or a gift). */
-  "item:collected": { name: string; count: number };
+  /** `from`: the player who threw it (it appeared at their hands), if anyone. */
+  "item:collected": { name: string; count: number; from: string | null };
 }
 
 type Listener<K extends keyof BotEvents> = (payload: BotEvents[K]) => unknown;

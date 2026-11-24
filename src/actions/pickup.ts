@@ -1,0 +1,226 @@
+// Path: src/actions/pickup.ts
+// Picking up items from the ground, like a player: walk to each one, wait
+// until the game hands it over, then go to the next. Also tidies up items it
+// can see while it has nothing else to do (saplings and apples from decaying
+// leaves, drops it missed), and never grabs back what it threw away itself.
+//
+// Why the old pickup missed most drops (36 of 44 pickups in one session got
+// nothing): it only looked at items lying still, but fresh drops are still
+// flying; and it gave up when an item was still there after it walked over,
+// but the game won't let anyone pick up a fresh drop for its first half second.
+
+import type { Entity } from "prismarine-entity";
+import pf from "mineflayer-pathfinder";
+import { Vec3 } from "vec3";
+import { bot } from "../core/body";
+import { pathing } from "../core/plugins";
+import { isCommandCancelled, getCurrentCommandName, markOwnWork } from "../core/commandContext";
+import { isAnyReflexActive } from "../core/reflexes";
+import { canSeePoint, type SightWorld } from "./sight";
+import { ownerEntity } from "../managers/ownerDialog";
+
+const PICKUP_WAIT_MS = 1500; // after arriving: the half-second pickup delay, plus slack
+const SETTLE_MS = 600; // fresh drops fly before they land
+const MAX_TRIES_PER_ITEM = 2;
+const MAX_ITEMS = 40;
+const IDLE_RADIUS = 12;
+
+
+// Items the bot threw itself (discard, give): never picked back up
+const tossedByMe = new WeakSet<Entity>();
+let tossCount = 0;
+// Items it set down only to make room for a moment (crafting a chest): picked up again afterwards
+const setDownForLater = new WeakSet<Entity>();
+
+/** Items it set down to make room, still lying there. */
+export function itemsSetDownForLater(): Entity[] {
+  return Object.values(bot.entities).filter((e) => setDownForLater.has(e));
+}
+// Items it couldn't walk to: left alone for a while (the idle tidy runs every few seconds)
+const UNREACHABLE_MS = 60_000;
+const unreachableUntil = new WeakMap<Entity, number>();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A dropped item entity. */
+export const isDroppedItem = (e: Entity): boolean => e.name === "item";
+
+/**
+ * Runs a toss (discard, give) and marks the item entities it throws, so no
+ * pickup ever grabs them back.
+ */
+export async function tossing<T>(toss: () => Promise<T>, { pickUpLater = false } = {}): Promise<T> {
+  // Each toss listens for its item for a second; when two tosses overlap
+  // (junk thrown away, then a stack set down for later), the newest one owns
+  // what spawns, so the stack isn't taken for junk
+  const mine = ++tossCount;
+  const onSpawn = (e: Entity): void => {
+    if (mine !== tossCount) return;
+    if (!isDroppedItem(e) || e.position.distanceTo(bot.entity.position) >= 3) return;
+    if (pickUpLater) setDownForLater.add(e);
+    else tossedByMe.add(e);
+  };
+  bot.on("entitySpawn", onSpawn);
+  try {
+    return await toss();
+  } finally {
+    // The item entity arrives a tick or two after the toss
+    setTimeout(() => bot.off("entitySpawn", onSpawn), 1000);
+  }
+}
+
+/**
+ * True when there's room for this item: a free slot, or a stack of the same
+ * thing that isn't full yet. Unknown items count as fitting only with a free slot.
+ */
+function hasRoomFor(e: Entity): boolean {
+  if (bot.inventory.emptySlotCount() > 0) return true;
+  const dropped = (e as Entity & { getDroppedItem?: () => { name: string; count: number } | null }).getDroppedItem?.();
+  if (!dropped) return false;
+  return bot.inventory.items().some((i) => i.name === dropped.name && i.count < i.stackSize);
+}
+
+/** Items within `radius` it may pick up, nearest first. */
+function looseItems(radius: number, skip: Map<number, number>, onlyVisible: boolean, leave: (e: Entity) => boolean = () => false): Entity[] {
+  const eyes = bot.entity.position.offset(0, 1.62, 0);
+  const world = bot.world as unknown as SightWorld;
+  return Object.values(bot.entities)
+    .filter((e) => isDroppedItem(e) && !tossedByMe.has(e) && !leave(e) && (skip.get(e.id) ?? 0) < MAX_TRIES_PER_ITEM)
+    .filter((e) => (unreachableUntil.get(e) ?? 0) < Date.now() && hasRoomFor(e))
+    .map((e) => ({ e, d: e.position.distanceTo(bot.entity.position) }))
+    .filter(({ e, d }) => d <= radius && (!onlyVisible || d <= 3 || canSeePoint(world, eyes, e.position.offset(0, 0.25, 0), radius)))
+    .sort((a, b) => a.d - b.d)
+    .map(({ e }) => e);
+}
+
+/** What a dropped item is ("oak sapling"), for the log. */
+function itemName(e: Entity): string {
+  const item = (e as Entity & { getDroppedItem?: () => { name: string } | null }).getDroppedItem?.();
+  return item?.name.replace(/_/g, " ") ?? "item";
+}
+
+/** Resolves true once the item is gone (picked up), false after `ms`. */
+async function waitGone(item: Entity, ms: number): Promise<boolean> {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (!bot.entities[item.id]) return true;
+    await sleep(100);
+  }
+  return !bot.entities[item.id];
+}
+
+/**
+ * Picks up the items lying within `radius`, nearest first, each one confirmed
+ * by the game before moving on. Returns how many item stacks it picked up.
+ * `keepGoing` lets a background caller stop as soon as real work starts.
+ */
+export async function collectDrops(
+  radius = 8,
+  {
+    onlyVisible = false,
+    keepGoing = () => true,
+    leave = () => false,
+  }: { onlyVisible?: boolean; keepGoing?: () => boolean; leave?: (e: Entity) => boolean } = {}
+): Promise<number> {
+  const skip = new Map<number, number>();
+  let collected = 0;
+  // Drops from what just happened may still be in the air
+  if (looseItems(radius, skip, onlyVisible, leave).some((e) => !e.onGround)) await sleep(SETTLE_MS);
+
+  for (let i = 0; i < MAX_ITEMS; i++) {
+    if (isCommandCancelled() || !keepGoing()) break;
+    const item = looseItems(radius, skip, onlyVisible, leave)[0];
+    if (!item) break; // nothing left it has room for
+    try {
+      const p = item.position;
+      await pathing.goto(new pf.goals.GoalNear(p.x, p.y, p.z, 1));
+    } catch (error) {
+      if (isCommandCancelled() || !keepGoing()) break; // stopped, or real work started
+      console.log(`Can't get to the ${itemName(item)} on the ground: ${(error as Error).message}`);
+      unreachableUntil.set(item, Date.now() + UNREACHABLE_MS); // ledge, lava, no path: leave it
+      continue;
+    }
+    if (await waitGone(item, PICKUP_WAIT_MS)) collected++;
+    else skip.set(item.id, (skip.get(item.id) ?? 0) + 1); // rolled away or still flying: one more try
+  }
+  if (collected > 0) console.log(`Picked up ${collected} item stack(s).`);
+  // Full: make room (store in a chest, or make one) and go back for the rest, once
+  const left = leftForLackOfRoom(radius, leave);
+  if (left.length > 0 && keepGoing() && !isCommandCancelled()) {
+    console.log(`Inventory is full; ${left.length} item(s) still on the ground.`);
+    const { makeRoom } = await import("./overflow");
+    if (await makeRoom("pick up what's on the ground")) collected += await collectDrops(radius, { onlyVisible, keepGoing, leave });
+  }
+  return collected;
+}
+
+/** Items still lying within `radius` that it has no room for. */
+function leftForLackOfRoom(radius: number, leave: (e: Entity) => boolean): Entity[] {
+  return Object.values(bot.entities).filter(
+    (e) => isDroppedItem(e) && !tossedByMe.has(e) && !leave(e) && e.position.distanceTo(bot.entity.position) <= radius && !hasRoomFor(e)
+  );
+}
+
+// --- Tidying up while idle ---------------------------------------------------
+
+// One background job at a time (tidying up, replanting): they'd fight over walking
+let backgroundBusy = false;
+
+/** Runs a background job unless another one is running. Returns false if it didn't run. */
+export async function asBackgroundJob(job: () => Promise<void>): Promise<boolean> {
+  if (backgroundBusy) return false;
+  backgroundBusy = true;
+  try {
+    await job();
+  } finally {
+    backgroundBusy = false;
+  }
+  return true;
+}
+
+/** True while no command or reflex wants the bot (a background job may keep walking). */
+export const noRealWork = (): boolean => getCurrentCommandName() === null && !isAnyReflexActive();
+
+/** True when nothing else wants the bot: no task, no reflex, not following or riding. */
+/** How far an idle chore may take the bot from the owner while the owner is around. */
+const STAY_NEAR_OWNER = 16;
+
+/**
+ * Whether an idle chore (replanting, taking down scaffolding) may walk to
+ * `pos`: while the owner is around, only near them, so the bot doesn't
+ * wander off right after being called over.
+ */
+export function mayWanderTo(pos: { x: number; y: number; z: number }): boolean {
+  const owner = ownerEntity();
+  if (!owner) return true;
+  return owner.position.distanceTo(new Vec3(pos.x, pos.y, pos.z)) <= STAY_NEAR_OWNER;
+}
+
+export function isIdle(): boolean {
+  return getCurrentCommandName() === null && !isAnyReflexActive() && !pathing.hasGoal() && !bot.vehicle;
+}
+
+/**
+ * Called every few seconds: while idle, picks up items it can see nearby.
+ * Items lying next to the owner are left alone (the owner may be sorting
+ * things out, or about to hand them over).
+ */
+export async function tidyUpWhileIdle(): Promise<void> {
+  if (backgroundBusy || !isIdle()) return;
+  const owner = ownerEntity();
+  const nearOwner = (e: Entity): boolean => owner !== null && e.position.distanceTo(owner.position) < 3;
+  const items = looseItems(IDLE_RADIUS, new Map(), true, nearOwner);
+  if (items.length === 0) return;
+  await asBackgroundJob(async () => {
+    try {
+      console.log(`Tidying up: ${items.length} item(s) on the ground nearby.`);
+      const stillIdle = (): boolean => {
+        markOwnWork(); // its own leftovers, not gifts to thank the owner for
+        return noRealWork();
+      };
+      await collectDrops(IDLE_RADIUS, { onlyVisible: true, keepGoing: stillIdle, leave: nearOwner });
+      markOwnWork();
+    } catch (error) {
+      console.log(`Tidying up stopped: ${(error as Error).message}`);
+    }
+  });
+}

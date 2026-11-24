@@ -9,6 +9,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // keeps running after its command was cancelled still sees the cancellation.
 const commandSignal = new AsyncLocalStorage<AbortSignal>();
 let currentCommandName: string | null = null;
+let lastCommandEndedAt = 0;
 
 /** Runs a command's code with its abort signal attached to the async context. */
 export function runWithSignal<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<T> {
@@ -50,5 +51,16 @@ export function getCurrentCommandName(): string | null {
 
 /** Called by the command runner when a command starts or ends. */
 export function setCurrentCommandName(name: string | null): void {
+  if (currentCommandName !== null && name === null) lastCommandEndedAt = Date.now();
   currentCommandName = name;
+}
+
+/** Background work of its own (tidying up) counts as busy, like a command. */
+export function markOwnWork(): void {
+  lastCommandEndedAt = Date.now();
+}
+
+/** True while a command runs, and for `graceMs` after the last one ended. */
+export function wasBusyWithin(graceMs: number): boolean {
+  return currentCommandName !== null || Date.now() - lastCommandEndedAt < graceMs;
 }

@@ -10,7 +10,7 @@ import { takeOffArmor, wornArmor } from "../actions/armor";
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
 When no amount is said ("give me dark oak", "give me your wood"), it gives all it has of that item.
 Example: "Give a sword to Steve.", "Give 2 apples to Alex", "Give a pickaxe to me", "Give me 20 spruce_log",
-"Give me the dark oak".`;
+"Give me the dark oak", "Give me half of your coal" (fraction 0.5).`;
 
 // Define parameters for the GiveItemToAPlayer action
 export const parameters = z.object({
@@ -20,6 +20,10 @@ export const parameters = z.object({
     .number()
     .nullable()
     .describe("How many to give. Null when the owner names no amount: then all of it. 1 only for \"a\"/\"an\"/\"one\"."),
+  fraction: z
+    .number()
+    .nullable()
+    .describe("A share of what the bot carries instead of a count: 0.5 for \"half\" or \"1/2\", 0.25 for \"a quarter\". Null otherwise."),
 });
 
 // Implement the GiveItemToAPlayer action
@@ -34,6 +38,7 @@ export async function execute(args: any) {
   }
 
   let { player_name, item_name, num } = parsed.data;
+  const { fraction } = parsed.data;
   item_name = item_name.trim().toLowerCase().replace(/\s+/g, "_");
 
   // A loose name ("pressure plate", "planks"): match what the bot really carries or wears
@@ -58,6 +63,8 @@ export async function execute(args: any) {
     bot.chat(`I don't have any ${pretty}.`);
     return;
   }
+  // A share ("half of your coal") is counted from what it carries now
+  if (fraction && fraction > 0 && fraction < 1) num = Math.max(1, Math.floor(carried * fraction));
   // No amount said: give all of it
   if (!num) num = carried;
   num = Math.min(num, carried);

@@ -14,7 +14,7 @@ import {
 } from "./actionManager";
 import { executeTool } from "./toolManager";
 import { addCommandToQueue, getAllCommands } from "./persistenceManager";
-import { answerPending, hasPendingQuestion, rememberOwnerPosition } from "./ownerDialog";
+import { answerPending, hasPendingQuestion, ownerDistance, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
 import { pathing } from "../core/plugins";
 
@@ -105,6 +105,13 @@ async function tryFastPath(message: string): Promise<boolean> {
   if (COME.test(message) || FOLLOW.test(message)) {
     const follow = FOLLOW.test(message);
     console.log(`Fast path: ${follow ? "follow" : "come"}`);
+    // Already on the way: saying it again doesn't restart the walk
+    const already = follow ? BotCommands.FollowPlayer : BotCommands.GoToPlayer;
+    if (getCurrentCommandName() === already) {
+      const dist = ownerDistance();
+      bot.chat(follow ? "I'm following you!" : `On my way${dist === null ? "" : `, ${Math.round(dist)} blocks to go`}!`);
+      return true;
+    }
     // The owner calling outranks whatever the bot is doing right now
     await cancelCurrentCommand(follow ? "owner asked to follow" : "owner called");
     await addCommandToQueue({
@@ -142,6 +149,7 @@ export async function handleChat(username: string, message: string): Promise<voi
   }
 
   const text = stripBotName(message);
+  console.log(`Owner says: ${text}`);
   recordTurn("owner", text);
   try {
     if (await tryFastPath(text)) return;

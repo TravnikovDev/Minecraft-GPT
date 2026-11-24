@@ -8,10 +8,10 @@ import { catalog } from "../core/catalog";
 import { bot, listen } from "../core/body";
 import { on } from "../core/events";
 import { getCurrentCommandName } from "../core/commandContext";
+import { OWNER_USERNAME } from "../config/env";
 import { ownerDistance, tellOwner } from "../managers/ownerDialog";
 
 const NEARBY_BLOCKS = 32; // only report when the owner is around
-const GIFT_BLOCKS = 6; // this close, a pickup is most likely a gift
 const PICKUP_BATCH_MS = 1500; // group pickups that arrive together
 const ARMOR_SLOTS: Record<number, string> = { 5: "helmet", 6: "chestplate", 7: "leggings", 8: "boots" };
 
@@ -63,20 +63,19 @@ export function registerOwnerUpdates(): void {
     const items = [...pickups.entries()].map(([name, count]) => `${count} ${pretty(name)}`);
     pickups.clear();
     const distance = ownerDistance();
-    // While busy with its own task (gathering, mining, hunting) pickups are its
-    // own work, not gifts; only report what it receives while idle
-    const ownWork = getCurrentCommandName() !== null;
-    if (items.length > 0 && !ownWork && distance !== null && distance <= NEARBY_BLOCKS) {
-      const thanks = distance <= GIFT_BLOCKS ? ", thanks!" : ".";
-      tellOwner(`Got ${items.join(", ")}${thanks}`);
+    // Only what the owner threw to it (see item:collected)
+    if (items.length > 0 && distance !== null && distance <= NEARBY_BLOCKS) {
+      tellOwner(`Got ${items.join(", ")}, thanks!`);
     }
     void keepWeaponInHand();
   };
 
   if (!subscribedToPickups) {
     subscribedToPickups = true;
-    on("item:collected", ({ name, count }) => {
-      pickups.set(name, (pickups.get(name) ?? 0) + count);
+    on("item:collected", ({ name, count, from }) => {
+      // Only what the owner threw to it is a gift; drops from mobs, blocks or
+      // its own work aren't (they used to be thanked for when the owner stood near)
+      if (from === OWNER_USERNAME) pickups.set(name, (pickups.get(name) ?? 0) + count);
       if (!flushTimer) flushTimer = setTimeout(flushPickups, PICKUP_BATCH_MS);
     });
   }

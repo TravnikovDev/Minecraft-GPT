@@ -73,7 +73,7 @@ export function getPriorityTargets(range = 16): Entity[] {
 }
 
 // Attack a Specific Entity
-export async function attackEntity(targetEntity: Entity): Promise<boolean> {
+export async function attackEntity(targetEntity: Entity, announce = true): Promise<boolean> {
   try {
     // Choose appropriate weapon based on enemy type
     await chooseWeaponForTarget(targetEntity);
@@ -83,7 +83,7 @@ export async function attackEntity(targetEntity: Entity): Promise<boolean> {
     
     // Attack
     await fighting.attack(targetEntity);
-    bot.chat(`Attacking ${targetEntity.name}!`);
+    if (announce) bot.chat(`Attacking ${targetEntity.name}!`);
     return true;
   } catch (error) {
     console.error("Error while attacking entity:", error);

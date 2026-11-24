@@ -42,7 +42,9 @@ function stateLine(): string {
   const task = getCurrentCommandName() ?? "idle";
   const held = bot.heldItem?.name ?? "nothing";
   const worn = wornArmor().join(", ") || "no armor";
-  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; wearing ${worn}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
+  const free = bot.inventory?.emptySlotCount() ?? 0;
+  const slots = free === 0 ? "inventory FULL" : `${free} free inventory slots`;
+  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; wearing ${worn}; ${slots}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
 }
 
 // Initialize OpenAI Client
@@ -52,7 +54,7 @@ const setupMessage = `You are MinecraftGPT, a bot playing Minecraft together wit
 Talk like a friendly, enthusiastic 12-year-old who loves Minecraft and wants to play along.
 
 How to respond:
-- When a player asks you to do something in the game, call the one tool that best matches the request.
+- When a player asks you to do something in the game, call the tool that best matches the request. When one message asks for several things ("stop, craft a pickaxe", "craft a chest and put it near the bed"), call a tool for each, in the order asked.
 - Use exact Minecraft IDs for items, blocks and mobs, e.g. oak_log, oak_planks, cobblestone, zombie.
 - When you just talk, reply in plain text: one or two short sentences.
 - Never put JSON, code or markdown in your reply; it is shown as-is in Minecraft chat.
@@ -74,7 +76,8 @@ interface ToolActionType {
 
 interface HandleResponseType {
   response: string | null;
-  toolCall: ToolCallType | null;
+  /** Every tool the model called, in order ("stop, craft a pickaxe" is two). */
+  toolCalls: ToolCallType[];
 }
 
 /**
@@ -135,25 +138,25 @@ export async function handleOpenAIResponse(
     return {
       response:
         "I'm having trouble processing that request right now. Please try again later.",
-      toolCall: null,
+      toolCalls: [],
     };
   }
 
   const response = openAiChoice.message?.content || null;
-  const firstToolCall = openAiChoice.message?.tool_calls?.[0];
-  const toolCall =
-    firstToolCall?.type === "function" ? firstToolCall.function : null;
+  const toolCalls = (openAiChoice.message?.tool_calls ?? []).flatMap((call) =>
+    call.type === "function" ? [call.function] : []
+  );
 
   console.log("Response:", response);
-  console.log("Tool Call:", toolCall);
+  console.log("Tool Calls:", toolCalls);
 
-  if (response || toolCall) {
-    return { response, toolCall };
+  if (response || toolCalls.length > 0) {
+    return { response, toolCalls };
   }
 
   return {
     response: "Sorry, I couldn't understand that request.",
-    toolCall: null,
+    toolCalls: [],
   };
 }
 
@@ -183,9 +186,10 @@ export async function initiateActionFromAI(
   username: string,
   message: string
 ): Promise<void> {
-  const { response, toolCall } = await handleOpenAIResponse(username, message);
+  const { response, toolCalls } = await handleOpenAIResponse(username, message);
+  let answered = false; // the reply is said once, however many tools were called
 
-  if (toolCall) {
+  for (const toolCall of toolCalls) {
     const toolAction = await executeToolCall(toolCall);
     if (toolAction) {
       if (toolAction.action === BotCommands.Stop) {
@@ -208,18 +212,19 @@ export async function initiateActionFromAI(
         if (question) {
           console.log(`Name check failed for ${toolAction.action}: ${question}`);
           bot.chat(question);
-          return;
+          return; // the rest of the request waits for the answer
         }
 
         if (INSTANT_COMMANDS.has(toolAction.action)) {
           // Answer right away, without interrupting the running task
-          if (response) bot.chat(response);
+          if (response && !answered) bot.chat(response);
+          answered = true;
           try {
             await executeTool(toolAction.action, toolAction.arguments);
           } catch (error) {
             console.error(`Instant command ${toolAction.action} failed:`, error);
           }
-          return;
+          continue;
         }
 
         // Movement/unstuck requests from the owner take over right away;
@@ -253,7 +258,7 @@ export async function initiateActionFromAI(
     }
   }
 
-  if (response) {
+  if (response && !answered) {
     bot.chat(response); // Send response to the game
   }
 }

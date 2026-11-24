@@ -5,8 +5,12 @@
 import mineflayer from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
 import { clearSolidDoors, isSafeMovements, walkingRules } from "./core/movements";
+import { clearScaffolds, forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./core/scaffold";
 import { registerDoorOpener } from "./actions/doors";
 import { autoWearArmor } from "./actions/armor";
+import { tidyUpWhileIdle } from "./actions/pickup";
+import { replantWhenIdle } from "./actions/forestry";
+import { cleanUpScaffoldingWhenIdle } from "./actions/scaffolding";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
@@ -78,11 +82,41 @@ onConnectionReady((currentBot) => {
   // Armor it carries but doesn't wear (crafted, given, or after a restart) goes on
   everyWhileConnected(currentBot, 10_000, autoWearArmor);
 
-  // Every block the bot breaks, with what it was doing, so a broken wall can be traced
-  currentBot.on("diggingCompleted", (block) => {
+  // While idle, pick up items it can see lying nearby (leftover drops, saplings)
+  everyWhileConnected(currentBot, 3_000, tidyUpWhileIdle);
+
+  // A minute after cutting trees, go back for the saplings and replant them
+  everyWhileConnected(currentBot, 5_000, replantWhenIdle);
+
+  // Pillars and bridges it built to get somewhere come down again
+  everyWhileConnected(currentBot, 5_000, cleanUpScaffoldingWhenIdle);
+
+  // Every block the bot breaks, with what it was doing, so a broken wall can be
+  // traced. This wraps bot.dig instead of listening to "diggingCompleted":
+  // that event hands over the block after breaking (air), and both mineflayer
+  // (on death) and the pathfinder (on every path reset, a removeAllListeners
+  // call whose second argument Node ignores) strip all of its listeners.
+  const dig = currentBot.dig.bind(currentBot);
+  currentBot.dig = (async (block: Parameters<typeof dig>[0], ...rest: unknown[]): Promise<void> => {
+    const what = block.name;
     const moving = currentBot.pathfinder.isMoving() ? "while walking" : "standing";
-    console.log(`Broke ${block.name} at ${block.position} (${moving}, task ${getCurrentCommandName() ?? "idle"}).`);
-  });
+    await (dig as (...a: unknown[]) => Promise<void>)(block, ...rest);
+    forgetScaffold(block.position);
+    console.log(`Broke ${what} at ${block.position} (${moving}, task ${getCurrentCommandName() ?? "idle"}).`);
+  }) as typeof currentBot.dig;
+
+  // Blocks the pathfinder puts down to get somewhere (pillars up a tall tree,
+  // bridges) are scaffolding the bot takes down again (core/scaffold);
+  // deliberate placements (chests, torches, seeds) are marked as such
+  const place = currentBot.placeBlock.bind(currentBot);
+  currentBot.placeBlock = (async (reference: Parameters<typeof place>[0], face: Parameters<typeof place>[1]): Promise<void> => {
+    const target = reference.position.plus(face);
+    await place(reference, face);
+    if (!isPlacingOnPurpose()) {
+      recordScaffold(target);
+      console.log(`Placed scaffolding at ${target} (task ${getCurrentCommandName() ?? "idle"}).`);
+    }
+  }) as typeof currentBot.placeBlock;
 
   // Configure auto-eat plugin settings
   currentBot.autoEat.options = {
@@ -108,6 +142,7 @@ onConnectionReady((currentBot) => {
   registerDrowningReflex(); // and so is running out of air underwater
   registerDoorOpener(); // opens doors on the way and closes them behind
   clearSolidDoors(); // doors that wouldn't open last connection may open now
+  clearScaffolds(); // scaffolding from before may have been changed since
   resetUnstuckState(); // stuck counters from an old connection don't apply
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
@@ -196,6 +231,7 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
 
 // Conversation memory: what the bot says publicly or whispers to the owner
 onChatSent((text, whisperTo) => {
+  console.log(`Bot says${whisperTo ? ` (to ${whisperTo})` : ""}: ${text}`);
   if (whisperTo === null || isOwner(whisperTo)) recordTurn("bot", text);
 });
 

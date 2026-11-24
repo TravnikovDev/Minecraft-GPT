@@ -5,6 +5,7 @@
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
+import { placingOnPurpose } from "../core/scaffold";
 import { isCommandCancelled } from "../core/commandContext";
 import { markSelfAction } from "../core/events";
 import { goToPosition } from "./movement";
@@ -55,7 +56,7 @@ async function replant(position: Vec3, seed: string): Promise<void> {
   try {
     await bot.equip(item, "hand");
     markSelfAction(position);
-    await bot.placeBlock(farmland, new Vec3(0, 1, 0));
+    await placingOnPurpose(() => bot.placeBlock(farmland, new Vec3(0, 1, 0)));
   } catch (error) {
     console.log(`Replanting ${seed} at ${position} failed: ${(error as Error).message}`);
   }

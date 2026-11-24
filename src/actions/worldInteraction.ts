@@ -1,6 +1,8 @@
 // src/actions/worldInteraction.ts
 
+import { collectDrops } from "./pickup";
 import { bot } from "../core/body";
+import { placingOnPurpose } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { markSelfAction } from "../core/events";
 import { Vec3 } from "vec3";
@@ -168,7 +170,7 @@ export async function placeBlock(
 
   try {
     markSelfAction(buildOffBlock.position.plus(faceVec));
-    await bot.placeBlock(buildOffBlock, faceVec);
+    await placingOnPurpose(() => bot.placeBlock(buildOffBlock, faceVec));
     console.log(`Placed ${blockType} at ${targetDest}.`);
     await new Promise((resolve) => setTimeout(resolve, 200));
     return true;
@@ -185,6 +187,32 @@ export async function placeBlock(
     return false;
   }
 }
+let replacingTool = false;
+
+/**
+ * The right tool for `block` wore out (or it never had one): crafts a new one
+ * from what it carries, the best it can, like a player does when a pickaxe
+ * breaks mid-mine, and equips it. Never recursive: making the tool can't
+ * start making another. Returns true if it can now harvest the block.
+ */
+export async function replaceBrokenTool(block: Block): Promise<boolean> {
+  const kind = catalog().toolKindFor(block.name);
+  if (replacingTool || (kind !== "pickaxe" && kind !== "axe" && kind !== "shovel")) return false;
+  replacingTool = true;
+  try {
+    const { ensureTool } = await import("./ensureTools");
+    console.log(`No ${kind} that can break ${block.name}: making one.`);
+    if (!(await ensureTool(kind, 1))) return false;
+    await tools.equipForBlock(block);
+    return block.canHarvest(bot.heldItem ? bot.heldItem.type : null);
+  } catch (error) {
+    console.log(`Making a new ${kind} failed: ${(error as Error).message}`);
+    return false;
+  } finally {
+    replacingTool = false;
+  }
+}
+
 
 export async function breakBlockAt(
   x: number,
@@ -202,12 +230,13 @@ export async function breakBlockAt(
   }
   if (block.name !== "air" && block.name !== "water" && block.name !== "lava") {
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
-      await goToPosition(x, y, z);
+      // Reaching a block up high (the top of a tree) is when a player builds up to it
+      await pathing.withRules({ allow1by1towers: true }, () => goToPosition(x, y, z));
     }
     if (bot.game.gameMode !== "creative") {
       await tools.equipForBlock(block);
       const itemId = bot.heldItem ? bot.heldItem.type : null;
-      if (!block.canHarvest(itemId)) {
+      if (!block.canHarvest(itemId) && !(await replaceBrokenTool(block))) {
         console.log(`Don't have right tools to break ${block.name}.`);
         return false;
       }
@@ -339,7 +368,7 @@ export async function tillAndSow(
     }
     await bot.equip(seeds, "hand");
     markSelfAction(block.position.offset(0, -1, 0));
-    await bot.placeBlock(block, new Vec3(0, -1, 0));
+    await placingOnPurpose(() => bot.placeBlock(block, new Vec3(0, -1, 0)));
     console.log(
       `Planted ${seedType} at x:${x.toFixed(1)}, y:${y.toFixed(
         1
@@ -349,39 +378,9 @@ export async function tillAndSow(
   return true;
 }
 
-export async function pickupNearbyItems(
-  bot: Bot,
-  distance = 8
-): Promise<boolean> {
-  const getNearestItem = (bot: Bot) =>
-    bot.nearestEntity(
-      (entity) =>
-        entity.name == "item" &&
-        entity.onGround &&
-        bot.entity.position.distanceTo(entity.position) < distance
-    );
-  let nearestItem = getNearestItem(bot);
-
-  let pickedUp = 0;
-  while (nearestItem) {
-    // pathing.setMovements(new pf.Movements(bot));
-    try {
-      await pathing.goto(new pf.goals.GoalFollow(nearestItem, 0.8));
-    } catch (err) {
-      // pathfinder rejects unreachable goals (e.g. an item on a ledge or in lava);
-      // skip the rest instead of failing the action that wanted the pickup
-      console.log(`Stopped picking up items: ${(err as Error).message}`);
-      break;
-    }
-    await __actionsDelay(500);
-    const prev = nearestItem;
-    nearestItem = getNearestItem(bot);
-    if (prev === nearestItem) {
-      break;
-    }
-    pickedUp++;
-  }
-  console.log(`Picked up ${pickedUp} items.`);
+/** Picks up the items within `distance` (see actions/pickup.ts). */
+export async function pickupNearbyItems(_bot: Bot, distance = 8): Promise<boolean> {
+  await collectDrops(distance);
   return true;
 }
 
@@ -754,7 +753,7 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
       try {
         // Try to use the minecart on the top face of the block below
         markSelfAction(referenceBlock.position.offset(0, 1, 0));
-        await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+        await placingOnPurpose(() => bot.placeBlock(referenceBlock, new Vec3(0, 1, 0)));
         await __actionsDelay(1000);
 
         // Check again if minecart was placed

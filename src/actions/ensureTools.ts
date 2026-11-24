@@ -39,7 +39,7 @@ export const materialsForTool = (tool: ToolType): number => {
 };
 
 // Helper function to ensure a specific tool, checking from best materials to wood
-const ensureTool = async (
+export const ensureTool = async (
   toolType: ToolType,
   quantity: number = 1
 ): Promise<boolean> => {

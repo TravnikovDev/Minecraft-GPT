@@ -20,6 +20,11 @@ import * as RandomMovement from "./RandomMovement";
 import * as SetBase from "./SetBase";
 import * as SetBasement from "./SetBasement";
 import * as DigDiagonalTunnel from "./DigDiagonalTunnel";
+import * as DigToSurface from "./DigToSurface";
+import * as StoreItems from "./StoreItems";
+import * as TakeFromChest from "./TakeFromChest";
+import * as CheckChest from "./CheckChest";
+import * as PlantSaplings from "./PlantSaplings";
 import * as PickupNearbyItems from "./PickupNearbyItems";
 import * as BuildStoneHouse from "./BuildStoneHouse";
 import * as FindAndRememberNearChest from "./FindAndRememberNearChest";
@@ -74,6 +79,11 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.SetBase]: SetBase,
   [BotCommands.SetBasement]: SetBasement,
   [BotCommands.DigDiagonalTunnel]: DigDiagonalTunnel,
+  [BotCommands.DigToSurface]: DigToSurface,
+  [BotCommands.StoreItems]: StoreItems,
+  [BotCommands.TakeFromChest]: TakeFromChest,
+  [BotCommands.CheckChest]: CheckChest,
+  [BotCommands.PlantSaplings]: PlantSaplings,
   [BotCommands.PickupNearbyItems]: PickupNearbyItems,
   [BotCommands.BuildStoneHouse]: BuildStoneHouse,
   [BotCommands.FindAndRememberNearChest]: FindAndRememberNearChest,

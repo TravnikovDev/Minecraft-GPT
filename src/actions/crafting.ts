@@ -9,6 +9,7 @@ import { markSelfAction } from "../core/events";
 import { tools } from "../core/plugins";
 import { goToNearestBlock, goToPosition } from "./movement";
 import { bot } from "../core/body";
+import { isCommandCancelled } from "../core/commandContext";
 import { collectBlock } from "./collectBlock";
 import { ensureCraftingTable } from "./ensure";
 import {
@@ -90,6 +91,12 @@ export async function craftRecipe(
     return false;
   }
   const itemId: number = foundItemId; // narrowed for use inside closures
+
+  // No free slot and no stack to add to: the crafted item would have nowhere to go and be lost
+  if (bot.inventory.emptySlotCount() === 0 && !bot.inventory.items().some((i) => i.type === itemId && i.count < i.stackSize)) {
+    console.log(`Can't craft ${itemName}: my inventory is full (the result would be lost).`);
+    return false;
+  }
 
   // Helper function to attempt crafting
   async function attemptCraft(
@@ -309,6 +316,7 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
   await new Promise((resolve) => setTimeout(resolve, 200));
   while (total < num) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
+    if (isCommandCancelled()) break; // stopped: take what's done and close the furnace
     console.log("checking...");
     let collected = false;
     if (furnace.outputItem()) {

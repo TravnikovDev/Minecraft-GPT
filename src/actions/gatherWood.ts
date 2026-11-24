@@ -1,10 +1,12 @@
 import { bot } from "../core/body";
+import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
-import { getNearestBlocks } from "./world";
 import { isCommandCancelled } from "../core/commandContext";
+import { findTrunk, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
+import { takeDownScaffolding } from "./scaffolding";
 
 // Give up after this many failed attempts in a row to find or reach a tree
 const MAX_FAILED_ATTEMPTS = 5;
@@ -27,6 +29,9 @@ export async function gatherWood(
     const startingLogs = logsCount;
     const targetLogs = startingLogs + num; // Collect `num` new logs
     let failedAttempts = 0;
+    // Logs it couldn't walk to (up a jungle trunk, behind leaves); without
+    // this the nearest-log search returns the same one until it gives up
+    const unreachable = new Set<string>();
     console.log(`I currently have ${logsCount} logs.`);
 
     while (logsCount < targetLogs) {
@@ -49,6 +54,7 @@ export async function gatherWood(
 
       const woodBlock = bot.findBlock({
         matching: (block) => catalog().isTreeLog(block.name), // nether stems too, never stripped logs in builds
+        useExtraInfo: (block) => !unreachable.has(block.position.toString()),
         maxDistance,
       });
 
@@ -67,18 +73,22 @@ export async function gatherWood(
       );
 
       if (!destinationReached) {
-        console.log("Unable to reach the wood block.");
+        console.log(`Unable to reach the ${woodBlock.name} at ${woodBlock.position}; trying another.`);
+        unreachable.add(woodBlock.position.toString());
         failedAttempts++;
         continue; // Try finding another wood block
       }
 
-      const aTree = await getNearestBlocks(woodBlock.name, 4, 4);
-      if (aTree.length === 0) {
-        console.log("No wood blocks found nearby.");
-        failedAttempts++;
-        await moveAway(15);
+      // The whole trunk, bottom up: a floating top keeps its leaves forever,
+      // so no saplings would fall and the tree couldn't be replanted
+      const at = (p: Vec3) => bot.blockAt(p);
+      const aTree = findTrunk(woodBlock, at);
+      if (!isNaturalTree(aTree, at)) {
+        console.log(`The ${woodBlock.name} at ${woodBlock.position} has no leaves: something built, leaving it.`);
+        for (const log of aTree) unreachable.add(log.position.toString());
         continue;
       }
+      const stumps = stumpsOf(aTree, at);
 
       try {
         for (const aLog of aTree) {
@@ -86,6 +96,10 @@ export async function gatherWood(
           await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
           await __actionsDelay(1200); // Simulate gathering delay
         }
+        // Off the pillar it built to reach the top, and its scaffolding gone,
+        // before moving on (otherwise it bridges from tree to tree)
+        await takeDownScaffolding();
+        rememberFelledTree(stumps, woodBlock.name); // back for the saplings once the leaves fall
         await pickupNearbyItems(bot);
         await __actionsDelay(2500);
         const newCount = getLogsCount();
@@ -100,6 +114,7 @@ export async function gatherWood(
     }
 
     console.log(`Wood gathering complete! Total logs collected: ${logsCount}.`);
+    if (treesToReplant() > 0) bot.chat("Once the leaves fall I'll pick up the saplings and replant the trees.");
     return true;
   } catch (error) {
     console.error("Failed to gather wood:", error);

@@ -8,6 +8,8 @@ import { BotCommands } from "./types";
 import { isCommandCancelled } from "../core/commandContext";
 import { addCommandToQueue } from "../managers/persistenceManager";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
+import { inventoryFull } from "../actions/storage";
+import { makeRoom } from "../actions/overflow";
 import { isArmorPiece, wearBestArmor } from "../actions/armor";
 
 export const description = `When player is asking the bot to craft an item, the bot works out the recipe, makes the
@@ -106,6 +108,10 @@ export async function execute(args: any): Promise<void> {
   }
 
   const count = Math.max(1, parsed.data.itemCount ?? 1);
+
+  // With no free slot a crafted item has nowhere to go and is lost (the
+  // planks for a chest vanished this way): make room first (a chest)
+  if (inventoryFull() && !(await makeRoom(`craft ${pretty(parsed.data.itemName)}`))) return;
 
   // A set ("armor", "iron tools"): one craft per piece, each picking the best material it can make
   const pieces = setPieces(parsed.data.itemName);

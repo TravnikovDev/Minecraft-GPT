@@ -1,96 +1,50 @@
-// Path: src/actions/FindAndRememberNearChest.ts
+// Path: src/commands/FindAndRememberNearChest.ts
+// "Remember this chest": looks into the chests and barrels around and keeps
+// where they are and what's inside (saved, so it survives restarts). Storing,
+// taking and "where is my X" use this memory.
 
 import { z } from "zod";
-import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
-import { Vec3 } from "vec3";
+import { STORAGE_BLOCKS } from "../core/containers";
+import { describeContents, lookInChest } from "../actions/storage";
 
-export const description = `When user asks the bot to find and remember nearby chests, the bot will search for chests
-within a specified radius and categorize their contents. The bot will remember the locations of the chests and the
-categories of their contents for later use. Example: "Find and remember chests within 10 blocks.", "Remember those chests".
-If no parameters are provided, the bot will search for chests within a radius of 10 blocks.`;
+export const description = `When the owner asks the bot to find and remember chests nearby ("remember this chest",
+"remember those chests"), the bot looks into the chests and barrels within the radius and remembers where they are and
+what's inside, for storing and taking items later. Default radius 10.`;
 
-// Define parameters for FindAndRememberNearChest action
 export const parameters = z.object({
-  radius: z.number().nullable().describe("Radius to search for chests"),
+  radius: z.number().nullable().describe("Radius to search for chests (default 10)."),
 });
 
-// Chest memory object to store locations and categories
-const chestMemory: { [category: string]: Vec3[] } = {};
+const MAX_CHESTS = 8;
 
-// Function to categorize chest contents
-function categorizeChest(contents: any[]): string {
-  if (
-    contents.some(
-      (item) => catalog().toolKind(item.name) !== null
-    )
-  ) {
-    return "Tools";
-  } else if (
-    contents.some(
-      (item) => catalog().isLog(item.name) || catalog().isOre(item.name) || catalog().oresFor(item.name).length > 0
-    )
-  ) {
-    return "RawResources";
-  } else if (
-    contents.some(
-      (item) => catalog().isPlanks(item.name) || /_ingot$/.test(item.name)
-    )
-  ) {
-    return "RefinedMaterials";
-  } else if (
-    contents.some(
-      (item) => catalog().isFood(item.name)
-    )
-  ) {
-    return "Food";
-  } else {
-    return "Miscellaneous";
-  }
-}
-
-// Implement the FindAndRememberNearChest action
-export async function execute(args: any) {
+export async function execute(args: any): Promise<void> {
   console.log(`Executing FindAndRememberNearChest with args:`, args);
-
-  // Validate arguments
   const parsed = parameters.safeParse(args);
   if (!parsed.success) {
-    console.error(
-      `Invalid parameters for FindAndRememberNearChest:`,
-      parsed.error
-    );
+    console.error(`Invalid parameters for FindAndRememberNearChest:`, parsed.error);
     return;
   }
+  const radius = parsed.data.radius ?? 10;
+  const ids = [...STORAGE_BLOCKS].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
+  const positions = bot.findBlocks({ matching: ids, maxDistance: radius, count: MAX_CHESTS * 2 });
 
-  let { radius } = parsed.data;
-  radius = radius || 10;
-
-  // Search for chests within the specified radius
-  const chestsFound = bot.findBlocks({
-    matching: (block) => block.name === "chest",
-    maxDistance: radius,
-    count: 10,
-  });
-
-  // Process each chest found
-  for (const pos of chestsFound) {
-    const chestPosition = new Vec3(pos.x, pos.y, pos.z);
-    const block = bot.blockAt(chestPosition);
-    if (block) {
-      const chest = await bot.openChest(block);
-      const category = categorizeChest(chest.containerItems());
-      if (!chestMemory[category]) {
-        chestMemory[category] = [];
-      }
-      chestMemory[category].push(chestPosition);
-      await chest.close();
-      bot.chat(`Found a chest categorized as ${category} at ${chestPosition}.`);
-    } else {
-      console.error(`No block found at position ${chestPosition}`);
+  // A double chest is two blocks; look in it once
+  const seen: { x: number; y: number; z: number }[] = [];
+  let remembered = 0;
+  for (const pos of positions) {
+    if (remembered >= MAX_CHESTS) break;
+    if (seen.some((s) => s.y === pos.y && Math.abs(s.x - pos.x) + Math.abs(s.z - pos.z) === 1)) continue;
+    const block = bot.blockAt(pos);
+    if (!block) continue;
+    try {
+      const contents = await lookInChest(block);
+      seen.push(pos);
+      remembered++;
+      bot.chat(`I'll remember the ${block.name.replace(/_/g, " ")} at ${pos.x}, ${pos.y}, ${pos.z}: ${describeContents(contents, 5)}.`);
+    } catch (error) {
+      console.log(`Couldn't look into the ${block.name} at ${pos}: ${(error as Error).message}`);
     }
   }
-
-  console.log("Chest memory updated:", chestMemory);
-  bot.chat("Chest scanning complete. Chest locations stored for later use.");
+  if (remembered === 0) bot.chat(`I don't see any chest within ${radius} blocks.`);
 }

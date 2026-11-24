@@ -317,3 +317,36 @@ In the game:
 - **Boundary count:** unchanged at 122 direct game-changing calls; Phase 3 starts on those.
 - **Not yet run in the owner's game:** the plan's Phase 2 in-game checks ("collect 5 iron" asks a question; wood in a cherry or mangrove forest; "how many axes" ignores pickaxes), plus a bed search near bedrock. They are added to the checklist.
 - **Branch:** `phase-2/catalog`, to merge to master after the in-game run.
+
+
+## 2026-11-25: Playing like a player (mining, storage, cleanup, survival)
+
+**Asked for**
+- No vertical shafts: mine with the owner's diagonal and straight tunnels, and a reverse diagonal tunnel to get out
+- Dig out visible ore first; torches every 7 blocks
+- Hunting as a group (look around 60 blocks, report, ask to continue); collect every drop after kills and wood gathering
+- Replant felled trees with the saplings; take down pillars and bridges built while gathering
+- Inventory management: chests near the bed, remembered chests, storing duplicates or resources; on overflow make a chest and put away the less valuable stuff
+
+**How it works**
+
+| Area | Where |
+|---|---|
+| Walking rules: no shafts, own scaffolding may be dug, pillaring only to reach a block | `core/movements.ts`, `core/scaffold.ts`, `core/plugins.ts` (`withRules`, `setReflexGoal`) |
+| Sight (open faces, raycasts) for visible ore and animals | `actions/sight.ts` |
+| Tunnels to buried ore, torches, dig out, water and lava stops | `actions/digging.ts` (`tunnelTo`, `digDiagonalTunnelUp`, `digOutToSurface`), `commands/DigToSurface.ts` |
+| Drops: tracked tosses, collect everything visible, idle tidy-up | `actions/pickup.ts` |
+| Trees: whole trunks, replanting, planting saplings | `actions/forestry.ts`, `commands/PlantSaplings.ts` |
+| Scaffolding cleanup | `actions/scaffolding.ts` |
+| Chests: value ranking, store/take/check, remembered contents | `actions/storage.ts`, `core/containers.ts`, `commands/StoreItems.ts`, `TakeFromChest.ts`, `CheckChest.ts` |
+| Overflow: make room (cheapest ~4 stacks), make a chest, wall niche underground | `actions/overflow.ts`, `actions/placement.ts` |
+| Hunting plan and report | `actions/hunting.ts`, `commands/Hunting.ts` |
+| Survival: back off at 4 hearts; recover items from a cave below | `actions/combatReflex.ts`, `commands/RecoverItems.ts` |
+| Broken tools replaced mid-dig | `actions/worldInteraction.ts` (`replaceBrokenTool`) |
+| Several tools per message; gifts only when thrown by the owner | `managers/aiManager.ts`, `core/body.ts`, `actions/ownerUpdates.ts` |
+
+**Outcome**
+- **Tests:** 83 pass (55 new across 11 files: shafts with the real A*, sight, tunnels and torches, pickup, forestry, storage, overflow, chest niche, scaffolding, hunting, stopping collection).
+- **Boundary count:** 117 direct game-changing calls outside `core/` (was 122).
+- **In the game:** results are in `docs/real-game-checklist.md` (2026-11-25). Mining through tunnels, torches, making and filling a chest, scaffolding cleanup, replanting, beds and exact giving worked. The fixes made during the run are listed there under "Next run: re-test these".
+- **Known gaps:** the felled-trees list is lost on restart; one chest at a time (no sorting across chests); hunting doesn't yet skip fenced pens.

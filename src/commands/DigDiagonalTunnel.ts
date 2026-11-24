@@ -2,12 +2,12 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
-import { digDiagonalTunnel } from "../actions/digging";
+import { digDiagonalTunnel, resetTorchSpacing, TORCH_EVERY } from "../actions/digging";
 import { ensurePickaxe } from "../actions/ensureTools";
 
 export const description = `Dig a tunnel in the specified direction. The bot will dig a tunnel of the specified depth 
 and dimensions, placing torches at the specified interval. If no parameters are provided, the bot will dig a tunnel
-10 blocks deep, 3 blocks wide, and 4 blocks high, placing a torch every 12 blocks towards north. Example usage:
+10 blocks deep, 3 blocks wide, and 4 blocks high, placing a torch every 7 blocks (crafted from its coal and sticks) towards north. Example usage:
 'Please build a tunnel', 'Let's mine', 'Build a mine', "Dig a tunnel 20 blocks deep",
 "Dig a 3x3 tunnel towards east", "Please dig a tunnel 10 blocks deep towards south."`;
 
@@ -45,11 +45,12 @@ export async function execute(args: any) {
 
   // Default values for tunnel size
   depth = depth || 10;
-  torchInterval = torchInterval || 10;
+  torchInterval = torchInterval || TORCH_EVERY;
   tunnelSize = tunnelSize || { width: 3, height: 4 };
   direction = direction || "north";
 
   await ensurePickaxe();
+  resetTorchSpacing();
 
   const result = await digDiagonalTunnel(
     direction,

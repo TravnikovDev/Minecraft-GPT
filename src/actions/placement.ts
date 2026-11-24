@@ -6,6 +6,13 @@ import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
 import { placeBlock } from "./worldInteraction";
 import { getNearestFreeSpace } from "./world";
+import { Vec3 } from "vec3";
+import pf from "mineflayer-pathfinder";
+import { pathing } from "../core/plugins";
+import { loadBed } from "../core/session";
+import { ownerEntity } from "../managers/ownerDialog";
+import { isNatural } from "../core/movements";
+import { breakBlockAt } from "./worldInteraction";
 
 /**
  * The inventory item to place for what the owner asked: an exact ID, or a
@@ -18,6 +25,11 @@ export function findPlaceableItem(requested: string): string | null {
   const singular = requested.replace(/s$/, "");
   const variant = items.find((i) => i.name.endsWith(`_${singular}`) || i.name === singular);
   return variant?.name ?? null;
+}
+
+/** Looks east along a free area, so a bed placed at `spot` puts its head inside it. */
+async function faceAlong(spot: Vec3, size: number): Promise<void> {
+  await bot.lookAt(spot.offset(size, 0, 0), true);
 }
 
 /** Beds need two free blocks in a row; everything else one. */
@@ -35,7 +47,7 @@ export async function placeItemNear(itemName: string): Promise<Block | null> {
     const spot = getNearestFreeSpace(size, 6 + attempt * 4);
     if (!spot) return null;
     // Face along the free area so a bed's head lands inside it too
-    await bot.lookAt(spot.offset(size, 0, 0), true);
+    await faceAlong(spot, size);
     const ok = await placeBlock(itemName, spot.x, spot.y, spot.z);
     const placed = bot.blockAt(spot);
     if (ok && placed?.name === itemName) return placed;
@@ -44,8 +56,150 @@ export async function placeItemNear(itemName: string): Promise<Block | null> {
   return null;
 }
 
+// --- A chest out of the way ---------------------------------------------------
+
+const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+const LIQUIDS = new Set(["water", "lava"]);
+
+/** True under a roof: something solid (not leaves) somewhere above the bot's head. */
+export function underRoof(feet: Vec3, blockAt: BlockAt, height = 32): boolean {
+  for (let y = 2; y <= height; y++) {
+    const b = blockAt(feet.offset(0, y, 0));
+    if (b && b.boundingBox === "block" && !b.name.endsWith("_leaves")) return true;
+  }
+  return false;
+}
+
+/**
+ * Where to dig a chest niche into the wall beside `feet`: the block at feet
+ * level and the one above it (a chest won't open with a solid block on top),
+ * both natural stone or dirt, with solid ground under them and no water or
+ * lava around them. The side walls of a tunnel come first (a wall with
+ * another wall opposite), so the chest never ends up in the way ahead.
+ * Returns the chest spot, or null.
+ */
+export function nicheSpot(feet: Vec3, blockAt: BlockAt): Vec3 | null {
+  const solidNatural = (p: Vec3): boolean => {
+    const b = blockAt(p);
+    return b !== null && b.boundingBox === "block" && isNatural(b.name);
+  };
+  const wet = (p: Vec3): boolean => [...HORIZONTAL, new Vec3(0, 1, 0)].some((d) => LIQUIDS.has(blockAt(p.plus(d))?.name ?? ""));
+  const candidates = HORIZONTAL.filter((d) => {
+    const spot = feet.plus(d);
+    const above = spot.offset(0, 1, 0);
+    return solidNatural(spot) && solidNatural(above) && isFloor(blockAt(spot.offset(0, -1, 0))) && !wet(spot) && !wet(above);
+  });
+  const sideWall = (d: Vec3): boolean => blockAt(feet.minus(d))?.boundingBox === "block";
+  const best = candidates.find(sideWall) ?? candidates[0];
+  return best ? feet.plus(best) : null;
+}
+
+/**
+ * Places a chest where it isn't in the way. Underground (in a tunnel or a
+ * cave) it digs a 2-high niche into the wall beside it and puts the chest in
+ * the bottom of it, like a miner; in the open, on free ground nearby.
+ */
+export async function placeChestOutOfTheWay(itemName = "chest"): Promise<Block | null> {
+  const feet = bot.entity.position.floored();
+  const blockAt = (p: Vec3): Block | null => bot.blockAt(p);
+  const niche = underRoof(feet, blockAt) ? nicheSpot(feet, blockAt) : null;
+  if (niche) {
+    console.log(`Digging a niche in the wall at ${niche} for the ${itemName}.`);
+    const dug = (await breakBlockAt(niche.x, niche.y + 1, niche.z)) && (await breakBlockAt(niche.x, niche.y, niche.z));
+    if (dug && (await placeBlock(itemName, niche.x, niche.y, niche.z))) {
+      const placed = bot.blockAt(niche);
+      if (placed?.name === itemName) return placed;
+    }
+    console.log(`Placing the ${itemName} in the niche at ${niche} failed; trying free ground.`);
+  }
+  return placeItemNear(itemName);
+}
+
 /** The nearest bed block within range, if any. */
 export function findNearestBed(maxDistance = 24): Block | null {
   const bedIds = bot.registry.blocksArray.filter((b) => catalog().isBed(b.name)).map((b) => b.id);
   return bot.findBlock({ matching: bedIds, maxDistance });
+}
+
+// --- Placing next to something -------------------------------------------------
+
+type BlockAt = (pos: Vec3) => Block | null;
+const NEAR_RADIUS = 3; // how far from the target a spot may be
+
+/** Air or a plant you can place over, with nothing solid in it. */
+const isOpen = (b: Block | null): boolean => b !== null && b.boundingBox === "empty" && b.name !== "water" && b.name !== "lava";
+/** Solid ground to stand an item on. */
+const isFloor = (b: Block | null): boolean => b !== null && b.boundingBox === "block";
+
+/**
+ * Free spots right next to a target (a bed, a chest, the owner), closest
+ * first: open space with solid ground under it, not on the target itself.
+ * `size` 2 (a bed) also needs the next block east free.
+ */
+export function spotsNear(target: Vec3[], blockAt: BlockAt, size = 1, avoid: Vec3[] = []): Vec3[] {
+  const center = target[0];
+  const taken = (p: Vec3): boolean => [...target, ...avoid].some((t) => t.x === p.x && t.z === p.z && Math.abs(t.y - p.y) <= 1);
+  const spots: { p: Vec3; d: number }[] = [];
+  for (let dx = -NEAR_RADIUS; dx <= NEAR_RADIUS; dx++)
+    for (let dz = -NEAR_RADIUS; dz <= NEAR_RADIUS; dz++)
+      for (let dy = -1; dy <= 1; dy++) {
+        const p = center.offset(dx, dy, dz);
+        if (taken(p)) continue;
+        const cells = size === 2 ? [p, p.offset(1, 0, 0)] : [p];
+        if (cells.some((c) => taken(c) || !isOpen(blockAt(c)) || !isFloor(blockAt(c.offset(0, -1, 0))))) continue;
+        // Distance to the nearest target block, so "next to the bed" means touching it when it can
+        const d = Math.min(...target.map((t) => Math.hypot(t.x - p.x, t.z - p.z) + Math.abs(t.y - p.y) * 0.5));
+        spots.push({ p, d });
+      }
+  return spots.sort((a, b) => a.d - b.d).map((s) => s.p);
+}
+
+/** What "near" names: the owner, or the nearest block of that kind (the bot's own bed first). */
+export function findPlacementTarget(near: string): Vec3[] | null {
+  const name = catalog().normalize(near);
+  if (["owner", "me", "player", "here", "you"].includes(name)) {
+    const owner = ownerEntity();
+    return owner ? [owner.position.floored()] : null;
+  }
+  const matches = (blockName: string): boolean =>
+    name === "bed" ? catalog().isBed(blockName) : blockName === name || blockName.endsWith(`_${name}`);
+  if (name === "bed") {
+    const own = loadBed();
+    const b = own ? bot.blockAt(new Vec3(own.x, own.y, own.z)) : null;
+    if (b && catalog().isBed(b.name)) return bedBlocks(b);
+  }
+  const ids = bot.registry.blocksArray.filter((b) => matches(b.name)).map((b) => b.id);
+  const found = bot.findBlock({ matching: ids, maxDistance: 32 });
+  if (!found) return null;
+  return catalog().isBed(found.name) ? bedBlocks(found) : [found.position];
+}
+
+/** Both halves of a bed. */
+function bedBlocks(bed: Block): Vec3[] {
+  const other = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]
+    .map((d) => bed.position.plus(d))
+    .find((p) => catalog().isBed(bot.blockAt(p)?.name ?? ""));
+  return other ? [bed.position, other] : [bed.position];
+}
+
+/**
+ * Places an item right next to a target ("bed", "chest", "owner"...).
+ * Returns the placed block, or a reason it couldn't.
+ */
+export async function placeItemNextTo(itemName: string, near: string): Promise<Block | string> {
+  const target = findPlacementTarget(near);
+  if (!target) return `I can't find the ${near.replace(/_/g, " ")} nearby.`;
+  const t = target[0];
+  await pathing.goto(new pf.goals.GoalNear(t.x, t.y, t.z, 2));
+  const owner = ownerEntity();
+  const avoid = owner ? [owner.position.floored()] : [];
+  const size = footprint(itemName);
+  for (const spot of spotsNear(target, (p) => bot.blockAt(p), size, avoid).slice(0, 3)) {
+    if (size === 2) await faceAlong(spot, size); // the bed's head goes east, into the free block
+    const ok = await placeBlock(itemName, spot.x, spot.y, spot.z);
+    const placed = bot.blockAt(spot);
+    if (ok && placed?.name === itemName) return placed;
+    console.log(`Placing ${itemName} next to the ${near} at ${spot} failed.`);
+  }
+  return `There's no free spot next to the ${near.replace(/_/g, " ")}.`;
 }

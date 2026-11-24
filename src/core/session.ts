@@ -4,6 +4,7 @@
 // - the last death (where/when, for item recovery),
 // - the owner's last known position (for "come here" when out of sight),
 // - the bot's own bed (its spawn point; it goes back to that one to sleep),
+// - the chests it knows and what was in them when it last looked,
 // - the recent conversation with the owner (sent with each AI request).
 
 import { getMemory, updateMemory } from "../managers/persistenceManager";
@@ -56,6 +57,27 @@ export function loadBed(): SavedBed | null {
 
 export async function saveBed(bed: SavedBed | null): Promise<void> {
   await updateMemory({ bed: bed ?? undefined });
+}
+
+// --- Chests it knows ------------------------------------------------------------
+
+export type KnownChest = NonNullable<MemoryType["chests"]>[number];
+const samePlace = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): boolean =>
+  a.x === b.x && a.y === b.y && a.z === b.z;
+
+export function loadChests(): KnownChest[] {
+  return getMemory().chests ?? [];
+}
+
+/** Remembers a chest and what's in it now (replacing what it knew about that spot). */
+export async function rememberChest(chest: KnownChest): Promise<void> {
+  const others = loadChests().filter((c) => !samePlace(c, chest));
+  await updateMemory({ chests: [...others, chest] });
+}
+
+/** Forgets a chest (it was broken or isn't there any more). */
+export async function forgetChest(at: { x: number; y: number; z: number }): Promise<void> {
+  await updateMemory({ chests: loadChests().filter((c) => !samePlace(c, at)) });
 }
 
 // --- Conversation memory -----------------------------------------------------

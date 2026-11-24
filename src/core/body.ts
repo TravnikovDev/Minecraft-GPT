@@ -265,10 +265,26 @@ function forwardEvents(currentBot: Bot): void {
       selfCaused: isSelfCaused(newBlock.position),
     });
   });
+  // An item a player throws (Q, or dragging it out of the inventory) appears
+  // at their hands; a mob's drop or a broken block's drop doesn't. That's how
+  // a gift is told apart from the bot's own pickups.
+  const thrownBy = new WeakMap<object, string>();
+  listen(currentBot, "entitySpawn", (entity: { name?: string; position: { x: number; y: number; z: number } }) => {
+    if (entity.name !== "item") return;
+    for (const player of Object.values(currentBot.players)) {
+      const p = player.entity;
+      if (!p || p === currentBot.entity) continue;
+      const hands = p.position.offset(0, 1.32, 0); // eye height minus 0.3: where thrown items start
+      if (hands.distanceTo(entity.position as typeof hands) <= 1) {
+        thrownBy.set(entity, player.username);
+        break;
+      }
+    }
+  });
   listen(currentBot, "playerCollect", (collector: unknown, collected: { getDroppedItem?: () => Item | null }) => {
     if (collector !== currentBot.entity) return;
     const item = collected.getDroppedItem?.();
-    if (item) emit("item:collected", { name: item.name, count: item.count });
+    if (item) emit("item:collected", { name: item.name, count: item.count, from: thrownBy.get(collected) ?? null });
   });
 }
 

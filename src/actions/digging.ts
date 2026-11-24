@@ -9,8 +9,148 @@ import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
 import { getItemCount } from "./inventory";
 import { ensurePlanks } from "./ensure";
+import pf from "mineflayer-pathfinder";
+import { isNatural } from "../core/movements";
+import { catalog } from "../core/catalog";
+import { isCommandCancelled } from "../core/commandContext";
+import { pathing } from "../core/plugins";
 
 export type DirectionType = "north" | "south" | "west" | "east";
+
+const OFFSETS: Record<DirectionType, { x: number; z: number }> = {
+  east: { x: 1, z: 0 },
+  west: { x: -1, z: 0 },
+  south: { x: 0, z: 1 },
+  north: { x: 0, z: -1 },
+};
+const SIDES = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+
+/** The direction (north/south/east/west) that heads most toward dx, dz. */
+export function directionToward(dx: number, dz: number): DirectionType {
+  if (Math.abs(dx) >= Math.abs(dz)) return dx >= 0 ? "east" : "west";
+  return dz >= 0 ? "south" : "north";
+}
+
+/**
+ * Why a tunnel must stop before digging here, or null when it's fine: lava
+ * or water in or next to the block (it would flood the tunnel; digging in
+ * water is slow and the bot can drown), or a block someone built (an
+ * underground base, a mineshaft's planks) that is never broken.
+ */
+export function tunnelBlocked(pos: Vec3): string | null {
+  const block = bot.blockAt(pos);
+  if (!block) return `unloaded ground at ${pos}`;
+  if (block.name === "lava" || block.name === "water") return `${block.name} at ${pos}`;
+  for (const side of SIDES) {
+    const liquid = bot.blockAt(pos.plus(side))?.name;
+    if (liquid === "lava" || liquid === "water") return `${liquid} next to ${pos}`;
+  }
+  const open = block.boundingBox === "empty";
+  if (!open && !isNatural(block.name)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
+  return null;
+}
+
+/** Checks one block before a tunnel digs it; logs and tells the owner when it must stop. */
+function stopTunnelAt(pos: Vec3): boolean {
+  if (isCommandCancelled()) return true;
+  const why = tunnelBlocked(pos);
+  if (!why) return false;
+  console.log(`Tunnel stopped: ${why}.`);
+  bot.chat(`I stopped digging: ${why}.`);
+  return true;
+}
+
+// --- Torches ----------------------------------------------------------------
+
+/** A torch every this many blocks along a tunnel, like a player lighting the way back. */
+export const TORCH_EVERY = 7;
+const NO_TORCH_NOTICE_MS = 10 * 60_000;
+let stepsSinceTorch = 0;
+let lastNoTorchNotice = 0;
+
+const SIDE_DIRS: Record<string, Vec3> = {
+  north: new Vec3(0, 0, -1),
+  south: new Vec3(0, 0, 1),
+  east: new Vec3(1, 0, 0),
+  west: new Vec3(-1, 0, 0),
+};
+// The walls beside a tunnel (never the block ahead, which the next step digs away)
+const WALLS: Record<DirectionType, string[]> = {
+  east: ["north", "south"],
+  west: ["south", "north"],
+  north: ["east", "west"],
+  south: ["west", "east"],
+};
+
+/** Starts torch spacing afresh (a new tunnel route begins at the bot). */
+export function resetTorchSpacing(): void {
+  stepsSinceTorch = 0;
+}
+
+/**
+ * A torch to place: one it carries, or crafted from the coal or charcoal and
+ * sticks it carries (sticks from its planks or logs). It never goes off to
+ * gather for this: coal turns up while mining anyway.
+ */
+async function torchReady(): Promise<true | string> {
+  if (getItemCount("torch") > 0) return true;
+  const fuel = getItemCount("coal") + getItemCount("charcoal");
+  if (fuel === 0) return "I have no torches and no coal to make them";
+  const { inventoryFull } = await import("./storage");
+  if (inventoryFull()) {
+    // Crafting needs a free slot: put the cheap stuff away first (or make a chest)
+    const { makeRoom } = await import("./overflow");
+    if (!(await makeRoom("make torches"))) return "My inventory is full, so I can't make torches";
+  }
+  const { craftRecipe } = await import("./crafting");
+  if (getItemCount("stick") === 0) {
+    if (getItemCount("planks") === 0) {
+      const log = bot.inventory.items().find((i) => catalog().isLog(i.name));
+      const planks = log ? catalog().planksFor(log.name) : null;
+      if (planks) await craftRecipe(planks, 4);
+    }
+    if (getItemCount("planks") > 0) await craftRecipe("stick", 4);
+  }
+  const sticks = getItemCount("stick");
+  if (sticks === 0) return "I have coal but no sticks, planks or logs for torches";
+  const make = Math.min(fuel, sticks, 4) * 4; // 1 coal + 1 stick = 4 torches
+  if (await craftRecipe("torch", make)) console.log(`Crafted ${getItemCount("torch")} torches for the tunnel.`);
+  return getItemCount("torch") > 0 ? true : "I couldn't craft torches";
+}
+
+/** Puts a torch on a wall beside `spot` (air inside the tunnel). */
+async function placeTunnelTorch(spot: Vec3, direction: DirectionType): Promise<boolean> {
+  for (const side of WALLS[direction]) {
+    const wall = bot.blockAt(spot.plus(SIDE_DIRS[side]));
+    if (wall?.boundingBox !== "block") continue;
+    if (await placeBlock("torch", spot.x, spot.y, spot.z, side)) {
+      console.log(`Placed a torch at ${spot} on the ${side} wall.`);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Called once per tunnel step: every `every` steps, lights the tunnel with a
+ * torch (crafting some first if needed). Without torches or coal it says so
+ * now and then, and keeps digging.
+ */
+async function torchStep(spot: Vec3, direction: DirectionType, every = TORCH_EVERY): Promise<void> {
+  stepsSinceTorch++;
+  if (stepsSinceTorch < every) return;
+  const ready = await torchReady();
+  if (ready !== true) {
+    stepsSinceTorch = 0; // try again a torch-spacing further on, not every step
+    if (Date.now() - lastNoTorchNotice > NO_TORCH_NOTICE_MS) {
+      lastNoTorchNotice = Date.now();
+      bot.chat(`${ready}, so this tunnel stays dark for now.`);
+    }
+    return;
+  }
+  if (await placeTunnelTorch(spot, direction)) stepsSinceTorch = 0;
+}
+
 
 /**
  * Digs a diagonal tunnel in the specified direction.
@@ -26,7 +166,7 @@ export async function digDiagonalTunnel(
   tunnelSize: { width: number; height: number } = { width: 1, height: 4 },
   startPosition?: Vec3,
   tunnelName: string = `Tunnel-${direction}-${depth}`,
-  torchInterval: number = 12
+  torchInterval: number = TORCH_EVERY
 ): Promise<boolean> {
   if (!startPosition) startPosition = bot.entity.position.clone();
 
@@ -46,6 +186,7 @@ export async function digDiagonalTunnel(
 
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
+        if (stopTunnelAt(digPosition)) return false;
         const digResult = await breakBlockAt(
           digPosition.x,
           digPosition.y,
@@ -61,22 +202,7 @@ export async function digDiagonalTunnel(
 
       await pickupNearbyItems(bot);
 
-      if (i % torchInterval === 0 && w === tunnelSize.width - 1) {
-        const torchPosition = basePosition.offset(0, 2, 0);
-        const torch = bot.inventory
-          .items()
-          .find((item) => item.name === "torch");
-        if (torch) {
-          await placeBlock(
-            "wall_torch",
-            torchPosition.x,
-            torchPosition.y,
-            torchPosition.z,
-            "side"
-          );
-          bot.chat(`Placed torch at ${torchPosition.toString()}`);
-        }
-      }
+      if (w === tunnelSize.width - 1) await torchStep(basePosition.offset(0, 2, 0), direction, torchInterval);
     }
   }
 
@@ -174,17 +300,22 @@ export async function digDoorway(position: Vec3, direction: string) {
 export async function digStraightTunnel(
   direction: "north" | "south" | "east" | "west",
   length: number,
-  startPosition: Vec3
-) {
+  startPosition: Vec3,
+  width = 3
+): Promise<boolean> {
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
+  // Sideways is across the tunnel: along Z for an east/west tunnel, along X for north/south
+  const side = new Vec3(Math.abs(offsetZ), 0, Math.abs(offsetX));
+  const half = Math.floor(width / 2);
 
   for (let i = 1; i <= length; i++) {
     const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
-    // Dig out a 2x2 tunnel
+    // Dig out a 2-high tunnel, `width` wide
     for (let y = 0; y < 2; y++) {
-      for (let x = -1; x <= 1; x++) {
-        const blockPos = position.offset(x, y, 0);
+      for (let x = -half; x <= width - 1 - half; x++) {
+        const blockPos = position.offset(side.x * x, y, side.z * x);
+        if (stopTunnelAt(blockPos)) return false;
         await breakBlockAt(blockPos.x, blockPos.y, blockPos.z);
 
         // Ensure foundation under the floor blocks
@@ -193,7 +324,12 @@ export async function digStraightTunnel(
         }
       }
     }
+    await pickupNearbyItems(bot, 4);
+    // On the outer column's wall, at the top of the 2-high tunnel
+    const outer = width - 1 - half;
+    await torchStep(position.offset(side.x * outer, 1, side.z * outer), direction);
   }
+  return true;
 }
 
 /**
@@ -248,26 +384,172 @@ export async function digRoom(
  * @param position The position of the block.
  */
 export async function ensureBlock(position: Vec3): Promise<void> {
-  const dirtNum = getItemCount("dirt");
-  const plankNum = getItemCount("planks");
-  // Check if we have dirt or planks available to use as foundation
-  if (!dirtNum && !plankNum) {
-    console.log("I don't have any dirt or planks to place!");
-    await ensurePlanks(4);
-    return;
-  }
-
-  const stubName = dirtNum ? "dirt" : "planks";
-
-  // Check if the block is air or water (indicating a hole or exposed area)
+  // Only a hole needs filling; a solid floor needs nothing (it used to craft
+  // planks for every floor block when the bot carried no dirt or planks)
   const blockToCheck = bot.blockAt(position);
-  if (blockToCheck?.name === "air" || blockToCheck?.name === "water") {
-    if (stubName) {
-      // Place the foundation block
-      await placeBlock(stubName, position.x, position.y, position.z);
-      console.log(`Placed ${stubName} at to fix a hole`);
-    } else {
-      console.log(`I don't have any ${stubName} to place!`);
+  const isHole = blockToCheck?.boundingBox === "empty" || blockToCheck?.name === "water" || blockToCheck?.name === "lava";
+  if (!isHole) return;
+
+  // What a miner carries: the stone it dug out, then dirt, then planks
+  const filler = ["cobblestone", "cobbled_deepslate", "dirt", "netherrack", "planks"].find((name) => getItemCount(name) > 0);
+  if (!filler) {
+    console.log("I have nothing to fill a hole in the floor with; making planks.");
+    await ensurePlanks(4);
+    if (getItemCount("planks") === 0) return;
+  }
+  const stubName = filler ?? "planks";
+  const placeName = stubName === "planks" ? (bot.inventory.items().find((i) => i.name.endsWith("_planks"))?.name ?? "oak_planks") : stubName;
+  await placeBlock(placeName, position.x, position.y, position.z);
+  console.log(`Placed ${placeName} at ${position} to fix a hole.`);
+}
+
+/**
+ * The reverse of digDiagonalTunnel: digs a diagonal tunnel going up, one
+ * block forward and one block up per step, the floor of each step kept solid.
+ * @param direction The direction to dig the tunnel in.
+ * @param rise How many blocks to go up.
+ * @param tunnelSize Width, and how many blocks above the floor to clear.
+ * @param startPosition Where the tunnel starts (the bot's feet by default).
+ * @returns Whether the whole tunnel was dug (false when stopped or blocked).
+ */
+export async function digDiagonalTunnelUp(
+  direction: DirectionType = "south",
+  rise: number = 10,
+  tunnelSize: { width: number; height: number } = { width: 1, height: 3 },
+  startPosition?: Vec3,
+  firstStep = 0
+): Promise<boolean> {
+  if (!startPosition) startPosition = bot.entity.position.floored();
+  const { x: offsetX, z: offsetZ } = OFFSETS[direction];
+
+  for (let w = 0; w < tunnelSize.width; w++) {
+    const wOffsetX = direction === "north" || direction === "south" ? w : 0;
+    const wOffsetZ = direction === "east" || direction === "west" ? w : 0;
+
+    for (let i = firstStep; i <= rise; i++) {
+      const basePosition = startPosition.offset(wOffsetX + i * offsetX, i, wOffsetZ + i * offsetZ);
+
+      for (let h = tunnelSize.height; h >= 0; h--) {
+        const digPosition = basePosition.offset(0, h, 0);
+        if (stopTunnelAt(digPosition)) return false;
+        const digResult = await breakBlockAt(digPosition.x, digPosition.y, digPosition.z);
+        await __actionsDelay(digResult ? 1000 : 200);
+
+        // The block under each step is the stair itself: keep it solid
+        if (h === 0) {
+          await ensureBlock(basePosition.offset(0, -1, 0));
+        }
+      }
+
+      await pickupNearbyItems(bot);
+      if (w === tunnelSize.width - 1) await torchStep(basePosition.offset(0, 2, 0), direction);
     }
   }
+  return true;
+}
+
+/** Walks to a spot inside a tunnel it just dug (the path is clear, nothing to dig). */
+async function walkTo(pos: Vec3): Promise<void> {
+  await pathing.goto(new pf.goals.GoalBlock(pos.x, pos.y, pos.z));
+}
+
+/**
+ * Tunnels to a buried block the way a miner does: a diagonal tunnel down
+ * (digDiagonalTunnel) or up (digDiagonalTunnelUp) to its level, then
+ * straight tunnels (digStraightTunnel) along that level until next to it.
+ * @returns Whether it got next to the target.
+ */
+export async function tunnelTo(target: Vec3, label: string): Promise<boolean> {
+  resetTorchSpacing();
+  const start = bot.entity.position.floored();
+  const dy = target.y - start.y;
+  let here = start.clone();
+
+  if (Math.abs(dy) >= 2) {
+    const direction = directionToward(target.x - start.x, target.z - start.z);
+    const { x, z } = OFFSETS[direction];
+    const steps = Math.abs(dy);
+    console.log(`Tunnelling ${dy < 0 ? "down" : "up"} ${steps} blocks toward the ${label} (${direction}).`);
+    const ok =
+      dy < 0
+        ? await digDiagonalTunnel(direction, steps, { width: 1, height: 3 }, start, `a tunnel down to the ${label}`)
+        : await digDiagonalTunnelUp(direction, steps, { width: 1, height: 3 }, start);
+    if (!ok) return false;
+    here = start.offset(x * steps, dy, z * steps);
+    await walkTo(here);
+  }
+
+  // Along the target's level: first east/west, then north/south, ending next to it
+  const dx = target.x - here.x;
+  const dz = target.z - here.z;
+  const xLength = Math.abs(dz) > 0 ? Math.abs(dx) : Math.max(0, Math.abs(dx) - 1);
+  if (xLength > 0) {
+    if (!(await digStraightTunnel(dx > 0 ? "east" : "west", xLength, here, 1))) return false;
+    here = here.offset(Math.sign(dx) * xLength, 0, 0);
+    await walkTo(here);
+  }
+  const zLength = Math.max(0, Math.abs(dz) - 1);
+  if (zLength > 0) {
+    if (!(await digStraightTunnel(dz > 0 ? "south" : "north", zLength, here, 1))) return false;
+    here = here.offset(0, 0, Math.sign(dz) * zLength);
+    await walkTo(here);
+  }
+  return true;
+}
+
+/** True when nothing but open air (or plants) is above this spot: the sky. */
+export function seesSky(pos: Vec3): boolean {
+  const top = (bot.game as { minY?: number; height?: number }).minY ?? -64;
+  const ceiling = top + ((bot.game as { height?: number }).height ?? 384);
+  for (let y = pos.y + 2; y < ceiling; y++) {
+    const block = bot.blockAt(new Vec3(pos.x, y, pos.z));
+    if (!block) return true; // above the loaded world
+    if (block.boundingBox !== "empty" && !block.name.endsWith("_leaves")) return false; // leaves: under a tree, outside
+  }
+  return true;
+}
+
+/**
+ * Out on the surface: open sky above, and ground at its feet level ahead it
+ * can walk onto (not still at the bottom of the tunnel's own opening).
+ */
+export function isOutside(feet: Vec3, direction: DirectionType): boolean {
+  if (!seesSky(feet)) return false;
+  const { x, z } = OFFSETS[direction];
+  const empty = (dy: number): boolean => bot.blockAt(feet.offset(x, dy, z))?.boundingBox === "empty";
+  return empty(0) || (empty(1) && empty(2)); // flat ground ahead, or one step up onto it
+}
+
+/**
+ * Digs out to the surface with the reverse diagonal tunnel
+ * (digDiagonalTunnelUp), one step at a time, until it can walk out under the
+ * open sky. Starts the way the bot faces; if lava or something built is in
+ * the way, tries the other directions.
+ */
+export async function digOutToSurface(maxRise = 120): Promise<boolean> {
+  resetTorchSpacing();
+  const yaw = bot.entity.yaw;
+  // mineflayer yaw: 0 faces north (-z), PI/2 faces west (-x)
+  const facing = directionToward(-Math.sin(yaw), -Math.cos(yaw));
+  const order: DirectionType[] = [facing, ...(["north", "east", "south", "west"] as DirectionType[]).filter((d) => d !== facing)];
+
+  let risen = 0;
+  for (const direction of order) {
+    const { x, z } = OFFSETS[direction];
+    let first = true; // the first step also clears headroom over where it stands
+    while (risen < maxRise) {
+      if (isCommandCancelled()) return false;
+      const here = bot.entity.position.floored();
+      if (isOutside(here, direction)) {
+        console.log(`Out on the surface at ${here}.`);
+        return true;
+      }
+      if (!(await digDiagonalTunnelUp(direction, 1, { width: 1, height: 3 }, here, first ? 0 : 1))) break; // blocked: next direction
+      first = false;
+      await walkTo(here.offset(x, 1, z));
+      risen++;
+    }
+    if (risen >= maxRise) break;
+  }
+  return seesSky(bot.entity.position.floored());
 }

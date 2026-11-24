@@ -96,6 +96,39 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | Doors | ❌→✅ stood in the open doorway (the pathfinder aimed at the top of the open door leaf), then flapped a double door open and shut while following; now it walks through the middle of the doorway, opens only doors on its route, and closes them only once through. It passed through the door |
 | "Give me the plate" | ❌→fixed: claimed "Gave 1 iron_chestplate" three times while giving nothing; give now tosses the exact item, says when it has none, matches loose names against what it carries, and can hand over worn armor (not yet re-tested) |
 
+### Real-world run: 2026-11-25 (same world; mining, storage, death)
+
+| Check | Result |
+|---|---|
+| Buried ore | ✅ "No iron_ore in sight; tunnelling": diagonal tunnel down, straight legs along the ore's level, no shafts; 15 iron ore, then 10 + 6 + 6 + 8 coal |
+| Tunnel torches | ✅ "Placed a torch … on the east wall"; ❌→fixed: with a full inventory it tried to craft torches every step and said it had no coal; now it makes room first and gives the real reason |
+| Dig out to the surface | ✅ reverse diagonal tunnel with a torch; ❌→fixed: broke into gravel under water, digging underwater timed out and it took damage; tunnels now stop at water next to a block as well as lava |
+| Full inventory | ✅ made, placed and filled a chest by itself (crafting table put down and picked back up); ❌→fixed: it put the chest in the middle of the tunnel and stored ~21 stacks including all its coal and the iron it was mining. Now: a 2-high niche in the tunnel's side wall, only the cheapest ~4 stacks, and coal, sticks, logs and the job's ore stay (not yet re-tested) |
+| "Do you have raw iron?" after storing | ❌→fixed: "My inventory is empty"; now names what it carries and what it put in which chest |
+| Following you up high | ❌→fixed: built an 8-block pillar; pillaring is now only for reaching a block up high (a treetop) |
+| Scaffolding cleanup | ✅ "Took down 2/1/3 block(s) of my scaffolding" when idle |
+| Replanting | ✅ "Replanted 1 tree (1 oak)"; ❌→fixed: it kept walking off to replant right after being called; idle chores now stay within 16 blocks of the owner |
+| Beds | ✅ "use this bed" slept there; after dying, "go to sleep" walked back to that bed; with no bed around it said so |
+| Give | ✅ "give me 20 coal" gave 20; ❌→fixed: "give me 1/2 of ur coal" only listed the inventory; give now takes a share |
+| Broken pickaxe | ❌→fixed: it stood still until the owner stepped in; it now crafts the best pickaxe it can and goes on |
+| "stop, craft pickaxe" | ❌→fixed: only stopped; every tool the model calls now runs, in order |
+| Collect count | ❌→fixed: "Collected 6" after getting 3; now "Collected 3 of 6" |
+| Night fight in a cave | ❌→fixed: died fighting a skeleton and zombie from 16 health to 0; now backs off at 4 hearts and fights again once healed or cornered (not yet re-tested) |
+| Getting its things back | ❌→fixed: stopped on the surface 20 blocks above the cave it died in; now walks down or tunnels down to the spot |
+| Hunting | "hunt" saw no animals; "hunt cow" saw 1 and left it to breed. Now a named kind asks "Hunt it anyway?", and the log lists animals out of sight |
+| Thanks for gifts | ❌→fixed: thanked the owner for its own pickups (rotten flesh, dirt); now only items that appear at the owner's hands (thrown) count |
+
+### Next run: re-test these
+
+| # | Do this | Expect |
+|---|---|---|
+| 1 | Fill its inventory while it mines underground | A 2-high niche in the tunnel wall holds the chest; about 4 cheap stacks go in; it keeps coal and the ore |
+| 2 | "follow me" and climb a cliff | It walks around; no pillar |
+| 3 | Let it fight mobs at night until it's hurt | "I'm badly hurt, backing off!", it runs, then comes back |
+| 4 | "give me half your coal" | Half of what it carries |
+| 5 | "stop, craft a torch" while it's busy | It stops, then crafts |
+| 6 | Throw it an item, then let it pick up a zombie's drop | Thanks only for the thrown item |
+
 ### Phase 1 closing checks (not yet run)
 
 | # | Do this | Expect |
@@ -106,7 +139,7 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | 4 | Lead it through a door it can't open (adventure mode or a protected spot) | "The door … won't open; finding another way", and no digging |
 | 5 | Restart the server while it's fighting or dodging a creeper | It rejoins idle; the old task doesn't keep moving it |
 
-## Phase 2: Catalog and identifiers (not yet run)
+## Phase 2: Catalog and identifiers (#1 done: "mine 15 ore" asked which ore, "iron ore" mined; the rest not yet run)
 
 | # | Do this | Expect |
 |---|---|---|

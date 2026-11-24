@@ -5,7 +5,9 @@ import { bot } from "../core/body";
 import { collectBlock } from "../actions/collectBlock";
 
 export const description = `The user asks the bot to collect a certain number of blocks of a specific type. The bot will 
-search for and collect the specified blocks. Example: "Collect 5 diamonds", "Gather 10 iron ore"`;
+search for and collect the specified blocks. Example: "Collect 5 diamonds", "Gather 10 iron ore".
+Only for mining blocks out of the world: items lying on the ground are pickupNearbyItems, planting saplings is
+plantSaplings, wood is gatherWood.`;
 
 // Define parameters for the CollectBlock action
 export const parameters = z.object({
@@ -31,11 +33,10 @@ export async function execute(args: any) {
   const { blockType, num } = parsed.data;
   const range = parsed.data.range ?? 16;
 
-  const result = await collectBlock(blockType, num, range);
-
-  if (result) {
-    bot.chat(`Collected ${num} ${blockType}.`);
-  } else {
-    bot.chat(`Failed to collect ${num} ${blockType}.`);
-  }
+  const got = await collectBlock(blockType, num, range);
+  const pretty = blockType.replace(/_/g, " ");
+  // Say what it really got: a stop or a broken tool can end it early
+  if (got >= num) bot.chat(`Collected ${got} ${pretty}.`);
+  else if (got > 0) bot.chat(`Collected ${got} of ${num} ${pretty}.`);
+  else bot.chat(`I couldn't collect any ${pretty}.`);
 }

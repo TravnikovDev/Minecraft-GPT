@@ -1,6 +1,8 @@
 // Path: src/commands/RecoverItems.ts
 
 import { z } from "zod";
+import { Vec3 } from "vec3";
+import { tunnelTo } from "../actions/digging";
 import { bot } from "../core/body";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/worldInteraction";
@@ -44,6 +46,19 @@ export async function execute(): Promise<void> {
       : await goToPosition(p.x, p.y, p.z, 2);
   if (isCommandCancelled()) return;
 
+  // The long trip stops above the spot (it measures across, not down): died
+  // in a cave below, so walk down to it, or tunnel down like a miner
+  let reached = arrived;
+  const below = new Vec3(p.x, p.y, p.z).floored();
+  if (Math.abs(bot.entity.position.y - p.y) > 3) {
+    reached = await goToPosition(p.x, p.y, p.z, 2);
+    if (!reached && !isCommandCancelled()) {
+      tellOwner(`I died down in a cave ${Math.round(bot.entity.position.y - p.y)} blocks below; digging down to my things.`);
+      reached = await tunnelTo(below, "place where I died");
+    }
+    if (isCommandCancelled()) return;
+  }
+
   // A few passes: items scatter and some land a few blocks away
   for (let pass = 0; pass < 3; pass++) {
     await pickupNearbyItems(bot, 12);
@@ -55,7 +70,7 @@ export async function execute(): Promise<void> {
   clearLastDeath();
   if (gained > 0) {
     tellOwner(`Got my things back (${gained} items).`);
-  } else if (arrived) {
+  } else if (reached) {
     tellOwner("I couldn't find my things here; they may have burned or despawned.");
   } else {
     tellOwner("I couldn't get back to where I died.");

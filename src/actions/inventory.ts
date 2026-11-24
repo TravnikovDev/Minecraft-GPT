@@ -1,11 +1,10 @@
-// src/utils/inventory.ts
-
-// src/utils/inventory.ts
-import type { Bot } from "mineflayer";
-import * as world from "./world.js";
-import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
+// Path: src/actions/inventory.ts
+// The bot's own inventory: equipping, discarding, eating, giving, listing and
+// counting items. Chests are in actions/storage.ts.
+import { goToPlayer } from "./movement";
 import { Item } from "prismarine-item";
 import { bot } from "../core/body";
+import { tossing } from "./pickup";
 import { catalog } from "../core/catalog";
 import type { InventoryItemType } from "../schemas/types.js";
 
@@ -33,7 +32,7 @@ export async function equip(itemName: string): Promise<boolean> {
  * @param num The number of items to discard. Default is -1 for all.
  * @returns Whether the item was successfully discarded.
  */
-export async function discard(itemName: string, num = -1): Promise<boolean> {
+export async function discard(itemName: string, num = -1, { pickUpLater = false } = {}): Promise<boolean> {
   // Exact name or category: discarding "stone" must never toss a stone pickaxe
   const matches = itemMatcher(itemName);
   let discarded = 0;
@@ -44,7 +43,7 @@ export async function discard(itemName: string, num = -1): Promise<boolean> {
     }
     const toDiscard =
       num === -1 ? item.count : Math.min(num - discarded, item.count);
-    await bot.toss(item.type, null, toDiscard);
+    await tossing(() => bot.toss(item.type, null, toDiscard), { pickUpLater });
     discarded += toDiscard;
     if (num !== -1 && discarded >= num) {
       break;
@@ -58,77 +57,7 @@ export async function discard(itemName: string, num = -1): Promise<boolean> {
   return true;
 }
 
-export async function putInChest(itemName: string, num = -1): Promise<boolean> {
-  const chest = world.getNearestBlock("chest", 32);
-  if (!chest) {
-    console.log(`Could not find a chest nearby.`);
-    return false;
-  }
-  const matches = itemMatcher(itemName);
-  const item = bot.inventory.items().find((item) => matches(item.name));
-  if (!item) {
-    console.log(`You do not have any ${itemName} to put in the chest.`);
-    return false;
-  }
-  const toPut = num === -1 ? item.count : Math.min(num, item.count);
-  await goToPosition(chest.position.x, chest.position.y, chest.position.z);
-  const chestContainer = await bot.openContainer(chest);
-  await chestContainer.deposit(item.type, null, toPut);
-  await chestContainer.close();
-  console.log(`Successfully put ${toPut} ${itemName} in the chest.`);
-  return true;
-}
 
-export async function takeFromChest(
-  itemName: string,
-  num = -1
-): Promise<boolean> {
-  const chest = world.getNearestBlock("chest", 32);
-  if (!chest) {
-    console.log(`Could not find a chest nearby.`);
-    return false;
-  }
-  await goToPosition(chest.position.x, chest.position.y, chest.position.z);
-  const chestContainer = await bot.openContainer(chest);
-  const matches = itemMatcher(itemName);
-  const item = chestContainer.containerItems().find((item) => matches(item.name));
-  if (!item) {
-    console.log(`Could not find any ${itemName} in the chest.`);
-    await chestContainer.close();
-    return false;
-  }
-  const toTake = num === -1 ? item.count : Math.min(num, item.count);
-  await chestContainer.withdraw(item.type, null, toTake);
-  await chestContainer.close();
-  console.log(`Successfully took ${toTake} ${itemName} from the chest.`);
-  return true;
-}
-
-/**
- * View the contents of a chest near the bot.
- * @param bot
- * @returns
- */
-export async function viewChest(bot: Bot): Promise<boolean> {
-  const chest = world.getNearestBlock("chest", 32);
-  if (!chest) {
-    console.log(`Could not find a chest nearby.`);
-    return false;
-  }
-  await goToPosition(chest.position.x, chest.position.y, chest.position.z);
-  const chestContainer = await bot.openContainer(chest);
-  const items = chestContainer.containerItems();
-  if (items.length === 0) {
-    console.log(`The chest is empty.`);
-  } else {
-    console.log(`The chest contains:`);
-    for (const item of items) {
-      console.log(`${item.count} ${item.name}`);
-    }
-  }
-  await chestContainer.close();
-  return true;
-}
 
 /**
  * Ask to bot to eat a food item from its inventory.
@@ -182,7 +111,7 @@ export async function giveToPlayer(
     const item = bot.inventory.items().find((i) => i.name === itemType);
     if (!item) break;
     const n = Math.min(num - given, item.count);
-    await bot.toss(item.type, null, n);
+    await tossing(() => bot.toss(item.type, null, n));
     given += n;
   }
   console.log(`Gave ${given} of ${num} ${itemType} to ${username}.`);
@@ -214,7 +143,16 @@ export async function checkForItem(itemName: string): Promise<void> {
   const searchableItems = items.filter(
     (item) => matches(item.name) || words.every((w) => item.name.split("_").includes(w))
   );
-  sayItems(searchableItems);
+  // Also where it put some away, so "do you have iron?" isn't answered "my inventory is empty"
+  const { whereStored } = await import("./storage");
+  const stored = whereStored(itemName);
+  const inChests = stored.length > 0 ? ` I put ${stored.join("; ")}.` : "";
+  if (searchableItems.length === 0) {
+    bot.chat(`I don't have any ${itemName.replace(/_/g, " ")} on me.${inChests}`);
+    return;
+  }
+  const output = searchableItems.map((item) => `${item.name} x ${item.count}`).join(", ");
+  bot.chat(`I have ${output}.${inChests}`);
 }
 
 export async function sayItems(items: Array<Item> | null = null) {
@@ -231,46 +169,6 @@ export async function sayItems(items: Array<Item> | null = null) {
   }
 }
 
-/**
- * Find the number of free slots in the bot's inventory.
- * @param bot
- * @returns
- */
-export function checkFreeSpace(): number {
-  const totalSlots = bot.inventory.slots.length;
-  const usedSlots = bot.inventory.items().length;
-  const freeSlots = totalSlots - usedSlots;
-  console.log(`You have ${freeSlots} free slots in your inventory.`);
-  return freeSlots;
-}
-
-/**
- * Transfer all items from the bot's inventory to a chest.
- * @param bot
- * @returns
- */
-export async function transferAllToChest(): Promise<boolean> {
-  const chest = world.getNearestBlock("chest", 32);
-  if (!chest) {
-    console.log(`Could not find a chest nearby.`);
-    return false;
-  }
-  await goToPosition(chest.position.x, chest.position.y, chest.position.z);
-  const chestContainer = await bot.openContainer(chest);
-
-  for (const item of bot.inventory.items()) {
-    await chestContainer.deposit(item.type, null, item.count);
-    console.log(`Put ${item.count} ${item.name} in the chest.`);
-  }
-  await chestContainer.close();
-  return true;
-}
-
-/**
- * Utility function to get item count in inventory
- * @param itemName - The name of the item to count.
- * @returns number
- */
 /**
  * How many of an item the bot carries: an exact name ("stick", "chest"), or a
  * Catalog category ("planks", "logs", "pickaxe", "axe", "food"). Never a
@@ -300,23 +198,3 @@ export function itemMatcher(itemName: string): (name: string) => boolean {
   return one.ok ? (item) => item === one.name : () => false; // plural ("torches")
 }
 
-/**
- * Organize the bot's inventory.
- * @param bot
- * @returns
- */
-export async function organizeInventory(): Promise<void> {
-  const items = bot.inventory.items();
-  if (items.length === 0) {
-    console.log(`Inventory is empty, nothing to organize.`);
-    return;
-  }
-
-  for (const item of items) {
-    await bot.moveSlotItem(
-      item.slot,
-      bot.inventory.findInventoryItem(item.type, null, false)?.slot ?? item.slot
-    );
-  }
-  console.log(`Inventory has been organized.`);
-}

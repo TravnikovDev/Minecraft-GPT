@@ -10,6 +10,7 @@ import {
   getNearestFreeSpace,
 } from "./world"; // Assuming these are imported from your helpers
 import { __actionsDelay } from "../utils/utility";
+import { isCommandCancelled } from "../core/commandContext";
 
 export async function ensureLocation(
   radius: number = 120,
@@ -35,6 +36,7 @@ export async function ensureLocation(
 
   while (true) {
     await __actionsDelay(1000); // Delay to avoid spamming the server
+    if (isCommandCancelled()) throw new Error("Cancelled"); // "stop" ends the search
 
     // Initialize resource counters
     let woodCount = 0;
