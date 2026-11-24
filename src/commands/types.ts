@@ -30,6 +30,7 @@ enum BotCommands {
   DiscardItem = "discardItem",
   GiveItemToAPlayer = "giveItemToAPlayer",
   TellLocation = "tellLocation",
+  DescribeSurroundings = "describeSurroundings",
   UseNearbyObject = "useNearbyObject",
   DeployVehicle = "deployVehicle",
   Stop = "stop",

@@ -2,7 +2,9 @@
 
 import { z } from "zod";
 import { bot } from "../index";
-import { goToPosition, goToPlayer } from "../actions/movement";
+import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
+import { isCommandCancelled } from "../managers/actionManager";
+import { tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
 import { Movements } from "mineflayer-pathfinder";
 import { unstuck } from "../actions/unstuck";
@@ -33,7 +35,14 @@ export async function execute(args: any = {}) {
   if (player_name) {
     targetPlayer = bot.players[player_name]?.entity;
     if (!targetPlayer) {
-      bot.chat(`Could not find player ${player_name}. They might be too far away or offline.`);
+      if (bot.players[player_name]) {
+        // Online but out of sight: ask for coordinates, which the fast path turns into a trip
+        tellOwner(
+          `I can't see you from here. Tell me your coordinates (press F3), like: come to 100 64 -200`
+        );
+      } else {
+        bot.chat(`Could not find player ${player_name}. They might be offline.`);
+      }
       return;
     }
   } else {
@@ -53,6 +62,25 @@ export async function execute(args: any = {}) {
   if (!targetName) {
     bot.chat(`Could not determine the target player's name.`);
     return;
+  }
+
+  // Far away but visible: travel in legs toward wherever the player is now
+  const distance = targetPlayer.position.distanceTo(bot.entity.position);
+  if (distance > LONG_TRIP_BLOCKS) {
+    tellOwner(`Coming! You're about ${Math.round(distance)} blocks away.`);
+    const arrived = await travelTo(
+      () => {
+        const p = bot.players[targetName]?.entity;
+        return p ? { x: p.position.x, y: p.position.y, z: p.position.z } : null;
+      },
+      { range: closeness, onProgress: (percent) => tellOwner(`Coming: ${percent}% of the way.`) }
+    );
+    if (isCommandCancelled()) return;
+    if (arrived) {
+      tellOwner("I'm here!");
+      return;
+    }
+    // Fall through to the short-range methods below
   }
 
   bot.chat(`Heading towards ${targetName}.`);

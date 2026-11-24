@@ -14,6 +14,7 @@ import {
 } from "./actionManager";
 import { executeTool } from "./toolManager";
 import { addCommandToQueue, getAllCommands } from "./persistenceManager";
+import { answerPending, hasPendingQuestion } from "./ownerDialog";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
 // message (allowing "please", the bot's name and trailing punctuation).
@@ -23,6 +24,11 @@ const STOP = new RegExp(`${PREFIX}(?:stop|halt|freeze|stand still)(?:\\s+(?:it|n
 const COME = new RegExp(`${PREFIX}(?:come(?:\\s+(?:here|to me|back))?)${SUFFIX}`, "i");
 const FOLLOW = new RegExp(`${PREFIX}(?:follow me)${SUFFIX}`, "i");
 const STATUS = new RegExp(`${PREFIX}(?:status|what are you doing|what're you doing|whats up|what's up)${SUFFIX}`, "i");
+const WHERE = new RegExp(`${PREFIX}(?:where are you|where r u|how far are you|how far away are you|your location|location)${SUFFIX}`, "i");
+const YES = new RegExp(`${PREFIX}(?:yes|yeah|yep|yup|sure|ok|okay|go|go ahead|do it|please do)${SUFFIX}`, "i");
+const NO = new RegExp(`${PREFIX}(?:no|nope|nah|don't|do not|cancel|never mind|nevermind)${SUFFIX}`, "i");
+// "come to 505 67 -1085", "go to x=505 y=67 z=-1085", "I'm at 505, 67, -1085" or just "505 67 -1085"
+const COORDS = /^(?:(?:please\s+)?(?:come|go|walk|travel)\s+(?:to\s+)?|i'?m\s+at\s+|i\s+am\s+at\s+)?\s*x?\s*[:=]?\s*(-?\d+)[\s,]+y?\s*[:=]?\s*(-?\d+)[\s,]+z?\s*[:=]?\s*(-?\d+)\s*[!.]*$/i;
 
 /** True if this username is the configured owner (usernames are case-insensitive). */
 export function isOwner(username: string): boolean {
@@ -58,6 +64,34 @@ async function statusMessage(): Promise<string> {
 
 /** Handles the owner's simple commands. Returns true if the message was handled. */
 async function tryFastPath(message: string): Promise<boolean> {
+  // Answers to a question the bot asked ("Should I go get the wool?")
+  if (hasPendingQuestion()) {
+    if (YES.test(message)) return answerPending(true);
+    if (NO.test(message)) return answerPending(false);
+  }
+
+  const coords = COORDS.exec(message);
+  if (coords) {
+    const [x, y, z] = coords.slice(1, 4).map(Number) as [number, number, number];
+    console.log(`Fast path: go to ${x} ${y} ${z}`);
+    await cancelCurrentCommand("owner gave coordinates");
+    await addCommandToQueue({
+      id: crypto.randomUUID(),
+      command: BotCommands.GoToCoordinates,
+      priority: 1,
+      retryCount: 0,
+      args: { x, y, z },
+    });
+    bot.chat(`On my way to ${x}, ${y}, ${z}!`);
+    return true;
+  }
+
+  if (WHERE.test(message)) {
+    console.log("Fast path: where");
+    await executeTool(BotCommands.TellLocation, {});
+    return true;
+  }
+
   if (STOP.test(message)) {
     console.log("Fast path: stop");
     await stopEverything();

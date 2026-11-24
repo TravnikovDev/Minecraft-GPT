@@ -6,8 +6,29 @@ import { bot } from "..";
 import { BotCommands, isBotAction } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
 import { addCommandToQueue } from "./persistenceManager";
-import { stopEverything } from "./actionManager";
+import { getCurrentCommandName, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
+import { directionFromOwner, ownerDistance } from "./ownerDialog";
+
+// Questions answered from current state: they run immediately, even while the
+// bot is busy with something else, instead of waiting in the queue
+const INSTANT_COMMANDS = new Set<string>([
+  BotCommands.TellLocation,
+  BotCommands.ListInventory,
+  BotCommands.CheckForItem,
+  BotCommands.DescribeSurroundings,
+]);
+
+/** One line of real state for the model, so its chat answers are grounded. */
+function stateLine(): string {
+  const pos = bot.entity?.position;
+  const where = pos ? `${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}` : "unknown";
+  const dist = ownerDistance();
+  const owner = dist === null ? "not visible" : `${Math.round(dist)} blocks away (bot is ${directionFromOwner()} of owner)`;
+  const task = getCurrentCommandName() ?? "idle";
+  const held = bot.heldItem?.name ?? "nothing";
+  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
+}
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -54,7 +75,7 @@ export async function sendMessageToOpenAI(
           role: "system",
           content: setupMessage,
         },
-        { role: "user", content: `${username}: ${userMessage}` },
+        { role: "user", content: `${stateLine()}\n${username}: ${userMessage}` },
       ],
       tools: tools,
     });
@@ -144,6 +165,23 @@ export async function initiateActionFromAI(
           if (MINECRAFT_ID_ARGS.has(key) && typeof value === "string") {
             toolAction.arguments[key] = normalizeMinecraftName(value);
           }
+        }
+
+        if (INSTANT_COMMANDS.has(toolAction.action)) {
+          // Answer right away, without interrupting the running task
+          if (response) bot.chat(response);
+          try {
+            await executeTool(toolAction.action, toolAction.arguments);
+          } catch (error) {
+            console.error(`Instant command ${toolAction.action} failed:`, error);
+          }
+          return;
+        }
+
+        // Tell the owner when the request has to wait for the current task
+        const busyWith = getCurrentCommandName();
+        if (busyWith && !response) {
+          bot.chat(`Okay, I'll do that after I finish ${busyWith}.`);
         }
         // Log for debugging
         console.log(

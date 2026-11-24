@@ -14,6 +14,7 @@ import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
+import { registerOwnerUpdates } from "./actions/ownerUpdates";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going
@@ -98,6 +99,9 @@ function initializeBot(currentBot: mineflayer.Bot): void {
 
   // Health monitoring for self-defense (listener lives on this bot instance)
   monitorHealth();
+
+  // Personal updates to the owner (pickups, armor) and weapon-in-hand
+  registerOwnerUpdates();
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 }
