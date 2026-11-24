@@ -4,6 +4,7 @@ import { z } from "zod";
 import { giveToPlayer } from "../actions/inventory";
 import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
+import { takeOffArmor, wornArmor } from "../actions/armor";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
 When no amount is said ("give me dark oak", "give me your wood"), it gives all it has of that item.
@@ -32,11 +33,20 @@ export async function execute(args: any) {
   }
 
   let { player_name, item_name, num } = parsed.data;
-  // No amount said: give all of it
-  if (!num) {
-    const carried = bot.inventory.items().filter((i) => i.name === item_name).reduce((n, i) => n + i.count, 0);
-    num = carried > 0 ? carried : 1;
+  const pretty = item_name.replace(/_/g, " ");
+  let carried = bot.inventory.items().filter((i) => i.name === item_name).reduce((n, i) => n + i.count, 0);
+
+  // Worn armor isn't in the bag: take it off first so it can be handed over
+  if (carried === 0 && wornArmor().includes(item_name)) {
+    if (await takeOffArmor(item_name)) carried = 1;
   }
+  if (carried === 0) {
+    bot.chat(`I don't have any ${pretty}.`);
+    return;
+  }
+  // No amount said: give all of it
+  if (!num) num = carried;
+  num = Math.min(num, carried);
 
   let theName;
   if (player_name) {

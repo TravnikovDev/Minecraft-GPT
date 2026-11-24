@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { listInventory } from "../actions/inventory";
 import { syncInventory } from "../managers/persistenceManager";
+import { bot } from "../core/body";
+import { wornArmor } from "../actions/armor";
 
 export const description = `When user asks the bot to list its inventory, the bot will list all the items in its inventory.
 Example: "List inventory", "What do you have?", "Show me your inventory".`;
@@ -13,5 +15,7 @@ export const parameters = z.object({});
 // Implement the ListInventory action
 export async function execute() {
   const items = await listInventory();
+  const worn = wornArmor();
+  if (worn.length > 0) bot.chat(`Wearing: ${worn.map((n) => n.replace(/_/g, " ")).join(", ")}.`);
   await syncInventory(items);
 }

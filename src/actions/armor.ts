@@ -24,3 +24,23 @@ export async function wearBestArmor(): Promise<string[]> {
   }
   return wornArmor();
 }
+
+const SLOT_FOR: Record<string, "head" | "torso" | "legs" | "feet"> = {
+  helmet: "head",
+  chestplate: "torso",
+  leggings: "legs",
+  boots: "feet",
+};
+
+/** Takes off a worn armor piece into the inventory (e.g. to give it away). */
+export async function takeOffArmor(name: string): Promise<boolean> {
+  const slot = SLOT_FOR[name.slice(name.lastIndexOf("_") + 1)];
+  if (!slot || !wornArmor().includes(name)) return false;
+  try {
+    await bot.unequip(slot);
+    return bot.inventory.items().some((i) => i.name === name);
+  } catch (error) {
+    console.log(`Taking off ${name} failed: ${(error as Error).message}`);
+    return false;
+  }
+}
