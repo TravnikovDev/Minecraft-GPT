@@ -8,7 +8,8 @@ Expected usage:
 - "Use the nearby boat" or "Get in the minecart" or "Exit the boat" or "Get out of minecart"
 - "Press the button" or "Pull the lever" or "Toggle the lever" or "Switch off the lever"
 - "Open the door" or "Open the chest" or "Use the crafting table"
-- "Ride the horse" or "Mount the camel" or "Get on the pig" or "Dismount the animal"`;
+- "Ride the horse" or "Mount the camel" or "Get on the pig" or "Dismount the animal"
+Not for beds or sleeping (use sleep) and not for putting items down (use placeItem).`;
 
 // Define parameters for the UseNearbyObject action
 export const parameters = z.object({

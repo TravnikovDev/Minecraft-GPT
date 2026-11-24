@@ -33,6 +33,8 @@ enum BotCommands {
   DescribeSurroundings = "describeSurroundings",
   RecoverItems = "recoverItems",
   StarterKit = "starterKit",
+  Sleep = "sleep",
+  PlaceItem = "placeItem",
   UseNearbyObject = "useNearbyObject",
   DeployVehicle = "deployVehicle",
   Stop = "stop",

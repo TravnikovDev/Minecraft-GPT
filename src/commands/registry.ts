@@ -37,6 +37,8 @@ import * as TellLocation from "./TellLocation";
 import * as DescribeSurroundings from "./DescribeSurroundings";
 import * as RecoverItems from "./RecoverItems";
 import * as StarterKit from "./StarterKit";
+import * as Sleep from "./Sleep";
+import * as PlaceItem from "./PlaceItem";
 import * as UseNearbyObject from "./UseNearbyObject";
 import * as DeployVehicle from "./DeployVehicle";
 
@@ -79,6 +81,8 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.DescribeSurroundings]: DescribeSurroundings,
   [BotCommands.RecoverItems]: RecoverItems,
   [BotCommands.StarterKit]: StarterKit,
+  [BotCommands.Sleep]: Sleep,
+  [BotCommands.PlaceItem]: PlaceItem,
   [BotCommands.UseNearbyObject]: UseNearbyObject,
   [BotCommands.DeployVehicle]: DeployVehicle,
   [BotCommands.Stop]: Stop,
