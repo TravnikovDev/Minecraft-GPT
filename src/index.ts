@@ -8,7 +8,8 @@ import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
-import { bot, connect, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
+import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
+import { trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
@@ -123,6 +124,9 @@ onBotCreated((currentBot) => {
   // Chat and whispers go through the gateway: owner only, fast path first
   listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message));
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message));
+  // Keep the owner's position fresh, so "come here" works after a death or
+  // restart takes the bot out of sight
+  everyWhileConnected(currentBot, 5000, trackOwnerPosition);
 
   listen(currentBot, "playerJoined", (player: mineflayer.Player) => {
     if (player.username === currentBot.username) return;

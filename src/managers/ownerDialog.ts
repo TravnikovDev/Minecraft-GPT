@@ -33,6 +33,12 @@ export function rememberOwnerPosition(x: number, y: number, z: number, typed = f
   void saveOwnerPosition({ x, y, z, at: Date.now() }, typed);
 }
 
+/** Saves where the owner is while the bot can see them (saving is throttled). */
+export function trackOwnerPosition(): void {
+  const seen = ownerEntity();
+  if (seen) rememberOwnerPosition(seen.position.x, seen.position.y, seen.position.z);
+}
+
 /** The owner's last known position (within 30 minutes), or null. */
 export function lastKnownOwnerPosition(): { x: number; y: number; z: number } | null {
   const seen = ownerEntity();
