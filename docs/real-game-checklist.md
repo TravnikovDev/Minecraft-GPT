@@ -53,6 +53,20 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 
 **Notes:** the offline login works on this LAN world. After a restart the bot may be far from the owner; `come here` only works within walking range until long trips are split into legs (Phase 3).
 
+### Owner-feedback run: 2026-11-24, second session (same world)
+
+| Check | Result |
+|---|---|
+| 13: death and respawn | ✅ killed twice (creeper; a fall), respawned by itself and kept listening |
+| 6: commands without OpenAI | ✅ on the local server with OpenAI unreachable: stop/status/come instant, AI requests answered with a polite error |
+| 10: "you're stuck, move away" | ⬜ the request waited behind wood gathering and was then cleared by `stop`; now fixed to interrupt (commit f2fbf24), needs one more try |
+| "where are you" while busy | ✅ instant, with distance and direction |
+| Out of sight: asks for coordinates | ✅ whisper asks for F3 coordinates; `X Y Z` starts the trip without the LLM |
+| Long trip with progress | ✅ ~1,200 blocks in legs, whispers at 20/40/60/80 %, arrives on the ground |
+| Personal updates | ✅ "Got 14 cooked porkchop, thanks!", "I'm wearing golden boots now." |
+| Smart crafting | ✅ makes sticks itself, picks stone over wood for "pickaxe", crafts its own table, asks before gathering missing wool |
+| Chat pacing | ✅ no more `disconnect.spam` kicks after pacing chat to 1.2 s |
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.
