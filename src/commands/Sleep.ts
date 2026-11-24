@@ -48,11 +48,23 @@ export async function execute(): Promise<void> {
   await goToPosition(bed.position.x, bed.position.y, bed.position.z, 2);
   if (isCommandCancelled()) return;
 
+  const where = `${bed.position.x}, ${bed.position.y}, ${bed.position.z}`;
   try {
     await bot.sleep(bed);
     bot.chat("Good night! I'll wake up in the morning.");
   } catch (error) {
-    const where = `${bed.position.x}, ${bed.position.y}, ${bed.position.z}`;
-    bot.chat(`${whyNoSleep((error as Error).message)} My bed is at ${where}.`);
+    const message = (error as Error).message;
+    // mineflayer refuses daytime sleep without touching the bed, so the spawn
+    // point is never set. Using the bed by day still sets it on the server.
+    if (/not night/i.test(message)) {
+      try {
+        await bot.activateBlock(bed);
+        bot.chat(`It's daytime, so I can't sleep yet, but I set my spawn point at my bed (${where}).`);
+        return;
+      } catch (activateError) {
+        console.error("Using the bed to set the spawn point failed:", activateError);
+      }
+    }
+    bot.chat(`${whyNoSleep(message)} My bed is at ${where}.`);
   }
 }

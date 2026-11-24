@@ -99,8 +99,22 @@ on("bot:spawned", () => {
   if (takeRecoveryPending()) void startRecovery(bot);
 });
 
+// Recent hits, so a death in the log shows what caused it
+const recentDamage: string[] = [];
+on("bot:damaged", ({ amount, health }) => {
+  const nearest = bot.nearestEntity((e) => e.type !== "object" && e !== bot.entity && e.position.distanceTo(bot.entity.position) < 8);
+  const near = nearest ? `${nearest.name ?? nearest.username ?? nearest.type} ${nearest.position.distanceTo(bot.entity.position).toFixed(1)}m away` : "nothing near";
+  const block = bot.blockAt(bot.entity.position)?.name ?? "?";
+  const line = `Took ${amount.toFixed(1)} damage (health ${health.toFixed(1)}) at ${bot.entity.position.floored()} in ${block}, ${near}, falling ${bot.entity.velocity.y.toFixed(2)}`;
+  console.log(line);
+  recentDamage.push(line);
+  if (recentDamage.length > 4) recentDamage.shift();
+});
+
 on("bot:died", ({ position }) => {
   console.log(`Bot died${position ? ` at ${position.floored()}` : ""}; it will respawn automatically.`);
+  if (recentDamage.length) console.log(`Last hits before death:\n  ${recentDamage.join("\n  ")}`);
+  recentDamage.length = 0;
   recordDeath();
 });
 
