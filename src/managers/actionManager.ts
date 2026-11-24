@@ -16,6 +16,17 @@ import { unstuck } from "../actions/unstuck";
 
 // Constants for action monitoring
 const MAX_ACTION_EXECUTION_TIME = 5 * 60 * 1000; // Cancel any command running longer than 5 minutes
+// Long trips and gathering legitimately take longer; the stuck watcher still
+// catches a command that stops making progress
+const LONG_RUNNING_LIMITS: Record<string, number> = {
+  goToCoordinates: 30 * 60 * 1000,
+  goToPlayer: 30 * 60 * 1000,
+  goToNamedLocation: 30 * 60 * 1000,
+  returnToBase: 30 * 60 * 1000,
+  gatherWood: 15 * 60 * 1000,
+  collectBlocks: 15 * 60 * 1000,
+  hunting: 10 * 60 * 1000,
+};
 const ACTION_CHECK_INTERVAL = 5000; // Check action progress every 5 seconds
 const STUCK_THRESHOLD = 3;          // Number of consecutive checks without movement to trigger unstuck
 const MAX_RECOVERIES_PER_COMMAND = 2; // Cancel the command if it is still stuck after this many unstuck attempts
@@ -175,7 +186,8 @@ async function checkActionProgress() {
   const executionTime = currentTime - actionStartTime;
   
   // Check if action has exceeded maximum execution time
-  if (executionTime > MAX_ACTION_EXECUTION_TIME) {
+  const limit = LONG_RUNNING_LIMITS[currentCommand.command] ?? MAX_ACTION_EXECUTION_TIME;
+  if (executionTime > limit) {
     console.log(`Action ${currentCommand.command} has timed out after ${executionTime}ms. Cancelling.`);
     bot.chat(`That took too long, so I stopped doing ${currentCommand.command}.`);
     await cancelCurrentCommand("timed out");

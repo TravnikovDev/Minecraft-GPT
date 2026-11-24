@@ -22,6 +22,11 @@ export const parameters = z.object({
 });
 
 const pretty = (name: string): string => name.replace(/_/g, " ");
+
+// When the bot last went to gather materials for an item; if the retry still
+// lacks them, it explains instead of asking the same question again
+const GATHER_MEMORY_MS = 5 * 60 * 1000;
+const lastGatherFor = new Map<string, number>();
 const listOf = (items: CraftStep[]): string => items.map((m) => `${m.count} ${pretty(m.name)}`).join(", ");
 
 /** The command that gathers a missing raw material, or null if the bot can't yet. */
@@ -70,8 +75,19 @@ export async function execute(args: any): Promise<void> {
       return;
     }
 
+    const triedAt = lastGatherFor.get(item);
+    if (triedAt && Date.now() - triedAt < GATHER_MEMORY_MS) {
+      lastGatherFor.delete(item);
+      const hint = plan.missing.some((m) => m.name.endsWith("_wool"))
+        ? " I couldn't find enough sheep nearby; you could give me the wool."
+        : " I couldn't find enough nearby; you could give them to me.";
+      bot.chat(`${need}${hint}`);
+      return;
+    }
+
     askOwner(`${need} Should I go get them?`, async () => {
       tellOwner("Okay, going to get them!");
+      lastGatherFor.set(item, Date.now());
       for (const { gather } of gathers) {
         await addCommandToQueue({
           id: crypto.randomUUID(),

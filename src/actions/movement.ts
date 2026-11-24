@@ -48,11 +48,17 @@ export async function travelTo(
         options.onProgress?.(percent);
       }
 
-      // Last stretch: an exact goal (with height when known)
+      // Close enough horizontally: arrived. The owner's y is often approximate
+      // (e.g. 100 for ground at 70), so never insist on reaching an exact height.
+      if (remaining <= range + 1) return true;
+
+      // Last stretch: walk to the spot on the ground. Use the height only when
+      // it is close to the bot's own level; otherwise aim for x/z alone.
       if (remaining <= LEG_BLOCKS) {
         try {
-          const goal = target.y !== null
-            ? new pf.goals.GoalNear(target.x, target.y, target.z, range)
+          const useHeight = target.y !== null && Math.abs(target.y - pos.y) <= 6;
+          const goal = useHeight
+            ? new pf.goals.GoalNear(target.x, target.y!, target.z, range)
             : new pf.goals.GoalNearXZ(target.x, target.z, range);
           await bot.pathfinder.goto(goal);
           return true;
