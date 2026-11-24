@@ -15,7 +15,8 @@ import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { isCommandCancelled, trackCleanup } from "../core/commandContext";
-import { pathing } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { expectOk } from "../core/result";
 
 /** Trips at least this long make the bot get a boat before it sets off. */
 export const BOAT_TRIP_BLOCKS = 150;
@@ -295,7 +296,7 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
 
   if (bot.entity.position.distanceTo(water.offset(0.5, 1, 0.5)) > 3.5) {
     try {
-      await pathing.goto(new pf.goals.GoalNear(water.x, water.y + 1, water.z, 2));
+      expectOk(await goTo(new pf.goals.GoalNear(water.x, water.y + 1, water.z, 2)));
     } catch (error) {
       console.log(`Boat: couldn't get to the water at ${water} (${(error as Error).message}).`);
       return null;
@@ -318,7 +319,7 @@ async function launchBoat(target: XZ): Promise<{ boat: Entity; surfaceY: number 
   for (let attempt = 0; attempt < 3 && !bot.vehicle; attempt++) {
     if (bot.entity.position.distanceTo(boat.position) > 2.5) {
       try {
-        await pathing.goto(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 1));
+        expectOk(await goTo(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 1)));
       } catch {
         // close enough to try anyway
       }
@@ -351,7 +352,7 @@ async function boardNearbyBoat(): Promise<{ boat: Entity; surfaceY: number } | n
   for (let attempt = 0; attempt < 3 && !bot.vehicle; attempt++) {
     if (bot.entity.position.distanceTo(boat.position) > 2.5) {
       try {
-        await pathing.goto(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 1));
+        expectOk(await goTo(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 1)));
       } catch {
         // close enough to try anyway
       }
@@ -423,7 +424,7 @@ async function pickUpBoat(boat: Entity): Promise<void> {
   for (let hit = 0; hit < 12 && bot.entities[boat.id]; hit++) {
     if (bot.entity.position.distanceTo(boat.position) > 3) {
       try {
-        await pathing.goto(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 2));
+        expectOk(await goTo(new pf.goals.GoalNear(boat.position.x, boat.position.y, boat.position.z, 2)));
       } catch {
         break; // drifted out of reach; leave it
       }

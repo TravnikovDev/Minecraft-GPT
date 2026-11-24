@@ -6,6 +6,8 @@
 import type { Item } from "prismarine-item";
 import { catalog } from "../core/catalog";
 import { bot, listen } from "../core/body";
+import { equipItem, unequipSlot } from "../core/primitives";
+import { describeFailure } from "../core/result";
 import { on } from "../core/events";
 import { getCurrentCommandName } from "../core/commandContext";
 import { OWNER_USERNAME } from "../config/env";
@@ -41,11 +43,8 @@ export async function keepWeaponInHand(): Promise<void> {
     .filter((item) => isWeapon(item.name))
     .sort((a, b) => weaponRank(b.name) - weaponRank(a.name))[0];
   try {
-    if (best) {
-      await bot.equip(best, "hand");
-    } else if (held && bot.registry.foodsByName?.[held.name]) {
-      await bot.unequip("hand");
-    }
+    const result = best ? await equipItem(best.name, "hand") : held && bot.registry.foodsByName?.[held.name] ? await unequipSlot("hand") : null;
+    if (result && !result.ok) console.log(`Could not switch held item: ${describeFailure(result)}`);
   } catch (error) {
     console.error("Could not switch held item:", error);
   }

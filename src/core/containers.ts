@@ -1,11 +1,16 @@
 // Path: src/core/containers.ts
-// Opening chests and barrels and moving exact item stacks in and out. The
-// only place outside the Body that opens containers, so every container use
-// goes through one primitive (Phase 3: verified actions).
+// Opening chests and barrels and moving exact item stacks in and out, checked
+// (Phase 3): opening has a time limit, every transfer is paced (servers like
+// Paper kick players who click windows too fast) and recounted afterwards, so
+// "stored 12 coal" means 12 coal really left the inventory.
 
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
+import type { Furnace } from "mineflayer";
 import { bot } from "./body";
+import { guarded } from "./guard";
+import { carried, withinReach } from "./primitives";
+import { fail, ok, type ActionResult } from "./result";
 
 /** An open chest or barrel. */
 export type OpenContainer = {
@@ -23,13 +28,136 @@ export type OpenContainer = {
 /** Blocks the bot uses for storage. */
 export const STORAGE_BLOCKS = new Set(["chest", "trapped_chest", "barrel"]);
 
-/** Opens a chest or barrel the bot is standing next to. */
-export async function openStorage(block: Block): Promise<OpenContainer> {
-  if (!STORAGE_BLOCKS.has(block.name)) throw new Error(`${block.name} is not a chest or barrel`);
-  return (await bot.openContainer(block)) as unknown as OpenContainer;
+const OPEN_TIMEOUT_MS = 5_000;
+const TRANSFER_TIMEOUT_MS = 5_000;
+const CONFIRM_MS = 1_000;
+// Window clicks: Paper allows about 500 per 7 s; a transfer is several clicks
+const CLICK_GAP_MS = 120;
+let lastClickAt = 0;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Waits so window actions stay well under the server's packet limits. */
+export async function paceClicks(): Promise<void> {
+  const wait = lastClickAt + CLICK_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastClickAt = Date.now();
+}
+
+async function until(check: () => boolean, ms: number): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (check()) return true;
+    await sleep(50);
+  }
+  return check();
+}
+
+/** Opens a chest or barrel within reach, with a time limit. */
+export async function openStorage(block: Block): Promise<ActionResult<OpenContainer>> {
+  if (!STORAGE_BLOCKS.has(block.name)) return fail("not_found", `${block.name} is not a chest or barrel`);
+  if (!withinReach(block.position)) return fail("out_of_reach", `${block.name} at ${block.position}`);
+  await paceClicks();
+  return guarded(`opening the ${block.name}`, async () => (await bot.openContainer(block)) as unknown as OpenContainer, {
+    timeoutMs: OPEN_TIMEOUT_MS,
+    onStop: () => {
+      if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
+    },
+  });
+}
+
+/** Closes an open container (never throws). */
+export async function closeStorage(open: OpenContainer): Promise<void> {
+  try {
+    await open.close();
+  } catch (error) {
+    console.log(`Closing the container failed: ${(error as Error).message}`);
+  }
 }
 
 /** Free container slots (empty ones; partly filled stacks are extra room). */
 export function freeContainerSlots(open: OpenContainer): number {
   return open.inventoryStart - open.containerItems().length;
+}
+
+/** How many of `item` still fit in the container (empty slots plus room in matching stacks). */
+function roomInContainer(open: OpenContainer, item: { type: number; stackSize: number }): number {
+  const inStacks = open
+    .containerItems()
+    .filter((i) => i.type === item.type)
+    .reduce((n, i) => n + Math.max(0, i.stackSize - i.count), 0);
+  return freeContainerSlots(open) * item.stackSize + inStacks;
+}
+
+/** Puts `count` of the exact stack `item` (from the bot's inventory) in the container, and recounts. */
+export async function depositInto(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+  const n = Math.min(count, item.count);
+  if (roomInContainer(open, item) < n) return fail("full", "the chest is full");
+  const before = carried(item.name);
+  await paceClicks();
+  const done = await guarded(`storing ${item.name}`, () => open.deposit(item.type, null, n, item.nbt ?? undefined), {
+    timeoutMs: TRANSFER_TIMEOUT_MS,
+  });
+  if (!done.ok) return done;
+  if (!(await until(() => carried(item.name) <= before - n, CONFIRM_MS))) {
+    const moved = before - carried(item.name);
+    return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't go in`);
+  }
+  return ok(n);
+}
+
+/** Takes `count` of the exact stack `item` (from the container) into the bot's inventory, and recounts. */
+export async function withdrawFrom(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
+  const n = Math.min(count, item.count);
+  const room =
+    bot.inventory.emptySlotCount() * item.stackSize +
+    bot.inventory.items().filter((i) => i.type === item.type).reduce((r, i) => r + Math.max(0, i.stackSize - i.count), 0);
+  if (room === 0) return fail("full", "my inventory is full");
+  const take = Math.min(n, room);
+  const before = carried(item.name);
+  await paceClicks();
+  const done = await guarded(`taking ${item.name}`, () => open.withdraw(item.type, null, take, item.nbt ?? undefined), {
+    timeoutMs: TRANSFER_TIMEOUT_MS,
+  });
+  if (!done.ok) return done;
+  if (!(await until(() => carried(item.name) >= before + take, CONFIRM_MS))) {
+    const moved = carried(item.name) - before;
+    return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't come out`);
+  }
+  return ok(take);
+}
+
+// --- Furnaces and other windows ------------------------------------------------
+
+/** An open furnace window (mineflayer's Furnace). */
+export type OpenFurnace = Furnace;
+
+/** Opens a furnace (or smoker, blast furnace) within reach, with a time limit. */
+export async function openFurnaceAt(block: Block): Promise<ActionResult<OpenFurnace>> {
+  if (!withinReach(block.position)) return fail("out_of_reach", `${block.name} at ${block.position}`);
+  await paceClicks();
+  return guarded(`opening the ${block.name}`, () => bot.openFurnace(block), {
+    timeoutMs: OPEN_TIMEOUT_MS,
+    onStop: () => {
+      if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
+    },
+  });
+}
+
+/**
+ * One click-step in an open window (put fuel in, take the output...), paced
+ * and with a time limit, so a server that never answers can't hang the bot.
+ */
+export async function windowStep<T>(label: string, step: () => Promise<T>): Promise<ActionResult<T>> {
+  await paceClicks();
+  return guarded(label, step, { timeoutMs: TRANSFER_TIMEOUT_MS });
+}
+
+/** Closes any open window (never throws). */
+export function closeWindow(window: { id?: number } | null | undefined): void {
+  try {
+    if (window) bot.closeWindow(window as never);
+  } catch (error) {
+    console.log(`Closing the window failed: ${(error as Error).message}`);
+  }
 }

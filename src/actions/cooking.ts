@@ -5,6 +5,9 @@
 
 import type { Block } from "prismarine-block";
 import { bot } from "../core/body";
+import { equipItem, useBlock } from "../core/primitives";
+import { closeWindow, openFurnaceAt, windowStep } from "../core/containers";
+import { describeFailure } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { goToPosition } from "./movement";
 import { placeItemNear } from "./placement";
@@ -79,8 +82,12 @@ async function loadCampfire(campfire: Block, foods: string[], max: number): Prom
     const food = foods.find((f) => count(f) > 0);
     if (!food) break;
     const before = count(food);
-    await bot.equip(bot.inventory.items().find((i) => i.name === food)!, "hand");
-    await bot.activateBlock(campfire);
+    const held = await equipItem(food, "hand");
+    const used = held.ok ? await useBlock(campfire) : held;
+    if (!used.ok) {
+      console.log(`Cooking: couldn't put ${food} on the campfire: ${describeFailure(used)}`);
+      break;
+    }
     await sleep(300);
     if (count(food) >= before) break; // the campfire is full
     placed++;
@@ -153,7 +160,12 @@ function pickFuel(items: number): { name: string; amount: number } | null {
 /** Cooks in a furnace or smoker, taking the food out as it's done. */
 async function cookInOven(oven: Block, foods: string[], limit: number): Promise<number> {
   if (!(await walkTo(oven))) return 0;
-  const window = await bot.openFurnace(oven);
+  const opened = await openFurnaceAt(oven);
+  if (!opened.ok) {
+    console.log(`Cooking: couldn't open the ${oven.name}: ${describeFailure(opened)}`);
+    return 0;
+  }
+  const window = opened.value;
   let cooked = 0;
   try {
     for (const food of foods) {
@@ -166,28 +178,35 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
           console.log("Cooking: no fuel (coal, charcoal, planks or logs).");
           break;
         }
-        await window.putFuel(bot.registry.itemsByName[fuel.name]!.id, null, fuel.amount);
+        const fueled = await windowStep("fuelling", () => window.putFuel(bot.registry.itemsByName[fuel.name]!.id, null, fuel.amount));
+        if (!fueled.ok) {
+          console.log(`Cooking: couldn't add fuel: ${describeFailure(fueled)}`);
+          break;
+        }
       }
-      await window.putInput(bot.registry.itemsByName[food]!.id, null, n);
+      const loaded = await windowStep(`putting ${food} in`, () => window.putInput(bot.registry.itemsByName[food]!.id, null, n));
+      if (!loaded.ok) {
+        console.log(`Cooking: couldn't put ${food} in: ${describeFailure(loaded)}`);
+        break;
+      }
       // Take the cooked food out as it comes; stop when nothing comes for a while
       let idle = 0;
       let done = 0;
       while (done < n && idle < 3 && !isCommandCancelled()) {
         await sleep(oven.name === "smoker" ? 5000 : 10_000);
         const output = window.outputItem();
-        if (output) {
-          await window.takeOutput();
+        if (output && (await windowStep("taking the food out", () => window.takeOutput())).ok) {
           done += output.count;
           idle = 0;
         } else {
           idle++;
         }
       }
-      if (window.inputItem()) await window.takeInput(); // leftovers back
+      if (window.inputItem()) await windowStep("taking leftovers back", () => window.takeInput()); // leftovers back
       cooked += done;
     }
   } finally {
-    bot.closeWindow(window);
+    closeWindow(window);
   }
   return cooked;
 }

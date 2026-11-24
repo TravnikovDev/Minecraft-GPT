@@ -4,7 +4,7 @@
 // gear, food and valuables.
 import { EventEmitter } from "node:events";
 import { beforeEach, expect, mock, test } from "bun:test";
-import { useFakeBot } from "./fakeBody";
+import { arriveAt, useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
@@ -100,6 +100,7 @@ const fake: any = Object.assign(new EventEmitter(), {
     setGoal: () => {},
     // Walking up to an item picks it up
     goto: async (g: any) => {
+      arriveAt(fake, g);
       for (const e of Object.values(fake.entities as Record<number, any>)) {
         if (Math.abs(e.position.x - g.x) < 1 && Math.abs(e.position.z - g.z) < 1) {
           inv.push(e.getDroppedItem());

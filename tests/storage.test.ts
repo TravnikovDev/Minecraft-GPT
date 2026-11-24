@@ -2,7 +2,7 @@
 // things in and taking them out of a (fake) chest, and placing a chest next
 // to the bed rather than "somewhere near the bot".
 import { beforeEach, expect, test } from "bun:test";
-import { useFakeBot } from "./fakeBody";
+import { arriveAt, useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
@@ -60,7 +60,7 @@ const fake: any = {
     deposit: async (type: number, _m: unknown, count: number, nbt?: unknown) => move(inv, chestItems, chestSlots, type, count, nbt),
     withdraw: async (type: number, _m: unknown, count: number, nbt?: unknown) => move(chestItems, inv, INV_SLOTS, type, count, nbt),
   }),
-  pathfinder: { goal: null, isMoving: () => false, setGoal: () => {}, goto: async () => {} },
+  pathfinder: { goal: null, isMoving: () => false, setGoal: () => {}, goto: async (g: any) => arriveAt(fake, g) },
 };
 useFakeBot(fake);
 beforeEach(() => {

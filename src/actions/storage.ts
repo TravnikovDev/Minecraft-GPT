@@ -14,8 +14,9 @@ import type { Item } from "prismarine-item";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
-import { pathing } from "../core/plugins";
-import { freeContainerSlots, openStorage, STORAGE_BLOCKS, type OpenContainer } from "../core/containers";
+import { closeStorage, depositInto, openStorage, STORAGE_BLOCKS, withdrawFrom, type OpenContainer } from "../core/containers";
+import { goTo } from "../core/primitives";
+import { describeFailure, expectOk, explain, wasStopped } from "../core/result";
 import { forgetChest, loadChests, rememberChest, type KnownChest } from "../core/session";
 import { itemMatcher } from "./inventory";
 import { countList } from "./hunting";
@@ -214,13 +215,13 @@ export async function chooseChest(holding?: (contents: Record<string, number>) =
 /** Walks to a chest, opens it, runs `use`, remembers what's inside, closes it. */
 export async function withChest<T>(block: Block, use: (open: OpenContainer) => Promise<T>): Promise<T> {
   const p = block.position;
-  await pathing.goto(new pf.goals.GoalGetToBlock(p.x, p.y, p.z));
-  const open = await openStorage(block);
+  expectOk(await goTo(new pf.goals.GoalGetToBlock(p.x, p.y, p.z)));
+  const open = expectOk(await openStorage(block));
   try {
     return await use(open);
   } finally {
     const contents = Object.fromEntries(tally(open.containerItems()));
-    await open.close();
+    await closeStorage(open);
     await rememberChest({ x: p.x, y: p.y, z: p.z, dimension: dimension(), contents, seenAt: Date.now() });
   }
 }
@@ -232,7 +233,13 @@ export async function lookInChest(block: Block): Promise<Map<string, number>> {
 
 // --- Putting things away and taking them out ------------------------------------------
 
-export type StoreResult = { stored: Map<string, number>; leftOver: Map<string, number>; chestAt: string } | null;
+export type StoreResult = {
+  stored: Map<string, number>;
+  leftOver: Map<string, number>;
+  chestAt: string;
+  /** Why it couldn't use the chest at all (couldn't get there, couldn't open it). */
+  problem?: string;
+} | null;
 
 /** Puts items in the nearest known chest. Returns what went in and what didn't fit (null: no chest). */
 export async function storeItems(mode: StoreMode, wanted: Wanted[] = [], keep: string[] = []): Promise<StoreResult> {
@@ -244,24 +251,34 @@ export async function storeItems(mode: StoreMode, wanted: Wanted[] = [], keep: s
   const leftOver = new Map<string, number>();
   if (plan.length === 0) return { stored, leftOver, chestAt: at(chest.position) };
 
-  await withChest(chest, async (open) => {
-    for (const { stack, count } of plan) {
-      try {
-        if (freeContainerSlots(open) === 0 && !open.containerItems().some((i) => i.type === stack.type && i.count < i.stackSize)) {
-          throw new Error("destination full");
+  try {
+    await withChest(chest, async (open) => {
+      for (const { stack, count } of plan) {
+        const item = bot.inventory.items().find((i) => i.type === stack.type && i.count >= 1 && (stack.nbt === undefined || i.nbt === stack.nbt));
+        const moved = item ? await depositInto(open, item, count) : null;
+        if (moved?.ok) stored.set(stack.name, (stored.get(stack.name) ?? 0) + moved.value);
+        const missed = count - (moved?.ok ? moved.value : 0);
+        if (missed > 0) {
+          if (moved && !moved.ok) console.log(`Couldn't put ${count} ${stack.name} in the chest: ${describeFailure(moved)}`);
+          leftOver.set(stack.name, (leftOver.get(stack.name) ?? 0) + missed);
         }
-        await open.deposit(stack.type, null, count, stack.nbt ?? undefined);
-        stored.set(stack.name, (stored.get(stack.name) ?? 0) + count);
-      } catch (error) {
-        console.log(`Couldn't put ${count} ${stack.name} in the chest: ${(error as Error).message}`);
-        leftOver.set(stack.name, (leftOver.get(stack.name) ?? 0) + count);
+        if (moved && !moved.ok && wasStopped(moved)) break;
       }
-    }
-  });
+    });
+  } catch (error) {
+    return { stored, leftOver, chestAt: at(chest.position), problem: explain(error) };
+  }
   return { stored, leftOver, chestAt: at(chest.position) };
 }
 
-export type TakeResult = { taken: Map<string, number>; missing: string[]; full: boolean; chestAt: string } | null;
+export type TakeResult = {
+  taken: Map<string, number>;
+  missing: string[];
+  full: boolean;
+  chestAt: string;
+  /** Why it couldn't use the chest at all. */
+  problem?: string;
+} | null;
 
 /** Takes items (or everything, with no list) from the chest that has them. */
 export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
@@ -273,27 +290,31 @@ export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
   const missing: string[] = [];
   let full = false;
 
-  await withChest(chest, async (open) => {
-    const asks: Wanted[] = wanted ?? [...tally(open.containerItems()).keys()].map((name) => ({ name, count: null }));
-    for (const w of asks) {
-      const matches = itemMatcher(w.name);
-      let left = w.count ?? Infinity;
-      const there = open.containerItems().filter((i) => matches(i.name));
-      if (there.length === 0) missing.push(pretty(w.name));
-      for (const item of there) {
-        if (left <= 0 || full) break;
-        const n = Math.min(item.count, left);
-        try {
-          await open.withdraw(item.type, null, n, item.nbt ?? undefined);
-          taken.set(item.name, (taken.get(item.name) ?? 0) + n);
-          left -= n;
-        } catch (error) {
-          console.log(`Couldn't take ${n} ${item.name}: ${(error as Error).message}`);
-          full = /full/i.test((error as Error).message);
+  try {
+    await withChest(chest, async (open) => {
+      const asks: Wanted[] = wanted ?? [...tally(open.containerItems()).keys()].map((name) => ({ name, count: null }));
+      for (const w of asks) {
+        const matches = itemMatcher(w.name);
+        let left = w.count ?? Infinity;
+        const there = open.containerItems().filter((i) => matches(i.name));
+        if (there.length === 0) missing.push(pretty(w.name));
+        for (const item of there) {
+          if (left <= 0 || full) break;
+          const moved = await withdrawFrom(open, item, Math.min(item.count, left));
+          if (moved.ok) {
+            taken.set(item.name, (taken.get(item.name) ?? 0) + moved.value);
+            left -= moved.value;
+          } else {
+            console.log(`Couldn't take ${item.name}: ${describeFailure(moved)}`);
+            full = moved.reason === "full";
+            if (wasStopped(moved)) return;
+          }
         }
       }
-    }
-  });
+    });
+  } catch (error) {
+    return { taken, missing, full, chestAt: at(chest.position), problem: explain(error) };
+  }
   return { taken, missing, full, chestAt: at(chest.position) };
 }
 

@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
-import { findPlaceableItem, placeItemNear, placeItemNextTo } from "../actions/placement";
+import { findPlaceableItem, placeItemNearResult, placeItemNextTo } from "../actions/placement";
+import { describeFailure, wasStopped } from "../core/result";
 
 export const description = `Places an item from the bot's inventory: a bed, crafting table, chest, furnace, torch,
 or any block. Generic names are fine ("bed" places whichever bed it carries). With near, it goes right next to that
@@ -46,11 +47,11 @@ export async function execute(args: any): Promise<void> {
     return;
   }
 
-  const placed = await placeItemNear(item);
-  if (placed) {
-    const p = placed.position;
+  const placed = await placeItemNearResult(item);
+  if (placed.ok) {
+    const p = placed.value.position;
     bot.chat(`Placed the ${pretty(item)} at ${p.x}, ${p.y}, ${p.z}.`);
-  } else {
-    bot.chat(`I couldn't find a free spot to place the ${pretty(item)}.`);
+  } else if (!wasStopped(placed)) {
+    bot.chat(`I couldn't place the ${pretty(item)}: ${describeFailure(placed)}.`);
   }
 }

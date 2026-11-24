@@ -11,7 +11,8 @@ import type { Block } from "prismarine-block";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
-import { pathing } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { expectOk, wasStopped } from "../core/result";
 import { markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, collectDrops, isIdle, mayWanderTo, noRealWork } from "./pickup";
 import { placeBlock } from "./worldInteraction";
@@ -182,7 +183,7 @@ async function replant(ready: Felled[]): Promise<void> {
     for (const tree of ready) {
       if (!stillIdle()) break;
       const stump = tree.stumps[0];
-      await pathing.goto(new pf.goals.GoalNear(stump.x, stump.y, stump.z, 2));
+      expectOk(await goTo(new pf.goals.GoalNear(stump.x, stump.y, stump.z, 2)));
       await collectDrops(10, { keepGoing: stillIdle });
       const used = await replantStump(tree);
       if (used) {
@@ -247,7 +248,11 @@ export async function plantSaplings(center: Vec3 | null, kind: string | null, ma
       if (count() >= max) break;
       const s = tree.stumps[0];
       if (s.distanceTo(bot.entity.position) > REPLANT_RANGE) continue;
-      await pathing.goto(new pf.goals.GoalNear(s.x, s.y, s.z, 2));
+      const walked = await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 2));
+      if (!walked.ok) {
+        if (wasStopped(walked)) break;
+        continue; // can't get to that stump: the next one
+      }
       const used = saplingsCarried(tree.sapling).some((c) => wanted(c.name)) ? await replantStump(tree) : null;
       if (used) {
         add(used);

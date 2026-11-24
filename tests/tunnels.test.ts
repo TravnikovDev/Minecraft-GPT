@@ -64,7 +64,9 @@ const fake: any = {
   canDigBlock: () => true,
   lookAt: async () => {},
   chat: (m: string) => said.push(m),
-  equip: async () => {},
+  equip: async (item: any) => {
+    fake.heldItem = item; // in hand, as the server confirms
+  },
   placeBlock: async (wall: any, face: any) => {
     const at = wall.position.plus(face);
     torches.push({ at: key(at), wall: key(wall.position) });

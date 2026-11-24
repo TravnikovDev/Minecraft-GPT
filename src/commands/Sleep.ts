@@ -5,6 +5,8 @@ import { catalog } from "../core/catalog";
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
+import { lookAt, sleepIn, useBlock } from "../core/primitives";
+import { describeFailure, wasStopped } from "../core/result";
 import { goToPosition, travelTo } from "../actions/movement";
 import { findNearestBed, placeItemNear } from "../actions/placement";
 import { loadBed, saveBed } from "../core/session";
@@ -59,11 +61,10 @@ async function useBedByDay(bed: Block, where: string): Promise<{ text: string; s
   };
   bot.on("message", onMessage);
   try {
-    await bot.lookAt(bed.position.offset(0.5, 0.5, 0.5), true);
-    await bot.activateBlock(bed);
+    await lookAt(bed.position.offset(0.5, 0.5, 0.5));
+    const used = await useBlock(bed);
+    if (!used.ok) console.log(`Using the bed failed: ${describeFailure(used)}`);
     await new Promise((r) => setTimeout(r, 1500));
-  } catch (error) {
-    console.error("Using the bed failed:", error);
   } finally {
     bot.off("message", onMessage);
   }
@@ -148,12 +149,13 @@ export async function execute(args: any = {}): Promise<void> {
   if (isCommandCancelled()) return;
 
   const where = `${bed.position.x}, ${bed.position.y}, ${bed.position.z}`;
-  try {
-    await bot.sleep(bed);
+  const slept = await sleepIn(bed);
+  if (slept.ok) {
     await rememberBed(bed);
     bot.chat("Good night! I'll wake up in the morning.");
-  } catch (error) {
-    const message = (error as Error).message;
+  } else {
+    if (wasStopped(slept)) return;
+    const message = slept.detail;
     // mineflayer refuses daytime sleep without touching the bed, so the spawn
     // point is never set. Using the bed by day still sets it on the server.
     if (/not night/i.test(message)) {

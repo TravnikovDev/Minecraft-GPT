@@ -18,7 +18,7 @@ import { resetChores, stopChores } from "../core/chores";
 
 // How long the owner's "stop" keeps fighting and creeper dodging quiet
 const STOP_MUTES_REFLEXES_MS = 60_000;
-import { fighting, pathing } from "../core/plugins";
+import { haltBody, pathing } from "../core/plugins";
 
 // "Doing nothing" watchdog: no movement and no inventory change for this long
 // means the command is hung (e.g. staring at a block it can't dig)
@@ -85,14 +85,7 @@ export { getCurrentCommandName, isCommandCancelled };
 
 /** Stops all bot movement, combat and digging immediately. */
 function haltBot(): void {
-  try {
-    pathing.stop();
-    fighting.stop();
-    bot.stopDigging();
-    bot.clearControlStates();
-  } catch (error) {
-    console.error("Error while halting bot:", error);
-  }
+  haltBody();
 }
 
 /**

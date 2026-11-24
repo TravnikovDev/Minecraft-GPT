@@ -37,3 +37,24 @@ mock.module(`${ROOT}/src/core/body.ts`, () => ({
   bot: botProxy,
   onConnectionEnd: (_bot: unknown, fn: () => void) => g.__testEndHooks?.push(fn),
 }));
+
+/**
+ * Moves the fake bot to a spot that satisfies a pathfinder goal near its
+ * target, as a finished walk would (the checked goTo verifies arrival).
+ */
+export function arriveAt(fake: any, goal: any): void {
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  const cx = Math.floor(goal.x ?? fake.entity.position.x);
+  const cy = Math.floor(goal.y ?? fake.entity.position.y);
+  const cz = Math.floor(goal.z ?? fake.entity.position.z);
+  for (let r = 0; r <= 4; r++)
+    for (let dx = -r; dx <= r; dx++)
+      for (let dy = -r; dy <= r; dy++)
+        for (let dz = -r; dz <= r; dz++) {
+          const p = new Vec3(cx + dx, cy + dy, cz + dz);
+          if (goal.isEnd(p)) {
+            fake.entity.position = new Vec3(p.x + 0.5, p.y, p.z + 0.5);
+            return;
+          }
+        }
+}

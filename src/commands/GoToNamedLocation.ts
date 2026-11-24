@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { goToPosition } from "../actions/movement";
+import { travelToResult } from "../actions/movement";
+import { bot } from "../core/body";
+import { describeFailure, wasStopped } from "../core/result";
 import {
   getBasementLocation,
   getChests,
@@ -38,53 +40,28 @@ export async function execute(args: any) {
 
   let target = parsed.data.targetName;
 
-  switch (target) {
-    case "basement":
-      const basementLocation = getBasementLocation();
-      if (basementLocation)
-        await goToPosition(
-          basementLocation.x,
-          basementLocation.y,
-          basementLocation.z
-        );
-      break;
-    case "crafting table":
-      const craftingTableLocation = getCraftingTables();
-      if (craftingTableLocation?.length)
-        await goToPosition(
-          craftingTableLocation[0].x,
-          craftingTableLocation[0].y,
-          craftingTableLocation[0].z
-        );
-      break;
-    case "furnace":
-      const furnaceLocations = getFurnaces();
-      if (furnaceLocations?.length)
-        await goToPosition(
-          furnaceLocations[0].x,
-          furnaceLocations[0].y,
-          furnaceLocations[0].z
-        );
-      break;
-    case "chest":
-      const chestLocations = getChests();
-      if (chestLocations?.length)
-        await goToPosition(
-          chestLocations[0].location.x,
-          chestLocations[0].location.y,
-          chestLocations[0].location.z
-        );
-      break;
-    case "mine":
-      const minesLocations = getMines();
-      if (minesLocations?.length)
-        await goToPosition(
-          minesLocations[0].startsAt.x,
-          minesLocations[0].startsAt.y,
-          minesLocations[0].startsAt.z
-        );
-      break;
-    default:
-      console.error(`Invalid target name for GoToNamedLocation: ${target}`);
+  // Where the named place is, from what the bot remembers
+  const p = (() => {
+    switch (target) {
+      case "basement":
+        return getBasementLocation();
+      case "crafting table":
+        return getCraftingTables()?.[0];
+      case "furnace":
+        return getFurnaces()?.[0];
+      case "chest":
+        return getChests()?.[0]?.location;
+      case "mine":
+        return getMines()?.[0]?.startsAt;
+      default:
+        return undefined;
+    }
+  })();
+  if (!p) {
+    bot.chat(`I don't know where the ${target} is.`);
+    return;
   }
+  const result = await travelToResult(() => ({ x: p.x, y: p.y, z: p.z }), { range: 2 });
+  if (result.ok) bot.chat(`I'm at the ${target}.`);
+  else if (!wasStopped(result)) bot.chat(`I can't get to the ${target}: ${describeFailure(result)}.`);
 }

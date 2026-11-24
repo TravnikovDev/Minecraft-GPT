@@ -6,12 +6,14 @@ import { Item } from "prismarine-item";
 import { bot } from "../core/body";
 import { tossing } from "./pickup";
 import { catalog } from "../core/catalog";
+import { consumeItem, equipItem, lookAt, tossStack } from "../core/primitives";
+import { describeFailure } from "../core/result";
 import type { InventoryItemType } from "../schemas/types.js";
 
 /**
- * Equip an item from the bot's inventory.
- * @param itemName The name of the item to equip.
- * @returns Whether the item was successfully equipped.
+ * Equip an item from the bot's inventory (armor goes on, anything else in hand).
+ * @param itemName The name of the item to equip (exact name or category).
+ * @returns Whether it is really equipped.
  */
 export async function equip(itemName: string): Promise<boolean> {
   const matches = itemMatcher(itemName);
@@ -20,34 +22,31 @@ export async function equip(itemName: string): Promise<boolean> {
     console.log(`You do not have any ${itemName} to equip.`);
     return false;
   }
-  const destination = catalog().armorSlot(item.name) ?? "hand";
-
-  await bot.equip(item, destination);
-  return true;
+  const result = await equipItem(item.name, catalog().armorSlot(item.name) ?? "hand");
+  if (!result.ok) console.log(`Couldn't equip ${item.name}: ${describeFailure(result)}`);
+  return result.ok;
 }
 
 /**
  * Discard an item from the bot's inventory.
  * @param itemName The name of the item to discard.
  * @param num The number of items to discard. Default is -1 for all.
- * @returns Whether the item was successfully discarded.
+ * @returns Whether anything was really thrown away.
  */
 export async function discard(itemName: string, num = -1, { pickUpLater = false } = {}): Promise<boolean> {
   // Exact name or category: discarding "stone" must never toss a stone pickaxe
   const matches = itemMatcher(itemName);
   let discarded = 0;
-  while (true) {
+  while (num === -1 || discarded < num) {
     const item = bot.inventory.items().find((item) => matches(item.name));
-    if (!item) {
+    if (!item) break;
+    const want = num === -1 ? item.count : Math.min(num - discarded, item.count);
+    const thrown = await tossing(() => tossStack(item, want), { pickUpLater });
+    if (!thrown.ok) {
+      console.log(`Couldn't throw away ${item.name}: ${describeFailure(thrown)}`);
       break;
     }
-    const toDiscard =
-      num === -1 ? item.count : Math.min(num - discarded, item.count);
-    await tossing(() => bot.toss(item.type, null, toDiscard), { pickUpLater });
-    discarded += toDiscard;
-    if (num !== -1 && discarded >= num) {
-      break;
-    }
+    discarded += thrown.value;
   }
   if (discarded === 0) {
     console.log(`You do not have any ${itemName} to discard.`);
@@ -57,65 +56,56 @@ export async function discard(itemName: string, num = -1, { pickUpLater = false 
   return true;
 }
 
-
-
 /**
  * Ask to bot to eat a food item from its inventory.
- * @param foodName The name of the food item to eat.
- * @returns
+ * @param foodName The name of the food item to eat (any food when empty).
+ * @returns Whether it really ate one.
  */
 export async function eat(foodName = ""): Promise<boolean> {
-  let item: Item | undefined;
-  let name: string;
-  if (foodName) {
-    const matches = itemMatcher(foodName);
-    item = bot.inventory.items().find((item) => matches(item.name) && catalog().isFood(item.name));
-    name = foodName;
-  } else {
-    // @ts-ignore
-    item = bot.inventory.items().find((item) => item.foodPoints > 0);
-    name = "food";
-  }
+  const matches = foodName ? itemMatcher(foodName) : () => true;
+  const item = bot.inventory.items().find((item) => matches(item.name) && catalog().isFood(item.name));
   if (!item) {
-    console.log(`You do not have any ${name} to eat.`);
+    console.log(`You do not have any ${foodName || "food"} to eat.`);
     return false;
   }
-  await bot.equip(item, "hand");
-  await bot.consume();
+  const result = await consumeItem(item.name);
+  if (!result.ok) {
+    console.log(`Couldn't eat ${item.name}: ${describeFailure(result)}`);
+    return false;
+  }
   console.log(`Successfully ate ${item.name}.`);
   return true;
 }
 
 /**
- * Give an item to a player.
- * @param itemType The name of the item to give.
- * @param username The username of the player to give the item to.
- * @param num The number of items to give.
- * @returns
+ * Give an item to a player: walks up to them and throws it over.
+ * @param itemType The exact item to give.
+ * @param username The player to give it to.
+ * @param num How many.
+ * @returns How many were really handed over (0: none).
  */
-export async function giveToPlayer(
-  itemType: string,
-  username: string,
-  num = 1
-): Promise<boolean> {
+export async function giveToPlayer(itemType: string, username: string, num = 1): Promise<number> {
   const player = bot.players[username]?.entity;
   if (!player) {
     console.log(`Could not find a player with username: ${username}.`);
-    return false;
+    return 0;
   }
-  await goToPlayer(username);
-  await bot.lookAt(player.position);
+  if (!(await goToPlayer(username))) return 0;
+  await lookAt(player.position.offset(0, 1.6, 0));
   // Exact name only: "plate" must never toss the iron chestplate
   let given = 0;
   while (given < num) {
     const item = bot.inventory.items().find((i) => i.name === itemType);
     if (!item) break;
-    const n = Math.min(num - given, item.count);
-    await tossing(() => bot.toss(item.type, null, n));
-    given += n;
+    const thrown = await tossing(() => tossStack(item, num - given));
+    if (!thrown.ok) {
+      console.log(`Couldn't hand over ${itemType}: ${describeFailure(thrown)}`);
+      break;
+    }
+    given += thrown.value;
   }
   console.log(`Gave ${given} of ${num} ${itemType} to ${username}.`);
-  return given > 0;
+  return given;
 }
 
 /**

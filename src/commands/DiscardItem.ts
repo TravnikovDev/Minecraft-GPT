@@ -1,7 +1,7 @@
 // Path: src/actions/DiscardItem.ts
 
 import { z } from "zod";
-import { discard } from "../actions/inventory";
+import { discard, itemMatcher } from "../actions/inventory";
 import { bot } from "../core/body";
 
 export const description = `When user asks the bot to discard an item from its inventory, the bot will discard the item.
@@ -27,10 +27,15 @@ export async function execute(args: any) {
   let { item_name, num } = parsed.data;
   num = num || 64;
 
-  const result = await discard(item_name, num);
-  if (result) {
-    bot.chat(`Discarded ${num} ${item_name}.`);
-  } else {
-    bot.chat(`Failed to discard ${num} ${item_name}.`);
+  // Say what really left the inventory, not what was asked for
+  const matches = itemMatcher(item_name);
+  const carriedNow = (): number => bot.inventory.items().filter((i) => matches(i.name)).reduce((n, i) => n + i.count, 0);
+  const before = carriedNow();
+  if (before === 0) {
+    bot.chat(`I don't have any ${item_name.replace(/_/g, " ")}.`);
+    return;
   }
+  await discard(item_name, num);
+  const thrown = before - carriedNow();
+  bot.chat(thrown > 0 ? `Discarded ${thrown} ${item_name.replace(/_/g, " ")}.` : `I couldn't throw away the ${item_name.replace(/_/g, " ")}.`);
 }

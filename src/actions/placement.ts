@@ -4,15 +4,15 @@
 import type { Block } from "prismarine-block";
 import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
-import { placeBlock } from "./worldInteraction";
+import { goTo, lookAt } from "../core/primitives";
+import { describeFailure, fail, ok, wasStopped, type ActionResult } from "../core/result";
+import { breakBlockAt, placeBlock, placeBlockResult } from "./worldInteraction";
 import { getNearestFreeSpace } from "./world";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
-import { pathing } from "../core/plugins";
 import { loadBed } from "../core/session";
 import { ownerEntity } from "../managers/ownerDialog";
 import { isNatural } from "../core/movements";
-import { breakBlockAt } from "./worldInteraction";
 
 /**
  * The inventory item to place for what the owner asked: an exact ID, or a
@@ -29,7 +29,7 @@ export function findPlaceableItem(requested: string): string | null {
 
 /** Looks east along a free area, so a bed placed at `spot` puts its head inside it. */
 async function faceAlong(spot: Vec3, size: number): Promise<void> {
-  await bot.lookAt(spot.offset(size, 0, 0), true);
+  await lookAt(spot.offset(size, 0, 0));
 }
 
 /** Beds need two free blocks in a row; everything else one. */
@@ -42,18 +42,27 @@ function footprint(itemName: string): number {
  * or null if there was no room or the server refused.
  */
 export async function placeItemNear(itemName: string): Promise<Block | null> {
+  const result = await placeItemNearResult(itemName);
+  return result.ok ? result.value : null;
+}
+
+/** placeItemNear, with the reason when it couldn't (no free spot, refused...). */
+export async function placeItemNearResult(itemName: string): Promise<ActionResult<Block>> {
   const size = footprint(itemName);
+  let last: ActionResult<Block> = fail("occupied", "no free spot nearby");
   for (let attempt = 0; attempt < 3; attempt++) {
     const spot = getNearestFreeSpace(size, 6 + attempt * 4);
-    if (!spot) return null;
+    if (!spot) return last;
     // Face along the free area so a bed's head lands inside it too
     await faceAlong(spot, size);
-    const ok = await placeBlock(itemName, spot.x, spot.y, spot.z);
-    const placed = bot.blockAt(spot);
-    if (ok && placed?.name === itemName) return placed;
-    console.log(`Placing ${itemName} at ${spot} failed (attempt ${attempt + 1}).`);
+    const placed = await placeBlockResult(itemName, spot.x, spot.y, spot.z);
+    const block = bot.blockAt(spot);
+    if (placed.ok && block?.name === itemName) return ok(block);
+    last = placed.ok ? fail("refused", `the ${itemName} didn't stay at ${spot}`) : placed;
+    if (wasStopped(last) || last.reason === "missing_items") return last;
+    console.log(`Placing ${itemName} at ${spot} failed (attempt ${attempt + 1}): ${describeFailure(last)}`);
   }
-  return null;
+  return last;
 }
 
 // --- A chest out of the way ---------------------------------------------------
@@ -190,16 +199,22 @@ export async function placeItemNextTo(itemName: string, near: string): Promise<B
   const target = findPlacementTarget(near);
   if (!target) return `I can't find the ${near.replace(/_/g, " ")} nearby.`;
   const t = target[0];
-  await pathing.goto(new pf.goals.GoalNear(t.x, t.y, t.z, 2));
+  const walked = await goTo(new pf.goals.GoalNear(t.x, t.y, t.z, 2));
+  if (!walked.ok) return `I can't get to the ${near.replace(/_/g, " ")}: ${describeFailure(walked)}.`;
   const owner = ownerEntity();
   const avoid = owner ? [owner.position.floored()] : [];
   const size = footprint(itemName);
+  let why = "there's no free spot next to it";
   for (const spot of spotsNear(target, (p) => bot.blockAt(p), size, avoid).slice(0, 3)) {
     if (size === 2) await faceAlong(spot, size); // the bed's head goes east, into the free block
-    const ok = await placeBlock(itemName, spot.x, spot.y, spot.z);
-    const placed = bot.blockAt(spot);
-    if (ok && placed?.name === itemName) return placed;
-    console.log(`Placing ${itemName} next to the ${near} at ${spot} failed.`);
+    const placed = await placeBlockResult(itemName, spot.x, spot.y, spot.z);
+    const block = bot.blockAt(spot);
+    if (placed.ok && block?.name === itemName) return block;
+    if (!placed.ok) {
+      why = describeFailure(placed);
+      if (wasStopped(placed)) break;
+    }
+    console.log(`Placing ${itemName} next to the ${near} at ${spot} failed: ${why}`);
   }
-  return `There's no free spot next to the ${near.replace(/_/g, " ")}.`;
+  return `I couldn't place it next to the ${near.replace(/_/g, " ")}: ${why}.`;
 }

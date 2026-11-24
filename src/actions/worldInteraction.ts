@@ -14,180 +14,79 @@ import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";
 import { __actionsDelay } from "../utils/utility.js";
 import { pathing, tools } from "../core/plugins";
+import { breakBlock, equipItem, goTo, isReplaceable, knownBlock, placeBlockAt, useBlock, withinReach } from "../core/primitives";
+import { describeFailure, fail, ok, wasStopped, type ActionResult } from "../core/result";
 import { inChore } from "../core/chores";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 
-export async function placeBlock(
-  blockType: string,
-  x: number,
-  y: number,
-  z: number,
-  placeOn: string = "bottom"
-): Promise<boolean> {
-  // if (!gameData.getBlockId(blockType)) {
-  //   console.log(`Invalid block type: ${blockType}.`);
-  //   return false;
-  // }
+const FACE_BY_NAME: Record<string, Vec3> = {
+  top: new Vec3(0, 1, 0),
+  bottom: new Vec3(0, -1, 0),
+  north: new Vec3(0, 0, -1),
+  south: new Vec3(0, 0, 1),
+  east: new Vec3(1, 0, 0),
+  west: new Vec3(-1, 0, 0),
+};
+// Things that can go where the bot stands (no need to step back first)
+const PLACE_WHILE_STANDING = new Set([
+  "torch", "redstone_torch", "redstone", "lever", "button", "rail", "detector_rail",
+  "powered_rail", "activator_rail", "tripwire_hook", "tripwire", "water_bucket",
+]);
 
+/**
+ * Places the exact item `blockType` at x, y, z: breaks what's in the way,
+ * steps back if it stands there, walks within reach, and places it against
+ * the side named by `placeOn` (or any solid side). Returns whether the block
+ * is really there; placeBlockResult says why not.
+ */
+export async function placeBlock(blockType: string, x: number, y: number, z: number, placeOn: string = "bottom"): Promise<boolean> {
+  return (await placeBlockResult(blockType, x, y, z, placeOn)).ok;
+}
+
+/** placeBlock, with the reason when it didn't work. */
+export async function placeBlockResult(blockType: string, x: number, y: number, z: number, placeOn: string = "bottom"): Promise<ActionResult<{ name: string }>> {
   const targetDest = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
-
-  // The exact block to place: "stone" must never pick a stone pickaxe
-  let block = bot.inventory.items().find((item) => item.name === blockType);
-  if (!block && bot.game.gameMode === "creative") {
-    // TODO: Rework
-    await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
-    block = bot.inventory.items().find((item) => item.name === blockType);
-  }
-  if (!block) {
-    console.log(`Don't have any ${blockType} to place.`);
-    return false;
-  }
-
-  const targetBlock = bot.blockAt(targetDest);
-  if (!targetBlock) {
-    console.log(`No block found at ${targetDest}.`);
-    return false;
-  }
-
-  if (targetBlock.name === blockType) {
-    console.log(`${blockType} already at ${targetBlock.position}.`);
-    return false;
-  }
-
-  const emptyBlocks = [
-    "air",
-    "water",
-    "lava",
-    "grass",
-    "tall_grass",
-    "snow",
-    "dead_bush",
-    "fern",
-  ];
-  if (!emptyBlocks.includes(targetBlock.name)) {
-    console.log(
-      `${targetBlock.name} is in the way at ${targetBlock.position}.`
-    );
-    const removed = await breakBlockAt(x, y, z);
-    if (!removed) {
-      console.log(
-        `Cannot place ${blockType} at ${targetBlock.position}: block in the way.`
-      );
-      return false;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200)); // Wait for block to break
-  }
-
-  // Determine the build-off block and face vector
-  const dirMap: { [key: string]: Vec3 } = {
-    top: new Vec3(0, 1, 0),
-    bottom: new Vec3(0, -1, 0),
-    north: new Vec3(0, 0, -1),
-    south: new Vec3(0, 0, 1),
-    east: new Vec3(1, 0, 0),
-    west: new Vec3(-1, 0, 0),
+  const done = (result: ActionResult<{ name: string }>): ActionResult<{ name: string }> => {
+    if (result.ok) console.log(`Placed ${blockType} at ${targetDest}.`);
+    else console.log(`Failed to place ${blockType} at ${targetDest}: ${describeFailure(result)}`);
+    return result;
   };
 
-  let dirs: Vec3[] = [];
-  if (placeOn === "side") {
-    dirs.push(dirMap["north"], dirMap["south"], dirMap["east"], dirMap["west"]);
-  } else if (dirMap[placeOn]) {
-    dirs.push(dirMap[placeOn]);
-  } else {
-    dirs.push(dirMap["bottom"]);
-    console.log(`Unknown placeOn value "${placeOn}". Defaulting to bottom.`);
+  // The exact block to place: "stone" must never pick a stone pickaxe
+  if (!bot.inventory.items().some((item) => item.name === blockType) && bot.game.gameMode === "creative") {
+    await bot.creative.setInventorySlot(36, gameData.makeItem(blockType, 1)); // 36 is first hotbar slot
+  }
+  if (!bot.inventory.items().some((item) => item.name === blockType)) return done(fail("missing_items", `no ${blockType}`));
+
+  const targetBlock = knownBlock(targetDest);
+  if (!targetBlock) return done(fail("unknown_block", `${targetDest} isn't loaded`));
+  if (targetBlock.name === blockType) return done(fail("occupied", `${blockType} is already there`));
+
+  // Something solid in the way: break it first
+  if (!isReplaceable(targetBlock)) {
+    console.log(`${targetBlock.name} is in the way at ${targetBlock.position}.`);
+    const cleared = await breakBlockAtResult(targetDest.x, targetDest.y, targetDest.z);
+    if (!cleared.ok) return done(cleared);
   }
 
-  // Add remaining directions
-  dirs.push(...Object.values(dirMap).filter((d) => !dirs.includes(d)));
-
-  let buildOffBlock: Block | null = null;
-  let faceVec: Vec3 | null = null;
-
-  for (const d of dirs) {
-    const adjacentBlock = bot.blockAt(targetDest.plus(d));
-    if (adjacentBlock && !emptyBlocks.includes(adjacentBlock.name)) {
-      buildOffBlock = adjacentBlock;
-      faceVec = d.scaled(-1); // Invert direction
-      break;
-    }
+  // Standing in the spot: step back (blocks can't go where the bot is)
+  const feet = bot.entity.position;
+  if (!PLACE_WHILE_STANDING.has(blockType) && (feet.distanceTo(targetDest) < 1 || feet.offset(0, 1, 0).distanceTo(targetDest) < 1)) {
+    const away = await goTo(new pf.goals.GoalInvert(new pf.goals.GoalNear(targetDest.x, targetDest.y, targetDest.z, 2)));
+    if (!away.ok && wasStopped(away)) return done(away);
   }
 
-  if (!buildOffBlock || !faceVec) {
-    console.log(
-      `Cannot place ${blockType} at ${targetBlock.position}: nothing to place on.`
-    );
-    return false;
+  // Too far: walk within reach
+  if (!withinReach(targetDest)) {
+    const near = await goTo(new pf.goals.GoalNear(targetDest.x, targetDest.y, targetDest.z, 3));
+    if (!near.ok) return done(near);
   }
 
-  // Move away if too close
-  const pos = bot.entity.position;
-  const posAbove = pos.offset(0, 1, 0);
-  const dontMoveFor = [
-    "torch",
-    "redstone_torch",
-    "redstone",
-    "lever",
-    "button",
-    "rail",
-    "detector_rail",
-    "powered_rail",
-    "activator_rail",
-    "tripwire_hook",
-    "tripwire",
-    "water_bucket",
-  ];
-  if (
-    !dontMoveFor.includes(blockType) &&
-    (pos.distanceTo(targetBlock.position) < 1 ||
-      posAbove.distanceTo(targetBlock.position) < 1)
-  ) {
-    const goal = new pf.goals.GoalInvert(
-      new pf.goals.GoalNear(
-        targetBlock.position.x,
-        targetBlock.position.y,
-        targetBlock.position.z,
-        2
-      )
-    );
-    // pathing.setMovements(new pf.Movements(bot));
-    await pathing.goto(goal);
-  }
-
-  // Move closer if too far
-  if (bot.entity.position.distanceTo(targetBlock.position) > 4.5) {
-    await goToPosition(
-      targetBlock.position.x,
-      targetBlock.position.y,
-      targetBlock.position.z,
-      4
-    );
-  }
-
-  await bot.equip(block, "hand");
-  await bot.lookAt(buildOffBlock.position);
-  await __actionsDelay(500);
-
-  try {
-    markSelfAction(buildOffBlock.position.plus(faceVec));
-    await placingOnPurpose(() => bot.placeBlock(buildOffBlock, faceVec));
-    console.log(`Placed ${blockType} at ${targetDest}.`);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    return true;
-  } catch (err) {
-    if (err instanceof Error) {
-      console.log(
-        `Failed to place ${blockType} at ${targetDest}: ${err.message}`
-      );
-    } else {
-      console.log(
-        `Failed to place ${blockType} at ${targetDest}: ${String(err)}`
-      );
-    }
-    return false;
-  }
+  const against = placeOn === "side" ? undefined : FACE_BY_NAME[placeOn];
+  return done(await placeBlockAt(blockType, targetDest, { against }));
 }
+
 let replacingTool = false;
 
 /**
@@ -216,134 +115,103 @@ export async function replaceBrokenTool(block: Block): Promise<boolean> {
 }
 
 
-export async function breakBlockAt(
+/**
+ * Breaks the block at x, y, z: walks within reach (building up to it if it's
+ * high, like a treetop), takes the best tool (or makes one if the old one
+ * broke, never for an idle chore), digs, and checks it's really gone.
+ * Returns false for air or liquid (nothing to break), as before.
+ */
+export async function breakBlockAt(x: number, y: number, z: number): Promise<boolean> {
+  const result = await breakBlockAtResult(x, y, z);
+  return result.ok && !result.value.alreadyGone;
+}
+
+/** breakBlockAt, with the reason when it didn't break it. */
+export async function breakBlockAtResult(
   x: number,
   y: number,
   z: number
-): Promise<boolean> {
-  if (x == null || y == null || z == null) {
-    throw new Error("Invalid position to break block at.");
-  }
+): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
+  if (x == null || y == null || z == null) throw new Error("Invalid position to break block at.");
   const blockPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
-  const block = bot.blockAt(blockPos);
+  const block = knownBlock(blockPos);
   if (!block) {
-    console.log(`No block found at position ${blockPos}.`);
-    return false;
+    console.log(`No block known at ${blockPos} (not loaded).`);
+    return fail("unknown_block", `${blockPos} isn't loaded`);
   }
-  if (block.name !== "air" && block.name !== "water" && block.name !== "lava") {
-    if (bot.entity.position.distanceTo(block.position) > 4.5) {
-      // Reaching a block up high (the top of a tree) is when a player builds up to it
-      await pathing.withRules({ allow1by1towers: true }, () => goToPosition(x, y, z));
-    }
-    if (bot.game.gameMode !== "creative") {
-      await tools.equipForBlock(block);
-      const itemId = bot.heldItem ? bot.heldItem.type : null;
-      if (!block.canHarvest(itemId) && !(await replaceBrokenTool(block))) {
-        console.log(`Don't have right tools to break ${block.name}.`);
-        return false;
-      }
-    }
-    if (!bot.canDigBlock(block)) {
-      console.log(`Cannot break ${block.name} at ${blockPos}.`);
-      return false;
-    }
-    await bot.lookAt(block.position, true); // Ensure the bot has finished turning
-    await __actionsDelay(500);
-    try {
-      // A dig that never completes (out of reach, server ignored it) must not
-      // hang the task forever
-      const DIG_TIMEOUT_MS = 15000;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          bot.stopDigging();
-          reject(new Error(`digging ${block.name} took longer than ${DIG_TIMEOUT_MS / 1000}s`));
-        }, DIG_TIMEOUT_MS);
-      });
-      try {
-        markSelfAction(block.position);
-        await Promise.race([bot.dig(block, true), timeout]);
-      } finally {
-        clearTimeout(timer);
-      }
-      console.log(
-        `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(
-          1
-        )}, z:${z.toFixed(1)}.`
-      );
-      return true;
-    } catch (err) {
-      console.error(`Failed to dig the block: ${err}`);
-      return false;
-    }
-  } else {
-    console.log(
-      `Skipping block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(
-        1
-      )} because it is ${block.name}.`
+  if (block.boundingBox === "empty" && ["air", "cave_air", "water", "lava"].includes(block.name)) {
+    console.log(`Skipping block at ${blockPos} because it is ${block.name}.`);
+    return ok({ name: block.name, alreadyGone: true });
+  }
+  if (!withinReach(blockPos)) {
+    // Reaching a block up high (the top of a tree) is when a player builds up to it
+    const walked = await pathing.withRules({ allow1by1towers: true }, () =>
+      goTo(new pf.goals.GoalNear(blockPos.x, blockPos.y, blockPos.z, 2))
     );
-    return false;
+    if (!walked.ok && !withinReach(blockPos)) {
+      console.log(`Can't get to the ${block.name} at ${blockPos}: ${describeFailure(walked)}`);
+      return walked;
+    }
   }
+  let result = await breakBlock(blockPos);
+  // The pickaxe wore out, or it never had the right one: make one and try again
+  if (!result.ok && result.reason === "no_tool" && (await replaceBrokenTool(block))) result = await breakBlock(blockPos);
+  if (result.ok) console.log(`Broke ${block.name} at x:${blockPos.x}, y:${blockPos.y}, z:${blockPos.z}.`);
+  else console.log(`Couldn't break the ${block.name} at ${blockPos}: ${describeFailure(result)}`);
+  return result;
 }
 
-export async function activateNearestBlock(type: string) {
-  /**
-   * Activate the nearest block of the given type.
-   * @param {string} type, the type of block to activate.
-   * @returns {Promise<boolean>} true if the block was activated, false otherwise.
-   * @example
-   * await skills.activateNearestBlock( "lever");
-   * **/
-  let block = world.getNearestBlock(type, 16);
+/** Walks to the nearest block of `type` (a lever, a button) and right-clicks it. */
+export async function activateNearestBlock(type: string): Promise<boolean> {
+  const block = world.getNearestBlock(type, 16);
   if (!block) {
     console.log(`Could not find any ${type} to activate.`);
     return false;
   }
-  if (bot.entity.position.distanceTo(block.position) > 4.5) {
-    let pos = block.position;
-    // pathing.setMovements(new pf.Movements(bot));
-    await pathing.goto(new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
+  const p = block.position;
+  if (!withinReach(p)) {
+    const walked = await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 3));
+    if (!walked.ok) {
+      console.log(`Can't get to the ${type}: ${describeFailure(walked)}`);
+      return false;
+    }
   }
-  await bot.activateBlock(block);
-  console.log(
-    `Activated ${type} at x:${block.position.x.toFixed(
-      1
-    )}, y:${block.position.y.toFixed(1)}, z:${block.position.z.toFixed(1)}.`
-  );
+  const used = await useBlock(block);
+  if (!used.ok) {
+    console.log(`Couldn't use the ${type}: ${describeFailure(used)}`);
+    return false;
+  }
+  console.log(`Activated ${type} at ${p}.`);
   return true;
 }
 
-export async function tillAndSow(
-  x: number,
-  y: number,
-  z: number,
-  seedType: string | null = null
-): Promise<boolean> {
-  x = Math.round(x);
-  y = Math.round(y);
-  z = Math.round(z);
-  const blockPos = new Vec3(x, y, z);
-  const block = bot.blockAt(blockPos);
+/**
+ * Tills grass or dirt at x, y, z with a hoe (checking it turned to farmland)
+ * and, with `seedType`, sows on top of it.
+ */
+export async function tillAndSow(x: number, y: number, z: number, seedType: string | null = null): Promise<boolean> {
+  const blockPos = new Vec3(Math.round(x), Math.round(y), Math.round(z));
+  const block = knownBlock(blockPos);
   if (!block) {
-    console.log(`No block found at ${blockPos}.`);
+    console.log(`No block known at ${blockPos} (not loaded).`);
     return false;
   }
-  if (
-    block.name !== "grass_block" &&
-    block.name !== "dirt" &&
-    block.name !== "farmland"
-  ) {
+  if (block.name !== "grass_block" && block.name !== "dirt" && block.name !== "farmland") {
     console.log(`Cannot till ${block.name}, must be grass_block or dirt.`);
     return false;
   }
-  const above = bot.blockAt(blockPos.offset(0, 1, 0));
-  if (above && above.name !== "air") {
-    console.log(`Cannot till, there is ${above.name} above the block.`);
+  const abovePos = blockPos.offset(0, 1, 0);
+  const above = knownBlock(abovePos);
+  if (!above || above.name !== "air") {
+    console.log(`Cannot till, there is ${above?.name ?? "something unknown"} above the block.`);
     return false;
   }
-  // Move closer if too far
-  if (bot.entity.position.distanceTo(block.position) > 4.5) {
-    await goToPosition(x, y, z, 4);
+  if (!withinReach(blockPos)) {
+    const walked = await goTo(new pf.goals.GoalNear(blockPos.x, blockPos.y, blockPos.z, 3));
+    if (!walked.ok) {
+      console.log(`Can't get to the ground to till: ${describeFailure(walked)}`);
+      return false;
+    }
   }
   if (block.name !== "farmland") {
     const hoe = bot.inventory.items().find((item) => catalog().toolKind(item.name) === "hoe");
@@ -351,33 +219,42 @@ export async function tillAndSow(
       console.log(`Cannot till, no hoes.`);
       return false;
     }
-    await bot.equip(hoe, "hand");
-    await bot.activateBlock(block);
-    console.log(
-      `Tilled block x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}.`
-    );
+    const held = await equipItem(hoe.name, "hand");
+    const used = held.ok ? await useBlock(block) : held;
+    if (!used.ok || !(await settlesTo(blockPos, "farmland"))) {
+      console.log(`Tilling at ${blockPos} didn't work${used.ok ? "" : `: ${describeFailure(used)}`}.`);
+      return false;
+    }
+    console.log(`Tilled block at ${blockPos}.`);
   }
 
   if (seedType) {
-    if (seedType.endsWith("seed") && !seedType.endsWith("seeds"))
-      seedType += "s"; // Fixes common mistake
-    const seeds = bot.inventory
-      .items()
-      .find((item) => (seedType ? item.name === seedType : /_seeds$/.test(item.name)));
+    if (seedType.endsWith("seed") && !seedType.endsWith("seeds")) seedType += "s"; // Fixes common mistake
+    const wanted = seedType;
+    const seeds = bot.inventory.items().find((item) => item.name === wanted);
     if (!seeds) {
       console.log(`No ${seedType} to plant.`);
       return false;
     }
-    await bot.equip(seeds, "hand");
-    markSelfAction(block.position.offset(0, -1, 0));
-    await placingOnPurpose(() => bot.placeBlock(block, new Vec3(0, -1, 0)));
-    console.log(
-      `Planted ${seedType} at x:${x.toFixed(1)}, y:${y.toFixed(
-        1
-      )}, z:${z.toFixed(1)}.`
-    );
+    // Seeds go on top of the farmland (they used to be "placed" below it)
+    const sown = await placeBlockAt(seeds.name, abovePos, { against: new Vec3(0, -1, 0) });
+    if (!sown.ok) {
+      console.log(`Couldn't plant ${seedType} at ${abovePos}: ${describeFailure(sown)}`);
+      return false;
+    }
+    console.log(`Planted ${seedType} at ${abovePos}.`);
   }
   return true;
+}
+
+/** Waits briefly for the block at `pos` to become `name` (the server's answer). */
+async function settlesTo(pos: Vec3, name: string, ms = 1000): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (knownBlock(pos)?.name === name) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return knownBlock(pos)?.name === name;
 }
 
 /** Picks up the items within `distance` (see actions/pickup.ts). */

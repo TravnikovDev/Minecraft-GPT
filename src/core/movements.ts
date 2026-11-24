@@ -109,7 +109,17 @@ export function safeMovements(bot: Bot): pf.Movements {
     // looks built: nothing else it placed or anyone built is ever broken
     safeToBreak(...args: Parameters<pf.Movements["safeToBreak"]>): boolean {
       const [block] = args;
-      if (block?.position && isOwnScaffold(block.position)) return this.canDig;
+      if (block?.position && isOwnScaffold(block.position, block.name)) {
+        // Only "built" is waived: next to water or lava, or under sand and
+        // gravel, its own scaffolding stays too (same checks as for any block)
+        if (!this.canDig) return false;
+        const p = block.position;
+        const near = (dx: number, dy: number, dz: number) =>
+          this.getBlock(p as never, dx, dy, dz) as unknown as { liquid?: boolean; canFall?: boolean };
+        if (this.dontCreateFlow && [near(0, 1, 0), near(-1, 0, 0), near(1, 0, 0), near(0, 0, -1), near(0, 0, 1)].some((b) => b.liquid)) return false;
+        if (this.dontMineUnderFallingBlock && near(0, 1, 0).canFall) return false;
+        return true;
+      }
       return super.safeToBreak(...args);
     }
 

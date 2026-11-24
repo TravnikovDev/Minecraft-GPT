@@ -35,7 +35,11 @@ export async function execute(args: any): Promise<void> {
     bot.chat("I don't know any chest around here.");
     return;
   }
-  const { taken, missing, full, chestAt } = result;
+  const { taken, missing, full, chestAt, problem } = result;
+  if (problem && taken.size === 0) {
+    bot.chat(`I couldn't use the chest at ${chestAt}: ${problem}.`);
+    return;
+  }
   const parts: string[] = [];
   if (taken.size > 0) parts.push(`Took ${describeContents(taken)} from the chest at ${chestAt}.`);
   if (missing.length > 0) parts.push(`There's no ${missing.join(" or ")} in it.`);

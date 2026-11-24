@@ -1,7 +1,8 @@
 import type { Bot } from "mineflayer";
 import { z } from "zod";
 import { bot } from "../core/body";
-import { goToPosition } from "../actions/movement";
+import { goToPositionResult } from "../actions/movement";
+import { describeFailure, wasStopped } from "../core/result";
 
 export const description = `When user asks the bot to go to a block, the bot will search for the nearest block of the 
 specified type and move towards it. If no parameters are provided, the bot will search for the nearest block within 50 blocks.`;
@@ -65,10 +66,6 @@ export async function execute(args: any) {
   }
 
   console.log(`Found ${blockType} at ${block.position}.`);
-  await goToPosition(
-    block.position.x,
-    block.position.y,
-    block.position.z,
-    minDistance
-  );
+  const result = await goToPositionResult(block.position.x, block.position.y, block.position.z, minDistance);
+  if (!result.ok && !wasStopped(result)) bot.chat(`I can't get to the ${blockType.replace(/_/g, " ")}: ${describeFailure(result)}.`);
 }

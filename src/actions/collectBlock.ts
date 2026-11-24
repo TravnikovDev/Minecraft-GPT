@@ -7,6 +7,8 @@ import { __actionsDelay } from "../utils/utility.js";
 import { breakBlockAt, pickupNearbyItems, replaceBrokenTool } from "./worldInteraction.js";
 import { tellOwner } from "../managers/ownerDialog";
 import { pathing, tools } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { expectOk } from "../core/result";
 import { canSee, type SightWorld } from "./sight";
 import { isCommandCancelled } from "../core/commandContext";
 import { tunnelTo } from "./digging";
@@ -123,7 +125,7 @@ export async function collectBlock(
         );
         // Mining digs cheaply, so the path search finds stairs down to an
         // ore instead of timing out (the walking rules forbid shafts)
-        await pathing.withRules({ digCost: MINING_DIG_COST }, () => pathing.goto(goal));
+        expectOk(await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
 
         // Break the block and collect drops
         await mineAndCollect(veinBlock);

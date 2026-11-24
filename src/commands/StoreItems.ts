@@ -46,7 +46,11 @@ export async function execute(args: any): Promise<void> {
     bot.chat("I don't know any chest around here. Place one, or show me one and say 'remember this chest'.");
     return;
   }
-  const { stored, leftOver, chestAt } = result;
+  const { stored, leftOver, chestAt, problem } = result;
+  if (problem && stored.size === 0) {
+    bot.chat(`I couldn't use the chest at ${chestAt}: ${problem}.`);
+    return;
+  }
   if (stored.size === 0 && leftOver.size === 0) {
     const none =
       what === "items"

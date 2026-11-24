@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { Entity } from "prismarine-entity";
 import { bot } from "../core/body";
+import { lookAt } from "../core/primitives";
 import { goToPosition } from "../actions/movement";
 import { getNearbyPlayerNames } from "../actions/world";
 import { __actionsDelay } from "../utils/utility";
@@ -49,7 +50,7 @@ export async function execute(args: any = {}) {
       targetPlayer.position.y,
       targetPlayer.position.z
     );
-    await bot.lookAt(targetPlayer.position.offset(0, 1.6, 0));
+    await lookAt(targetPlayer.position.offset(0, 1.6, 0));
     bot.chat(
       `I'm here! ${player_name} I'm waiting for you 10 seconds and will go back to base`
     );

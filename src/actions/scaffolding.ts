@@ -8,6 +8,8 @@ import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { pathing } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { wasStopped } from "../core/result";
 import { isOwnScaffold, ownScaffolds } from "../core/scaffold";
 import { isCommandCancelled, markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, isIdle, mayWanderTo, noRealWork } from "./pickup";
@@ -68,9 +70,9 @@ export async function takeDownScaffolding(walk = false, keepGoing: () => boolean
     const me = bot.entity.position;
     for (const s of ownScaffolds().filter((p) => me.distanceTo(center(p)) <= CLEANUP_RADIUS && mayWanderTo(p))) {
       if (!keepGoing()) break;
-      try {
-        await pathing.withRules({ allow1by1towers: false }, () => pathing.goto(new pf.goals.GoalNear(s.x, s.y, s.z, 3)));
-      } catch {
+      const walked = await pathing.withRules({ allow1by1towers: false }, () => goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 3)));
+      if (!walked.ok) {
+        if (wasStopped(walked)) break;
         continue; // out of reach from the ground (a pillar standing alone): leave it
       }
       removed += await climbDownOwnPillar(keepGoing);

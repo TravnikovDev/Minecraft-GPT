@@ -3,6 +3,8 @@
 */
 
 import { bot } from "../core/body";
+import { craftWith } from "../core/primitives";
+import { describeFailure } from "../core/result";
 import { catalog } from "../core/catalog";
 import { getItemId } from "../utils/minecraftData";
 import { collectBlock } from "./collectBlock";
@@ -155,7 +157,8 @@ export const ensureSticks = async (neededAmount: number): Promise<boolean> => {
         if (!recipe) throw new Error("no stick recipe available from current inventory");
         // craft count = recipe runs (each yields recipe.result.count sticks)
         const times = Math.ceil((neededAmount - sticksCount) / (recipe.result?.count ?? 4));
-        await bot.craft(recipe, times);
+        const made = await craftWith(recipe, times, null);
+        if (!made.ok) throw new Error(describeFailure(made));
         sticksCount = getItemCount("stick");
         bot.chat(`I have made ${Math.abs(neededAmount - sticksCount)} sticks.`);
         console.log(`Bot: Sticks crafted.`);

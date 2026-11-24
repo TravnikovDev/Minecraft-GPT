@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
+import { equipItem } from "../core/primitives";
 import { equipBestMeleeWeapon, chooseWeaponForTarget } from "../actions/combat";
 import { getPriorityTargets } from "../actions/combat";
 
@@ -44,7 +45,7 @@ export async function execute(args: any) {
         const bows = bot.inventory.items().filter(item => item.name === "bow");
         
         if (bows.length > 0) {
-          await bot.equip(bows[0], "hand");
+          await equipItem(bows[0].name, "hand");
           bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
           
           // Check if we have arrows
@@ -59,7 +60,7 @@ export async function execute(args: any) {
           const crossbows = bot.inventory.items().filter(item => item.name === "crossbow");
           
           if (crossbows.length > 0) {
-            await bot.equip(crossbows[0], "hand");
+            await equipItem(crossbows[0].name, "hand");
             bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
             
             // Check if we have arrows
@@ -82,7 +83,7 @@ export async function execute(args: any) {
           // Sort by quality
           swords.sort((a, b) => catalog().toolTier(b.name) - catalog().toolTier(a.name));
           
-          await bot.equip(swords[0], "hand");
+          await equipItem(swords[0].name, "hand");
           bot.chat(`Equipped ${swords[0].displayName} for combat.`);
           
           // Equip shield in offhand if available and requested
@@ -90,7 +91,7 @@ export async function execute(args: any) {
             const shields = bot.inventory.items().filter(item => item.name === "shield");
             
             if (shields.length > 0) {
-              await bot.equip(shields[0], "off-hand");
+              await equipItem(shields[0].name, "off-hand");
               bot.chat(`Also equipped shield in off-hand for defense.`);
             }
           }
@@ -104,7 +105,7 @@ export async function execute(args: any) {
         const shields = bot.inventory.items().filter(item => item.name === "shield");
         
         if (shields.length > 0) {
-          await bot.equip(shields[0], "off-hand");
+          await equipItem(shields[0].name, "off-hand");
           bot.chat(`Equipped shield in off-hand for defense.`);
           
           // Equip best melee weapon in main hand

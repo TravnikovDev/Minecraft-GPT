@@ -108,6 +108,11 @@ export const pathing = {
   setMovements(movements: Movements): void {
     bot.pathfinder?.setMovements(movements);
   },
+  /** Plans the current route again with the same rules (after the world changed, e.g. a door won't open). */
+  replan(): void {
+    const rules = bot.pathfinder?.movements;
+    if (rules) bot.pathfinder.setMovements(rules);
+  },
   /**
    * Runs `fn` with some walking-rule settings changed, then puts them back.
    * The rules object is shared, so this is the only way to change them for
@@ -140,6 +145,21 @@ export const pathing = {
     if (bot.pathfinder) bot.pathfinder.thinkTimeout = ms;
   },
 };
+
+/**
+ * Stops everything the body is doing right now: walking, fighting, digging,
+ * and any held movement keys (the owner's stop, a cancelled command).
+ */
+export function haltBody(): void {
+  try {
+    pathing.stop();
+    bot.pvp?.forceStop();
+    bot.stopDigging();
+    bot.clearControlStates();
+  } catch (error) {
+    console.error("Error while halting the bot:", error);
+  }
+}
 
 /** Melee combat (mineflayer-pvp). */
 export const fighting = {

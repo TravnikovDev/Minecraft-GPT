@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { chooseChest, describeContents, lookInChest, whereStored } from "../actions/storage";
+import { explain } from "../core/result";
 
 export const description = `Tells what is in the nearest chest, or where an item is stored ("Where are my diamonds?").
 Examples: "What's in the chest?", "Check the chest", "Where did you put the iron?", "Do we have any wool stored?".`;
@@ -33,7 +34,13 @@ export async function execute(args: any): Promise<void> {
     bot.chat("I don't know any chest around here.");
     return;
   }
-  const contents = await lookInChest(chest);
+  let contents: Map<string, number>;
+  try {
+    contents = await lookInChest(chest);
+  } catch (error) {
+    bot.chat(`I couldn't look in the chest: ${explain(error)}.`);
+    return;
+  }
   const p = chest.position;
   if (item) {
     const again = whereStored(item);

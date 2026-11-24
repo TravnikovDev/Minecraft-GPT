@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
+import { useBlock } from "../core/primitives";
+import { describeFailure } from "../core/result";
 import { craftNow } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
 import { goToPosition } from "../actions/movement";
@@ -42,12 +44,9 @@ async function pickBerries(): Promise<void> {
     const bush = bot.blockAt(spot);
     const age = Number(bush?.getProperties()?.["age"] ?? 0);
     if (!bush || age < 2) continue; // not ripe
-    await goToPosition(spot.x, spot.y, spot.z, 2);
-    try {
-      await bot.activateBlock(bush);
-    } catch (error) {
-      console.log(`Couldn't pick berries: ${(error as Error).message}`);
-    }
+    if (!(await goToPosition(spot.x, spot.y, spot.z, 2))) continue;
+    const picked = await useBlock(bush);
+    if (!picked.ok) console.log(`Couldn't pick berries: ${describeFailure(picked)}`);
     await pickupNearbyItems(bot, 4);
   }
 }

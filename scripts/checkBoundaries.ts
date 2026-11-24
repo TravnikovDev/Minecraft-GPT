@@ -14,9 +14,10 @@ import { join, relative } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const ALLOWLIST = join(import.meta.dir, "boundaryAllowlist.json");
 
-// bot methods that change the game, plus direct plugin handles
+// bot methods that change the game, plus direct plugin handles (on `bot`, or a
+// connection's `currentBot` in per-connection setup code)
 const CHANGING_CALL =
-  /\bbot\.(dig|placeBlock|activateBlock|activateEntity|activateItem|equip|unequip|toss|tossStack|craft|openContainer|openFurnace|openChest|openBlock|clickWindow|closeWindow|setControlState|clearControlStates|lookAt|look|sleep|wake|attack|consume|mount|dismount|stopDigging)\(|\bbot\.(pathfinder|pvp|tool|autoEat|armorManager)\./g;
+  /\b(?:bot|currentBot)\.(dig|placeBlock|activateBlock|activateEntity|activateItem|equip|unequip|toss|tossStack|craft|openContainer|openFurnace|openChest|openBlock|clickWindow|closeWindow|setControlState|clearControlStates|lookAt|look|sleep|wake|attack|consume|mount|dismount|stopDigging)\(|\b(?:bot|currentBot)\.(pathfinder|pvp|tool|autoEat|armorManager)\./g;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

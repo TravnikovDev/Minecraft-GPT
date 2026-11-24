@@ -3,6 +3,8 @@
 // crafted armor (or armor it already carried) needs an explicit equip.
 
 import { bot } from "../core/body";
+import { unequipSlot, type EquipSlot } from "../core/primitives";
+import { describeFailure } from "../core/result";
 
 // Inventory window slots worn on the body: head, chest, legs, feet
 const ARMOR_SLOTS = [5, 6, 7, 8];
@@ -40,13 +42,9 @@ export async function takeOffArmor(name: string): Promise<boolean> {
   const slot = SLOT_FOR[name.slice(name.lastIndexOf("_") + 1)];
   if (!slot || !wornArmor().includes(name)) return false;
   noAutoWearUntil = Date.now() + 30_000;
-  try {
-    await bot.unequip(slot);
-    return bot.inventory.items().some((i) => i.name === name);
-  } catch (error) {
-    console.log(`Taking off ${name} failed: ${(error as Error).message}`);
-    return false;
-  }
+  const result = await unequipSlot(slot as EquipSlot);
+  if (!result.ok) console.log(`Taking off ${name} failed: ${describeFailure(result)}`);
+  return result.ok && bot.inventory.items().some((i) => i.name === name);
 }
 
 /**

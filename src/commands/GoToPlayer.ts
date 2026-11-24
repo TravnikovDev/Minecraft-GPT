@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
+import { lookAt } from "../core/primitives";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { isCommandCancelled } from "../core/commandContext";
 import { lastKnownOwnerPosition, ridingWithOwner, tellOwner } from "../managers/ownerDialog";
@@ -109,7 +110,7 @@ export async function execute(args: any = {}) {
   try {
     const success = await goToPlayer(targetName, closeness);
     if (success) {
-      await bot.lookAt(targetPlayer.position.offset(0, 1.6, 0));
+      await lookAt(targetPlayer.position.offset(0, 1.6, 0));
       return;
     }
   } catch (error) {
@@ -129,7 +130,7 @@ export async function execute(args: any = {}) {
     );
     
     if (success) {
-      await bot.lookAt(targetPlayer.position.offset(0, 1.6, 0));
+      await lookAt(targetPlayer.position.offset(0, 1.6, 0));
     } else {
       // If still failed, try unstuck procedure
       bot.chat("Had trouble reaching the player. Trying to get unstuck...");

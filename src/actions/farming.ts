@@ -5,9 +5,9 @@
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
-import { placingOnPurpose } from "../core/scaffold";
+import { breakBlock, placeBlockAt, useBlock } from "../core/primitives";
+import { describeFailure } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
-import { markSelfAction } from "../core/events";
 import { goToPosition } from "./movement";
 import { pickupNearbyItems } from "./worldInteraction";
 
@@ -53,13 +53,8 @@ async function replant(position: Vec3, seed: string): Promise<void> {
   if (farmland?.name !== "farmland" || (spot && spot.name !== "air")) return;
   const item = bot.inventory.items().find((i) => i.name === seed);
   if (!item) return;
-  try {
-    await bot.equip(item, "hand");
-    markSelfAction(position);
-    await placingOnPurpose(() => bot.placeBlock(farmland, new Vec3(0, 1, 0)));
-  } catch (error) {
-    console.log(`Replanting ${seed} at ${position} failed: ${(error as Error).message}`);
-  }
+  const planted = await placeBlockAt(item.name, position, { against: new Vec3(0, -1, 0) });
+  if (!planted.ok) console.log(`Replanting ${seed} at ${position} failed: ${describeFailure(planted)}`);
 }
 
 /** Harvests one ripe crop (or picks a berry bush) and replants it. */
@@ -71,10 +66,11 @@ async function harvestOne(block: Block): Promise<boolean> {
   if (!current || !isRipe(current)) return false; // someone else got it
   try {
     if (current.name === BERRY_BUSH) {
-      await bot.activateBlock(current); // berries come off, the bush stays
+      const picked = await useBlock(current); // berries come off, the bush stays
+      if (!picked.ok) throw new Error(describeFailure(picked));
     } else {
-      markSelfAction(current.position);
-      await bot.dig(current);
+      const broken = await breakBlock(current.position, { allowWithoutHarvest: true });
+      if (!broken.ok) throw new Error(describeFailure(broken));
       const seed = CROPS[current.name]?.seed;
       if (seed) {
         await new Promise((r) => setTimeout(r, 250)); // drops land first

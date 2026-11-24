@@ -25,6 +25,11 @@ export function isCommandCancelled(): boolean {
   return commandSignal.getStore()?.aborted ?? false;
 }
 
+/** The abort signal of the command or chore this code runs for, if any. */
+export function currentSignal(): AbortSignal | undefined {
+  return commandSignal.getStore();
+}
+
 // Cleanup a cancelled command still has to finish (e.g. getting out of a boat
 // and picking it up) before the next command may start
 let pendingCleanup: Promise<unknown> | null = null;

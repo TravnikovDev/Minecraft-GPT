@@ -7,7 +7,10 @@
 // Placements the bot makes on purpose (a chest, a torch, a tunnel floor)
 // run inside placingOnPurpose and are never counted as scaffolding.
 
-const placed = new Map<string, { x: number; y: number; z: number }>();
+import { bot } from "./body";
+
+type Placed = { x: number; y: number; z: number; name: string | null };
+const placed = new Map<string, Placed>();
 let onPurpose = 0;
 const key = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},${p.z}`;
 
@@ -26,14 +29,25 @@ export function isPlacingOnPurpose(): boolean {
   return onPurpose > 0;
 }
 
-/** Records a block the pathfinder placed to get somewhere. */
-export function recordScaffold(p: { x: number; y: number; z: number }): void {
-  placed.set(key(p), { x: p.x, y: p.y, z: p.z });
+/** Records a block the pathfinder placed to get somewhere, and what it was (cobblestone, dirt). */
+export function recordScaffold(p: { x: number; y: number; z: number }, name: string | null = null): void {
+  placed.set(key(p), { x: p.x, y: p.y, z: p.z, name });
 }
 
-/** True for a block the bot placed as scaffolding (it may take it down). */
-export function isOwnScaffold(p: { x: number; y: number; z: number }): boolean {
-  return placed.has(key(p));
+/**
+ * True for a block the bot placed as scaffolding and that is still that
+ * block (it may take it down). A different block there now (the owner built
+ * on the spot) is not its own: that spot is forgotten.
+ */
+export function isOwnScaffold(p: { x: number; y: number; z: number }, nameNow?: string): boolean {
+  const entry = placed.get(key(p));
+  if (!entry) return false;
+  if (entry.name === null) return true; // placed before names were kept
+  const now = nameNow ?? bot.blockAt?.(p as never)?.name;
+  if (now === undefined) return true; // not loaded: unknown, keep it
+  if (now === entry.name) return true;
+  placed.delete(key(p));
+  return false;
 }
 
 /** The block is gone (the bot broke it, or it was replaced). */
@@ -41,9 +55,12 @@ export function forgetScaffold(p: { x: number; y: number; z: number }): void {
   placed.delete(key(p));
 }
 
-/** Every scaffolding block still standing, highest first. */
+/** Every scaffolding block still standing (and still what it placed), highest first. */
 export function ownScaffolds(): { x: number; y: number; z: number }[] {
-  return [...placed.values()].sort((a, b) => b.y - a.y);
+  return [...placed.values()]
+    .filter((p) => isOwnScaffold(p))
+    .map(({ x, y, z }) => ({ x, y, z }))
+    .sort((a, b) => b.y - a.y);
 }
 
 /** A new connection: start over (positions from before may not be ours any more). */

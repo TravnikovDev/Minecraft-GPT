@@ -1,6 +1,7 @@
 // Path: src/actions/combat.ts
 
 import { bot } from "../core/body";
+import { equipItem, lookAt } from "../core/primitives";
 import type { Item } from "prismarine-item";
 import { catalog } from "../core/catalog";
 import { Entity } from "prismarine-entity";
@@ -105,7 +106,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       const bows = bot.inventory.items().filter(item => item.name === "bow"); // includes("bow") matched bowls
       
       if (bows.length > 0) {
-        await bot.equip(bows[0], "hand");
+        await equipItem(bows[0].name, "hand");
         // Check if we have arrows
         const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
         
@@ -119,7 +120,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       const crossbows = bot.inventory.items().filter(item => item.name === "crossbow");
       
       if (crossbows.length > 0 && bot.inventory.items().some(item => catalog().isArrow(item.name))) {
-        await bot.equip(crossbows[0], "hand");
+        await equipItem(crossbows[0].name, "hand");
         bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
         return true;
       }
@@ -128,7 +129,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       // Try to equip shield in offhand and best melee weapon in main hand
       const shields = bot.inventory.items().filter(item => item.name === "shield");
       if (shields.length > 0) {
-        await bot.equip(shields[0], "off-hand");
+        await equipItem(shields[0].name, "off-hand");
         bot.chat(`Equipped shield for defense.`);
       }
       // Also equip best melee weapon
@@ -164,7 +165,7 @@ export async function equipBestMeleeWeapon(): Promise<boolean> {
     }
     const weapons = [best];
     const bestWeapon = weapons[0];
-    await bot.equip(bestWeapon, "hand");
+    await equipItem(bestWeapon.name, "hand");
     bot.chat(`Equipped ${bestWeapon.displayName} for combat.`);
     return true;
   } catch (error) {
@@ -204,7 +205,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
     }
     else if (targetName === "phantom") {
       // For phantoms: they fly, so use ranged weapons and look up
-      bot.lookAt(target.position);
+      void lookAt(target.position);
     }
     else {
       // For other mobs: approach to attack or maintain optimal distance for ranged
@@ -281,7 +282,7 @@ async function useShield(): Promise<boolean> {
       // Equip shield in off-hand if not already equipped
       const currentOffhand = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
       if (!currentOffhand || currentOffhand.name !== "shield") {
-        await bot.equip(shields[0], "off-hand");
+        await equipItem(shields[0].name, "off-hand");
       }
       
       // Activate shield (right click)

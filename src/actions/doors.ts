@@ -14,6 +14,7 @@ import { Vec3 } from "vec3";
 import { bot, onConnectionEnd } from "../core/body";
 import { isWoodenDoor, markDoorSolid } from "../core/movements";
 import { pathing } from "../core/plugins";
+import { useBlock } from "../core/primitives";
 
 const CHECK_MS = 150;
 const OPEN_RANGE = 2.2; // open a door on the route this close to the bot
@@ -114,14 +115,14 @@ async function tick(): Promise<void> {
       if (door) {
         const opened = { pos: door.position.clone(), axis: crossingAxis(door), startSide: 0 };
         opened.startSide = sideOf(opened).side;
-        await bot.activateBlock(door);
+        await useBlock(door);
         if (await becameOpen(door.position)) {
           openedByBot.set(key(door.position), opened);
           console.log(`Opened the door at ${door.position}.`);
         } else {
           // The server refused (protected area, adventure mode): route around it
           markDoorSolid(door.position);
-          if (bot.pathfinder?.movements) pathing.setMovements(bot.pathfinder.movements); // replan
+          pathing.replan(); // the route goes around it now
           console.log(`The door at ${door.position} won't open; finding another way.`);
         }
       }
@@ -137,7 +138,7 @@ async function tick(): Promise<void> {
       openedByBot.delete(k);
       const door = bot.blockAt(opened.pos);
       if (!door || !isWoodenDoor(door.name) || !isOpen(door)) continue; // someone closed it already
-      await bot.activateBlock(door);
+      await useBlock(door);
       console.log(`Closed the door at ${opened.pos} behind me.`);
     }
   } catch (error) {

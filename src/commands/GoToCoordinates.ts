@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
+import { goToPositionResult, LONG_TRIP_BLOCKS, travelToResult } from "../actions/movement";
+import { describeFailure, wasStopped } from "../core/result";
 import { bot } from "../core/body";
 import { isCommandCancelled } from "../core/commandContext";
 import { tellOwner } from "../managers/ownerDialog";
@@ -32,15 +33,15 @@ export async function execute(args: any) {
 
   // Short trips: one path search. Long trips: legs with progress updates.
   if (distance <= LONG_TRIP_BLOCKS) {
-    const ok = await goToPosition(x, y, z);
-    if (!ok && !isCommandCancelled()) tellOwner(`I couldn't find a way to ${x}, ${y}, ${z}.`);
+    const result = await goToPositionResult(x, y, z);
+    if (!result.ok && !wasStopped(result)) tellOwner(`I couldn't get to ${x}, ${y}, ${z}: ${describeFailure(result)}.`);
     return;
   }
 
   tellOwner(`Heading to ${x}, ${y}, ${z}, about ${Math.round(distance)} blocks away.`);
-  const arrived = await travelTo(() => ({ x, y, z }), {
+  const arrived = await travelToResult(() => ({ x, y, z }), {
     onProgress: (percent) => tellOwner(`On my way: ${percent}% there.`),
   });
-  if (isCommandCancelled()) return;
-  tellOwner(arrived ? `I'm at ${x}, ${y}, ${z}!` : `I got stuck on the way to ${x}, ${y}, ${z}.`);
+  if (isCommandCancelled() || wasStopped(arrived)) return;
+  tellOwner(arrived.ok ? `I'm at ${x}, ${y}, ${z}!` : `I got stuck on the way to ${x}, ${y}, ${z}: ${describeFailure(arrived)}.`);
 }

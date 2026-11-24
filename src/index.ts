@@ -3,24 +3,20 @@
 // connection owner in core/body.ts), connects, and runs the command loop.
 
 import mineflayer from "mineflayer";
-import { pathfinder } from "mineflayer-pathfinder";
-import { clearSolidDoors, isSafeMovements, walkingRules } from "./core/movements";
-import { clearScaffolds, forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./core/scaffold";
+import { clearSolidDoors } from "./core/movements";
+import { installPlugins } from "./core/setup";
+import { clearScaffolds } from "./core/scaffold";
 import { registerDoorOpener } from "./actions/doors";
 import { autoWearArmor } from "./actions/armor";
 import { tidyUpWhileIdle } from "./actions/pickup";
 import { replantWhenIdle } from "./actions/forestry";
 import { cleanUpScaffoldingWhenIdle } from "./actions/scaffolding";
-import { plugin as pvp } from "mineflayer-pvp";
-import { plugin as autoEat } from "mineflayer-auto-eat";
-import { plugin as tool } from "mineflayer-tool";
-import armorManager from "mineflayer-armor-manager";
 import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionEnd, onConnectionReady } from "./core/body";
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { recordTurn, saveBed } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
-import { abortForDisconnect, executeCommands, getCurrentCommandName, handleBotRejoin } from "./managers/actionManager";
+import { abortForDisconnect, executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
 import { handleChat, isOwner } from "./managers/chatGateway";
 import { registerCombatReflex } from "./actions/combatReflex";
@@ -56,28 +52,7 @@ let restartRecoveryChecked = false;
 
 /** Loads plugins and per-connection behavior once a connection first spawns. */
 onConnectionReady((currentBot) => {
-  currentBot.loadPlugin(pathfinder);
-  currentBot.loadPlugin(pvp);
-  currentBot.loadPlugin(autoEat);
-  currentBot.loadPlugin(tool);
-  currentBot.loadPlugin(armorManager);
-
-  // One set of walking rules: natural terrain only, doors opened (core/movements).
-  // mineflayer-pvp brings its own default rules (dig through anything) and
-  // swaps them in on every attack, so it gets the same rules.
-  const rules = walkingRules(currentBot);
-  currentBot.pathfinder.setMovements(rules);
-  currentBot.pvp.movements = rules;
-
-  // Backstop: if anything ever swaps in other walking rules (a plugin's
-  // defaults dig through walls), say so and put the safe ones back
-  everyWhileConnected(currentBot, 2000, () => {
-    const current = currentBot.pathfinder?.movements;
-    if (!current || isSafeMovements(current)) return;
-    console.error("Walking rules were replaced by unsafe ones; restoring the safe rules.");
-    currentBot.pathfinder.setMovements(rules);
-    if (currentBot.pvp) currentBot.pvp.movements = rules;
-  });
+  installPlugins(currentBot); // plugins, safe walking rules, dig/place hooks, eating (core/setup)
 
   // Armor it carries but doesn't wear (crafted, given, or after a restart) goes on
   everyWhileConnected(currentBot, 10_000, autoWearArmor);
@@ -90,47 +65,6 @@ onConnectionReady((currentBot) => {
 
   // Pillars and bridges it built to get somewhere come down again
   everyWhileConnected(currentBot, 5_000, cleanUpScaffoldingWhenIdle);
-
-  // Every block the bot breaks, with what it was doing, so a broken wall can be
-  // traced. This wraps bot.dig instead of listening to "diggingCompleted":
-  // that event hands over the block after breaking (air), and both mineflayer
-  // (on death) and the pathfinder (on every path reset, a removeAllListeners
-  // call whose second argument Node ignores) strip all of its listeners.
-  const dig = currentBot.dig.bind(currentBot);
-  currentBot.dig = (async (block: Parameters<typeof dig>[0], ...rest: unknown[]): Promise<void> => {
-    const what = block.name;
-    const moving = currentBot.pathfinder.isMoving() ? "while walking" : "standing";
-    await (dig as (...a: unknown[]) => Promise<void>)(block, ...rest);
-    forgetScaffold(block.position);
-    console.log(`Broke ${what} at ${block.position} (${moving}, task ${getCurrentCommandName() ?? "idle"}).`);
-  }) as typeof currentBot.dig;
-
-  // Blocks the pathfinder puts down to get somewhere (pillars up a tall tree,
-  // bridges) are scaffolding the bot takes down again (core/scaffold);
-  // deliberate placements (chests, torches, seeds) are marked as such
-  const place = currentBot.placeBlock.bind(currentBot);
-  currentBot.placeBlock = (async (reference: Parameters<typeof place>[0], face: Parameters<typeof place>[1]): Promise<void> => {
-    const target = reference.position.plus(face);
-    await place(reference, face);
-    if (!isPlacingOnPurpose()) {
-      recordScaffold(target);
-      console.log(`Placed scaffolding at ${target} (task ${getCurrentCommandName() ?? "idle"}).`);
-    }
-  }) as typeof currentBot.placeBlock;
-
-  // Configure auto-eat plugin settings
-  currentBot.autoEat.options = {
-    priority: "foodPoints", // Prioritize foods that restore the most hunger points
-    startAt: 14, // Start eating when hunger is at or below this level
-    bannedFood: [], // No foods are banned by default
-    healthThreshold: 10, // Start eating when health is at or below this level
-    eatingTimeout: 3000, // Timeout for eating in milliseconds
-    ignoreInventoryCheck: false, // Do not ignore inventory check
-    checkOnItemPickup: true, // Check food on item pickup
-    equipOldItem: true, // Equip old item after eating
-    offhand: true, // Use offhand for food
-  };
-  currentBot.autoEat.enable();
 
   resetReflexes(); // a new connection starts with no reflex running
   pathing.resetPaused(); // a follow paused on the old connection points at a gone entity

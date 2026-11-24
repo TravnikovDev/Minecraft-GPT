@@ -13,7 +13,8 @@ import pf from "mineflayer-pathfinder";
 import { isNatural } from "../core/movements";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
-import { pathing } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { expectOk } from "../core/result";
 
 export type DirectionType = "north" | "south" | "west" | "east";
 
@@ -450,7 +451,7 @@ export async function digDiagonalTunnelUp(
 
 /** Walks to a spot inside a tunnel it just dug (the path is clear, nothing to dig). */
 async function walkTo(pos: Vec3): Promise<void> {
-  await pathing.goto(new pf.goals.GoalBlock(pos.x, pos.y, pos.z));
+  expectOk(await goTo(new pf.goals.GoalBlock(pos.x, pos.y, pos.z)));
 }
 
 /**

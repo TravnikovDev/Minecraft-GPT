@@ -14,6 +14,8 @@ import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { pathing } from "../core/plugins";
+import { goTo } from "../core/primitives";
+import { describeFailure, wasStopped } from "../core/result";
 import { isCommandCancelled, getCurrentCommandName, markOwnWork } from "../core/commandContext";
 import { isAnyReflexActive } from "../core/reflexes";
 import { areChoresMuted, inChore, isChoreRunning, runChore } from "../core/chores";
@@ -60,12 +62,14 @@ export async function tossing<T>(toss: () => Promise<T>, { pickUpLater = false }
     if (pickUpLater) setDownForLater.add(e);
     else tossedByMe.add(e);
   };
-  bot.on("entitySpawn", onSpawn);
+  // The listener goes off the same connection it went on (a reconnect swaps the bot)
+  const current = bot;
+  current.on("entitySpawn", onSpawn);
   try {
     return await toss();
   } finally {
     // The item entity arrives a tick or two after the toss
-    setTimeout(() => bot.off("entitySpawn", onSpawn), 1000);
+    setTimeout(() => current.removeListener("entitySpawn", onSpawn), 1000);
   }
 }
 
@@ -131,12 +135,15 @@ export async function collectDrops(
     if (isCommandCancelled() || !keepGoing()) break;
     const item = looseItems(radius, skip, onlyVisible, leave)[0];
     if (!item) break; // nothing left it has room for
-    try {
-      const p = item.position;
-      await pathing.goto(new pf.goals.GoalNear(p.x, p.y, p.z, 1));
-    } catch (error) {
-      if (isCommandCancelled() || !keepGoing()) break; // stopped, or real work started
-      console.log(`Can't get to the ${itemName(item)} on the ground: ${(error as Error).message}`);
+    const p = item.position;
+    const walked = await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1));
+    if (!walked.ok) {
+      if (wasStopped(walked) || isCommandCancelled() || !keepGoing()) break; // stopped, or real work started
+      if (!bot.entities[item.id]) {
+        collected++; // picked it up on the way (it rolled to the bot)
+        continue;
+      }
+      console.log(`Can't get to the ${itemName(item)} on the ground: ${describeFailure(walked)}`);
       unreachableUntil.set(item, Date.now() + UNREACHABLE_MS); // ledge, lava, no path: leave it
       continue;
     }

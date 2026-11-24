@@ -77,10 +77,9 @@ export async function execute(args: any) {
     theName = players[0];
   }
 
-  const result = await giveToPlayer(item_name, theName, num);
-  if (result) {
-    bot.chat(`Gave ${num} ${item_name} to ${theName}`);
-  } else {
-    bot.chat(`Failed to give ${num} ${item_name} to ${theName}`);
-  }
+  // Say what was really handed over
+  const given = await giveToPlayer(item_name, theName, num);
+  if (given >= num) bot.chat(`Gave ${given} ${pretty} to ${theName}`);
+  else if (given > 0) bot.chat(`Gave ${given} of ${num} ${pretty} to ${theName}`);
+  else bot.chat(`I couldn't give the ${pretty} to ${theName}.`);
 }
