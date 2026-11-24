@@ -36,6 +36,8 @@ enum BotCommands {
   Sleep = "sleep",
   PlaceItem = "placeItem",
   GoByBoat = "goByBoat",
+  Harvest = "harvest",
+  GatherFood = "gatherFood",
   UseNearbyObject = "useNearbyObject",
   DeployVehicle = "deployVehicle",
   Stop = "stop",

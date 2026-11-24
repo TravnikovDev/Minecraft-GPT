@@ -40,6 +40,8 @@ import * as StarterKit from "./StarterKit";
 import * as Sleep from "./Sleep";
 import * as PlaceItem from "./PlaceItem";
 import * as GoByBoat from "./GoByBoat";
+import * as Harvest from "./Harvest";
+import * as GatherFood from "./GatherFood";
 import * as UseNearbyObject from "./UseNearbyObject";
 import * as DeployVehicle from "./DeployVehicle";
 
@@ -85,6 +87,8 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.Sleep]: Sleep,
   [BotCommands.PlaceItem]: PlaceItem,
   [BotCommands.GoByBoat]: GoByBoat,
+  [BotCommands.Harvest]: Harvest,
+  [BotCommands.GatherFood]: GatherFood,
   [BotCommands.UseNearbyObject]: UseNearbyObject,
   [BotCommands.DeployVehicle]: DeployVehicle,
   [BotCommands.Stop]: Stop,

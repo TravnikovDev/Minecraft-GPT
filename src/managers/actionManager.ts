@@ -57,6 +57,8 @@ const LONG_RUNNING_LIMITS: Record<string, number> = {
   collectBlocks: 15 * 60 * 1000,
   hunting: 10 * 60 * 1000,
   goByBoat: 30 * 60 * 1000,
+  harvest: 10 * 60 * 1000,
+  gatherFood: 15 * 60 * 1000,
 };
 const ACTION_CHECK_INTERVAL = 5000; // Check action progress every 5 seconds
 const STUCK_THRESHOLD = 3;          // Number of consecutive checks without movement to trigger unstuck

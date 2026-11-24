@@ -11,7 +11,8 @@ import { fighting } from "../core/plugins";
 
 export const description = `When user asks the bot to hunt, the bot finds the nearest animal (optionally of a given type),
 kills it and picks up the drops, repeating for the requested number of animals.
-Example: "Hunt for animals within 10 blocks.", "Kill 3 sheep", "Gather some food", "Kill the chicken", "Hunt for pigs".`;
+Only for hunting animals; for food in general use gatherFood (farms first).
+Example: "Hunt for animals within 10 blocks.", "Kill 3 sheep", "Kill the chicken", "Hunt for pigs".`;
 
 // Define parameters for the Hunting action
 export const parameters = z.object({
