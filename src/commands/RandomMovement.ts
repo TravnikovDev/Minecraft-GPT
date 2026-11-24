@@ -1,7 +1,7 @@
 // Path: src/actions/RandomMovement.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goToPosition } from "../actions/movement";
 
 export const description = `When user asks the bot to move randomly, the bot will move in a random direction

@@ -1,7 +1,7 @@
 // Path: src/commands/Unstack.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { moveAway } from "../actions/movement";
 
 export const description = `When the user says the bot is stuck or asks it to move away, the bot walks a short distance

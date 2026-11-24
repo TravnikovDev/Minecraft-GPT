@@ -1,0 +1,84 @@
+// Path: src/core/session.ts
+// The Session: state that lives for the whole process and survives both
+// reconnects and bot restarts (saved in db.json under "memory"):
+// - the last death (where/when, for item recovery),
+// - the owner's last known position (for "come here" when out of sight),
+// - the recent conversation with the owner (sent with each AI request).
+
+import { getMemory, updateMemory } from "../managers/persistenceManager";
+import type { MemoryType } from "../schemas/types";
+
+// --- Last death ------------------------------------------------------------
+
+export type SavedDeath = NonNullable<MemoryType["lastDeath"]>;
+
+export function loadDeath(): SavedDeath | null {
+  return getMemory().lastDeath ?? null;
+}
+
+export async function saveDeath(death: SavedDeath | null): Promise<void> {
+  await updateMemory({ lastDeath: death ?? undefined });
+}
+
+// --- Owner's last known position -------------------------------------------
+
+export type SavedPosition = NonNullable<MemoryType["ownerPosition"]>;
+
+const OWNER_SAVE_MIN_MS = 60 * 1000;
+const OWNER_SAVE_MIN_BLOCKS = 8;
+
+export function loadOwnerPosition(): SavedPosition | null {
+  return getMemory().ownerPosition ?? null;
+}
+
+/**
+ * Saves the owner's position. Positions the bot merely *sees* change all the
+ * time, so those are only written when the owner moved a bit or a minute
+ * passed; coordinates the owner typed (`force`) are always written.
+ */
+export async function saveOwnerPosition(position: SavedPosition, force = false): Promise<void> {
+  const last = loadOwnerPosition();
+  if (!force && last) {
+    const moved = Math.hypot(position.x - last.x, position.y - last.y, position.z - last.z);
+    if (moved < OWNER_SAVE_MIN_BLOCKS && position.at - last.at < OWNER_SAVE_MIN_MS) return;
+  }
+  await updateMemory({ ownerPosition: position });
+}
+
+// --- Conversation memory -----------------------------------------------------
+
+export type Turn = { role: "owner" | "bot"; text: string; at: number };
+
+const MAX_TURNS = 12; // about 6 exchanges
+const MAX_TURN_CHARS = 200;
+const CONVERSATION_EXPIRY_MS = 15 * 60 * 1000; // forget after 15 minutes of silence
+
+// Loaded lazily: db.json is read at startup, after this module is imported
+let conversation: Turn[] | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Recent turns, oldest first; everything is forgotten after 15 minutes of silence. */
+export function recentConversation(): Turn[] {
+  conversation ??= (getMemory().conversation ?? []) as Turn[];
+  const last = conversation.at(-1);
+  if (last && Date.now() - last.at > CONVERSATION_EXPIRY_MS) conversation = [];
+  return conversation;
+}
+
+/** Adds what the owner said or what the bot replied (chat and whispers). */
+export function recordTurn(role: Turn["role"], text: string): void {
+  const clean = text.trim().slice(0, MAX_TURN_CHARS);
+  if (!clean) return;
+  const turns = recentConversation(); // also drops an expired conversation
+  const previous = turns.at(-1);
+  if (previous && previous.role === role && previous.text === clean) return;
+  conversation = [...turns, { role, text: clean, at: Date.now() }].slice(-MAX_TURNS);
+
+  // Save at most once every few seconds; chat comes in bursts
+  if (!saveTimer) {
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void updateMemory({ conversation: conversation ?? [] });
+    }, 3000);
+  }
+}

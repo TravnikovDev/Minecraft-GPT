@@ -1,7 +1,7 @@
 // Path: src/actions/ReturnToBase.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goToPosition } from "../actions/movement";
 import { getBaseLocation } from "../managers/persistenceManager";
 

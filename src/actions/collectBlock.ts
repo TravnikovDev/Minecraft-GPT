@@ -1,4 +1,4 @@
-import { bot } from "../index";
+import { bot } from "../core/body";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
 import * as world from "./world.js";

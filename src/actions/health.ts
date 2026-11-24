@@ -1,6 +1,6 @@
 // Path: src/actions/health.ts
 
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { defendSelf, equipBestMeleeWeapon } from "./combat";
 
 // Track previous health to detect damage

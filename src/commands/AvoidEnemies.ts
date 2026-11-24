@@ -1,7 +1,7 @@
 // Path: src/commands/AvoidEnemies.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
 import { getPriorityTargets } from "../actions/combat";

@@ -1,7 +1,7 @@
 // Path: src/actions/FindAndRememberNearChest.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 
 export const description = `When user asks the bot to find and remember nearby chests, the bot will search for chests

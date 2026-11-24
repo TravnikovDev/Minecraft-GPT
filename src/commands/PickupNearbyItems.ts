@@ -1,7 +1,7 @@
 // Path: src/actions/PickupNearbyItems.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { pickupNearbyItems } from "../actions/worldInteraction";
 
 export const description = `When user asks the bot to pick up nearby items, the bot will search for items on the ground

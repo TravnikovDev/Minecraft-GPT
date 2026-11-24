@@ -1,7 +1,7 @@
 // Path: src/actions/BuildStoneHouse.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 import { placeBlock } from "../actions/worldInteraction";
 

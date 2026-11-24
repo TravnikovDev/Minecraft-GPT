@@ -1,6 +1,6 @@
 // Path: src/managers/botProgress.ts
 
-import { bot } from "..";
+import { bot } from "../core/body";
 import { getInventory, getBotProgress, saveBotProgress } from "./persistenceManager";
 import { getItemCraftingRecipes } from "../utils/minecraftData";
 

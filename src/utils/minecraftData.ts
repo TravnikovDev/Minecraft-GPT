@@ -9,7 +9,7 @@ import minecraftData, {
 import prismarineItem from "prismarine-item";
 import { Entity } from "prismarine-entity";
 import type { Bot } from "mineflayer";
-import { bot } from "..";
+import { bot } from "../core/body";
 
 /**
  * Game data must match the server's Minecraft version: item/block IDs and

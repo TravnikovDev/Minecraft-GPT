@@ -1,7 +1,7 @@
 // Path: src/actions/GoToPlayer.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { isCommandCancelled } from "../managers/actionManager";
 import { lastKnownOwnerPosition, tellOwner } from "../managers/ownerDialog";

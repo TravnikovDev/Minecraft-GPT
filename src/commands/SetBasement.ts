@@ -1,7 +1,7 @@
 // Path: src/actions/SetBasement.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { buildShelter } from "../actions/building";
 
 export const description = `When the user asks the bot to set up a basement, the bot will dig a diagonal tunnel down and 

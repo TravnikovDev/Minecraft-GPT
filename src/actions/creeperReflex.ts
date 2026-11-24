@@ -6,7 +6,7 @@
 
 import type { Entity } from "prismarine-entity";
 import type { Item } from "prismarine-item";
-import { bot } from "../index";
+import { bot } from "../core/body";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;

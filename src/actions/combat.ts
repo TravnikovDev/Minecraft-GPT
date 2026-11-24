@@ -1,6 +1,6 @@
 // Path: src/actions/combat.ts
 
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
 import { goals, Movements } from "mineflayer-pathfinder";

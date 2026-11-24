@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { discard } from "../actions/inventory";
-import { bot } from "..";
+import { bot } from "../core/body";
 
 export const description = `When user asks the bot to discard an item from its inventory, the bot will discard the item.
 Example: "Discard the sword.", "Drop the pickaxe", "Get rid of the food.".`;

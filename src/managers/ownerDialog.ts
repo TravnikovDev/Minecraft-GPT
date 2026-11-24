@@ -3,8 +3,9 @@
 // where the owner is, and yes/no questions the bot can ask and wait on.
 
 import type { Entity } from "prismarine-entity";
-import { bot } from "..";
+import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
+import { loadOwnerPosition, saveOwnerPosition } from "../core/session";
 
 const DUPLICATE_WINDOW_MS = 3000;
 let lastMessage = "";
@@ -23,21 +24,25 @@ export function ownerEntity(): Entity | null {
   return name ? bot.players[name]?.entity ?? null : null;
 }
 
-// Where the owner was last seen or said they are, for "come here" when out of sight
+// Where the owner was last seen or said they are, for "come here" when out of
+// sight. Saved in the Session, so it survives a bot restart.
 const LAST_KNOWN_TTL_MS = 30 * 60 * 1000;
-let lastKnown: { x: number; y: number; z: number; at: number } | null = null;
 
-/** Records where the owner is (seen, or coordinates they typed). */
-export function rememberOwnerPosition(x: number, y: number, z: number): void {
-  lastKnown = { x, y, z, at: Date.now() };
+/** Records where the owner is: `typed` for coordinates they sent, else seen. */
+export function rememberOwnerPosition(x: number, y: number, z: number, typed = false): void {
+  void saveOwnerPosition({ x, y, z, at: Date.now() }, typed);
 }
 
 /** The owner's last known position (within 30 minutes), or null. */
 export function lastKnownOwnerPosition(): { x: number; y: number; z: number } | null {
   const seen = ownerEntity();
-  if (seen) rememberOwnerPosition(seen.position.x, seen.position.y, seen.position.z);
-  if (!lastKnown || Date.now() - lastKnown.at > LAST_KNOWN_TTL_MS) return null;
-  return { x: lastKnown.x, y: lastKnown.y, z: lastKnown.z };
+  if (seen) {
+    rememberOwnerPosition(seen.position.x, seen.position.y, seen.position.z);
+    return { x: seen.position.x, y: seen.position.y, z: seen.position.z };
+  }
+  const saved = loadOwnerPosition();
+  if (!saved || Date.now() - saved.at > LAST_KNOWN_TTL_MS) return null;
+  return { x: saved.x, y: saved.y, z: saved.z };
 }
 
 /** Distance to the owner in blocks, or null if the bot can't see them. */

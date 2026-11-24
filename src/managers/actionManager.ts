@@ -11,7 +11,7 @@ import {
 import { AsyncLocalStorage } from "node:async_hooks";
 import { executeTool } from "./toolManager";
 import type { CommandType } from "../schemas/types";
-import { bot } from "..";
+import { bot } from "../core/body";
 import { unstuck } from "../actions/unstuck";
 import { isCreeperReflexActive } from "../actions/creeperReflex";
 

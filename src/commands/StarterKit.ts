@@ -1,7 +1,7 @@
 // Path: src/commands/StarterKit.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { craftNow } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
 import { goToPosition } from "../actions/movement";

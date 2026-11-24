@@ -1,7 +1,7 @@
 // Path: src/actions/SetBase.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import {
   getBaseLocation,
   saveBaseLocation,

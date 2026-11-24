@@ -1,7 +1,7 @@
 // Path: src/actions/Stop.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { removeAllCommands } from "../managers/persistenceManager";
 
 export const description = `When user asks the bot to stop, it will stop moving. It will also remove all the commands from the queue.

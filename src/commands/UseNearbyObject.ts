@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { useNearbyObject } from "../actions/worldInteraction.js";
-import { bot } from "../index.js";
+import { bot } from "../core/body";
 
 export const description = `Makes the bot interact with a nearby object such as vehicles, animals, or interactive blocks.
 The bot can use, enter, exit, toggle, switch on/off various objects, or mount/dismount rideable entities.

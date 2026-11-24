@@ -1,4 +1,4 @@
-import { bot } from "../index";
+import { bot } from "../core/body";
 import {
   breakBlockAt,
   pickupNearbyItems,

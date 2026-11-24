@@ -1,7 +1,7 @@
 // Path: src/actions/CraftStoneTools.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { craftRecipe } from "../actions/crafting";
 import { __actionsDelay } from "../utils/utility";
 import { ensureCobblestone, ensureSticks } from "../actions/ensure";

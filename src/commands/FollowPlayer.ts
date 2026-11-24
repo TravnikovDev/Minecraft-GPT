@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { followPlayer } from "../actions/movement";
 import { getNearbyPlayerNames } from "../actions/world";
-import { bot } from "..";
+import { bot } from "../core/body";
 
 export const description = `When user asks the bot to follow a player, the bot will follow the player at a specified distance.
 Example: "Follow player Steve at a distance of 2 blocks.", "Follow me", "Let' go", "Let' go together".`;

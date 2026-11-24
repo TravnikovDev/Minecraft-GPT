@@ -1,7 +1,7 @@
 // Path: src/actions/DigDirectionalTunnel.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { digDiagonalTunnel } from "../actions/digging";
 import { ensurePickaxe } from "../actions/ensureTools";
 

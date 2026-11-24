@@ -1,7 +1,7 @@
 // Path: src/commands/DescribeSurroundings.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 
 export const description = `Describes where the bot is: biome, time of day, weather, and what's nearby (trees, ores,
 water, lava, useful blocks, animals, monsters, players). Answers immediately, even while busy.

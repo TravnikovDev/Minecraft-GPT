@@ -5,7 +5,7 @@
 
 import type { Entity } from "prismarine-entity";
 import type { Item } from "prismarine-item";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { getCurrentCommandName } from "../managers/actionManager";
 import { ownerDistance, tellOwner } from "../managers/ownerDialog";
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getBotPosition } from "../actions/movement";
-import { bot } from "../index.js";
+import { bot } from "../core/body";
 import { directionFromOwner, ownerDistance } from "../managers/ownerDialog";
 
 export const description = `Reports the bot's current position (x, y, z coordinates).

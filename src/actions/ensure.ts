@@ -2,7 +2,7 @@
     Purpose: This file will store various functions used to ensure the bot has needed items for in-game actions.
 */
 
-import { bot } from "..";
+import { bot } from "../core/body";
 import { getItemId } from "../utils/minecraftData";
 import { collectBlock } from "./collectBlock";
 import { craftRecipe } from "./crafting";

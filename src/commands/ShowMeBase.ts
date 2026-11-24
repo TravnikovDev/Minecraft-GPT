@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { Entity } from "prismarine-entity";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goToPosition } from "../actions/movement";
 import { getNearbyPlayerNames } from "../actions/world";
 import { __actionsDelay } from "../utils/utility";

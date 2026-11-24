@@ -1,6 +1,6 @@
 // Only include imports that are actually used in this file
 import { Vec3 } from "vec3";
-import { bot } from "..";
+import { bot } from "../core/body";
 import {
   breakBlockAt,
   pickupNearbyItems,

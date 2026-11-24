@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { deployVehicle } from "../actions/worldInteraction.js";
-import { bot } from "../index.js";
+import { bot } from "../core/body";
 
 export const description = `Makes the bot deploy a vehicle (minecart, boat) in the world or place a saddle on an animal.
 For minecarts, the bot will find nearby rails to place it on.

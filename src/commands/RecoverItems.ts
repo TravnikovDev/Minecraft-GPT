@@ -1,7 +1,7 @@
 // Path: src/commands/RecoverItems.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/worldInteraction";
 import { canReachBeforeDespawn, clearLastDeath, getLastDeath } from "../actions/recovery";

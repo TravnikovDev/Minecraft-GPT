@@ -3,7 +3,7 @@
 // most common commands (stop, come, follow, status) are handled by code with
 // no LLM call, so they work instantly and even when OpenAI is unreachable.
 
-import { bot } from "..";
+import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { BotCommands } from "../commands/types";
 import { initiateActionFromAI } from "./aiManager";
@@ -15,6 +15,7 @@ import {
 import { executeTool } from "./toolManager";
 import { addCommandToQueue, getAllCommands } from "./persistenceManager";
 import { answerPending, hasPendingQuestion, rememberOwnerPosition } from "./ownerDialog";
+import { recordTurn } from "../core/session";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
 // message (allowing "please", the bot's name and trailing punctuation).
@@ -74,7 +75,7 @@ async function tryFastPath(message: string): Promise<boolean> {
   if (coords) {
     const [x, y, z] = coords.slice(1, 4).map(Number) as [number, number, number];
     console.log(`Fast path: go to ${x} ${y} ${z}`);
-    rememberOwnerPosition(x, y, z); // the owner almost always sends their own position
+    rememberOwnerPosition(x, y, z, true); // the owner almost always sends their own position
     await cancelCurrentCommand("owner gave coordinates");
     await addCommandToQueue({
       id: crypto.randomUUID(),
@@ -140,6 +141,7 @@ export async function handleChat(username: string, message: string): Promise<voi
   }
 
   const text = stripBotName(message);
+  recordTurn("owner", text);
   try {
     if (await tryFastPath(text)) return;
     await initiateActionFromAI(username, text);

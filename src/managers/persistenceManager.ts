@@ -9,6 +9,7 @@ import type {
   CommandType,
   DbSchemaType,
   InventoryItemType,
+  MemoryType,
   MineType,
   PositionType,
 } from "../schemas/types";
@@ -377,4 +378,18 @@ export function getBotProgress(): {
     };
   }
   return db.data.botProgress;
+}
+
+// --- Session memory (survives restarts) --------------------------------------
+
+/** The persisted session memory (death spot, owner position, conversation). */
+export function getMemory(): MemoryType {
+  return db.data?.memory ?? {};
+}
+
+/** Merges fields into the persisted session memory and saves. */
+export async function updateMemory(patch: Partial<MemoryType>): Promise<void> {
+  if (!db.data) return;
+  db.data.memory = { ...(db.data.memory ?? {}), ...patch };
+  await saveDb();
 }

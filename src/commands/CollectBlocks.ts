@@ -1,7 +1,7 @@
 // Path: src/actions/CollectBlock.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { collectBlock } from "../actions/collectBlock";
 
 export const description = `The user asks the bot to collect a certain number of blocks of a specific type. The bot will 

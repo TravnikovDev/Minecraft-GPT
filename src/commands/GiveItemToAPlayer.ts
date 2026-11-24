@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { giveToPlayer } from "../actions/inventory";
 import { getNearbyPlayerNames } from "../actions/world";
-import { bot } from "..";
+import { bot } from "../core/body";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
 Example: "Give a sword to Steve.", "Give 2 apples to Alex", "Give a pickaxe to me", "Give me 20 spruce_log".`;

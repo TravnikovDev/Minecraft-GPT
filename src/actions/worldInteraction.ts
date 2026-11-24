@@ -1,6 +1,6 @@
 // src/actions/worldInteraction.ts
 
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";

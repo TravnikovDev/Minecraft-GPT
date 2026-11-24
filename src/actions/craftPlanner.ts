@@ -4,7 +4,7 @@
 // intermediate parts it can make itself (planks from logs, sticks from
 // planks), and lists the raw materials it is still missing.
 
-import { bot } from "../index";
+import { bot } from "../core/body";
 
 /** How deep to plan intermediate parts (bed -> planks -> logs is depth 2). */
 const MAX_DEPTH = 3;

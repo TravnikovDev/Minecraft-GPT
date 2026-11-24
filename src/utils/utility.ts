@@ -1,6 +1,6 @@
 // Path: src/utils/utility.ts
 
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Item } from "prismarine-item";
 
 // Utility function to log messages to the console and optionally send them in chat

@@ -1,7 +1,7 @@
 // Path: src/commands/EquipBestWeapon.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { equipBestMeleeWeapon, chooseWeaponForTarget } from "../actions/combat";
 import { getPriorityTargets } from "../actions/combat";
 

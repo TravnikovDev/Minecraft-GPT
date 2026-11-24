@@ -1,7 +1,7 @@
 // Path: src/commands/Hunting.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { attackEntity } from "../actions/combat";
 import { pickupNearbyItems } from "../actions/worldInteraction";

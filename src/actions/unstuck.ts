@@ -1,4 +1,4 @@
-import { bot, relogBot } from "../index";
+import { bot, relogBot } from "../core/body";
 import { moveAway } from "./movement";
 
 // Keep track of unstuck attempts

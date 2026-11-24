@@ -6,7 +6,7 @@ import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
 import { placeBlock } from "./worldInteraction";
 import { goToNearestBlock, goToPosition } from "./movement";
-import { bot } from "..";
+import { bot } from "../core/body";
 import { collectBlock } from "./collectBlock";
 import { ensureCraftingTable } from "./ensure";
 import {

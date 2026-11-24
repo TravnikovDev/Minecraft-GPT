@@ -1,7 +1,7 @@
 // Path: src/actions/CraftWoodenTools.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { craftRecipe } from "../actions/crafting";
 import { ensurePlanks, ensureSticks } from "../actions/ensure";
 import { getItemCount } from "../actions/inventory";

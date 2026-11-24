@@ -1,4 +1,4 @@
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";

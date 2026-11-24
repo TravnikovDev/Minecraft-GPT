@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { isCommandCancelled } from "../managers/actionManager";
 import { tellOwner } from "../managers/ownerDialog";
 

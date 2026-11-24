@@ -53,8 +53,27 @@ export const BotProgressSchema = z.object({
   unlockedRecipes: z.array(z.string())
 });
 
+// Session memory that survives bot restarts
+export const MemorySchema = z.object({
+  lastDeath: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      z: z.number(),
+      dimension: z.string(),
+      at: z.number(),
+      itemCount: z.number(),
+    })
+    .optional(),
+  ownerPosition: z.object({ x: z.number(), y: z.number(), z: z.number(), at: z.number() }).optional(),
+  conversation: z
+    .array(z.object({ role: z.enum(["owner", "bot"]), text: z.string(), at: z.number() }))
+    .optional(),
+});
+
 export const DbSchema = z.object({
   commands: z.array(CommandSchema),
+  memory: MemorySchema.optional(),
   lore: LoreSchema.optional(),
   inventory: InventorySchema.optional(),
   botProgress: BotProgressSchema.optional(),

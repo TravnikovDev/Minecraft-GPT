@@ -2,13 +2,14 @@
 
 import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
-import { bot } from "..";
+import { bot } from "../core/body";
 import { BotCommands, isBotAction } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
 import { addCommandToQueue } from "./persistenceManager";
 import { cancelCurrentCommand, getCurrentCommandName, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
 import { directionFromOwner, ownerDistance } from "./ownerDialog";
+import { recentConversation } from "../core/session";
 
 // Questions answered from current state: they run immediately, even while the
 // bot is busy with something else, instead of waiting in the queue
@@ -50,7 +51,8 @@ How to respond:
 - Use exact Minecraft IDs for items, blocks and mobs, e.g. oak_log, oak_planks, cobblestone, zombie.
 - When you just talk, reply in plain text: one or two short sentences.
 - Never put JSON, code or markdown in your reply; it is shown as-is in Minecraft chat.
-- If a request is unclear or no tool fits, ask a short clarifying question.`;
+- If a request is unclear or no tool fits, ask a short clarifying question.
+- Earlier messages are your recent conversation with the player (your past replies include results like "Crafted 1 stone pickaxe"). Use them to understand follow-ups such as "do that again", "no, the other one" or "let's start from the beginning".`;
 
 // Argument names that hold Minecraft item, block or mob IDs
 const MINECRAFT_ID_ARGS = new Set(["itemName", "item_name", "blockType", "mobType"]);
@@ -70,6 +72,24 @@ interface HandleResponseType {
   toolCall: ToolCallType | null;
 }
 
+/**
+ * The recent conversation as chat messages (owner = user, bot = assistant),
+ * without the message being answered now, which handleChat already recorded.
+ */
+function conversationHistory(
+  username: string,
+  userMessage: string
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const turns = [...recentConversation()];
+  const last = turns.at(-1);
+  if (last?.role === "owner" && last.text === userMessage.trim().slice(0, last.text.length)) turns.pop();
+  return turns.map((turn) =>
+    turn.role === "owner"
+      ? { role: "user" as const, content: `${username}: ${turn.text}` }
+      : { role: "assistant" as const, content: turn.text }
+  );
+}
+
 // Function to send a message to OpenAI and get a response
 export async function sendMessageToOpenAI(
   username: string,
@@ -84,6 +104,7 @@ export async function sendMessageToOpenAI(
           role: "system",
           content: setupMessage,
         },
+        ...conversationHistory(username, userMessage),
         { role: "user", content: `${stateLine()}\n${username}: ${userMessage}` },
       ],
       tools: tools,

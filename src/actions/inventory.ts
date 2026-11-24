@@ -5,7 +5,7 @@ import type { Bot } from "mineflayer";
 import * as world from "./world.js";
 import { goToPosition, goToPlayer } from "./movement"; // Import goToPlayer
 import { Item } from "prismarine-item";
-import { bot } from "..";
+import { bot } from "../core/body";
 import type { InventoryItemType } from "../schemas/types.js";
 
 /**

@@ -1,7 +1,7 @@
 // Path: src/commands/AttackNearest.ts
 
 import { z } from "zod";
-import { bot } from "../index";
+import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { attackEntity, getPriorityTargets } from "../actions/combat";
 

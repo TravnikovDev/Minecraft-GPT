@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { craftRecipe } from "../actions/crafting";
 import { planCraft, resolveCraftable, type CraftStep } from "../actions/craftPlanner";
-import { bot } from "..";
+import { bot } from "../core/body";
 import { BotCommands } from "./types";
 import { isCommandCancelled } from "../managers/actionManager";
 import { addCommandToQueue } from "../managers/persistenceManager";

@@ -3,7 +3,7 @@
 import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import * as world from "./world.js";
-import { bot } from "../index.js";
+import { bot } from "../core/body";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 import { isCommandCancelled } from "../managers/actionManager";
 import { isCreeperReflexActive, waitForCreeperReflex } from "./creeperReflex";

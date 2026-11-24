@@ -1,4 +1,4 @@
-import { bot } from "..";
+import { bot } from "../core/body";
 import { Vec3 } from "vec3"; // Add this import statement
 import { isHuntable } from "../utils/minecraftData";
 import { moveAway } from "./movement";
