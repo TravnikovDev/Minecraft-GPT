@@ -27,6 +27,7 @@ const INTERRUPTING_COMMANDS = new Set<string>([
   BotCommands.GoToPlayer,
   BotCommands.FollowPlayer,
   BotCommands.GoToCoordinates,
+  BotCommands.GoByBoat,
 ]);
 
 /** One line of real state for the model, so its chat answers are grounded. */
