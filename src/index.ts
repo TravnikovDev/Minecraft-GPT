@@ -6,6 +6,7 @@ import mineflayer from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
 import { isSafeMovements, safeMovements } from "./core/movements";
 import { registerDoorOpener } from "./actions/doors";
+import { autoWearArmor } from "./actions/armor";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
@@ -72,6 +73,9 @@ onConnectionReady((currentBot) => {
     currentBot.pathfinder.setMovements(walkingRules);
     if (currentBot.pvp) currentBot.pvp.movements = walkingRules;
   });
+
+  // Armor it carries but doesn't wear (crafted, given, or after a restart) goes on
+  everyWhileConnected(currentBot, 10_000, autoWearArmor);
 
   // Every block the bot breaks, with what it was doing, so a broken wall can be traced
   currentBot.on("diggingCompleted", (block) => {

@@ -181,8 +181,17 @@ export async function giveToPlayer(
   }
   await goToPlayer(username);
   await bot.lookAt(player.position);
-  await discard(itemType, num);
-  return true;
+  // Exact name only: "plate" must never toss the iron chestplate
+  let given = 0;
+  while (given < num) {
+    const item = bot.inventory.items().find((i) => i.name === itemType);
+    if (!item) break;
+    const n = Math.min(num - given, item.count);
+    await bot.toss(item.type, null, n);
+    given += n;
+  }
+  console.log(`Gave ${given} of ${num} ${itemType} to ${username}.`);
+  return given > 0;
 }
 
 /**

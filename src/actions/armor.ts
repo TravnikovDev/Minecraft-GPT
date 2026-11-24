@@ -32,10 +32,14 @@ const SLOT_FOR: Record<string, "head" | "torso" | "legs" | "feet"> = {
   boots: "feet",
 };
 
+// After taking armor off to give it away, don't put armor back on for a bit
+let noAutoWearUntil = 0;
+
 /** Takes off a worn armor piece into the inventory (e.g. to give it away). */
 export async function takeOffArmor(name: string): Promise<boolean> {
   const slot = SLOT_FOR[name.slice(name.lastIndexOf("_") + 1)];
   if (!slot || !wornArmor().includes(name)) return false;
+  noAutoWearUntil = Date.now() + 30_000;
   try {
     await bot.unequip(slot);
     return bot.inventory.items().some((i) => i.name === name);
@@ -43,4 +47,17 @@ export async function takeOffArmor(name: string): Promise<boolean> {
     console.log(`Taking off ${name} failed: ${(error as Error).message}`);
     return false;
   }
+}
+
+/**
+ * Puts on carried armor that's better than (or fills a slot left empty by)
+ * what the bot wears. Runs on a timer: crafted or given armor is never
+ * put on by the armor plugin, which only reacts to picking items up.
+ */
+export async function autoWearArmor(): Promise<void> {
+  if (Date.now() < noAutoWearUntil || bot.currentWindow) return;
+  if (!bot.inventory.items().some((i) => isArmorPiece(i.name))) return;
+  const before = wornArmor().join(",");
+  const after = await wearBestArmor();
+  if (after.join(",") !== before) console.log(`Put on armor: now wearing ${after.join(", ")}.`);
 }
