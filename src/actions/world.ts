@@ -7,6 +7,7 @@ import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
 import { Item } from "prismarine-item";
 import { bot } from "../core/body";
+import { pathing } from "../core/plugins";
 
 export function getNearestFreeSpace(
   size: number = 1,
@@ -264,7 +265,7 @@ export async function isClearPath(target: Entity): Promise<boolean> {
     target.position.z,
     1
   );
-  const path = await bot.pathfinder.getPathTo(movements, goal, 100);
+  const path = await pathing.getPathTo(movements, goal, 100);
   return path.status === "success";
 }
 

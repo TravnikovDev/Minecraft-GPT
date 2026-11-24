@@ -3,11 +3,12 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { lastKnownOwnerPosition, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
 import { Movements } from "mineflayer-pathfinder";
 import { unstuck } from "../actions/unstuck";
+import { pathing } from "../core/plugins";
 
 export const description = `When user asks the bot to go to a player, the bot will navigate to the player's location. 
    Example: "Go to player Steve", "Head towards Alex", "Move to player Notch", "Come to papa", "Come here".
@@ -117,7 +118,7 @@ export async function execute(args: any = {}) {
     movements.canDig = true;
     movements.maxDropDown = 5;
     movements.allowSprinting = true;
-    bot.pathfinder.setMovements(movements);
+    pathing.setMovements(movements);
     
     const success = await goToPosition(
       targetPlayer.position.x,

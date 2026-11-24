@@ -8,12 +8,13 @@ import {
   removeAllCommands,
   removeCommand,
 } from "./persistenceManager";
-import { AsyncLocalStorage } from "node:async_hooks";
+import { getCurrentCommandName, isCommandCancelled, runWithSignal, setCurrentCommandName } from "../core/commandContext";
 import { executeTool } from "./toolManager";
 import type { CommandType } from "../schemas/types";
 import { bot } from "../core/body";
 import { unstuck } from "../actions/unstuck";
 import { isCreeperReflexActive } from "../actions/creeperReflex";
+import { fighting, pathing } from "../core/plugins";
 
 // "Doing nothing" watchdog: no movement and no inventory change for this long
 // means the command is hung (e.g. staring at a block it can't dig)
@@ -71,28 +72,15 @@ let currentAbort: AbortController | null = null;
 
 // Each command runs with its own abort signal in async context, so code that
 // keeps running after its command was cancelled still sees the cancellation.
-const commandSignal = new AsyncLocalStorage<AbortSignal>();
-
-/**
- * True when the command this code is running for has been cancelled.
- * Long-running actions (loops that search, gather or wait) should check this
- * and return early.
- */
-export function isCommandCancelled(): boolean {
-  return commandSignal.getStore()?.aborted ?? false;
-}
-
-/** Name of the command currently running, or null when idle. */
-export function getCurrentCommandName(): string | null {
-  return currentCommand?.command ?? null;
-}
+// Re-exported for managers that already import them from here
+export { getCurrentCommandName, isCommandCancelled };
 
 /** Stops all bot movement, combat and digging immediately. */
 function haltBot(): void {
   try {
-    bot.pathfinder?.stop();
-    bot.pathfinder?.setGoal(null);
-    bot.pvp?.stop();
+    pathing.stop();
+    pathing.setGoal(null);
+    fighting.stop();
     bot.stopDigging();
     bot.clearControlStates();
   } catch (error) {
@@ -130,6 +118,7 @@ async function processCommand(nextCommand: CommandType) {
   try {
     // Record the command being executed and its start time
     currentCommand = nextCommand;
+    setCurrentCommandName(nextCommand.command);
     currentAbort = abort;
     actionStartTime = Date.now();
     lastBotPosition = bot.entity?.position.clone() ?? lastBotPosition;
@@ -145,8 +134,7 @@ async function processCommand(nextCommand: CommandType) {
       abort.signal.addEventListener("abort", () => resolve("aborted"), { once: true })
     );
     const outcome = await Promise.race([
-      commandSignal
-        .run(abort.signal, () => executeTool(nextCommand.command, nextCommand.args))
+      runWithSignal(abort.signal, () => executeTool(nextCommand.command, nextCommand.args))
         .then(() => "done" as const),
       aborted,
     ]);
@@ -194,6 +182,7 @@ async function processCommand(nextCommand: CommandType) {
     // Reset tracking only if no newer command has started meanwhile
     if (currentCommand === nextCommand) {
       currentCommand = null;
+      setCurrentCommandName(null);
       actionStartTime = null;
       currentAbort = null;
     }
@@ -241,7 +230,7 @@ async function checkActionProgress() {
     Math.abs(currentPosition.y - lastBotPosition.y) > 0.1 ||
     Math.abs(currentPosition.z - lastBotPosition.z) > 0.1;
     
-  if (!hasMovementProgress && bot.pathfinder.isMoving()) {
+  if (!hasMovementProgress && pathing.isMoving()) {
     botStuckCounter++;
     console.log(`Bot hasn't moved while executing ${currentCommand.command}. Stuck counter: ${botStuckCounter}`);
     
@@ -310,6 +299,7 @@ export function handleBotRejoin() {
   currentAbort?.abort("bot rejoined");
   currentAbort = null;
   currentCommand = null;
+  setCurrentCommandName(null);
   actionStartTime = null;
   botStuckCounter = 0;
   recoveryInProgress = false;

@@ -1,7 +1,8 @@
 // Path: src/actions/health.ts
 
-import { bot } from "../core/body";
+import { bot, listen } from "../core/body";
 import { defendSelf, equipBestMeleeWeapon } from "./combat";
+import { eating, fighting } from "../core/plugins";
 
 // Track previous health to detect damage
 let previousHealth = 20;
@@ -10,7 +11,10 @@ const damageThreshold = 3000; // 3 seconds cooldown between defensive reactions
 
 // Heal if Health Drops Below Threshold and defend if under attack
 export async function monitorHealth(): Promise<void> {
-  bot.on("health", () => {
+  // Fresh tracking for this connection (health from the old one is stale)
+  previousHealth = bot.health ?? 20;
+  lastDamageTime = 0;
+  listen(bot, "health", () => {
     const currentHealth = bot.health;
     const now = Date.now();
     
@@ -55,7 +59,7 @@ export async function monitorHealth(): Promise<void> {
 async function emergencyRetreat(): Promise<void> {
   try {
     // Stop any current fighting
-    bot.pvp?.stop();
+    fighting.stop();
     
     // Try to eat food immediately
     await eatFood();
@@ -85,7 +89,7 @@ async function defendFromAttack(): Promise<void> {
 async function eatFood(): Promise<void> {
   try {
     if (bot.food < 20) {
-      bot.autoEat.eat();
+      eating.eat();
     } else {
       bot.chat("No need to eat right now.");
     }
@@ -97,7 +101,7 @@ async function eatFood(): Promise<void> {
 // Stop Eating (if needed)
 export async function stopEating(): Promise<void> {
   try {
-    bot.autoEat.disable();
+    eating.disable();
     bot.chat("Stopping eating process.");
   } catch (error) {
     console.error("Error while stopping eating:", error);
@@ -107,7 +111,7 @@ export async function stopEating(): Promise<void> {
 // Resume Eating (if needed)
 export async function resumeEating(): Promise<void> {
   try {
-    bot.autoEat.enable();
+    eating.enable();
     bot.chat("Resuming automatic eating.");
   } catch (error) {
     console.error("Error while resuming eating:", error);

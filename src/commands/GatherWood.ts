@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { __actionsDelay } from "../utils/utility";
 import { gatherWood } from "../actions/gatherWood";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { bot } from "../core/body";
 
 export const description = `When user asks the bot to gather wood, the bot will search for wood blocks nearby and gather them.

@@ -5,8 +5,9 @@ import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { attackEntity } from "../actions/combat";
 import { pickupNearbyItems } from "../actions/worldInteraction";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { isHuntable } from "../utils/minecraftData";
+import { fighting } from "../core/plugins";
 
 export const description = `When user asks the bot to hunt, the bot finds the nearest animal (optionally of a given type),
 kills it and picks up the drops, repeating for the requested number of animals.
@@ -44,7 +45,7 @@ function waitUntilGone(target: Entity): Promise<boolean> {
       const gone = !bot.entities[target.id];
       if (gone || isCommandCancelled() || Date.now() - started > KILL_TIMEOUT_MS) {
         clearInterval(check);
-        if (!gone) bot.pvp.stop();
+        if (!gone) fighting.stop();
         resolve(gone);
       }
     }, 250);

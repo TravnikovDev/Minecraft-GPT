@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { removeAllCommands } from "../managers/persistenceManager";
+import { pathing } from "../core/plugins";
 
 export const description = `When user asks the bot to stop, it will stop moving. It will also remove all the commands from the queue.
 Example: "Stop", "Please stop it", "Stop moving", "Stop following me", "What are you doing? Stop it!"`;
@@ -14,7 +15,7 @@ export const parameters = z.object({});
 export async function execute() {
   try {
     console.log(`====> Stop actions execution !`);
-    await bot.pathfinder.stop();
+    await pathing.stop();
     await removeAllCommands();
     bot.chat(`Standing still!`);
   } catch (error) {

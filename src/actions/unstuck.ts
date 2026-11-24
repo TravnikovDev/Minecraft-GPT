@@ -1,5 +1,6 @@
 import { bot, relogBot } from "../core/body";
 import { moveAway } from "./movement";
+import { pathing } from "../core/plugins";
 
 // Keep track of unstuck attempts
 let unstuckAttempts = 0;
@@ -7,6 +8,13 @@ const MAX_NORMAL_ATTEMPTS = 3;
 const UNSTUCK_COOLDOWN = 60000; // 1 minute cooldown between major unstuck attempts
 let lastUnstuckTime = 0;
 let isRelogging = false;
+
+/** Called when a new connection is ready: a fresh connection starts with a clean slate. */
+export function resetUnstuckState(): void {
+  if (isRelogging) return; // the relog itself is waiting for this connection
+  unstuckAttempts = 0;
+  lastUnstuckTime = 0;
+}
 
 // Function to attempt to unstuck the bot from various situations
 export async function unstuck(): Promise<boolean> {
@@ -33,8 +41,8 @@ export async function unstuck(): Promise<boolean> {
 
   try {
     // Step 1: Cancel any ongoing pathfinding
-    if (bot.pathfinder.isMoving()) {
-      bot.pathfinder.stop();
+    if (pathing.isMoving()) {
+      pathing.stop();
       console.log("- Stopped active pathfinding");
     }
     

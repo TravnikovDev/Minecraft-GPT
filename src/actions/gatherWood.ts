@@ -3,7 +3,7 @@ import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
 import { getNearestBlocks } from "./world";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 
 // Give up after this many failed attempts in a row to find or reach a tree
 const MAX_FAILED_ATTEMPTS = 5;

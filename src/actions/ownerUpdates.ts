@@ -3,10 +3,10 @@
 // items it picked up or was given, and armor it put on. Also keeps a weapon
 // in hand after pickups, instead of whatever item landed in the hand slot.
 
-import type { Entity } from "prismarine-entity";
 import type { Item } from "prismarine-item";
-import { bot } from "../core/body";
-import { getCurrentCommandName } from "../managers/actionManager";
+import { bot, listen } from "../core/body";
+import { on } from "../core/events";
+import { getCurrentCommandName } from "../core/commandContext";
 import { ownerDistance, tellOwner } from "../managers/ownerDialog";
 
 const NEARBY_BLOCKS = 32; // only report when the owner is around
@@ -52,11 +52,13 @@ export async function keepWeaponInHand(): Promise<void> {
   }
 }
 
-/** Registers the update listeners on the current bot instance. */
-export function registerOwnerUpdates(): void {
-  const pickups = new Map<string, number>();
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+// Pickup batching lives for the whole process (the bus outlives connections)
+const pickups = new Map<string, number>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let subscribedToPickups = false;
 
+/** Registers the update listeners: pickups once per process, armor per connection. */
+export function registerOwnerUpdates(): void {
   const flushPickups = (): void => {
     flushTimer = null;
     const items = [...pickups.entries()].map(([name, count]) => `${count} ${pretty(name)}`);
@@ -72,16 +74,15 @@ export function registerOwnerUpdates(): void {
     void keepWeaponInHand();
   };
 
-  bot.on("playerCollect", (collector: Entity, collected: Entity) => {
-    if (collector !== bot.entity) return;
-    // Item entities carry their stack in metadata
-    const dropped = (collected as unknown as { getDroppedItem?: () => Item | null }).getDroppedItem?.();
-    if (!dropped) return;
-    pickups.set(dropped.name, (pickups.get(dropped.name) ?? 0) + dropped.count);
-    if (!flushTimer) flushTimer = setTimeout(flushPickups, PICKUP_BATCH_MS);
-  });
+  if (!subscribedToPickups) {
+    subscribedToPickups = true;
+    on("item:collected", ({ name, count }) => {
+      pickups.set(name, (pickups.get(name) ?? 0) + count);
+      if (!flushTimer) flushTimer = setTimeout(flushPickups, PICKUP_BATCH_MS);
+    });
+  }
 
-  bot.inventory.on("updateSlot", (slot: number, oldItem: Item | null, newItem: Item | null) => {
+  listen(bot.inventory, "updateSlot", (slot: number, oldItem: Item | null, newItem: Item | null) => {
     const piece = ARMOR_SLOTS[slot];
     if (!piece || !newItem || newItem.name === oldItem?.name) return;
     const distance = ownerDistance();

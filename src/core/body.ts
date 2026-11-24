@@ -8,7 +8,9 @@
 // module can import `bot` from here without creating import cycles.
 
 import mineflayer, { type Bot } from "mineflayer";
+import type { Item } from "prismarine-item";
 import { AUTH, BOT_USERNAME, SERVER_HOST, SERVER_PORT } from "../config/env";
+import { emit, isSelfCaused } from "./events";
 
 /**
  * The active bot instance, replaced on every reconnect. Modules see the new
@@ -208,8 +210,40 @@ function createBot(): Bot {
     scheduleReconnect();
   });
 
+  forwardEvents(newBot);
   for (const hook of createdHooks) hook(newBot);
   return newBot;
+}
+
+/** Turns this connection's raw mineflayer events into typed bus events. */
+function forwardEvents(currentBot: Bot): void {
+  let lastHealth = 20;
+  listen(currentBot, "spawn", () => {
+    lastHealth = currentBot.health ?? 20;
+    emit("bot:spawned", { position: currentBot.entity?.position.clone() ?? null });
+  });
+  listen(currentBot, "death", () => {
+    emit("bot:died", { position: currentBot.entity?.position.clone() ?? null });
+  });
+  listen(currentBot, "health", () => {
+    const health = currentBot.health;
+    if (health < lastHealth) emit("bot:damaged", { amount: lastHealth - health, health });
+    lastHealth = health;
+  });
+  listen(currentBot, "blockUpdate", (oldBlock: { name: string } | null, newBlock: { name: string; position: any } | null) => {
+    if (!newBlock || oldBlock?.name === newBlock.name) return;
+    emit("block:changed", {
+      position: newBlock.position,
+      from: oldBlock?.name ?? "unknown",
+      to: newBlock.name,
+      selfCaused: isSelfCaused(newBlock.position),
+    });
+  });
+  listen(currentBot, "playerCollect", (collector: unknown, collected: { getDroppedItem?: () => Item | null }) => {
+    if (collector !== currentBot.entity) return;
+    const item = collected.getDroppedItem?.();
+    if (item) emit("item:collected", { name: item.name, count: item.count });
+  });
 }
 
 /** Schedules creation of a new bot instance after a backoff delay. */

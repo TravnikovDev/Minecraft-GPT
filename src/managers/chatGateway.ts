@@ -16,6 +16,7 @@ import { executeTool } from "./toolManager";
 import { addCommandToQueue, getAllCommands } from "./persistenceManager";
 import { answerPending, hasPendingQuestion, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
+import { pathing } from "../core/plugins";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
 // message (allowing "please", the bot's name and trailing punctuation).
@@ -57,7 +58,7 @@ async function statusMessage(): Promise<string> {
 
   console.log(
     `[status] pos=${pos?.toString()} owner=${owner ? owner.position.toString() : "not visible"} ` +
-      `pathfinderMoving=${bot.pathfinder?.isMoving()}`
+      `pathfinderMoving=${pathing.isMoving()}`
   );
 
   return `${doing}${next}. Health ${Math.round(bot.health)}/20, food ${bot.food}/20, ${where}.${ownerInfo}`;

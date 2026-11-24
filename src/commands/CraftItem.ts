@@ -5,7 +5,7 @@ import { craftRecipe } from "../actions/crafting";
 import { planCraft, resolveCraftable, type CraftStep } from "../actions/craftPlanner";
 import { bot } from "../core/body";
 import { BotCommands } from "./types";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { addCommandToQueue } from "../managers/persistenceManager";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
 

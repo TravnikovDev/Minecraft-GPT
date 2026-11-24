@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { bot } from "../core/body";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { tellOwner } from "../managers/ownerDialog";
 
 export const description = `When user asks the bot to go to specific coordinates, the bot will navigate to the specified position.

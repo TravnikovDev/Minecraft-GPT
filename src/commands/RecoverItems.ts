@@ -5,7 +5,7 @@ import { bot } from "../core/body";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/worldInteraction";
 import { canReachBeforeDespawn, clearLastDeath, getLastDeath } from "../actions/recovery";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { tellOwner } from "../managers/ownerDialog";
 
 export const description = `Goes back to where the bot last died and picks up its dropped items (they disappear

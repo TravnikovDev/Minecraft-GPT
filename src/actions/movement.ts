@@ -5,8 +5,9 @@ import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { bot } from "../core/body";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { isCreeperReflexActive, waitForCreeperReflex } from "./creeperReflex";
+import { pathing } from "../core/plugins";
 
 /** Distance beyond which a trip is walked in legs instead of one path search. */
 export const LONG_TRIP_BLOCKS = 48;
@@ -31,8 +32,8 @@ export async function travelTo(
   if (!first) return false;
   const total = Math.max(1, distXZ(bot.entity.position, first));
   const reported = new Set<number>();
-  const savedThink = bot.pathfinder.thinkTimeout;
-  bot.pathfinder.thinkTimeout = 10000; // a leg of rough terrain can need more than the 5 s default
+  const savedThink = pathing.thinkTimeout;
+  pathing.thinkTimeout = 10000; // a leg of rough terrain can need more than the 5 s default
   let failures = 0;
 
   try {
@@ -62,7 +63,7 @@ export async function travelTo(
           const goal = useHeight
             ? new pf.goals.GoalNear(target.x, target.y!, target.z, range)
             : new pf.goals.GoalNearXZ(target.x, target.z, range);
-          await bot.pathfinder.goto(goal);
+          await pathing.goto(goal);
           return true;
         } catch (error) {
           if (isCreeperReflexActive()) continue; // interrupted by a creeper, not a real failure
@@ -80,7 +81,7 @@ export async function travelTo(
       const legX = Math.round(pos.x + Math.cos(angle) * step);
       const legZ = Math.round(pos.z + Math.sin(angle) * step);
       try {
-        await bot.pathfinder.goto(new pf.goals.GoalNearXZ(legX, legZ, 3));
+        await pathing.goto(new pf.goals.GoalNearXZ(legX, legZ, 3));
         failures = 0;
       } catch (error) {
         if (isCreeperReflexActive()) continue; // interrupted by a creeper, not a real failure
@@ -91,7 +92,7 @@ export async function travelTo(
     }
     return false;
   } finally {
-    bot.pathfinder.thinkTimeout = savedThink;
+    pathing.thinkTimeout = savedThink;
   }
 }
 
@@ -101,7 +102,7 @@ export async function goToPosition(
   z: number,
   minDistance = 2
 ): Promise<boolean> {
-  // bot.pathfinder.setMovements(new pf.Movements(bot));
+  // pathing.setMovements(new pf.Movements(bot));
   let base: Vec3 | undefined;
 
   try {
@@ -116,14 +117,14 @@ export async function goToPosition(
       ) {
         // If the targe position is within the base area, go to the base first
         // fix to prevent bot breaking walls
-        await bot.pathfinder.goto(
+        await pathing.goto(
           new pf.goals.GoalNear(base.x, base.y, base.z, minDistance)
         );
         __actionsDelay(1000);
-        await bot.pathfinder.goto(new pf.goals.GoalNear(x, y, z, minDistance));
+        await pathing.goto(new pf.goals.GoalNear(x, y, z, minDistance));
       }
     } else {
-      await bot.pathfinder.goto(new pf.goals.GoalNear(x, y, z, minDistance));
+      await pathing.goto(new pf.goals.GoalNear(x, y, z, minDistance));
       console.log(`You have reached at ${x}, ${y}, ${z}.`);
     }
     return true;
@@ -169,8 +170,8 @@ export async function goToPlayer(
   }
 
   const move = new pf.Movements(bot);
-  bot.pathfinder.setMovements(move);
-  await bot.pathfinder.goto(new pf.goals.GoalFollow(playerEntity, distance));
+  pathing.setMovements(move);
+  await pathing.goto(new pf.goals.GoalFollow(playerEntity, distance));
 
   console.log(`You have reached ${username}.`);
   return true;
@@ -186,8 +187,8 @@ export async function followPlayer(
   }
 
   const move = new pf.Movements(bot);
-  bot.pathfinder.setMovements(move);
-  bot.pathfinder.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
+  pathing.setMovements(move);
+  pathing.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
   console.log(`You are now actively following player ${username}.`);
 
   return true;
@@ -222,7 +223,7 @@ export async function moveAway(distance: number): Promise<boolean> {
 
     const farGoal = new pf.goals.GoalXZ(newX, newZ);
 
-    await bot.pathfinder.goto(farGoal);
+    await pathing.goto(farGoal);
     const newPos = bot.entity.position;
     console.log(`Moved away from nearest entity to ${newPos}.`);
     await __actionsDelay(500);
@@ -260,11 +261,11 @@ export async function useDoor(doorPos: Vec3 | null = null): Promise<boolean> {
     return false;
   }
 
-  bot.pathfinder.setGoal(
+  pathing.setGoal(
     new pf.goals.GoalNear(doorPos.x, doorPos.y, doorPos.z, 1)
   );
   await __actionsDelay(1000);
-  while (bot.pathfinder.isMoving()) {
+  while (pathing.isMoving()) {
     await __actionsDelay(100);
   }
 

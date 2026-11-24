@@ -7,6 +7,7 @@
 import type { Entity } from "prismarine-entity";
 import type { Item } from "prismarine-item";
 import { bot } from "../core/body";
+import { fighting, pathing } from "../core/plugins";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -88,8 +89,8 @@ async function tick(): Promise<void> {
     if (!active) {
       active = true;
       console.log(`Creeper reflex: creeper ${distance.toFixed(1)} blocks away${isNight() ? " (night)" : ""}.`);
-      bot.pathfinder?.setGoal(null); // take over movement from whatever task is running
-      bot.pvp?.stop();
+      pathing.setGoal(null); // take over movement from whatever task is running
+      fighting.stop();
     }
 
     const weapon = bestWeapon();
@@ -125,7 +126,10 @@ async function tick(): Promise<void> {
 
 /** Starts the reflex for the current bot instance. */
 export function registerCreeperReflex(): void {
+  // Fresh state for this connection
   active = false;
+  busy = false;
+  lastHitAt = 0;
   const timer = setInterval(() => void tick(), CHECK_MS);
   bot.once("end", () => clearInterval(timer));
   bot.on("death", finish);

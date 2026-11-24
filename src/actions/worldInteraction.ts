@@ -1,6 +1,7 @@
 // src/actions/worldInteraction.ts
 
 import { bot } from "../core/body";
+import { markSelfAction } from "../core/events";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
@@ -9,6 +10,7 @@ import * as world from "./world.js";
 import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";
 import { __actionsDelay } from "../utils/utility.js";
+import { pathing, tools } from "../core/plugins";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 
@@ -146,8 +148,8 @@ export async function placeBlock(
         2
       )
     );
-    // bot.pathfinder.setMovements(new pf.Movements(bot));
-    await bot.pathfinder.goto(goal);
+    // pathing.setMovements(new pf.Movements(bot));
+    await pathing.goto(goal);
   }
 
   // Move closer if too far
@@ -165,6 +167,7 @@ export async function placeBlock(
   await __actionsDelay(500);
 
   try {
+    markSelfAction(buildOffBlock.position.plus(faceVec));
     await bot.placeBlock(buildOffBlock, faceVec);
     console.log(`Placed ${blockType} at ${targetDest}.`);
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -202,7 +205,7 @@ export async function breakBlockAt(
       await goToPosition(x, y, z);
     }
     if (bot.game.gameMode !== "creative") {
-      await bot.tool.equipForBlock(block);
+      await tools.equipForBlock(block);
       const itemId = bot.heldItem ? bot.heldItem.type : null;
       if (!block.canHarvest(itemId)) {
         console.log(`Don't have right tools to break ${block.name}.`);
@@ -227,6 +230,7 @@ export async function breakBlockAt(
         }, DIG_TIMEOUT_MS);
       });
       try {
+        markSelfAction(block.position);
         await Promise.race([bot.dig(block, true), timeout]);
       } finally {
         clearTimeout(timer);
@@ -266,8 +270,8 @@ export async function activateNearestBlock(type: string) {
   }
   if (bot.entity.position.distanceTo(block.position) > 4.5) {
     let pos = block.position;
-    // bot.pathfinder.setMovements(new pf.Movements(bot));
-    await bot.pathfinder.goto(new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
+    // pathing.setMovements(new pf.Movements(bot));
+    await pathing.goto(new pf.goals.GoalNear(pos.x, pos.y, pos.z, 4));
   }
   await bot.activateBlock(block);
   console.log(
@@ -334,6 +338,7 @@ export async function tillAndSow(
       return false;
     }
     await bot.equip(seeds, "hand");
+    markSelfAction(block.position.offset(0, -1, 0));
     await bot.placeBlock(block, new Vec3(0, -1, 0));
     console.log(
       `Planted ${seedType} at x:${x.toFixed(1)}, y:${y.toFixed(
@@ -359,9 +364,9 @@ export async function pickupNearbyItems(
 
   let pickedUp = 0;
   while (nearestItem) {
-    // bot.pathfinder.setMovements(new pf.Movements(bot));
+    // pathing.setMovements(new pf.Movements(bot));
     try {
-      await bot.pathfinder.goto(new pf.goals.GoalFollow(nearestItem, 0.8));
+      await pathing.goto(new pf.goals.GoalFollow(nearestItem, 0.8));
     } catch (err) {
       // pathfinder rejects unreachable goals (e.g. an item on a ledge or in lava);
       // skip the rest instead of failing the action that wanted the pickup
@@ -748,6 +753,7 @@ async function tryPlaceMinecart(railPosition: Vec3, railBlock: Block): Promise<b
 
       try {
         // Try to use the minecart on the top face of the block below
+        markSelfAction(referenceBlock.position.offset(0, 1, 0));
         await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
         await __actionsDelay(1000);
 

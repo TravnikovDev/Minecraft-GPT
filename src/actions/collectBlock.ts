@@ -5,6 +5,7 @@ import * as world from "./world.js";
 import { __actionsDelay } from "../utils/utility.js";
 import { breakBlockAt, pickupNearbyItems } from "./worldInteraction.js";
 import { ensurePickaxe } from "./ensureTools.js";
+import { pathing, tools } from "../core/plugins";
 
 export async function collectBlock(
   blockType: string,
@@ -56,7 +57,7 @@ export async function collectBlock(
     try {
       // Equip appropriate tool
       if (bot.game.gameMode !== "creative") {
-        await bot.tool.equipForBlock(block);
+        await tools.equipForBlock(block);
         const itemId = bot.heldItem ? bot.heldItem.type : null;
         if (!block.canHarvest(itemId)) {
           console.log(`Don't have right tools to harvest ${block.name}.`);
@@ -79,7 +80,7 @@ export async function collectBlock(
           veinBlock.position.y,
           veinBlock.position.z
         );
-        await bot.pathfinder.goto(goal);
+        await pathing.goto(goal);
 
         // Break the block and collect drops
         await mineAndCollect(veinBlock);

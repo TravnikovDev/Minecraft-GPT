@@ -5,6 +5,7 @@ import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
 import { goals, Movements } from "mineflayer-pathfinder";
 import vec3 from "vec3";
+import { fighting, pathing } from "../core/plugins";
 
 // Mob types with threat levels
 export enum ThreatLevel {
@@ -78,7 +79,7 @@ export async function attackEntity(targetEntity: Entity): Promise<boolean> {
     await useTacticsForTarget(targetEntity);
     
     // Attack
-    await bot.pvp.attack(targetEntity);
+    await fighting.attack(targetEntity);
     bot.chat(`Attacking ${targetEntity.name}!`);
     return true;
   } catch (error) {
@@ -99,7 +100,7 @@ export async function defendSelf(range = 16): Promise<boolean> {
       await chooseWeaponForTarget(target);
       await useTacticsForTarget(target);
       
-      bot.pvp.attack(target);
+      fighting.attack(target);
       bot.chat(`Defending myself against ${target.name} (threat level: ${getMobThreatInfo(target)?.threatLevel})!`);
       return true;
     } else {
@@ -115,8 +116,8 @@ export async function defendSelf(range = 16): Promise<boolean> {
 // Stop Combat
 export async function stopCombat(): Promise<void> {
   try {
-    bot.pvp?.stop();
-    bot.pathfinder.setGoal(null);
+    fighting.stop();
+    pathing.setGoal(null);
     bot.chat("Stopping combat.");
   } catch (error) {
     console.error("Error while stopping combat:", error);
@@ -223,7 +224,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
   const preferredDistance = threatInfo.preferredDistance;
   
   // Stop any existing movement
-  bot.pathfinder.setGoal(null);
+  pathing.setGoal(null);
   
   try {
     // Use appropriate movement pattern based on mob type
@@ -254,8 +255,8 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
         await maintainDistance(target, preferredDistance);
       } else {
         // For melee, get close but use optimal fighting position
-        bot.pathfinder.setMovements(new Movements(bot));
-        bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true);
+        pathing.setMovements(new Movements(bot));
+        pathing.setGoal(new goals.GoalFollow(target, 2), true);
       }
     }
   } catch (error) {
@@ -277,16 +278,16 @@ async function maintainDistance(target: Entity, distance: number): Promise<void>
     const vectorAway = bot.entity.position.minus(target.position).normalize().scale(distance);
     const targetPosition = bot.entity.position.plus(vectorAway);
     
-    bot.pathfinder.setMovements(new Movements(bot));
-    bot.pathfinder.setGoal(new goals.GoalBlock(
+    pathing.setMovements(new Movements(bot));
+    pathing.setGoal(new goals.GoalBlock(
       targetPosition.x, 
       targetPosition.y, 
       targetPosition.z
     ), true);
   } else {
     // Too far, get closer
-    bot.pathfinder.setMovements(new Movements(bot));
-    bot.pathfinder.setGoal(new goals.GoalFollow(target, distance), true);
+    pathing.setMovements(new Movements(bot));
+    pathing.setGoal(new goals.GoalFollow(target, distance), true);
   }
 }
 
@@ -302,8 +303,8 @@ async function strafeAroundTarget(target: Entity, distance: number): Promise<voi
   const direction = Date.now() % 6000 < 3000 ? 1 : -1; 
   const targetPosition = target.position.plus(strafeVector.scale(direction));
   
-  bot.pathfinder.setMovements(new Movements(bot));
-  bot.pathfinder.setGoal(new goals.GoalBlock(
+  pathing.setMovements(new Movements(bot));
+  pathing.setGoal(new goals.GoalBlock(
     targetPosition.x, 
     targetPosition.y, 
     targetPosition.z

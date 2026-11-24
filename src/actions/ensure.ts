@@ -10,7 +10,7 @@ import { ensurePickaxe } from "./ensureTools";
 import { gatherWood } from "./gatherWood";
 import { getItemCount } from "./inventory";
 import { moveAway } from "./movement";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 
 // Constants for crafting and gathering
 const PLANKS_PER_LOG = 4;

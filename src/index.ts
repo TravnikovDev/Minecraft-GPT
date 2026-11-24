@@ -10,6 +10,7 @@ import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 import { bot, connect, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
 import { recordTurn } from "./core/session";
+import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
@@ -18,6 +19,7 @@ import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
+import { resetUnstuckState } from "./actions/unstuck";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
 
@@ -77,6 +79,7 @@ onConnectionReady((currentBot) => {
   monitorHealth(); // self-defense on damage (per-connection state reset inside)
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
+  resetUnstuckState(); // stuck counters from an old connection don't apply
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 
@@ -90,20 +93,19 @@ onConnectionReady((currentBot) => {
   }
 });
 
+// First spawn of each connection and every respawn after death
+on("bot:spawned", () => {
+  handleBotRejoin();
+  if (takeRecoveryPending()) void startRecovery(bot);
+});
+
+on("bot:died", ({ position }) => {
+  console.log(`Bot died${position ? ` at ${position.floored()}` : ""}; it will respawn automatically.`);
+  recordDeath();
+});
+
 /** Event handlers for every new Bot instance. */
 onBotCreated((currentBot) => {
-  // Fires on the first spawn and after every death/respawn
-  listen(currentBot, "spawn", () => {
-    handleBotRejoin();
-    if (takeRecoveryPending()) void startRecovery(currentBot);
-  });
-
-  listen(currentBot, "death", () => {
-    const pos = currentBot.entity?.position;
-    console.log(`Bot died${pos ? ` at ${pos.floored()}` : ""}; it will respawn automatically.`);
-    recordDeath();
-  });
-
   // Chat and whispers go through the gateway: owner only, fast path first
   listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message));
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message));

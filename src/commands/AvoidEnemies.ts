@@ -5,8 +5,9 @@ import { bot } from "../core/body";
 import { goals, Movements } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
 import { getPriorityTargets } from "../actions/combat";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import vec3, { Vec3 } from "vec3";
+import { pathing } from "../core/plugins";
 
 export const description = `The user asks the bot to avoid enemies within a certain distance. The bot will move away from 
 hostile mobs to maintain a safe distance. Example: "Avoid enemies within 10 blocks.", "Keep away from the zombies", "Run from creepers"`;
@@ -132,8 +133,8 @@ export async function execute(args: any) {
     
     // Move to the safe location
     bot.chat(`Moving away from ${threateningMobs.length} hostile mobs.`);
-    bot.pathfinder.setMovements(new Movements(bot));
-    bot.pathfinder.setGoal(new goals.GoalBlock(
+    pathing.setMovements(new Movements(bot));
+    pathing.setGoal(new goals.GoalBlock(
       safePosition.x, 
       safePosition.y, 
       safePosition.z
@@ -144,5 +145,5 @@ export async function execute(args: any) {
   }
   
   // Stop pathfinding when done
-  bot.pathfinder.stop();
+  pathing.stop();
 }

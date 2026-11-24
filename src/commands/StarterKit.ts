@@ -8,7 +8,7 @@ import { goToPosition } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/worldInteraction";
 import { foodCount, hasPickaxe, hasWeapon } from "../actions/recovery";
 import { execute as hunt } from "./Hunting";
-import { isCommandCancelled } from "../managers/actionManager";
+import { isCommandCancelled } from "../core/commandContext";
 import { tellOwner } from "../managers/ownerDialog";
 
 export const description = `Gets basic gear when the bot has little or nothing: a wooden sword and pickaxe
