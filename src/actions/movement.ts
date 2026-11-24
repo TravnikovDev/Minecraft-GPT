@@ -190,8 +190,6 @@ export async function goToPlayer(
     return false;
   }
 
-  const move = new pf.Movements(bot);
-  pathing.setMovements(move);
   await pathing.goto(new pf.goals.GoalFollow(playerEntity, distance));
 
   console.log(`You have reached ${username}.`);
@@ -207,8 +205,6 @@ export async function followPlayer(
     return false;
   }
 
-  const move = new pf.Movements(bot);
-  pathing.setMovements(move);
   pathing.setGoal(new pf.goals.GoalFollow(playerEntity, distance), true);
   console.log(`You are now actively following player ${username}.`);
 

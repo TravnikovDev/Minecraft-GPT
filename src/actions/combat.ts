@@ -3,7 +3,8 @@
 import { bot } from "../core/body";
 import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
-import { goals, Movements } from "mineflayer-pathfinder";
+import { goals } from "mineflayer-pathfinder";
+import { safeMovements } from "../core/movements";
 import vec3 from "vec3";
 import { fighting, pathing } from "../core/plugins";
 
@@ -255,7 +256,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
         await maintainDistance(target, preferredDistance);
       } else {
         // For melee, get close but use optimal fighting position
-        pathing.setMovements(new Movements(bot));
+        pathing.setMovements(safeMovements(bot));
         pathing.setGoal(new goals.GoalFollow(target, 2), true);
       }
     }
@@ -278,7 +279,7 @@ async function maintainDistance(target: Entity, distance: number): Promise<void>
     const vectorAway = bot.entity.position.minus(target.position).normalize().scale(distance);
     const targetPosition = bot.entity.position.plus(vectorAway);
     
-    pathing.setMovements(new Movements(bot));
+    pathing.setMovements(safeMovements(bot));
     pathing.setGoal(new goals.GoalBlock(
       targetPosition.x, 
       targetPosition.y, 
@@ -286,7 +287,7 @@ async function maintainDistance(target: Entity, distance: number): Promise<void>
     ), true);
   } else {
     // Too far, get closer
-    pathing.setMovements(new Movements(bot));
+    pathing.setMovements(safeMovements(bot));
     pathing.setGoal(new goals.GoalFollow(target, distance), true);
   }
 }
@@ -303,7 +304,7 @@ async function strafeAroundTarget(target: Entity, distance: number): Promise<voi
   const direction = Date.now() % 6000 < 3000 ? 1 : -1; 
   const targetPosition = target.position.plus(strafeVector.scale(direction));
   
-  pathing.setMovements(new Movements(bot));
+  pathing.setMovements(safeMovements(bot));
   pathing.setGoal(new goals.GoalBlock(
     targetPosition.x, 
     targetPosition.y, 

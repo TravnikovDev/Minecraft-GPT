@@ -3,6 +3,7 @@
 // reconnects and bot restarts (saved in db.json under "memory"):
 // - the last death (where/when, for item recovery),
 // - the owner's last known position (for "come here" when out of sight),
+// - the bot's own bed (its spawn point; it goes back to that one to sleep),
 // - the recent conversation with the owner (sent with each AI request).
 
 import { getMemory, updateMemory } from "../managers/persistenceManager";
@@ -43,6 +44,18 @@ export async function saveOwnerPosition(position: SavedPosition, force = false):
     if (moved < OWNER_SAVE_MIN_BLOCKS && position.at - last.at < OWNER_SAVE_MIN_MS) return;
   }
   await updateMemory({ ownerPosition: position });
+}
+
+// --- The bot's own bed (where its spawn point is) ------------------------------
+
+export type SavedBed = NonNullable<MemoryType["bed"]>;
+
+export function loadBed(): SavedBed | null {
+  return getMemory().bed ?? null;
+}
+
+export async function saveBed(bed: SavedBed | null): Promise<void> {
+  await updateMemory({ bed: bed ?? undefined });
 }
 
 // --- Conversation memory -----------------------------------------------------

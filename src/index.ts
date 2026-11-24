@@ -3,14 +3,16 @@
 // connection owner in core/body.ts), connects, and runs the command loop.
 
 import mineflayer from "mineflayer";
-import { Movements, pathfinder } from "mineflayer-pathfinder";
+import { pathfinder } from "mineflayer-pathfinder";
+import { safeMovements } from "./core/movements";
+import { registerDoorOpener } from "./actions/doors";
 import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as autoEat } from "mineflayer-auto-eat";
 import { plugin as tool } from "mineflayer-tool";
 import armorManager from "mineflayer-armor-manager";
 import { bot, connect, everyWhileConnected, listen, onBeforeReconnect, onBotCreated, onChatSent, onConnectionReady } from "./core/body";
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
-import { recordTurn } from "./core/session";
+import { recordTurn, saveBed } from "./core/session";
 import { on } from "./core/events";
 import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
@@ -54,15 +56,8 @@ onConnectionReady((currentBot) => {
   currentBot.loadPlugin(tool);
   currentBot.loadPlugin(armorManager);
 
-  const defaultMove = new Movements(currentBot);
-  defaultMove.allow1by1towers = true; // Allow pillaring up with 1x1 towers
-  defaultMove.canDig = true; // Allow breaking blocks when pathing
-  defaultMove.canOpenDoors = true; // Enable opening doors
-  defaultMove.maxDropDown = 5;
-  defaultMove.digCost = 6;
-  defaultMove.placeCost = 6;
-  defaultMove.entityCost = 6;
-  currentBot.pathfinder.setMovements(defaultMove);
+  // One set of walking rules: natural terrain only, doors opened (core/movements)
+  currentBot.pathfinder.setMovements(safeMovements(currentBot));
 
   // Configure auto-eat plugin settings
   currentBot.autoEat.options = {
@@ -84,6 +79,7 @@ onConnectionReady((currentBot) => {
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
   registerDrowningReflex(); // and so is running out of air underwater
+  registerDoorOpener(); // opens doors on the way and closes them behind
   resetUnstuckState(); // stuck counters from an old connection don't apply
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
@@ -128,6 +124,13 @@ onBotCreated((currentBot) => {
   // Chat and whispers go through the gateway: owner only, fast path first
   listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message));
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message));
+  // "You have no home bed": the bot's bed was broken; forget it
+  listen(currentBot, "message", (msg: { translate?: string }) => {
+    if (msg.translate === "block.minecraft.spawn.not_valid") {
+      console.log("The server says the bot's bed is gone; forgetting it.");
+      void saveBed(null);
+    }
+  });
   // Keep the owner's position fresh, so "come here" works after a death or
   // restart takes the bot out of sight
   everyWhileConnected(currentBot, 20_000, trackOwnerPosition); // 3 times a minute

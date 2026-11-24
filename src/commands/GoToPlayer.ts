@@ -6,7 +6,7 @@ import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions
 import { isCommandCancelled } from "../core/commandContext";
 import { lastKnownOwnerPosition, ridingWithOwner, tellOwner } from "../managers/ownerDialog";
 import { getNearbyPlayerNames } from "../actions/world";
-import { Movements } from "mineflayer-pathfinder";
+import { safeMovements } from "../core/movements";
 import { unstuck } from "../actions/unstuck";
 import { pathing } from "../core/plugins";
 
@@ -118,10 +118,8 @@ export async function execute(args: any = {}) {
 
   // If GoalFollow fails, try with enhanced GoalNear approach
   try {
-    // Create more permissive movement settings
-    const movements = new Movements(bot);
-    movements.canDig = true;
-    movements.maxDropDown = 5;
+    // Same walking rules (never through the owner's walls), sprinting allowed
+    const movements = safeMovements(bot);
     movements.allowSprinting = true;
     pathing.setMovements(movements);
     

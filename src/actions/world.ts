@@ -1,7 +1,8 @@
 // src/actions/world.ts
 
 import { Block } from "prismarine-block";
-import { Movements, goals } from "mineflayer-pathfinder";
+import { goals } from "mineflayer-pathfinder";
+import { safeMovements } from "../core/movements";
 import * as gameData from "../utils/minecraftData";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
@@ -257,7 +258,7 @@ export async function isClearPath(target: Entity): Promise<boolean> {
    * @param {Entity} target - The target to path to.
    * @returns {boolean} - True if there is a clear path, false otherwise.
    */
-  const movements = new Movements(bot);
+  const movements = safeMovements(bot);
   movements.canDig = false;
   const goal = new goals.GoalNear(
     target.position.x,
