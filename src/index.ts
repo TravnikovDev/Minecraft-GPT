@@ -3,7 +3,7 @@
 // reconnects automatically after disconnects, and runs the command loop.
 
 import mineflayer from "mineflayer";
-import { loadDb, removeAllCommands } from "./managers/persistenceManager";
+import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { AUTH, BOT_USERNAME, OWNER_USERNAME, SERVER_HOST, SERVER_PORT } from "./config/env";
 import { handleChat } from "./managers/chatGateway";
@@ -15,6 +15,9 @@ import armorManager from "mineflayer-armor-manager";
 import { nightDefense } from "./actions/combat";
 import { monitorHealth } from "./actions/health";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
+import { registerCreeperReflex } from "./actions/creeperReflex";
+import { recordDeath, takeRecoveryPending } from "./actions/recovery";
+import { BotCommands } from "./commands/types";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going
@@ -148,6 +151,9 @@ function initializeBot(currentBot: mineflayer.Bot): void {
   // Personal updates to the owner (pickups, armor) and weapon-in-hand
   registerOwnerUpdates();
 
+  // Creepers are handled on reflex, whatever the bot is doing
+  registerCreeperReflex();
+
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 }
 
@@ -161,11 +167,13 @@ function registerBotEvents(currentBot: mineflayer.Bot): void {
   // Fires on the first spawn and after every death/respawn
   currentBot.on("spawn", () => {
     handleBotRejoin();
+    if (takeRecoveryPending()) void startRecovery(currentBot);
   });
 
   currentBot.on("death", () => {
     const pos = currentBot.entity?.position;
     console.log(`Bot died${pos ? ` at ${pos.floored()}` : ""}; it will respawn automatically.`);
+    recordDeath();
   });
 
   // Chat and whispers go through the gateway: owner only, fast path first
@@ -195,6 +203,28 @@ function registerBotEvents(currentBot: mineflayer.Bot): void {
     console.log(`Bot disconnected: ${reason}`);
     scheduleReconnect();
   });
+}
+
+/**
+ * After a death: go back for the dropped items, get basic gear if still empty
+ * handed, then return to the owner if they are online. Runs ahead of anything
+ * else in the queue, without asking the owner.
+ */
+async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
+  const steps: Array<{ command: BotCommands; args: object }> = [
+    { command: BotCommands.RecoverItems, args: {} },
+    { command: BotCommands.StarterKit, args: {} },
+  ];
+  const ownerOnline = Object.keys(currentBot.players).some(
+    (name) => name.toLowerCase() === OWNER_USERNAME.toLowerCase()
+  );
+  if (ownerOnline) {
+    steps.push({ command: BotCommands.GoToPlayer, args: { player_name: OWNER_USERNAME, closeness: 3 } });
+  }
+  for (const step of steps) {
+    await addCommandToQueue({ id: crypto.randomUUID(), priority: 0, retryCount: 0, ...step });
+  }
+  console.log(`Recovery queued: ${steps.map((s) => s.command).join(" -> ")}`);
 }
 
 /** Schedules creation of a new bot instance after a backoff delay. */

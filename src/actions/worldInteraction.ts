@@ -216,7 +216,21 @@ export async function breakBlockAt(
     await bot.lookAt(block.position, true); // Ensure the bot has finished turning
     await __actionsDelay(500);
     try {
-      await bot.dig(block, true);
+      // A dig that never completes (out of reach, server ignored it) must not
+      // hang the task forever
+      const DIG_TIMEOUT_MS = 15000;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          bot.stopDigging();
+          reject(new Error(`digging ${block.name} took longer than ${DIG_TIMEOUT_MS / 1000}s`));
+        }, DIG_TIMEOUT_MS);
+      });
+      try {
+        await Promise.race([bot.dig(block, true), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
       console.log(
         `Broke ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(
           1

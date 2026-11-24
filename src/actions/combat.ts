@@ -46,7 +46,9 @@ export function getMobThreatInfo(entity: Entity) {
 export function getPriorityTargets(range = 16): Entity[] {
   const hostileEntities = Object.values(bot.entities).filter(
     (entity) =>
-      entity.type === "mob" &&
+      // creepers are handled by the creeper reflex: rushing them in melee with
+      // pvp is exactly how the bot got blown up
+      entity.name !== "creeper" &&
       entity.position.distanceTo(bot.entity.position) <= range &&
       isHostile(entity)
   );

@@ -6,6 +6,7 @@ import * as world from "./world.js";
 import { bot } from "../index.js";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 import { isCommandCancelled } from "../managers/actionManager";
+import { isCreeperReflexActive, waitForCreeperReflex } from "./creeperReflex";
 
 /** Distance beyond which a trip is walked in legs instead of one path search. */
 export const LONG_TRIP_BLOCKS = 48;
@@ -37,6 +38,7 @@ export async function travelTo(
   try {
     while (failures < MAX_LEG_FAILURES) {
       if (isCommandCancelled()) return false;
+      await waitForCreeperReflex(); // a creeper fight takes over movement first
       const target = getTarget();
       if (!target) return false;
       const pos = bot.entity.position;
@@ -63,6 +65,7 @@ export async function travelTo(
           await bot.pathfinder.goto(goal);
           return true;
         } catch (error) {
+          if (isCreeperReflexActive()) continue; // interrupted by a creeper, not a real failure
           failures++;
           console.log(`travelTo final leg failed (${(error as Error).message}), retry ${failures}`);
           if (isCommandCancelled()) return false;
@@ -80,6 +83,7 @@ export async function travelTo(
         await bot.pathfinder.goto(new pf.goals.GoalNearXZ(legX, legZ, 3));
         failures = 0;
       } catch (error) {
+        if (isCreeperReflexActive()) continue; // interrupted by a creeper, not a real failure
         failures++;
         console.log(`travelTo leg failed (${(error as Error).message}), retry ${failures}`);
         if (isCommandCancelled()) return false;

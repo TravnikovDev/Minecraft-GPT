@@ -13,6 +13,35 @@ import { executeTool } from "./toolManager";
 import type { CommandType } from "../schemas/types";
 import { bot } from "..";
 import { unstuck } from "../actions/unstuck";
+import { isCreeperReflexActive } from "../actions/creeperReflex";
+
+// "Doing nothing" watchdog: no movement and no inventory change for this long
+// means the command is hung (e.g. staring at a block it can't dig)
+const NO_PROGRESS_MS = 45 * 1000;
+let lastProgressAt = Date.now();
+let lastProgressPos = { x: 0, y: 0, z: 0 };
+let lastInventorySignature = "";
+
+function inventorySignature(): string {
+  return bot.inventory
+    .items()
+    .map((i) => `${i.name}:${i.count}`)
+    .sort()
+    .join(",");
+}
+
+/** Records progress (movement or inventory change) for the watchdog. */
+function noteProgress(): void {
+  const pos = bot.entity?.position;
+  if (!pos) return;
+  const moved = Math.hypot(pos.x - lastProgressPos.x, pos.y - lastProgressPos.y, pos.z - lastProgressPos.z) > 1;
+  const signature = inventorySignature();
+  if (moved || signature !== lastInventorySignature || isCreeperReflexActive()) {
+    lastProgressAt = Date.now();
+    lastProgressPos = { x: pos.x, y: pos.y, z: pos.z };
+    lastInventorySignature = signature;
+  }
+}
 
 // Constants for action monitoring
 const MAX_ACTION_EXECUTION_TIME = 5 * 60 * 1000; // Cancel any command running longer than 5 minutes
@@ -105,6 +134,8 @@ async function processCommand(nextCommand: CommandType) {
     actionStartTime = Date.now();
     lastBotPosition = bot.entity?.position.clone() ?? lastBotPosition;
     recoveriesForCurrentCommand = 0;
+    lastProgressAt = Date.now();
+    noteProgress();
     
     // Start monitoring this action
     const timeoutId = startActionMonitoring();
@@ -139,7 +170,7 @@ async function processCommand(nextCommand: CommandType) {
       nextCommand.retryCount = (nextCommand.retryCount || 0) - 1;
       if (nextCommand.retryCount >= 0) {
         // Increase priority slightly with each retry
-        const newPriority = Math.max(1, (nextCommand.priority || 5) - 1);
+        const newPriority = Math.max(1, (nextCommand.priority ?? 5) - 1);
         await addCommandToQueue({
           ...nextCommand,
           priority: newPriority
@@ -194,6 +225,15 @@ async function checkActionProgress() {
     return;
   }
   
+  // Hung without moving or gaining/using items for a while: treat as stuck
+  noteProgress();
+  if (Date.now() - lastProgressAt > NO_PROGRESS_MS) {
+    console.log(`No progress on ${currentCommand.command} for ${NO_PROGRESS_MS / 1000}s. Initiating recovery.`);
+    lastProgressAt = Date.now(); // give the recovery its own window
+    await handleStuckAction();
+    return;
+  }
+
   // Check if bot's position has changed since last check
   const currentPosition = bot.entity.position;
   const hasMovementProgress = 
@@ -291,12 +331,12 @@ export async function executeCommands() {
   // Only process new commands if we're not currently processing one
   if (currentCommand === null) {
     // Sort commands by priority (lower number = higher priority)
-    commands.sort((a, b) => (a.priority || 5) - (b.priority || 5));
+    commands.sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5));
     
     for (const command of commands) {
       try {
         console.log(
-          `- Executing command ${command.command} with priority ${command.priority || 5}`
+          `- Executing command ${command.command} with priority ${command.priority ?? 5}`
         );
         await processCommand(command);
         break; // Only process one command per cycle

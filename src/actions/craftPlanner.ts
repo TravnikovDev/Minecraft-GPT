@@ -183,3 +183,17 @@ export function resolveCraftable(requested: string, count: number): string | nul
     (a, b) => missingTotal(a) - missingTotal(b) || tier(b) - tier(a) || preferred(a) - preferred(b)
   )[0]!;
 }
+
+/**
+ * Crafts an item right away when everything is available (making parts like
+ * planks and sticks first). Returns the missing materials instead of asking.
+ */
+export async function craftNow(item: string, count = 1): Promise<{ ok: boolean; missing: CraftStep[] }> {
+  const { craftRecipe } = await import("./crafting");
+  const plan = planCraft(item, count);
+  if (plan.missing.length > 0) return { ok: false, missing: plan.missing };
+  for (const step of plan.steps) {
+    if (!(await craftRecipe(step.name, step.count))) return { ok: false, missing: [] };
+  }
+  return { ok: true, missing: [] };
+}
