@@ -31,6 +31,28 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | 14 | Restart the bot process while it has queued work | On restart nothing resumes by itself; remembered base and chests are kept |
 | 15 | Restart your server while the bot is online | The log shows `Reconnecting in 5s…`, and it rejoins on its own |
 
+### Phase 0 run: 2026-11-24 (Minecraft 1.20.4 LAN world, `AUTH=offline`)
+
+| # | Result |
+|---|---|
+| 1 | ✅ chat from a non-owner name was ignored |
+| 2 | ✅ instant, no LLM call; reports the owner's distance |
+| 3 | ✅ "You have reached Travnikov" (only within walking range; a ~1,400-block trip times out, see Phase 3) |
+| 4 | ✅ followed the owner about 45 blocks |
+| 5 | ✅ instant |
+| 6 | ⬜ not run (Wi-Fi off) |
+| 7 | ✅ gathered logs (5 of 12 before the stop test) |
+| 8 | ✅ crafted an iron pickaxe, axe and sword (after fixing the craft-count bug); `craftItem` does not make missing sticks by itself yet (Phase 6) |
+| 9 | ✅ "Wood gathering cancelled", no late message |
+| 10 | ⬜ not run in the real world (passed on the local test server) |
+| 11 | ✅ an unknown name (`bed`) fails cleanly instead of searching for air |
+| 12 | ✅ failed once, no retry loop |
+| 13 | ⬜ not run |
+| 14 | ✅ queue empty on every restart |
+| 15 | ✅ reconnected after a server kick (a crash in the stuck-watcher was found and fixed) |
+
+**Notes:** the offline login works on this LAN world. After a restart the bot may be far from the owner; `come here` only works within walking range until long trips are split into legs (Phase 3).
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.
