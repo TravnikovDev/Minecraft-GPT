@@ -11,6 +11,7 @@ import { normalizeMinecraftName } from "../utils/utility";
 import { directionFromOwner, ownerDistance } from "./ownerDialog";
 import { recentConversation } from "../core/session";
 import { wornArmor } from "../actions/armor";
+import { checkNames } from "./nameGate";
 
 // Questions answered from current state: they run immediately, even while the
 // bot is busy with something else, instead of waiting in the queue
@@ -199,6 +200,15 @@ export async function initiateActionFromAI(
           if (MINECRAFT_ID_ARGS.has(key) && typeof value === "string") {
             toolAction.arguments[key] = normalizeMinecraftName(value);
           }
+        }
+
+        // Item, block and mob names must be real (or a kind the command
+        // understands); otherwise ask instead of guessing
+        const question = checkNames(toolAction.action, toolAction.arguments ?? {});
+        if (question) {
+          console.log(`Name check failed for ${toolAction.action}: ${question}`);
+          bot.chat(question);
+          return;
         }
 
         if (INSTANT_COMMANDS.has(toolAction.action)) {

@@ -1,4 +1,5 @@
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
 import * as world from "./world.js";
@@ -17,25 +18,15 @@ export async function collectBlock(
     return false;
   }
 
-  let blockTypes = [blockType];
-
-  // Add block variants
-  if (
-    [
-      "coal",
-      "diamond",
-      "emerald",
-      "iron",
-      "gold",
-      "lapis_lazuli",
-      "redstone",
-      "copper",
-    ].includes(blockType)
-  ) {
-    blockTypes.push(`${blockType}_ore`, `deepslate_${blockType}_ore`);
-  }
-  if (blockType.endsWith("ore")) {
-    blockTypes.push(`deepslate_${blockType}`);
+  // A block by name, or an item that comes from ores ("diamond", "raw_iron",
+  // "coal"): mine every ore that drops it (stone and deepslate variants)
+  const c = catalog();
+  let blockTypes = c.isBlock(blockType) ? [blockType] : [];
+  if (blockTypes.length === 0 && c.isItem(blockType)) blockTypes = c.oresFor(blockType);
+  if (c.isBlock(`deepslate_${blockType}`) && blockType.endsWith("_ore")) blockTypes.push(`deepslate_${blockType}`);
+  if (blockTypes.length === 0) {
+    console.log(`"${blockType}" is not a block or anything ores drop.`);
+    return false;
   }
   if (blockType === "dirt") {
     blockTypes.push("grass_block");
