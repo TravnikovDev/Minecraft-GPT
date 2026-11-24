@@ -9,6 +9,11 @@ minecraft-gpt is an AI-powered Minecraft bot built with Mineflayer and OpenAI's 
 bun run src/index.ts
 # Type checking
 bun run tsc
+# Tests (tests/) and the full check: type check + boundary check + tests
+bun run test
+bun run check
+# After removing direct game-changing bot calls outside src/core/, re-freeze the allow-list
+bun run scripts/checkBoundaries.ts --update
 # Install dependencies
 bun install
 ```

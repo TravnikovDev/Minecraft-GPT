@@ -195,15 +195,15 @@ In the game:
   - **Major:** the combat reflex can freeze for 30 s; reflexes only pause walking (no leases on hands, windows or keys); a task from an old connection can drive the new one; two door-opener bugs.
 - An audit of the 72 files found about 365 state reads, 165 chat calls and about 100 calls that change the game.
 
-**How we handled it.** No code changes; the owner chose to commit the working state first and decide the direction.
+**How we handled it.** No code changes at this point; the owner chose to commit the working state first and decide the direction.
 
-| Question | Decision (proposed, awaiting the owner) |
+| Question | Decision |
 |---|---|
 | Follow the phases strictly? | **No, but follow the order between foundations.** A feature may come early only if the foundation it leans on comes with it, at least in a thin form. The plan is a map of dependencies, not a schedule. |
 | Move everything behind the Body? | **No.** Reads stay direct (the singleton is accepted). The ~100 game-changing calls go through a gate in Phase 3 (server confirmation) and Phase 4 (leases). Chat goes through the Narrator in Phase 5. Phase 1's deliverable becomes "the Body owns connections and plugins, and a script blocks new direct calls that change the game". |
 | Alignment with the settled design | **Held:** slow LLM, cost, code-driven behavior, owner-only, one bot. **Drifted:** no arbiter (about six informal flags instead), no Catalog (three loose matchers), only some actions confirmed by the server, no automated tests in the repo. |
 
-**Outcome and what follows.** The proposed order:
+**Outcome and what follows.** This order was proposed:
 1. **Close Phase 1 (small).**
    - Reword the Body deliverable.
    - One set of walking rules per connection.
@@ -226,3 +226,54 @@ In the game:
 - Should "stop" end a fight (but never fleeing or drowning)?
 - Keep mineflayer-pvp, or replace it?
 - Should the bot close a door behind it while the owner follows through it?
+
+**The owner's decisions (2026-11-24)**
+- **Order:** close Phase 1, push to master, then **Phase 2 (Catalog) next**. Phase 4a (the control layer) is not pulled ahead of it.
+- **Stop:** "stop" also ends fighting and creeper dodging. The owner's base has a creeper farm, where penned-in creepers are no danger, so the owner decides what's dangerous, not the bot.
+- **mineflayer-pvp:** stays. Guard it rather than replace it.
+- **Doors:** the bot always closes doors behind itself, even with the owner following through. A door left open lets zombies in; a door shut in the owner's face is a small price.
+
+---
+
+## Entry 6: Closing Phase 1 (2026-11-24)
+
+**Planned.** Entry 5's step 1, plus the review's F1–F7, within the owner's decisions:
+- reword the Body deliverable
+- one set of walking rules
+- dead code out
+- tests into the repo
+- the boundary check
+- merge and push
+
+**What happened**
+- The fixes went in as planned (`b1bd968`, `1498411`).
+- Moving the tests into the repo exposed two test-harness problems:
+  - Bun copies a mocked module's exports once, so the fake bot is now a proxy (`tests/fakeBody.ts`).
+  - The door test's "won't open" list leaked into the walking-rules test.
+- Both were test problems only; no source code changed because of them.
+
+**How we handled it**
+
+| Item | Handling | Commit |
+|---|---|---|
+| F1: stop doesn't reach paused walks | `goto` and long trips check the cancel signal; waiting for reflexes can be cancelled | `b1bd968` |
+| Owner's stop vs reflexes | Stop ends fighting and creeper dodging and mutes both for 60 s. Drowning is never muted. A mob that actually hits the bot is still fought | `b1bd968` |
+| F2: deferred pathfinder and pvp stops | Never called. `pathing.stop` clears the goal; `fighting.stop` uses `pvp.forceStop` | `b1bd968` |
+| F3: combat reflex freeze | It re-asserts its target every tick | `b1bd968` |
+| F5: stale task drives the new connection | A disconnect aborts the running command at once; a follow paused on the old connection is forgotten | `b1bd968` |
+| F6: doors | Follows the pathfinder's live route; confirms the door opened; a door the server refuses becomes a wall | `b1bd968` |
+| F7 and housekeeping | One walking-rules object per connection; one cleanup list per connection (instead of `setMaxListeners`); dead combat code removed; `.DS_Store` untracked | `b1bd968` |
+| Tests and boundary check | `bun run check` = type check + boundary check (122 direct calls frozen) + 13 tests | `1498411` |
+| Body deliverable | Reworded in the plan | this entry |
+
+**Outcome and what follows**
+- **Phase 1 is closed in code.**
+- **Not yet seen in the owner's game:**
+  - stop during a fight, then "come"
+  - following resumes after a mob flees
+  - the 60 s mute at the creeper farm
+  - a door that won't open
+  - a reconnect during a reflex
+
+  These are added to the checklist.
+- **Next:** merge to master, push, and start Phase 2 (Catalog).

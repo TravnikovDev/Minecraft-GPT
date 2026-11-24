@@ -96,6 +96,16 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | Doors | ❌→✅ stood in the open doorway (the pathfinder aimed at the top of the open door leaf), then flapped a double door open and shut while following; now it walks through the middle of the doorway, opens only doors on its route, and closes them only once through. It passed through the door |
 | "Give me the plate" | ❌→fixed: claimed "Gave 1 iron_chestplate" three times while giving nothing; give now tosses the exact item, says when it has none, matches loose names against what it carries, and can hand over worn armor (not yet re-tested) |
 
+### Phase 1 closing checks (not yet run)
+
+| # | Do this | Expect |
+|---|---|---|
+| 1 | Let a zombie attack the bot while it walks to you, then say `stop`, then `come` | It stops fighting at once, then walks to you without wandering back to the old task |
+| 2 | "follow me", then let a mob chase the bot and run off | After the fight it follows you again |
+| 3 | Stand by penned-in creepers (the creeper farm), say `stop` | It stops dodging and stays quiet for about a minute |
+| 4 | Lead it through a door it can't open (adventure mode or a protected spot) | "The door … won't open; finding another way", and no digging |
+| 5 | Restart the server while it's fighting or dodging a creeper | It rejoins idle; the old task doesn't keep moving it |
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.

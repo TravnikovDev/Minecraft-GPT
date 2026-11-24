@@ -77,10 +77,14 @@ Sizes are relative effort (S < M < L < XL), not calendar estimates.
 
 ## Phase 1: Session and Body (L7)
 
-**Goal.** Exactly one place in the code touches mineflayer. Everything that should outlive a reconnect lives in a process-wide **Session**. Everything tied to one connection lives in a **Body** that is rebuilt on reconnect.
+**Goal.** One place owns the connection to mineflayer. Everything that should outlive a reconnect lives in a process-wide **Session**. Everything tied to one connection lives in a **Body** that is rebuilt on reconnect.
 
 **Deliverable (done when).**
-- All `bot.*` calls go through the Body adapter.
+- The Body owns the connection. Every per-connection listener, timer and plugin is registered through it and cleaned up when the connection ends. Plugins are reached only through `core/plugins`.
+- Calls that change the game don't spread. A boundary check (`scripts/checkBoundaries.ts`) freezes today's direct calls per file and fails on new ones.
+  - Phase 3 moves these calls into checked primitives; Phase 4 puts those primitives behind leases.
+  - Reads (position, inventory, blocks) stay direct reads of the one bot.
+  - *Reworded 2026-11-24.* The original "all `bot.*` calls go through the Body adapter" would have meant wrapping about 365 reads for no gain, and wrapping the game-changing calls twice. See the [Implementation log](Implementation%20log.md), entry 5.
 - After a server restart, the bot comes back with clean state: no leftover health tracking, timers or listeners from the old connection.
 - **Its death spot and your last known position survive a bot restart**, so death recovery and "come here" still work after it restarts.
 - **It remembers the recent conversation**, so follow-ups like "do that again", "no, the other one" or "let's start from the beginning" make sense to it.
