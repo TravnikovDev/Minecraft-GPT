@@ -79,7 +79,12 @@ function tick(): void {
     if (!underwater || (air > LOW_AIR && !longUnderwater)) return;
     floating = false;
     active = true;
-    console.log(`Drowning reflex: underwater with ${Math.round(air / 15)}/20 air, swimming up.`);
+    const at = (dy: number): string => bot.blockAt(bot.entity.position.offset(0, dy, 0))?.name ?? "?";
+    console.log(
+      `Drowning reflex: underwater with ${Math.round(air / 15)}/20 air, swimming up ` +
+        `(at ${bot.entity.position.toString()}, feet ${at(0.2)}, head ${at(1.62)}, above ${at(2.6)}, ` +
+        `jump ${bot.getControlState("jump")}, pathing ${pathing.isMoving()}, vy ${bot.entity.velocity.y.toFixed(2)}).`
+    );
     setReflexActive("drowning", true);
     pathing.takeOver(); // take over movement from whatever task is running
   }
