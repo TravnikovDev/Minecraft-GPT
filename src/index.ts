@@ -16,7 +16,8 @@ import { addCommandToQueue, loadDb, removeAllCommands } from "./managers/persist
 import { executeCommands, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
 import { handleChat, isOwner } from "./managers/chatGateway";
-import { nightDefense } from "./actions/combat";
+import { registerCombatReflex } from "./actions/combatReflex";
+import { resetReflexes } from "./core/reflexes";
 import { monitorHealth } from "./actions/health";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
@@ -77,7 +78,8 @@ onConnectionReady((currentBot) => {
   };
   currentBot.autoEat.enable();
 
-  nightDefense(1000); // checks for hostiles every second at night (cleared on 'end')
+  resetReflexes(); // a new connection starts with no reflex running
+  registerCombatReflex(); // fights back when mobs attack, pausing the task
   monitorHealth(); // self-defense on damage (per-connection state reset inside)
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing

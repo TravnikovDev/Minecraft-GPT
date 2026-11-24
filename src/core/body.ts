@@ -217,9 +217,11 @@ function createBot(): Bot {
 
 /** Turns this connection's raw mineflayer events into typed bus events. */
 function forwardEvents(currentBot: Bot): void {
-  let lastHealth = 20;
+  // Unknown until the server's first health update: on login it reports the
+  // health the bot had when it left, which is not damage taken now
+  let lastHealth: number | null = null;
   listen(currentBot, "spawn", () => {
-    lastHealth = currentBot.health ?? 20;
+    lastHealth = currentBot.health ?? null;
     emit("bot:spawned", { position: currentBot.entity?.position.clone() ?? null });
   });
   listen(currentBot, "death", () => {
@@ -227,7 +229,7 @@ function forwardEvents(currentBot: Bot): void {
   });
   listen(currentBot, "health", () => {
     const health = currentBot.health;
-    if (health < lastHealth) emit("bot:damaged", { amount: lastHealth - health, health });
+    if (lastHealth !== null && health < lastHealth) emit("bot:damaged", { amount: lastHealth - health, health });
     lastHealth = health;
   });
   listen(currentBot, "blockUpdate", (oldBlock: { name: string } | null, newBlock: { name: string; position: any } | null) => {

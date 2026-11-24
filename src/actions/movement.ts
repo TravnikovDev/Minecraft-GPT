@@ -6,8 +6,7 @@ import * as world from "./world.js";
 import { bot } from "../core/body";
 import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 import { isCommandCancelled } from "../core/commandContext";
-import { isCreeperReflexActive, waitForCreeperReflex } from "./creeperReflex";
-import { isDrowningReflexActive, waitForDrowningReflex } from "./drowningReflex";
+import { isAnyReflexActive, waitForReflexes } from "../core/reflexes";
 import { pathing } from "../core/plugins";
 
 /** Distance beyond which a trip is walked in legs instead of one path search. */
@@ -40,8 +39,7 @@ export async function travelTo(
   try {
     while (failures < MAX_LEG_FAILURES) {
       if (isCommandCancelled()) return false;
-      await waitForCreeperReflex(); // a creeper fight takes over movement first
-      await waitForDrowningReflex(); // so does swimming up for air
+      await waitForReflexes(); // creepers, mobs and running out of air come first
       const target = getTarget();
       if (!target) return false;
       const pos = bot.entity.position;
@@ -68,7 +66,7 @@ export async function travelTo(
           await pathing.goto(goal);
           return true;
         } catch (error) {
-          if (isCreeperReflexActive() || isDrowningReflexActive()) continue; // interrupted by a reflex, not a real failure
+          if (isAnyReflexActive()) continue; // interrupted by a reflex, not a real failure
           failures++;
           console.log(`travelTo final leg failed (${(error as Error).message}), retry ${failures}`);
           if (isCommandCancelled()) return false;
@@ -86,7 +84,7 @@ export async function travelTo(
         await pathing.goto(new pf.goals.GoalNearXZ(legX, legZ, 3));
         failures = 0;
       } catch (error) {
-        if (isCreeperReflexActive() || isDrowningReflexActive()) continue; // interrupted by a reflex, not a real failure
+        if (isAnyReflexActive()) continue; // interrupted by a reflex, not a real failure
         failures++;
         console.log(`travelTo leg failed (${(error as Error).message}), retry ${failures}`);
         if (isCommandCancelled()) return false;

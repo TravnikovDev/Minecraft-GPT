@@ -6,6 +6,7 @@
 
 import { bot } from "../core/body";
 import { pathing } from "../core/plugins";
+import { setReflexActive } from "../core/reflexes";
 
 const CHECK_MS = 250;
 const LOW_AIR = 12; // of 20; about 9 seconds of air left
@@ -38,6 +39,8 @@ function finish(): void {
   active = false;
   bot.setControlState("jump", false);
   bot.setControlState("forward", false);
+  setReflexActive("drowning", false);
+  pathing.resumeAfterReflex();
   console.log("Drowning reflex: breathing again.");
 }
 
@@ -50,7 +53,8 @@ function tick(): void {
     if (!underwater || air > LOW_AIR) return;
     active = true;
     console.log(`Drowning reflex: underwater with ${air}/20 air, swimming up.`);
-    pathing.setGoal(null); // take over movement from whatever task is running
+    setReflexActive("drowning", true);
+    pathing.takeOver(); // take over movement from whatever task is running
   }
 
   if (!underwater && air >= SAFE_AIR) {
