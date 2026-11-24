@@ -22,6 +22,7 @@ const MAX_UNDERWATER_MS = 5000;
 const WATER_BLOCKS = new Set(["water", "bubble_column", "kelp", "kelp_plant", "seagrass", "tall_seagrass"]);
 
 let active = false;
+let floating = false;
 let underwaterSince: number | null = null;
 
 /** The bot's own air in ticks (300 when full or unknown). */
@@ -40,12 +41,14 @@ export async function waitForDrowningReflex(): Promise<void> {
   while (active) await new Promise((r) => setTimeout(r, 250));
 }
 
-function headUnderwater(): boolean {
-  const head = bot.blockAt(bot.entity.position.offset(0, 1.62, 0));
-  if (!head) return false;
-  if (WATER_BLOCKS.has(head.name)) return true;
-  return (head.getProperties() as { waterlogged?: boolean }).waterlogged === true;
+function isWaterAt(dy: number): boolean {
+  const block = bot.blockAt(bot.entity.position.offset(0, dy, 0));
+  if (!block) return false;
+  if (WATER_BLOCKS.has(block.name)) return true;
+  return (block.getProperties() as { waterlogged?: boolean }).waterlogged === true;
 }
+
+const headUnderwater = (): boolean => isWaterAt(1.62);
 
 function finish(): void {
   if (!active) return;
@@ -64,8 +67,17 @@ function tick(): void {
   underwaterSince = underwater ? (underwaterSince ?? Date.now()) : null;
   const longUnderwater = underwaterSince !== null && Date.now() - underwaterSince > MAX_UNDERWATER_MS;
 
+  // Idle in deep water: tread water instead of sinking (the pathfinder
+  // swims on its own while it's walking somewhere)
+  const shouldFloat = !active && !bot.vehicle && isWaterAt(0.2) && !pathing.isMoving();
+  if (shouldFloat !== floating) {
+    floating = shouldFloat;
+    bot.setControlState("jump", shouldFloat);
+  }
+
   if (!active) {
     if (!underwater || (air > LOW_AIR && !longUnderwater)) return;
+    floating = false;
     active = true;
     console.log(`Drowning reflex: underwater with ${Math.round(air / 15)}/20 air, swimming up.`);
     setReflexActive("drowning", true);
@@ -86,6 +98,7 @@ function tick(): void {
 /** Starts the reflex for the current bot instance. */
 export function registerDrowningReflex(): void {
   active = false; // fresh state for this connection
+  floating = false;
   underwaterSince = null;
   const timer = setInterval(tick, CHECK_MS);
   bot.once("end", () => clearInterval(timer));
