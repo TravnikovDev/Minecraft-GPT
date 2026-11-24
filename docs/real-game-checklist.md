@@ -67,6 +67,21 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | Smart crafting | ✅ makes sticks itself, picks stone over wood for "pickaxe", crafts its own table, asks before gathering missing wool |
 | Chat pacing | ✅ no more `disconnect.spam` kicks after pacing chat to 1.2 s |
 
+### Phase 1 real-world run: 2026-11-24, third session (same world)
+
+| Check | Result |
+|---|---|
+| Creeper reflex | ✅ fired and cleared without a death |
+| Bed: place, sleep, spawn point | ✅ by day the bot uses the bed and repeats the server's own answer ("Respawn point set" / "only at night"); killed 83 blocks away, it respawned at the bed |
+| Death recovery | ✅ walked back 83 blocks and got all 148 items back |
+| Drowning | ❌→✅ drowned twice: mineflayer's `oxygenLevel` is overwritten by nearby fish and mobs; the reflex now reads the bot's own air and treads water when idle |
+| Mobs while busy | ❌→fixed, not yet re-tested: a spider and a zombie hit the bot while its task cancelled the fight; combat reflex now pauses the task |
+| Boat travel | ✅ rowed 258 blocks in one go (the server accepts the bot's own boat moves); a stopped trip now lands and picks up the boat before the next command (not yet re-tested) |
+| Riding in the owner's boat | ✅ fixed: come/follow keep it seated; walking gets out of a vehicle first |
+| Harvest | ✅ harvested and replanted about 20 crops |
+| Cooking | ✅ 9 potatoes on 3 campfires at once, all 9 collected (first version used one campfire and couldn't reach the food) |
+| Give with no amount | ❌→fixed, not yet re-tested: "give me dark oak" gave one plank; now gives all |
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.
