@@ -62,7 +62,10 @@ export function registerOwnerUpdates(): void {
     const items = [...pickups.entries()].map(([name, count]) => `${count} ${pretty(name)}`);
     pickups.clear();
     const distance = ownerDistance();
-    if (items.length > 0 && distance !== null && distance <= NEARBY_BLOCKS) {
+    // While busy with its own task (gathering, mining, hunting) pickups are its
+    // own work, not gifts; only report what it receives while idle
+    const ownWork = getCurrentCommandName() !== null;
+    if (items.length > 0 && !ownWork && distance !== null && distance <= NEARBY_BLOCKS) {
       const thanks = distance <= GIFT_BLOCKS ? ", thanks!" : ".";
       tellOwner(`Got ${items.join(", ")}${thanks}`);
     }
