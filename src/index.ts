@@ -51,6 +51,9 @@ let restartRecoveryChecked = false;
 
 /** Loads plugins and per-connection behavior once a connection first spawns. */
 onConnectionReady((currentBot) => {
+  // Each timer and reflex adds an "end" listener to clean itself up; more than
+  // Node's default 10 is expected, not a leak
+  currentBot.setMaxListeners(40);
   currentBot.loadPlugin(pathfinder);
   currentBot.loadPlugin(pvp);
   currentBot.loadPlugin(autoEat);
