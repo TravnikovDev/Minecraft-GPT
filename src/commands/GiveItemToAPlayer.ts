@@ -6,7 +6,9 @@ import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
-Example: "Give a sword to Steve.", "Give 2 apples to Alex", "Give a pickaxe to me", "Give me 20 spruce_log".`;
+When no amount is said ("give me dark oak", "give me your wood"), it gives all it has of that item.
+Example: "Give a sword to Steve.", "Give 2 apples to Alex", "Give a pickaxe to me", "Give me 20 spruce_log",
+"Give me the dark oak".`;
 
 // Define parameters for the GiveItemToAPlayer action
 export const parameters = z.object({
@@ -15,7 +17,7 @@ export const parameters = z.object({
   num: z
     .number()
     .nullable()
-    .describe("The number of items to give to the player."),
+    .describe("How many to give. Null when the owner names no amount: then all of it. 1 only for \"a\"/\"an\"/\"one\"."),
 });
 
 // Implement the GiveItemToAPlayer action
@@ -30,7 +32,11 @@ export async function execute(args: any) {
   }
 
   let { player_name, item_name, num } = parsed.data;
-  num = num || 1;
+  // No amount said: give all of it
+  if (!num) {
+    const carried = bot.inventory.items().filter((i) => i.name === item_name).reduce((n, i) => n + i.count, 0);
+    num = carried > 0 ? carried : 1;
+  }
 
   let theName;
   if (player_name) {
