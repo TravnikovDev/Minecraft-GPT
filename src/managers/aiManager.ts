@@ -6,7 +6,7 @@ import { bot } from "..";
 import { BotCommands, isBotAction } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
 import { addCommandToQueue } from "./persistenceManager";
-import { getCurrentCommandName, stopEverything } from "./actionManager";
+import { cancelCurrentCommand, getCurrentCommandName, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
 import { directionFromOwner, ownerDistance } from "./ownerDialog";
 
@@ -17,6 +17,15 @@ const INSTANT_COMMANDS = new Set<string>([
   BotCommands.ListInventory,
   BotCommands.CheckForItem,
   BotCommands.DescribeSurroundings,
+]);
+
+// Requests that should interrupt the running task instead of waiting behind it:
+// the owner calling the bot, or telling it that it is stuck
+const INTERRUPTING_COMMANDS = new Set<string>([
+  BotCommands.Unstack,
+  BotCommands.GoToPlayer,
+  BotCommands.FollowPlayer,
+  BotCommands.GoToCoordinates,
 ]);
 
 /** One line of real state for the model, so its chat answers are grounded. */
@@ -178,9 +187,13 @@ export async function initiateActionFromAI(
           return;
         }
 
-        // Tell the owner when the request has to wait for the current task
+        // Movement/unstuck requests from the owner take over right away;
+        // anything else waits, and the owner is told so
         const busyWith = getCurrentCommandName();
-        if (busyWith && !response) {
+        const interrupts = INTERRUPTING_COMMANDS.has(toolAction.action);
+        if (busyWith && interrupts) {
+          await cancelCurrentCommand(`owner asked for ${toolAction.action}`);
+        } else if (busyWith && !response) {
           bot.chat(`Okay, I'll do that after I finish ${busyWith}.`);
         }
         // Log for debugging
@@ -189,11 +202,11 @@ export async function initiateActionFromAI(
             toolAction.action
           }, with args: ${JSON.stringify(toolAction.arguments)}`
         );
-        // Add the parsed action to the queue with priority 3
+        // Add the parsed action to the queue (interrupting requests go first)
         await addCommandToQueue({
           command: toolAction.action,
           id: actionId,
-          priority: 3,
+          priority: interrupts ? 1 : 3,
           retryCount: 0, // Adding the missing retryCount property
           args: toolAction.arguments,
         });
