@@ -39,6 +39,7 @@ import * as RecoverItems from "./RecoverItems";
 import * as StarterKit from "./StarterKit";
 import * as Sleep from "./Sleep";
 import * as PlaceItem from "./PlaceItem";
+import * as GoByBoat from "./GoByBoat";
 import * as UseNearbyObject from "./UseNearbyObject";
 import * as DeployVehicle from "./DeployVehicle";
 
@@ -83,6 +84,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.StarterKit]: StarterKit,
   [BotCommands.Sleep]: Sleep,
   [BotCommands.PlaceItem]: PlaceItem,
+  [BotCommands.GoByBoat]: GoByBoat,
   [BotCommands.UseNearbyObject]: UseNearbyObject,
   [BotCommands.DeployVehicle]: DeployVehicle,
   [BotCommands.Stop]: Stop,

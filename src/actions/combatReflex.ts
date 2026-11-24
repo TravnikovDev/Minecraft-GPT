@@ -89,6 +89,7 @@ function finish(reason: string): void {
 
 function tick(): void {
   if (!bot.entity || !(bot.health > 0)) return;
+  if (bot.vehicle) return; // no melee from a boat (and rowing owns movement)
   if (isCreeperReflexActive() || isDrowningReflexActive()) {
     finish("stepping aside for another reflex");
     return;
@@ -125,7 +126,7 @@ export function registerCombatReflex(): void {
   // Hit back when hurt, even by a mob that isn't in melee range yet (skeletons)
   unsubscribe?.();
   unsubscribe = on("bot:damaged", () => {
-    if (target || isCreeperReflexActive() || isDrowningReflexActive()) return;
+    if (target || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
     const mob = pickTarget(HIT_BACK_RANGE);
     if (mob) engage(mob);
   });

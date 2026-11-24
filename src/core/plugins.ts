@@ -16,6 +16,22 @@ type Goal = goals.Goal;
 let pausedFollow: Goal | null = null;
 const MAX_REFLEX_RETRIES = 10;
 
+/** Gets out of a boat or off an animal (walking does nothing while mounted). */
+async function leaveVehicle(): Promise<void> {
+  if (!bot.vehicle) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(done, 3000);
+    function done(): void {
+      clearTimeout(timer);
+      bot.off("dismount", done);
+      resolve();
+    }
+    bot.on("dismount", done);
+    bot.dismount();
+  });
+  await new Promise((r) => setTimeout(r, 300)); // the server puts the bot down
+}
+
 /** Walking and path finding (mineflayer-pathfinder). */
 export const pathing = {
   /**
@@ -27,6 +43,7 @@ export const pathing = {
     for (let retry = 0; ; retry++) {
       await waitForReflexes();
       if (!bot.pathfinder) throw new Error("pathfinder is not loaded yet");
+      await leaveVehicle();
       const before = reflexTakeovers();
       try {
         return await bot.pathfinder.goto(goal);
@@ -55,6 +72,8 @@ export const pathing = {
     bot.pathfinder?.setGoal(pausedFollow, true);
     pausedFollow = null;
   },
+  /** Gets out of a boat or off an animal before walking. */
+  leaveVehicle,
   /** Stops at the next safe spot. */
   stop(): void {
     bot.pathfinder?.stop();

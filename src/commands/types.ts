@@ -35,6 +35,7 @@ enum BotCommands {
   StarterKit = "starterKit",
   Sleep = "sleep",
   PlaceItem = "placeItem",
+  GoByBoat = "goByBoat",
   UseNearbyObject = "useNearbyObject",
   DeployVehicle = "deployVehicle",
   Stop = "stop",

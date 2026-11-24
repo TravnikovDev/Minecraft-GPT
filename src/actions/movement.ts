@@ -8,11 +8,13 @@ import { __actionsDelay, getRandomInt } from "../utils/utility.js";
 import { isCommandCancelled } from "../core/commandContext";
 import { isAnyReflexActive, waitForReflexes } from "../core/reflexes";
 import { pathing } from "../core/plugins";
+import { BOAT_TRIP_BLOCKS, boatItem, crossWaterByBoat, ensureBoat, waterAhead } from "./boat";
 
 /** Distance beyond which a trip is walked in legs instead of one path search. */
 export const LONG_TRIP_BLOCKS = 48;
 const LEG_BLOCKS = 48;
 const MAX_LEG_FAILURES = 6;
+const MAX_BOAT_CROSSINGS = 4; // per trip
 
 type XZ = { x: number; z: number };
 const distXZ = (a: XZ, b: XZ): number => Math.hypot(a.x - b.x, a.z - b.z);
@@ -35,6 +37,15 @@ export async function travelTo(
   const savedThink = pathing.thinkTimeout;
   pathing.thinkTimeout = 10000; // a leg of rough terrain can need more than the 5 s default
   let failures = 0;
+  let crossings = 0;
+
+  // A long trip: take a boat along for any water on the way (much faster
+  // than swimming, and no drowning)
+  if (total >= BOAT_TRIP_BLOCKS && !boatItem()) {
+    console.log("Long trip: making a boat first.");
+    if (!(await ensureBoat())) console.log("Long trip: no boat (no wood); going without.");
+    if (isCommandCancelled()) return false;
+  }
 
   try {
     while (failures < MAX_LEG_FAILURES) {
@@ -54,6 +65,16 @@ export async function travelTo(
       // Close enough horizontally: arrived. The owner's y is often approximate
       // (e.g. 100 for ground at 70), so never insist on reaching an exact height.
       if (remaining <= range + 1) return true;
+
+      // Water in the way: row across instead of swimming
+      if (remaining > 24 && crossings < MAX_BOAT_CROSSINGS && boatItem() && waterAhead(target)) {
+        crossings++;
+        if (await crossWaterByBoat(target)) {
+          failures = 0;
+          continue;
+        }
+        if (isCommandCancelled()) return false;
+      }
 
       // Last stretch: walk to the spot on the ground. Use the height only when
       // it is close to the bot's own level; otherwise aim for x/z alone.
