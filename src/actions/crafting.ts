@@ -79,11 +79,11 @@ export async function craftRecipe(
         return false;
       }
     }
-    // Say why, so a failed craft is never silent in the log
-    const carried = bot.inventory.items().map((i) => `${i.count} ${i.name}`).join(", ");
-    console.log(
-      `No ${itemName} recipe fits the inventory${craftingTable ? " (with a crafting table)" : ""}. Carrying: ${carried || "nothing"}.`
-    );
+    // Say why a craft at a table failed (without a table, 3x3 recipes failing is expected)
+    if (craftingTable) {
+      const carried = bot.inventory.items().map((i) => `${i.count} ${i.name}`).join(", ");
+      console.log(`No ${itemName} recipe fits the inventory at the crafting table. Carrying: ${carried || "nothing"}.`);
+    }
     return false;
   }
 
