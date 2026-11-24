@@ -7,7 +7,6 @@ import type { Block } from "prismarine-block";
 import { bot } from "../core/body";
 import { isCommandCancelled } from "../core/commandContext";
 import { goToPosition } from "./movement";
-import { pickupNearbyItems } from "./worldInteraction";
 import { placeItemNear } from "./placement";
 
 /** Raw food -> what it cooks into. */
@@ -62,35 +61,83 @@ async function placeCarried(names: string[]): Promise<Block | null> {
   return item ? placeItemNear(item.name) : null;
 }
 
-/** Cooks on a campfire: up to four items at once, they pop off when done. */
-async function cookOnCampfire(campfire: Block, foods: string[], limit: number): Promise<number> {
-  let cooked = 0;
-  while (cooked < limit && !isCommandCancelled()) {
-    const raw = foods.find((f) => count(f) > 0);
-    if (!raw) break;
-    if (!(await walkTo(campfire))) break;
+/** All lit campfires nearby, nearest first. */
+function litCampfires(maxDistance = 24): Block[] {
+  const ids = CAMPFIRES.map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
+  return bot
+    .findBlocks({ matching: ids, maxDistance, count: 16 })
+    .map((p) => bot.blockAt(p))
+    .filter((b): b is Block => b !== null && isLit(b))
+    .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+}
 
-    // Each click puts one item on a free slot (four slots)
-    let placed = 0;
-    for (let slot = 0; slot < 4 && cooked + placed < limit; slot++) {
-      const food = foods.find((f) => count(f) > 0);
-      if (!food) break;
-      const before = count(food);
-      await bot.equip(bot.inventory.items().find((i) => i.name === food)!, "hand");
-      await bot.activateBlock(campfire);
-      await sleep(300);
-      if (count(food) < before) placed++;
-      else break; // the campfire is full
+/** Puts up to four raw items on a campfire (one per click). Returns how many it took. */
+async function loadCampfire(campfire: Block, foods: string[], max: number): Promise<number> {
+  if (!(await walkTo(campfire))) return 0;
+  let placed = 0;
+  while (placed < Math.min(4, max)) {
+    const food = foods.find((f) => count(f) > 0);
+    if (!food) break;
+    const before = count(food);
+    await bot.equip(bot.inventory.items().find((i) => i.name === food)!, "hand");
+    await bot.activateBlock(campfire);
+    await sleep(300);
+    if (count(food) >= before) break; // the campfire is full
+    placed++;
+  }
+  return placed;
+}
+
+/**
+ * Cooked food pops out on top of the campfire, out of reach from where the
+ * bot stood to load it: step right next to it and walk up to each item.
+ */
+async function collectAround(campfire: Block): Promise<void> {
+  const c = campfire.position;
+  await goToPosition(c.x, c.y, c.z, 1);
+  await sleep(400);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const item = bot.nearestEntity(
+      (e) => e.name === "item" && e.position.distanceTo(c.offset(0.5, 0.5, 0.5)) < 2.5
+    );
+    if (!item) return;
+    await goToPosition(item.position.x, item.position.y, item.position.z, 1);
+    await sleep(400);
+  }
+}
+
+/**
+ * Cooks on every lit campfire nearby at once: loads four items on each,
+ * waits the ~30 seconds once, collects from all, and repeats.
+ */
+async function cookOnCampfires(campfires: Block[], foods: string[], limit: number): Promise<number> {
+  const cookedNames = [...new Set(foods.map((f) => RAW_FOODS[f]!))];
+  const cookedCount = (): number => cookedNames.reduce((n, name) => n + count(name), 0);
+  const startCooked = cookedCount();
+  let loaded = 0;
+
+  while (loaded < limit && !isCommandCancelled() && foods.some((f) => count(f) > 0)) {
+    const used: Block[] = [];
+    let lastLoadAt = 0;
+    for (const campfire of campfires) {
+      if (loaded >= limit || isCommandCancelled()) break;
+      const placed = await loadCampfire(campfire, foods, limit - loaded);
+      if (placed > 0) {
+        used.push(campfire);
+        loaded += placed;
+        lastLoadAt = Date.now();
+      }
     }
-    if (placed === 0) {
-      console.log("Cooking: the campfire took nothing (full or not lit).");
+    if (used.length === 0) {
+      console.log("Cooking: the campfires took nothing (full or not lit).");
       break;
     }
-    console.log(`Cooking: ${placed} items on the campfire.`);
-    await sleep(CAMPFIRE_COOK_MS);
-    await pickupNearbyItems(bot, 4);
-    cooked += placed;
+    console.log(`Cooking: ${loaded} items loaded on ${used.length} campfire(s).`);
+    await sleep(Math.max(0, lastLoadAt + CAMPFIRE_COOK_MS - Date.now()));
+    for (const campfire of used) await collectAround(campfire);
   }
+  const cooked = cookedCount() - startCooked;
+  console.log(`Cooking: collected ${cooked} of ${loaded} cooked items.`);
   return cooked;
 }
 
@@ -154,8 +201,12 @@ export async function cookFood(only: string | null = null, limit = 64): Promise<
   const foods = rawFoodInInventory(only);
   if (foods.length === 0) return 0;
 
-  const campfire = nearest(CAMPFIRES, 24, isLit) ?? (await placeCarried(CAMPFIRES));
-  if (campfire && isLit(campfire)) return cookOnCampfire(campfire, foods, limit);
+  let campfires = litCampfires();
+  if (campfires.length === 0) {
+    const placed = await placeCarried(CAMPFIRES);
+    if (placed && isLit(placed)) campfires = [placed];
+  }
+  if (campfires.length > 0) return cookOnCampfires(campfires, foods, limit);
 
   const oven = nearest(OVENS) ?? (await placeCarried(OVENS));
   if (oven && pickFuel(1)) return cookInOven(oven, foods, limit);
