@@ -106,6 +106,18 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | 4 | Lead it through a door it can't open (adventure mode or a protected spot) | "The door … won't open; finding another way", and no digging |
 | 5 | Restart the server while it's fighting or dodging a creeper | It rejoins idle; the old task doesn't keep moving it |
 
+## Phase 2: Catalog and identifiers (not yet run)
+
+| # | Do this | Expect |
+|---|---|---|
+| 1 | "collect 5 iron" | A question: "I don't know the block "iron". Did you mean …iron ore…?"; answer "iron ore" and it mines |
+| 2 | "collect 3 diamonds" | It mines diamond ore (stone or deepslate), no question |
+| 3 | "gather wood" in a cherry or mangrove forest (or by crimson/warped stems) | It cuts those logs and makes the right planks |
+| 4 | Give it an iron pickaxe and an iron axe, then "how many axes do you have" | One axe; the pickaxe isn't counted |
+| 5 | "craft dimond sword" (typo) | "Did you mean diamond sword?" |
+| 6 | "go to bed" in a cave with bedrock nearby | It finds a real bed, never bedrock |
+| 7 | "discard stone" while carrying a stone pickaxe | Only stone blocks are dropped |
+
 ## Later phases
 
 Each phase in the implementation plan lists its own **In-game check**. Add those rows here as each phase lands.

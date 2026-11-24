@@ -277,3 +277,43 @@ In the game:
 
   These are added to the checklist.
 - **Next:** merge to master, push, and start Phase 2 (Catalog).
+
+---
+
+## Entry 7: Phase 2, Catalog and identifiers (2026-11-24)
+
+**Planned.** "Item and block names are validated and categorised in one place." This meant:
+- a Catalog over `bot.registry`
+- categories derived from game data, never `name.includes()`
+- replacing the substring matches
+- validating names at the gateway
+- storing only names
+- fixing the known naming errors (tier names, `stripped_oak_planks`, the incomplete wood list)
+
+**What happened**
+- **The count was off:** an audit found 80 name substring checks, not the plan's 52.
+- **Many were live bugs, not style:**
+  - finding a bed matched **bedrock**
+  - "bow" matched **bowls**
+  - "chest" counted chestplates, "diamond" diamond tools, "furnace" blast furnaces, "torch" redstone torches
+  - discarding "stone" could toss a stone pickaxe
+  - `ensureTools` counted pickaxes as axes
+  - wood gathering ignored nether stems
+- **Duplicates:** four separate "best weapon" pickers had grown up across combat, both reflexes and the owner updates.
+- **Data available:** the 1.20.4 registry carries all the needed data (entity type, food values, harvest tools, ore drops, every wood with planks). Derived from it, the categories work for newer versions too, such as pale oak in 26.1.
+
+**How we handled it**
+
+| Item | Handling | Commit |
+|---|---|---|
+| The Catalog | `src/core/catalog.ts`. Names ↔ IDs (unknown is null, never air), validation with closest matches (raw materials first), plural handling that keeps "glass", loose matching, every wood and `planksFor`, tool kind and tier by exact suffix, harvest tools from game data, armor, food, hostile and huntable mobs by entity type, ore drops | `706eab0` |
+| Gateway validation | `src/managers/nameGate.ts` checks names before a command is queued. Real names pass normalised. Generic kinds pass ("bed", "planks", "iron armor", "diamonds" from ores). Anything else gets "I don't know the block 'iron'. Did you mean raw iron, iron ore…?" `collectBlock` finds ores from game data | `b2f93d1` |
+| Known naming errors | Counting by exact name or category; `ensurePlanks` makes the right planks for every wood; `WOOD_TYPES` deleted; mobs by entity type with "baby" read by registry key (not index 16); tier names fixed and tested | `7ba5a10` |
+| Substring matches | 80 → 13 deliberate ones; one `bestMeleeWeapon` | `ddb82f6` |
+| Names only in `db.json` | Checked: no numeric IDs are stored | none needed |
+
+**Outcome and what follows**
+- **Tests:** 28 tests pass, 15 of them new (Catalog, name gate, counting and tiers), all against real 1.20.4 data.
+- **Boundary count:** unchanged at 122 direct game-changing calls; Phase 3 starts on those.
+- **Not yet run in the owner's game:** the plan's Phase 2 in-game checks ("collect 5 iron" asks a question; wood in a cherry or mangrove forest; "how many axes" ignores pickaxes), plus a bed search near bedrock. They are added to the checklist.
+- **Branch:** `phase-2/catalog`, to merge to master after the in-game run.
