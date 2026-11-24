@@ -128,6 +128,7 @@ Run this in **your own Minecraft world** after every phase of the [implementatio
 | 4 | "give me half your coal" | Half of what it carries |
 | 5 | "stop, craft a torch" while it's busy | It stops, then crafts |
 | 6 | Throw it an item, then let it pick up a zombie's drop | Thanks only for the thrown item |
+| 7 | Drop some items near it, and while it walks over to pick them up (or replants, or takes down scaffolding) say `stop` | It stops at once and stays put for about a minute; no chore starts again |
 
 ### Phase 1 closing checks (not yet run)
 

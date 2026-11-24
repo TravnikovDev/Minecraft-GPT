@@ -319,7 +319,7 @@ In the game:
 - **Branch:** `phase-2/catalog`, to merge to master after the in-game run.
 
 
-## 2026-11-25: Playing like a player (mining, storage, cleanup, survival)
+## Entry 8: Playing like a player: mining, storage, cleanup, survival (2026-11-25)
 
 **Asked for**
 - No vertical shafts: mine with the owner's diagonal and straight tunnels, and a reverse diagonal tunnel to get out
@@ -350,3 +350,24 @@ In the game:
 - **Boundary count:** 117 direct game-changing calls outside `core/` (was 122).
 - **In the game:** results are in `docs/real-game-checklist.md` (2026-11-25). Mining through tunnels, torches, making and filling a chest, scaffolding cleanup, replanting, beds and exact giving worked. The fixes made during the run are listed there under "Next run: re-test these".
 - **Known gaps:** the felled-trees list is lost on restart; one chest at a time (no sorting across chests); hunting doesn't yet skip fenced pens.
+
+
+## Entry 9: "stop" ends idle chores too (2026-11-25)
+
+**Found.** The architect review of Entry 8 (`32d0952`) found that `stop` didn't reach the idle chores (tidying up, replanting, taking down scaffolding): they ran outside any command, so the cancel signal read "not cancelled", and their timers started them again 3–5 s later. Seen in the game that day: `stop` during replanting, then "Going back to replant 1 tree(s)" again. That broke Phase 0's "stop always works".
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| One runner for chores | `src/core/chores.ts`: one chore at a time, each with its own abort signal in the same async context as commands |
+| What ends a chore | `stop` (and keeps chores quiet for 60 s, like the reflexes), any command starting, a disconnect |
+| A chore that never settles | Waited for at most 3 s, then cleared, so a walk cut off by a disconnect can't block chores until restart |
+| Big steps from a chore | A chore no longer makes room (chest, tossing junk) or crafts a replacement tool; those stay inside owner tasks |
+| Tests | `tests/chores.test.ts` (4): stop mid-walk, a new command, a chore that never settles, chore context. The first two fail without the abort |
+
+**Still open from the review**
+- `makeRoom`'s and `replaceBrokenTool`'s busy flags are still module-level (a disconnect mid-way can leave them set)
+- scaffolding is still remembered by position only
+- whether `stop` should also end fleeing at low health (the owner's call)
+- splitting the branch: Phase 2 commits to master after the Phase 2 checks; `32d0952` waits

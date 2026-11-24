@@ -14,6 +14,7 @@ import type { CommandType } from "../schemas/types";
 import { bot } from "../core/body";
 import { unstuck } from "../actions/unstuck";
 import { isAnyReflexActive, stopReflexes } from "../core/reflexes";
+import { resetChores, stopChores } from "../core/chores";
 
 // How long the owner's "stop" keeps fighting and creeper dodging quiet
 const STOP_MUTES_REFLEXES_MS = 60_000;
@@ -116,6 +117,8 @@ export async function stopEverything(): Promise<void> {
   // The owner decides what's dangerous: stop ends fighting and creeper
   // dodging too, and keeps them quiet for a minute (never running out of air)
   stopReflexes(STOP_MUTES_REFLEXES_MS);
+  // Idle chores too, and they stay quiet as long as the reflexes do
+  await stopChores("Stopped by player", STOP_MUTES_REFLEXES_MS);
   await cancelCurrentCommand("Stopped by player");
   await removeAllCommands();
 }
@@ -124,6 +127,8 @@ export async function stopEverything(): Promise<void> {
 async function processCommand(nextCommand: CommandType) {
   let success = false;
   const abort = new AbortController();
+  // An idle chore steps aside before the command starts (they'd fight over walking)
+  await stopChores(`${nextCommand.command} started`);
   try {
     // Record the command being executed and its start time
     currentCommand = nextCommand;
@@ -311,12 +316,14 @@ async function handleStuckAction() {
  */
 export function abortForDisconnect(): void {
   currentAbort?.abort("disconnected");
+  void stopChores("disconnected");
 }
 
 export function handleBotRejoin() {
   console.log("Bot rejoined the server. Resetting action state and continuing execution.");
   currentAbort?.abort("bot rejoined");
   currentAbort = null;
+  resetChores();
   currentCommand = null;
   setCurrentCommandName(null);
   actionStartTime = null;

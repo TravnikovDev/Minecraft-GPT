@@ -168,7 +168,7 @@ export async function replantWhenIdle(): Promise<void> {
   const ready = felled.filter((t) => now >= t.nextTry && t.stumps[0].distanceTo(me) <= REPLANT_RANGE && mayWanderTo(t.stumps[0]));
   if (ready.length === 0) return;
 
-  await asBackgroundJob(() => replant(ready));
+  await asBackgroundJob("replanting", () => replant(ready));
 }
 
 async function replant(ready: Felled[]): Promise<void> {

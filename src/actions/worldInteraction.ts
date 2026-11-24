@@ -14,6 +14,7 @@ import { goToPosition } from "./movement";
 import type { Bot } from "mineflayer";
 import { __actionsDelay } from "../utils/utility.js";
 import { pathing, tools } from "../core/plugins";
+import { inChore } from "../core/chores";
 
 // Move functions like placeBlock, breakBlockAt, collectBlock, etc.
 
@@ -197,7 +198,8 @@ let replacingTool = false;
  */
 export async function replaceBrokenTool(block: Block): Promise<boolean> {
   const kind = catalog().toolKindFor(block.name);
-  if (replacingTool || (kind !== "pickaxe" && kind !== "axe" && kind !== "shovel")) return false;
+  // Never for an idle chore: crafting a tool can mean fetching wood far away
+  if (replacingTool || inChore() || (kind !== "pickaxe" && kind !== "axe" && kind !== "shovel")) return false;
   replacingTool = true;
   try {
     const { ensureTool } = await import("./ensureTools");

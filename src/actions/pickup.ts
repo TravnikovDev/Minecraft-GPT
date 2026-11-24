@@ -16,6 +16,7 @@ import { bot } from "../core/body";
 import { pathing } from "../core/plugins";
 import { isCommandCancelled, getCurrentCommandName, markOwnWork } from "../core/commandContext";
 import { isAnyReflexActive } from "../core/reflexes";
+import { areChoresMuted, inChore, isChoreRunning, runChore } from "../core/chores";
 import { canSeePoint, type SightWorld } from "./sight";
 import { ownerEntity } from "../managers/ownerDialog";
 
@@ -148,7 +149,8 @@ export async function collectDrops(
   if (left.length > 0 && keepGoing() && !isCommandCancelled()) {
     console.log(`Inventory is full; ${left.length} item(s) still on the ground.`);
     const { makeRoom } = await import("./overflow");
-    if (await makeRoom("pick up what's on the ground")) collected += await collectDrops(radius, { onlyVisible, keepGoing, leave });
+    // A chore leaves it there: making room (a chest, tossing junk) is for real tasks
+    if (!inChore() && (await makeRoom("pick up what's on the ground"))) collected += await collectDrops(radius, { onlyVisible, keepGoing, leave });
   }
   return collected;
 }
@@ -162,23 +164,13 @@ function leftForLackOfRoom(radius: number, leave: (e: Entity) => boolean): Entit
 
 // --- Tidying up while idle ---------------------------------------------------
 
-// One background job at a time (tidying up, replanting): they'd fight over walking
-let backgroundBusy = false;
-
-/** Runs a background job unless another one is running. Returns false if it didn't run. */
-export async function asBackgroundJob(job: () => Promise<void>): Promise<boolean> {
-  if (backgroundBusy) return false;
-  backgroundBusy = true;
-  try {
-    await job();
-  } finally {
-    backgroundBusy = false;
-  }
-  return true;
+/** Runs a background job as the one idle chore (see core/chores). Returns false if it didn't run. */
+export function asBackgroundJob(name: string, job: () => Promise<void>): Promise<boolean> {
+  return runChore(name, job);
 }
 
-/** True while no command or reflex wants the bot (a background job may keep walking). */
-export const noRealWork = (): boolean => getCurrentCommandName() === null && !isAnyReflexActive();
+/** True while no command or reflex wants the bot and this chore wasn't stopped. */
+export const noRealWork = (): boolean => !isCommandCancelled() && getCurrentCommandName() === null && !isAnyReflexActive();
 
 /** True when nothing else wants the bot: no task, no reflex, not following or riding. */
 /** How far an idle chore may take the bot from the owner while the owner is around. */
@@ -196,7 +188,7 @@ export function mayWanderTo(pos: { x: number; y: number; z: number }): boolean {
 }
 
 export function isIdle(): boolean {
-  return getCurrentCommandName() === null && !isAnyReflexActive() && !pathing.hasGoal() && !bot.vehicle;
+  return getCurrentCommandName() === null && !isAnyReflexActive() && !areChoresMuted() && !pathing.hasGoal() && !bot.vehicle;
 }
 
 /**
@@ -205,12 +197,12 @@ export function isIdle(): boolean {
  * things out, or about to hand them over).
  */
 export async function tidyUpWhileIdle(): Promise<void> {
-  if (backgroundBusy || !isIdle()) return;
+  if (isChoreRunning() || !isIdle()) return;
   const owner = ownerEntity();
   const nearOwner = (e: Entity): boolean => owner !== null && e.position.distanceTo(owner.position) < 3;
   const items = looseItems(IDLE_RADIUS, new Map(), true, nearOwner);
   if (items.length === 0) return;
-  await asBackgroundJob(async () => {
+  await asBackgroundJob("tidying up", async () => {
     try {
       console.log(`Tidying up: ${items.length} item(s) on the ground nearby.`);
       const stillIdle = (): boolean => {

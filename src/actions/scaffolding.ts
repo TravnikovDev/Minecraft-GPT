@@ -86,7 +86,7 @@ export async function cleanUpScaffoldingWhenIdle(): Promise<void> {
   if (!isIdle()) return;
   const me = bot.entity.position;
   if (!ownScaffolds().some((p) => me.distanceTo(center(p)) <= CLEANUP_RADIUS && mayWanderTo(p))) return;
-  await asBackgroundJob(async () => {
+  await asBackgroundJob("taking down scaffolding", async () => {
     try {
       await takeDownScaffolding(true, () => {
         markOwnWork();
