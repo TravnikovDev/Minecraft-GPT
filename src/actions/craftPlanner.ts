@@ -157,35 +157,57 @@ export function planCraft(item: string, count: number): CraftPlan {
   };
 }
 
-/**
- * Turns what the owner typed into a real item ID. Generic names pick the
- * variant the bot can make best: "bed" -> white_bed if it has white wool.
- * Returns null when nothing matches.
- */
-export function resolveCraftable(requested: string, count: number): string | null {
+/** Craftable variants of a generic name ("helmet" -> iron_helmet, leather_helmet...). */
+function genericVariants(singular: string): string[] {
   const items = bot.registry.itemsByName;
-  if (items[requested]) return requested;
-  const singular = requested.replace(/s$/, "");
-  if (items[singular]) return singular;
-
-  const candidates = Object.keys(items).filter(
+  return Object.keys(items).filter(
     (name) =>
       name.endsWith(`_${singular}`) &&
       // "armor" is never horse armor unless the owner says horse
       (!name.includes("horse") || singular.includes("horse")) &&
       bot.recipesAll(items[name]!.id, null, true).length > 0
   );
+}
+
+/** The exact item ID for a name, or null when it's generic or unknown. */
+function exactItem(requested: string): string | null {
+  const items = bot.registry.itemsByName;
+  if (items[requested]) return requested;
+  const singular = requested.replace(/s$/, "");
+  return items[singular] ? singular : null;
+}
+
+const missingTotal = (name: string, count: number): number =>
+  planCraft(name, count).missing.reduce((sum, m) => sum + m.count, 0);
+
+/**
+ * Turns what the owner typed into a real item ID. Generic names pick the
+ * variant the bot can make best: "bed" -> white_bed if it has white wool.
+ * Returns null when nothing matches.
+ */
+export function resolveCraftable(requested: string, count: number): string | null {
+  const exact = exactItem(requested);
+  if (exact) return exact;
+  const candidates = genericVariants(requested.replace(/s$/, ""));
   if (candidates.length === 0) return null;
 
-  const missingTotal = (name: string): number =>
-    planCraft(name, count).missing.reduce((sum, m) => sum + m.count, 0);
   const preferred = (name: string): number => (/^(white|oak)_/.test(name) ? 0 : 1);
   // Among equally possible tools/armor, the best material wins (stone over wood)
   const TIERS = ["wooden", "golden", "stone", "iron", "diamond", "netherite"];
   const tier = (name: string): number => TIERS.findIndex((t) => name.startsWith(`${t}_`));
   return candidates.sort(
-    (a, b) => missingTotal(a) - missingTotal(b) || tier(b) - tier(a) || preferred(a) - preferred(b)
+    (a, b) => missingTotal(a, count) - missingTotal(b, count) || tier(b) - tier(a) || preferred(a) - preferred(b)
   )[0]!;
+}
+
+/**
+ * For a generic name, every variant the bot could craft right now with what
+ * it carries ("helmet" with iron and leather -> iron_helmet, leather_helmet).
+ * Empty for an exact item ID.
+ */
+export function readyVariants(requested: string, count: number): string[] {
+  if (exactItem(requested)) return [];
+  return genericVariants(requested.replace(/s$/, "")).filter((name) => missingTotal(name, count) === 0);
 }
 
 /**

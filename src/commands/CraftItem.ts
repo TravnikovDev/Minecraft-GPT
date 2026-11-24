@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { craftRecipe } from "../actions/crafting";
-import { planCraft, resolveCraftable, type CraftStep } from "../actions/craftPlanner";
+import { planCraft, readyVariants, resolveCraftable, type CraftStep } from "../actions/craftPlanner";
 import { bot } from "../core/body";
 import { BotCommands } from "./types";
 import { isCommandCancelled } from "../core/commandContext";
@@ -12,8 +12,8 @@ import { askOwner, tellOwner } from "../managers/ownerDialog";
 export const description = `When player is asking the bot to craft an item, the bot works out the recipe, makes the
 parts it can (planks from logs, sticks from planks), uses or places a crafting table, and crafts the item. If raw
 materials are missing it says what is missing and offers to go and get them.
-Generic names are fine ("bed", "planks", "helmet"); the bot picks the variant it can make (the best material
-for tools and armor). Sets are fine too: "armor" / "iron armor" means helmet, chestplate, leggings and boots,
+Generic names are fine ("bed", "planks", "helmet"); with one possible variant the bot makes it, with several it
+asks the owner which one (then call again with the exact ID the owner picked, e.g. iron_helmet). Sets are fine too: "armor" / "iron armor" means helmet, chestplate, leggings and boots,
 "tools" / "stone tools" means pickaxe, axe, shovel and sword. Pass the owner's words for these as they are.
 Example: "Craft a diamond sword", "Craft 5 planks", "Craft 10 torches", "Make me a bed", "Craft iron armor",
 "Make stone tools".`;
@@ -47,6 +47,13 @@ function setPieces(requested: string): string[] | null {
   const material = word ? MATERIALS[word] : null;
   return SET_PIECES[kind]!.map((piece) => (material ? `${material}_${piece}` : piece));
 }
+
+/** "a, b or c" */
+const orList = (names: string[]): string =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+
+/** The material of a tool or armor piece: iron_helmet -> iron. */
+const materialOf = (name: string): string => pretty(name.slice(0, name.lastIndexOf("_")));
 
 // Multi-word variant prefixes that are still just a color or wood type
 const PLAIN_PREFIXES = new Set(["dark_oak", "light_blue", "light_gray"]);
@@ -102,6 +109,14 @@ export async function execute(args: any): Promise<void> {
   // A set ("armor", "iron tools"): one craft per piece, each picking the best material it can make
   const pieces = setPieces(parsed.data.itemName);
   if (pieces) {
+    // No material said and more than one possible: the owner picks
+    if (!pieces[0]!.includes("_")) {
+      const materials = [...new Set(pieces.flatMap((p) => readyVariants(p, count).map(materialOf)))];
+      if (materials.length > 1) {
+        bot.chat(`I can make that from ${orList(materials)}. Which one?`);
+        return;
+      }
+    }
     tellOwner(`Making ${pieces.map(pretty).join(", ")}.`);
     for (const piece of pieces) {
       await addCommandToQueue({
@@ -112,6 +127,13 @@ export async function execute(args: any): Promise<void> {
         args: { itemName: piece, itemCount: count },
       });
     }
+    return;
+  }
+
+  // A generic name with several variants the bot could make now: the owner picks
+  const ready = readyVariants(parsed.data.itemName.trim().toLowerCase().replace(/\s+/g, "_"), count);
+  if (ready.length > 1) {
+    bot.chat(`I can make ${orList(ready.map(pretty))}. Which one?`);
     return;
   }
 
