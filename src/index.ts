@@ -126,7 +126,7 @@ onBotCreated((currentBot) => {
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message));
   // Keep the owner's position fresh, so "come here" works after a death or
   // restart takes the bot out of sight
-  everyWhileConnected(currentBot, 5000, trackOwnerPosition);
+  everyWhileConnected(currentBot, 20_000, trackOwnerPosition); // 3 times a minute
 
   listen(currentBot, "playerJoined", (player: mineflayer.Player) => {
     if (player.username === currentBot.username) return;
