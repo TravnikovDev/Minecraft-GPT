@@ -7,10 +7,13 @@
 // no door (no wood to make one) it closes the corridor with two blocks from
 // inside instead, and opens them again in the morning.
 //
-// The room has fixed spots, so furniture never lands where it stands:
+// The room (3 wide, 4 long) has fixed spots, so furniture never blocks the
+// way: the middle column is a walkway from the door to the exit in the far
+// wall, where the mine goes down (skills/mine).
 //
-//   stairs -> [ . ] [door] [ . ] [stand] [bed foot] [bed head]   (the middle column)
-//                                 [  .  ] [   .    ] [ chest  ]   (each side column)
+//   side:    [bed stand] [bed foot] [bed head] [chest]
+//   middle:  [  stand  ] [   .    ] [   .    ] [  .  ] [exit -> mine]
+//   side:    [    .    ] [   .    ] [   .    ] [chest]
 //
 // The stand cell is never furnished, so it is also what says the shelter is
 // still there. Where: open sky (not inside a house), every cell natural stone
@@ -37,7 +40,7 @@ import { shelter } from "./capabilities";
 
 const DEPTH = 5;
 const CORRIDOR = 3;
-const ROOM_LENGTH = 3;
+const ROOM_LENGTH = 4;
 const BASE_NEAR = 64;
 const FILLERS = ["cobblestone", "cobbled_deepslate", "dirt", "stone", "deepslate", "andesite", "diorite", "granite", "tuff"];
 const STEP: Record<DirectionType, { x: number; z: number }> = { north: { x: 0, z: -1 }, south: { x: 0, z: 1 }, east: { x: 1, z: 0 }, west: { x: -1, z: 0 } };
@@ -70,9 +73,13 @@ export function shelterLayout(start: Pos, dir: DirectionType) {
     seal: [door, door.offset(0, 1, 0)],
     // Where it stands (first row, middle): never furnished
     stand: fwd(roomStart, 1),
-    // The bed's foot (it's placed facing on, so the head goes in the last row)
-    bed: fwd(roomStart, 2),
-    chests: [fwd(roomStart, 3).plus(side), fwd(roomStart, 3).minus(side)],
+    // The bed along a side wall: placed from bedStand facing on, so its head
+    // goes into the third row
+    bedStand: fwd(roomStart, 1).plus(side),
+    bed: fwd(roomStart, 2).plus(side),
+    chests: [fwd(roomStart, ROOM_LENGTH).plus(side), fwd(roomStart, ROOM_LENGTH).minus(side)],
+    // The far wall's middle: the mine's first step
+    exit: fwd(roomStart, ROOM_LENGTH + 1),
     // Every cell dug, for checking the site first
     cells: [...stairs, ...corridor, ...room],
   };
@@ -134,6 +141,8 @@ async function saveShelter(start: Vec3, dir: DirectionType, incomplete: boolean)
       seal: layout.seal.map(plain),
       door: plain(layout.door),
       bed: plain(layout.bed),
+      bedStand: plain(layout.bedStand),
+      exit: plain(layout.exit),
       chests: layout.chests.map(plain),
     },
   });
@@ -204,11 +213,18 @@ const cellsOf = (room: { details?: Record<string, unknown> }, key: string): Pos[
   return Array.isArray(v) ? (v as Pos[]) : v ? [v as Pos] : [];
 };
 
-/** Where the bed and the chests go in its shelter (null without one). */
-export function shelterSlots(): { stand: Pos; bed: Pos | null; chests: Pos[] } | null {
+/** Where the bed and the chests go in its shelter, and where the mine starts (null without one). */
+export function shelterSlots(): { stand: Pos; bed: Pos | null; bedStand: Pos | null; chests: Pos[]; exit: Pos | null; direction: DirectionType | null } | null {
   const room = shelter();
   if (!room) return null;
-  return { stand: { x: room.x, y: room.y, z: room.z }, bed: cellsOf(room, "bed")[0] ?? null, chests: cellsOf(room, "chests") };
+  return {
+    stand: { x: room.x, y: room.y, z: room.z },
+    bed: cellsOf(room, "bed")[0] ?? null,
+    bedStand: cellsOf(room, "bedStand")[0] ?? null,
+    chests: cellsOf(room, "chests"),
+    exit: cellsOf(room, "exit")[0] ?? null,
+    direction: (room.details?.["direction"] as DirectionType | undefined) ?? null,
+  };
 }
 
 /** Goes into the shelter (to the stand cell) and seals the stairs behind it. */

@@ -67,9 +67,9 @@ const isNight = (): boolean => {
 /** Announces milestones reached for the first time. */
 async function announce(): Promise<void> {
   for (const m of await noteReached()) {
-    const done = MILESTONES.filter((x) => x.tier === 1 && x.done()).length;
-    const total = MILESTONES.filter((x) => x.tier === 1).length;
-    report(`Milestone: ${m.title} (${done} of ${total} for my first day).`);
+    const done = MILESTONES.filter((x) => x.tier === m.tier && x.done()).length;
+    const total = MILESTONES.filter((x) => x.tier === m.tier).length;
+    report(`Milestone: ${m.title} (${done} of ${total} ${m.tier === 1 ? "for my first day" : "for my mine"}).`);
   }
   if (tier1Reached() && !getMemory().milestones?.["tier1"]) {
     await updateMemory({ milestones: { ...(getMemory().milestones ?? {}), tier1: Date.now() } });
@@ -166,7 +166,12 @@ export function progressReport(): string {
   const done = tier1.filter((m) => m.done());
   const left = tier1.filter((m) => !m.done());
   const state = autonomyOn() ? "I'm living my own life" : "I'm waiting for you to tell me what to do (say \"go live your life\" to let me)";
-  if (left.length === 0) return `My first day is done: ${tier1.map((m) => m.title).join(", ")}. ${state}.`;
+  if (left.length === 0) {
+    const tier2 = MILESTONES.filter((m) => m.tier === 2);
+    const left2 = tier2.filter((m) => !m.done());
+    const mine = left2.length === 0 ? "My mine is done too (coal and iron)" : `Now my mine: still to do ${left2.map((m) => m.title).join(", ")}`;
+    return `My first day is done. ${mine}. ${state}.`;
+  }
   return `First day: ${done.length} of ${tier1.length} done${done.length ? ` (${done.map((m) => m.title).join(", ")})` : ""}; still to do: ${left.map((m) => m.title).join(", ")}. ${state}.`;
 }
 

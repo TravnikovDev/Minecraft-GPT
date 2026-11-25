@@ -162,44 +162,61 @@ test("a milestone that fails is set aside for a while; the next one is tried", a
 
 // --- The pure parts ------------------------------------------------------------
 
-test("the next milestone: the first not done and not set aside; null when the first day is complete", () => {
+test("the next milestone: the first not done and not set aside, then the next tier; null when all are done", () => {
   const list = [fakeMilestone("a"), fakeMilestone("b"), { ...fakeMilestone("later"), tier: 2 }];
   expect(M.nextMilestone(list)?.id).toBe("a");
   done.add("a");
   expect(M.nextMilestone(list)?.id).toBe("b");
   expect(M.nextMilestone(list, (id: string) => id === "b")).toBeNull();
   done.add("b");
-  expect(M.nextMilestone(list)).toBeNull();
   expect(M.tier1Reached(list)).toBe(true);
+  expect(M.nextMilestone(list)?.id).toBe("later"); // then the next tier
+  done.add("later");
+  expect(M.nextMilestone(list)).toBeNull();
 });
 
-test("the shelter's shape: stairs 5 down, a corridor with a door, then a room with fixed spots", () => {
+test("the shelter's shape: stairs, a corridor with a door, a 3x4 room with a clear walkway to the exit", () => {
   const { shelterLayout } = realShelter;
   const s = shelterLayout({ x: 10, y: 70, z: -4 }, "north");
   const at = (p: any) => [p.x, p.y, p.z];
   expect(at(s.bottom)).toEqual([10, 65, -9]);
-  expect(at(s.door)).toEqual([10, 65, -11]); // the corridor's middle
-  expect(s.seal.map(at)).toEqual([[10, 65, -11], [10, 66, -11]]); // no door: two blocks there
-  expect(at(s.stand)).toEqual([10, 65, -13]); // the room's first row, past the corridor
-  expect(at(s.bed)).toEqual([10, 65, -14]);
-  expect(s.chests.map(at)).toEqual([[11, 65, -15], [9, 65, -15]]);
+  expect(at(s.door)).toEqual([10, 65, -11]);
+  expect(at(s.stand)).toEqual([10, 65, -13]);
+  expect(at(s.bedStand)).toEqual([11, 65, -13]); // behind the bed, along the side wall
+  expect(at(s.bed)).toEqual([11, 65, -14]); // head goes to -15
+  expect(s.chests.map(at)).toEqual([[11, 65, -16], [9, 65, -16]]); // the far corners
+  expect(at(s.exit)).toEqual([10, 65, -17]); // the far wall's middle: the mine starts there
   const key = (p: any) => at(p).join(",");
   const dug = new Set(s.cells.map(key));
-  // Room to stand on both sides of the door, and the door's two blocks are dug
-  for (const p of [s.door, s.door.offset(0, 1, 0), s.door.offset(0, 0, 1), s.door.offset(0, 0, -1)]) expect(dug.has(key(p))).toBe(true);
-  // Never furnished where it stands or in the corridor
   const furnished = new Set([key(s.bed), key(s.bed.offset(0, 0, -1)), ...s.chests.map(key)]);
-  expect(furnished.has(key(s.stand))).toBe(false);
-  expect(furnished.has(key(s.door))).toBe(false);
+  // The walkway from the stand cell to the exit stays clear
+  for (let z = -13; z >= -16; z--) expect(furnished.has(`10,65,${z}`)).toBe(false);
   for (const f of furnished) expect(dug.has(f)).toBe(true);
+  expect(dug.has(key(s.exit))).toBe(false); // dug with the mine, not the shelter
   const e = shelterLayout({ x: 0, y: 64, z: 0 }, "east");
   expect([e.stand.x, e.stand.z]).toEqual([9, 0]);
+});
+
+test("after the first day it goes on to the mine: a mine, then coal, then iron", () => {
+  const list = [fakeMilestone("a"), { ...fakeMilestone("mine"), tier: 2 }, { ...fakeMilestone("coal"), tier: 2 }];
+  expect(M.nextMilestone(list)?.id).toBe("a");
+  done.add("a");
+  expect(M.nextMilestone(list)?.id).toBe("mine");
+  expect(M.nextMilestone(list, (id: string) => id === "mine")?.id).toBe("coal");
+  done.add("mine");
+  done.add("coal");
+  expect(M.nextMilestone(list)).toBeNull();
+});
+
+test("a blocked first-day milestone holds the mine back until the day is done", () => {
+  const list = [fakeMilestone("bed"), { ...fakeMilestone("mine"), tier: 2 }];
+  expect(M.nextMilestone(list, (id: string) => id === "bed")).toBeNull();
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
-  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests"]);
+  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests", "mine", "coal", "iron"]);
 });
 
 test("stay with me: the milestone it's on ends now, and no new one starts", async () => {

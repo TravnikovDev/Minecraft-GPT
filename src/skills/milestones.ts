@@ -15,7 +15,9 @@ import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, chestsNear, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, enterShelter, shelterSlots } from "./shelter";
-import { knownBlock } from "../core/primitives";
+import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
+import { goTo, knownBlock } from "../core/primitives";
+import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
 import { placeBlockResult } from "../actions/worldInteraction";
 
@@ -34,15 +36,21 @@ const FOOD_STOCK = 20; // food points carried: a couple of days' eating
 // again (it announced the stock, ate while cooking, and reported "only 17")
 const foodTarget = (): number => (reachedAt()["food"] ? FOOD_STOCK / 2 : FOOD_STOCK);
 
-/** Gets each item in turn with the planner; stops at the first it can't get. */
+/** Gets each item in turn with the planner ("2 stone_pickaxe" for two); stops at the first it can't get. */
 async function getAll(items: string[]): Promise<ActionResult> {
-  for (const item of items) {
-    if (bot.inventory.items().some((i) => i.name === item)) continue;
-    const result = await acquire(item, 1, liveWorld);
+  for (const entry of items) {
+    const [n, item] = /^\d+ /.test(entry) ? [Number(entry.split(" ")[0]), entry.split(" ")[1]!] : [1, entry];
+    const have = bot.inventory.items().filter((i) => i.name === item).reduce((c, i) => c + i.count, 0);
+    if (have >= n) continue;
+    const result = await acquire(item, n, liveWorld);
     if (!result.ok) return result;
   }
   return ok();
 }
+
+/** Pickaxes it carries of at least `tier` (a spare for mining: one wears out). */
+const pickaxesOfTier = (tier: number): number =>
+  bot.inventory.items().filter((i) => catalog().toolKind(i.name) === "pickaxe" && catalog().toolTier(i.name) >= tier).length;
 
 /** Food: berries, then hunting, then cooking what it caught. */
 async function stockFood(): Promise<ActionResult> {
@@ -84,12 +92,17 @@ async function getBed(): Promise<ActionResult> {
   // In the shelter, in the bed's own spot (never the nearest bed: that may be the owner's)
   const inside = await enterShelter();
   if (!inside.ok) return inside;
-  const slot = shelterSlots()?.bed;
+  const slots = shelterSlots();
+  const slot = slots?.bed;
   if (!slot) return fail("not_found", "no spot for a bed in the shelter");
   if (!catalog().isBed(knownBlock(slot)?.name ?? "")) {
     const bedItem = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
     if (!bedItem) return fail("missing_items", "no bed to put down");
-    // Placed from the stand cell, facing on: the head goes into the last row
+    // Placed facing on from the cell behind it, so the head goes along the wall
+    if (slots?.bedStand) {
+      const there = await goTo(new pf.goals.GoalBlock(slots.bedStand.x, slots.bedStand.y, slots.bedStand.z));
+      if (!there.ok) console.log(`Couldn't stand behind the bed's spot (${describeFailure(there)}); placing it from here.`);
+    }
     const placed = await placeBlockResult(bedItem.name, slot.x, slot.y, slot.z);
     if (!placed.ok) return placed;
   }
@@ -139,8 +152,9 @@ export const MILESTONES: Milestone[] = [
     id: "stone_tools",
     title: "stone tools",
     tier: 1,
-    done: () => (["pickaxe", "axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone),
-    achieve: () => getAll(["stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
+    // Two pickaxes: mining wears one out
+    done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
+    achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
   },
   {
     id: "food",
@@ -166,11 +180,44 @@ export const MILESTONES: Milestone[] = [
     },
     achieve: setUpChests,
   },
+  // --- Tier 2: the mine under the shelter (owner's design) -----------------------
+  {
+    id: "mine",
+    title: "a mine",
+    tier: 2,
+    done: () => myMine() !== null,
+    achieve: digMine,
+  },
+  {
+    id: "coal",
+    title: "coal",
+    tier: 2,
+    // Torches and smelting use it up: once found, only below 4 does it go back for more
+    done: () => carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough),
+    achieve: () => branchMine([COAL, IRON]),
+  },
+  {
+    id: "iron",
+    title: "iron",
+    tier: 2,
+    // Made into tools later: found once is reached
+    done: () => Boolean(reachedAt()["iron"]) || carriedOf(IRON.counts) >= IRON.enough,
+    achieve: () => branchMine([IRON, COAL]),
+  },
 ];
 
-/** The next milestone not done (and not blocked), Tier 1 first; null when Tier 1 is reached. */
+const carriedOf = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
+
+/** The next milestone not done (and not blocked), lowest tier first; null when all are reached. */
 export function nextMilestone(list: Milestone[], blocked: (id: string) => boolean = () => false): Milestone | null {
-  return list.find((m) => m.tier === 1 && !m.done() && !blocked(m.id)) ?? null;
+  const tiers = [...new Set(list.map((m) => m.tier))].sort((a, b) => a - b);
+  for (const tier of tiers) {
+    const open = list.filter((m) => m.tier === tier && !m.done());
+    if (open.length === 0) continue;
+    // A tier isn't skipped while any of it is left (a blocked one waits its turn)
+    return open.find((m) => !blocked(m.id)) ?? null;
+  }
+  return null;
 }
 
 /** True when every Tier 1 milestone is done. */
