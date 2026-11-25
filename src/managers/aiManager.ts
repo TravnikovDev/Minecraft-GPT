@@ -5,6 +5,7 @@ import { OPENAI_API_KEY } from "../config/env";
 import { bot } from "../core/body";
 import { reply } from "../core/narrator";
 import { BotCommands } from "../commands/types";
+import { overBudget, recordCall } from "../planner/cost";
 import { executeTool, tools } from "./toolManager";
 import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
@@ -59,6 +60,7 @@ function stateLine(): string {
 
 // Initialize OpenAI Client
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+const CHAT_MODEL = "gpt-6-luna";
 
 const setupMessage = `You are MinecraftGPT, a bot playing Minecraft together with the players who chat with you.
 Talk like a friendly, enthusiastic 12-year-old who loves Minecraft and wants to play along.
@@ -113,9 +115,14 @@ export async function sendMessageToOpenAI(
   username: string,
   userMessage: string
 ): Promise<OpenAI.Chat.Completions.ChatCompletion.Choice | null> {
+  // This month's money spent: the owner's chat is handled in code only (the fast path)
+  if (overBudget()) {
+    console.log("LLM: over this month's cap; not asking the model.");
+    return null;
+  }
   try {
     const openAiResponse = await openai.chat.completions.create({
-      model: "gpt-6-luna",
+      model: CHAT_MODEL,
       reasoning_effort: "none",
       messages: [
         {
@@ -129,6 +136,7 @@ export async function sendMessageToOpenAI(
     });
 
     console.log("OpenAI Response:", openAiResponse);
+    recordCall("chat", CHAT_MODEL, openAiResponse.usage?.prompt_tokens ?? 0, openAiResponse.usage?.completion_tokens ?? 0);
 
     return openAiResponse.choices[0];
   } catch (error) {
@@ -146,8 +154,9 @@ export async function handleOpenAIResponse(
 
   if (!openAiChoice) {
     return {
-      response:
-        "I'm having trouble processing that request right now. Please try again later.",
+      response: overBudget()
+        ? "I've used up this month's thinking budget, so I only understand stop, come, follow me and status until next month."
+        : "I'm having trouble processing that request right now. Please try again later.",
       toolCalls: [],
     };
   }

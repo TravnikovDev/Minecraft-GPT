@@ -18,6 +18,8 @@ const EnvSchema = z.object({
   SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(1024),
   // offline: servers with online-mode=false; microsoft: a real Minecraft account login
   AUTH: z.enum(["offline", "microsoft"]).default("offline"),
+  // Hard monthly cap on model spending (chat and day plans together), in US dollars
+  LLM_MONTHLY_CAP_USD: z.coerce.number().min(0).default(10),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -40,3 +42,4 @@ export const OPENAI_API_KEY = env.OPENAI_API_KEY;
 export const OWNER_USERNAME = env.OWNER_USERNAME;
 export const BOT_USERNAME = env.BOT_USERNAME;
 export const AUTH = env.AUTH;
+export const LLM_MONTHLY_CAP_USD = env.LLM_MONTHLY_CAP_USD;

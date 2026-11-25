@@ -6,3 +6,4 @@ db.json.*
 worlds/
 *.tmp
 .DS_Store
+usage.json
