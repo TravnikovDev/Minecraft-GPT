@@ -507,7 +507,7 @@ The owner asked for the architect to be consulted during the work: once on the d
 - **Built:**
   - memory v2 (`91ff985`)
   - the Narrator (`6a8d16c`)
-  - perception, keep-out areas and sightings (`b5f…`, see `git log`)
+  - perception, keep-out areas and sightings (`6a4d364`)
   - where-is, keep-out, status and place checks (`7dbb4dd`)
 - **The result review found:**
   - "where did you die?" forgot the death as soon as the bot went back for its things (recovery cleared it);
@@ -524,7 +524,7 @@ The owner asked for the architect to be consulted during the work: once on the d
 
 | Item | Handling |
 |---|---|
-| Narrator | `src/core/narrator.ts`, one process-wide outbox paced at 1.2 s. **Kinds:** `reply` (first, never dropped, back on the channel the owner used, taken when said), `report` (never dropped, de-duplicated for 30 s), `chatter` (by topic: the newest wins, at most 4 wait, dropped when its task ends). **Old `bot.chat` calls:** public reports, at most 6 waiting. **Stop and long lines:** a stopped task says nothing more; long messages are split to fit a chat packet, nothing cuts in between the parts, and newlines are removed. **Offline owner:** replies and reports wait; when they join, every answer plus the last 5 reports come as a digest; questions aren't kept (they expire). **Other:** sending starts at spawn (when the player list is known); only replies and reports go into the LLM's conversation; the chat lease is gone; the boundary check counts chat calls (189 → 152, may only go down) |
+| Narrator | `src/core/narrator.ts`, one process-wide outbox paced at 1.2 s. **Kinds:** `reply` (first, never dropped, back on the channel the owner used, taken when said), `report` (never dropped, de-duplicated for 30 s), `chatter` (by topic: the newest wins, at most 4 wait, dropped when its task ends). **Old `bot.chat` calls:** public reports, at most 6 waiting. **Stop and long lines:** a stopped task says nothing more; long messages are split to fit a chat packet, nothing cuts in between the parts, and newlines are removed. **Offline owner:** replies and reports wait; when they join, every answer plus the last 5 reports come as a digest; questions aren't kept (they expire). **Other:** sending starts at spawn (when the player list is known); only replies and reports go into the LLM's conversation; the chat lease is gone; the boundary check counts chat calls (189 → 118, may only go down) |
 | Noisy files converted | combat, the retreat warning, "come here", weapon equipping, the AI's answers, the fast path, inventory and chest answers, crafting, give and discard, the gift and armor notices |
 | Perception | `src/actions/perception.ts`: `owner()` (visible / out of range with where last seen / offline), `threats()` (the combat reflex's own classifier), `vitals()`, `sky()`, sightings (ores and logs noticed while working, 10-minute hints), one `currentDimension()`; each read says "unknown" honestly |
 | Memory v2 | `memory.places` (base, basement, crafting tables, furnaces, mines), one chest index (`contents: null` = never opened, never "no iron"), a death log (the last 3; recovery never clears it), forbidden areas. **Migration** (`src/managers/migrate.ts`): pure and tested; the old file is kept as `db.json.v1.bak`; the command queue and the inventory snapshot are dropped. **Loading:** an unreadable file is set aside, never written over; one bad entry costs only that entry; fields a newer version adds are kept |
@@ -540,7 +540,7 @@ The owner asked for the architect to be consulted during the work: once on the d
   - replies go back the way the owner asked;
   - a server area lasts 30 minutes or until cleared.
 - **Not done:**
-  - 152 old `bot.chat` lines remain, converted as each file is touched;
+  - 118 old `bot.chat` lines remain, converted as each file is touched;
   - display names still come from scattered `replace(/_/g, " ")` helpers.
 - **In-game checks:** `docs/testing-backlog.md`, Phase 5.
 - **Next:** Phase 6, skills and progression to Tier 1.
