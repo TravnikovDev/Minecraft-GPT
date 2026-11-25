@@ -1,0 +1,58 @@
+// Path: src/commands/all.ts
+// Every command the bot has, one line each. The export name is the command:
+// camelCased, it is the name the owner's chat and the model use
+// (GoToPlayer -> "goToPlayer"). Adding a command is adding its line here.
+
+export * as GoToPlayer from "./GoToPlayer";
+export * as GoToCoordinates from "./GoToCoordinates";
+export * as GoToNamedLocation from "./GoToNamedLocation";
+export * as FollowPlayer from "./FollowPlayer";
+export * as GoToBlock from "./GoToBlock";
+export * as CollectBlocks from "./CollectBlocks";
+export * as AttackNearest from "./AttackNearest";
+export * as Hunting from "./Hunting";
+export * as AvoidEnemies from "./AvoidEnemies";
+export * as EquipBestWeapon from "./EquipBestWeapon";
+export * as WearArmor from "./WearArmor";
+export * as Unstack from "./Unstack";
+export * as GatherWood from "./GatherWood";
+export * as CraftItem from "./CraftItem";
+export * as CraftWoodenTools from "./CraftWoodenTools";
+export * as CraftStoneTools from "./CraftStoneTools";
+export * as RandomMovement from "./RandomMovement";
+export * as SetBase from "./SetBase";
+export * as SetBasement from "./SetBasement";
+export * as DigDiagonalTunnel from "./DigDiagonalTunnel";
+export * as DigToSurface from "./DigToSurface";
+export * as StoreItems from "./StoreItems";
+export * as TakeFromChest from "./TakeFromChest";
+export * as CheckChest from "./CheckChest";
+export * as PlantSaplings from "./PlantSaplings";
+export * as PickupNearbyItems from "./PickupNearbyItems";
+export * as BuildStoneHouse from "./BuildStoneHouse";
+export * as FindAndRememberNearChest from "./FindAndRememberNearChest";
+export * as ReturnToBase from "./ReturnToBase";
+export * as ListInventory from "./ListInventory";
+export * as CheckForItem from "./CheckForItem";
+export * as DiscardItem from "./DiscardItem";
+export * as GiveItemToAPlayer from "./GiveItemToAPlayer";
+export * as TellLocation from "./TellLocation";
+export * as WhereIs from "./WhereIs";
+export * as KeepOut from "./KeepOut";
+export * as AllowHere from "./AllowHere";
+export * as Autonomy from "./Autonomy";
+export * as Progress from "./Progress";
+export * as DescribeSurroundings from "./DescribeSurroundings";
+export * as RecoverItems from "./RecoverItems";
+export * as StarterKit from "./StarterKit";
+export * as Sleep from "./Sleep";
+export * as PlaceItem from "./PlaceItem";
+export * as GoByBoat from "./GoByBoat";
+export * as Harvest from "./Harvest";
+export * as GatherFood from "./GatherFood";
+export * as Cook from "./Cook";
+export * as UseNearbyObject from "./UseNearbyObject";
+export * as DeployVehicle from "./DeployVehicle";
+export * as Stop from "./Stop";
+export * as ShowMeBase from "./ShowMeBase";
+export * as HomeChores from "./HomeChores";

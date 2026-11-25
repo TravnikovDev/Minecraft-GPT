@@ -55,8 +55,9 @@ All settings are validated by the Zod schema in `src/config/env.ts`; the bot exi
   - `world.ts` - World interaction and environment sensing
 - `/src/commands/` - High-level commands that users can trigger
   - Each file represents a discrete command the bot can execute
-  - `registry.ts` - Command registration and lookup system
-  - `types.ts` - Command interfaces and type definitions
+  - `all.ts` - The one list of commands (`export * as GoToPlayer from "./GoToPlayer"`); adding a command is adding its line here
+  - `registry.ts` - Builds the registry and the model's tools from `all.ts`
+  - `types.ts` - Command names (`BotCommands.GoToPlayer` is "goToPlayer"), taken from `all.ts` as types
 - `/src/schemas/` - Zod schemas for validation
   - `mainSchemas.ts` - Core data validation schemas
   - `types.ts` - TypeScript type definitions
@@ -157,7 +158,7 @@ declare module 'mineflayer-example-plugin' {
 ## Development Workflow
 1. Create new features in the appropriate module directory
 2. Ensure proper TypeScript typing and validation
-3. Register new commands in the command registry
+3. Add new commands to `src/commands/all.ts` (one line)
 4. Test functionality in-game with natural language commands
 5. Document changes in code comments
 

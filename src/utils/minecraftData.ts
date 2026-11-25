@@ -78,12 +78,6 @@ export function isHuntable(mob: Entity): boolean {
   return catalog().isHuntable(mob.name) && !isBaby(mob);
 }
 
-/** A hostile mob, by entity type from the game data. */
-export function isHostile(mob: Entity): boolean {
-  if (!mob?.name) return false;
-  return catalog().isHostile(mob.name);
-}
-
 /**
  * Returns the item's numeric id for the connected server's version, or null
  * if the name is unknown. (Unknown used to return 0, which is air.)

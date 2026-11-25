@@ -1,65 +1,19 @@
 // Path: src/commands/types.ts
+// The command names, taken from the one list in ./all.ts. Only types are
+// imported from it: command modules import this file, so a runtime import
+// would close a cycle (commands -> types -> all -> commands).
 
-// Define an enum for available bot actions
-enum BotCommands {
-  GoToPlayer = "goToPlayer",
-  GoToCoordinates = "goToCoordinates",
-  GoToNamedLocation = "goToNamedLocation",
-  FollowPlayer = "followPlayer",
-  GoToBlock = "goToBlock",
-  CollectBlocks = "collectBlocks",
-  AttackNearest = "attackNearest",
-  Hunting = "hunting",
-  AvoidEnemies = "avoidEnemies",
-  EquipBestWeapon = "equipBestWeapon",
-  WearArmor = "wearArmor",
-  Unstack = "unstack",
-  GatherWood = "gatherWood",
-  CraftItem = "craftItem",
-  CraftWoodenTools = "craftWoodenTools",
-  CraftStoneTools = "craftStoneTools",
-  RandomMovement = "randomMovement",
-  SetBase = "SetBase",
-  SetBasement = "setBasement",
-  DigDiagonalTunnel = "digDiagonalTunnel",
-  DigToSurface = "digToSurface",
-  StoreItems = "storeItems",
-  TakeFromChest = "takeFromChest",
-  CheckChest = "checkChest",
-  PlantSaplings = "plantSaplings",
-  PickupNearbyItems = "pickupNearbyItems",
-  BuildStoneHouse = "buildStoneHouse",
-  FindAndRememberNearChest = "findAndRememberNearChest",
-  ReturnToBase = "returnToBase",
-  ListInventory = "listInventory",
-  CheckForItem = "checkForItem",
-  DiscardItem = "discardItem",
-  GiveItemToAPlayer = "giveItemToAPlayer",
-  TellLocation = "tellLocation",
-  WhereIs = "whereIs",
-  KeepOut = "keepOut",
-  AllowHere = "allowHere",
-  Autonomy = "autonomy",
-  Progress = "progress",
-  DescribeSurroundings = "describeSurroundings",
-  RecoverItems = "recoverItems",
-  StarterKit = "starterKit",
-  Sleep = "sleep",
-  PlaceItem = "placeItem",
-  GoByBoat = "goByBoat",
-  Harvest = "harvest",
-  GatherFood = "gatherFood",
-  Cook = "cook",
-  UseNearbyObject = "useNearbyObject",
-  DeployVehicle = "deployVehicle",
-  Stop = "stop",
-  ShowMeBase = "showMeBase",
-  HomeChores = "homeChores",
-}
+import type * as All from "./all";
 
-// Type guard to check if a value is a valid BotCommands
-function isBotAction(action: string): action is BotCommands {
-  return Object.values(BotCommands).includes(action as BotCommands);
-}
+/** A command's key in ./all.ts (its module name): "GoToPlayer". */
+export type CommandKey = keyof typeof All;
 
-export { BotCommands, isBotAction };
+/** A command's name, as chat and the model use it: "goToPlayer". */
+type BotCommands = Uncapitalize<CommandKey>;
+
+/** The name of a command from its key, so `BotCommands.GoToPlayer` is "goToPlayer". */
+const BotCommands = new Proxy({} as { readonly [K in CommandKey]: Uncapitalize<K> }, {
+  get: (_target, key) => (typeof key === "string" ? key.charAt(0).toLowerCase() + key.slice(1) : undefined),
+});
+
+export { BotCommands };

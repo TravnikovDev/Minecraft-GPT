@@ -37,9 +37,11 @@ export const hostileMobsInfo = {
 };
 
 // Check if an Entity is Hostile - standardized function
+/** A hostile mob: the game's own list (core/catalog), plus the ones the threat table knows. */
 export function isHostile(entity: Entity): boolean {
   if (!entity || !entity.name) return false;
-  return Object.keys(hostileMobsInfo).includes(entity.name.toLowerCase());
+  const name = entity.name.toLowerCase();
+  return catalog().isHostile(name) || name in hostileMobsInfo;
 }
 
 // Get mob threat info

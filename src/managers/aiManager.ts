@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
 import { bot } from "../core/body";
 import { reply } from "../core/narrator";
-import { BotCommands, isBotAction } from "../commands/types";
+import { BotCommands } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
 import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
 import { normalizeMinecraftName } from "../utils/utility";
@@ -198,6 +198,8 @@ export async function initiateActionFromAI(
 ): Promise<void> {
   const { response, toolCalls } = await handleOpenAIResponse(username, message);
   let answered = false; // the reply is said once, however many tools were called
+  // Lazily: the registry loads every command, and a static import closes a cycle
+  const { isBotAction } = await import("../commands/registry");
 
   for (const toolCall of toolCalls) {
     const toolAction = await executeToolCall(toolCall);
