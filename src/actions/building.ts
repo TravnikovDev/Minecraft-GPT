@@ -491,12 +491,23 @@ export function shelterSlots(): {
 export async function enterShelter(): Promise<ActionResult> {
   const room = shelterPlace(false);
   if (!room) return fail("not_found", "no shelter");
-  // From far off: the long-trip walker first (in legs; one 40-block plan
-  // "took too long to decide", fresh-world test), then the last steps in
-  if (bot.entity.position.distanceTo(new Vec3(room.x, room.y, room.z)) > 16) {
-    const { travelToResult } = await import("./movement");
-    const near = await travelToResult(() => ({ x: room.x, y: room.y, z: room.z }), { range: 3 });
-    if (!near.ok) console.log(`On the way to my shelter: ${describeFailure(near)}; trying the last stretch anyway.`);
+  // The way a player goes home: to the top of its stairs first (from far off
+  // in legs), then down them and in. One path search straight into the
+  // room "took too long to decide" from 15 blocks away (fresh-world test):
+  // it weighed digging down through the ground everywhere
+  const top = room.details?.["start"] as Pos | undefined;
+  const inside = shelterPlace(false) && bot.entity.position.distanceTo(new Vec3(room.x, room.y, room.z)) <= 6 && bot.entity.position.y < (top?.y ?? Infinity) - 1;
+  if (top && !inside) {
+    const atTop = (): boolean => bot.entity.position.distanceTo(new Vec3(top.x + 0.5, top.y, top.z + 0.5)) <= 1.5;
+    if (bot.entity.position.distanceTo(new Vec3(top.x, top.y, top.z)) > 16) {
+      const { travelToResult } = await import("./movement");
+      const near = await travelToResult(() => ({ x: top.x, y: top.y, z: top.z }), { range: 2 });
+      if (!near.ok) console.log(`On the way to my shelter: ${describeFailure(near)}.`);
+    }
+    if (!atTop()) {
+      const stairs = await goTo(new pf.goals.GoalBlock(top.x, top.y, top.z));
+      if (!stairs.ok) console.log(`Couldn't get to the top of my shelter's stairs: ${describeFailure(stairs)}; going straight in.`);
+    }
   }
   const walked = await goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
   if (!walked.ok) return walked;

@@ -214,9 +214,10 @@ export function safeMovements(bot: Bot): pf.Movements {
   // No pillaring just to get somewhere (following, walking up to the owner):
   // a player walks around. Reaching a block up high turns it on for that walk
   moves.allow1by1towers = false;
-  // A drop of 4 or more hurts: it jumped from the grass by its table into its
-  // shelter's stairwell (4 down) every trip, half a heart each (fresh-world test)
-  moves.maxDropDown = 3;
+  // Drops up to 5, as it always had: limited to 3 (to spare half a heart on
+  // a 4-block drop) it dug the block under its own feet instead of stepping
+  // down, all its walking and hunting went jerky (owner, fresh-world test)
+  moves.maxDropDown = 5;
   moves.digCost = 6;
   moves.placeCost = 6;
   moves.entityCost = 6;

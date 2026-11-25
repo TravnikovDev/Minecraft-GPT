@@ -75,7 +75,7 @@ export async function execute(args: any): Promise<void> {
   const maxDistance = Math.min(parsed.data.maxDistance ?? SIGHT_RANGE, SIGHT_RANGE);
   const mobType = parsed.data.mobType ?? null;
   const count = parsed.data.count ?? null;
-  const what = mobType ? mobType.replace(/_/g, " ") : "game";
+  const what = mobType ? mobType.replace(/_/g, " ") : "animals"; // owner: never "game"
 
   // 1. Look around and say what's there. None to take in sight, but the
   // server says some are about (up to 200 blocks): walk there until they are
