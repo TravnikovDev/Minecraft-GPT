@@ -274,6 +274,9 @@ test("what a site leaves to build: none under solid ground, the open roof of a h
   expect(shellIsSolid(plan.shell, roof, hillside)).toBe(false);
   // Still a site: those roof blocks get built (3 wide x 2 rows open over z 9-10)
   expect(shellGaps(plan.shell, roof, hillside)).toBe(6);
+  // A tree over it: leaves and logs in the roof are gaps too (they rot away or get chopped)
+  const treeRoof = (p: any) => (p.y >= roof && p.z === 6 ? { name: p.x === 0 ? "oak_log" : "oak_leaves", boundingBox: "block" } : solid());
+  expect(shellGaps(plan.shell, roof, treeRoof)).toBe(3);
   expect(shellGaps(plan.shell, roof, solid)).toBe(0);
   // A beach: sand over the room falls in
   const beach = (p: any) => (p.y >= roof ? { name: "sand", boundingBox: "block" } : solid());

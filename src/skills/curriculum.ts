@@ -10,7 +10,7 @@
 //   up again in the morning.
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
-import { bot } from "../core/body";
+import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
 import { isCommandCancelled } from "../core/commandContext";
@@ -153,7 +153,8 @@ function nightTask(): TaskSpec {
  * routine or the next milestone when it's free to live its own life.
  */
 export async function considerNextStep(): Promise<void> {
-  if (!bot.entity || !autonomyOn() || areChoresMuted()) return;
+  // Offline (the world closed): nothing to start until it's back
+  if (!bot.entity || !isOnline() || !autonomyOn() || areChoresMuted()) return;
   await announce();
   // Night comes first: it cuts in on a milestone (upkeep outranks "self"),
   // but waits for the owner's commands

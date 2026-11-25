@@ -4,6 +4,17 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Fixes from the 2026-11-25 hillside game test (not yet re-tested)
+
+The shelter was built into a hill under a tree and its mine came out into a ravine. Re-check in a world with hills and caves:
+
+- [ ] Shelter under a tree → logs and leaves in its walls or roof are broken out and replaced with dirt or stone (log: "Placed dirt at …" where the leaves were)
+- [ ] Mine stairs that cross a cave or ravine → every step gets a floor; where nothing is next to it, a support block goes under the previous step first ("Filled the hole … (a support block at … first)"), and the step gets side walls
+- [ ] Mine stairs over a cave with no dirt or cobblestone carried → the mine stops there and says it needs dirt or cobblestone; next time it carries on from that step
+- [ ] Craft from inside the shelter with the only table 16+ blocks away → it walks there (the long way if needed); never a second table within 50 blocks ("There's a crafting table at … already")
+- [ ] Walk out of the shelter → no dirt scaffold left inside the room, stairs or doorways
+- [ ] Close the LAN world while it works → no "Task started" lines until it's back
+
 ## Phase 6: skills and the first day (2026-11-25, first run 2026-11-25: 5 of 6 milestones, see Log Entry 14)
 
 The bot can now live its own life when the owner lets it: it works through a player's first day (wooden tools, a shelter, stone tools, food, a bed, two chests) and goes into its shelter at night. It's **off until you say so**. Every "make me X" now goes through one planner that gets the materials, a table and the tools first.
@@ -204,4 +215,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] "you're stuck, move away" → it walks about 10 blocks away and stays responsive
 - [ ] Mobs hit it while it's busy → it fights back (the task pauses), then carries on
 - [ ] `stop` during a boat trip → it lands and picks up its boat before the next command
-- [ ] Craft at a table it can't reach → it uses its own table and picks it back up
+- [ ] Craft at a table it can't reach → it walks the long way to it; it never places a second table within 50 blocks (owner's rule, replaces the old "uses its own table")

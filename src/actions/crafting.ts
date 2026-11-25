@@ -12,7 +12,7 @@ import { closeWindow, openFurnaceAt, windowStep } from "../core/containers";
 import { describeFailure } from "../core/result";
 import { placeBlock } from "./worldInteraction";
 import pf from "mineflayer-pathfinder";
-import { goToPosition } from "./movement";
+import { goToPosition, travelToResult } from "./movement";
 import { bot } from "../core/body";
 import { isCommandCancelled } from "../core/commandContext";
 import { collectBlock } from "./collectBlock";
@@ -73,6 +73,27 @@ const HOME_RADIUS = 24;
 /** A crafting table this close is walked to; a new one is placed only with none this close. */
 export const TABLE_RANGE = 50;
 
+
+/**
+ * A crafting table within `range`: one in sight (loaded), or one it
+ * remembers placing that is still there or out of sight. Null when none.
+ */
+export function tableNear(range: number): Vec3 | null {
+  const id = bot.registry.blocksByName["crafting_table"]?.id;
+  const here = bot.entity.position;
+  const seen = id === undefined ? null : bot.findBlock({ matching: id, maxDistance: range });
+  if (seen) return seen.position;
+  const dim = currentDimension();
+  for (const t of getPlaces("crafting_table")) {
+    if ((t.dimension ?? dim) !== dim) continue;
+    const at = new Vec3(t.x, t.y, t.z);
+    if (here.distanceTo(at) > range) continue;
+    const block = bot.blockAt(at);
+    // Out of sight (not loaded) counts; loaded and gone doesn't
+    if (!block || block.name === "crafting_table") return at;
+  }
+  return null;
+}
 
 /** The shelter's table spot, when it's near and free (air) right now. */
 function homeTableSpot(): Vec3 | null {
@@ -166,14 +187,29 @@ export async function craftRecipe(
         console.log(`Couldn't craft ${itemName} at the crafting table at ${table.position}.`);
         return false;
       }
+      // A short walk found no way (from inside its shelter, fresh-world
+      // test): the long way, in legs, before giving up on it
+      const p = table.position;
+      const walked = await travelToResult(() => ({ x: p.x, y: p.y, z: p.z }), { range: 2 });
+      if (walked.ok && (await moveToAndCraft(table))) return true;
       unreachableTables.set(tableKey(table), Date.now() + UNREACHABLE_FOR_MS);
-      console.log(`Can't get to the crafting table at ${table.position} (without breaking anything).`);
+      console.log(`Can't get to the crafting table at ${table.position}.`);
     }
-    console.log(
-      tables.length > 0
-        ? `No crafting table I can reach, using my own.`
-        : `No crafting table nearby, using my own.`
-    );
+    // Owner's rule: never a second table with one within TABLE_RANGE, even
+    // one it can't get to right now (it placed a new one 16 blocks from its
+    // first when the walk from its shelter timed out)
+    const near = tableNear(TABLE_RANGE);
+    if (near) {
+      // One it remembers but can't see from here (out of sight): walk there first
+      if (!tables.some((t) => t.position.equals(near))) {
+        const walked = await travelToResult(() => ({ x: near.x, y: near.y, z: near.z }), { range: 2 });
+        const there = bot.blockAt(near);
+        if (walked.ok && there?.name === "crafting_table" && (await moveToAndCraft(there))) return true;
+      }
+      console.log(`There's a crafting table at ${near} already (within ${TABLE_RANGE}) that I can't get to; I won't place another, so no ${itemName} for now.`);
+      return false;
+    }
+    console.log(`No crafting table within ${TABLE_RANGE}, using my own.`);
 
     // Our own table, only with no table within TABLE_RANGE it can reach: put
     // it down and leave it there. Made from

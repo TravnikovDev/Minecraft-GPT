@@ -150,6 +150,13 @@ const RECONNECT_MAX_DELAY_MS = 60000;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
+// In the world right now: from spawn until the connection ends
+let online = false;
+
+/** True while the bot is in the world (spawned, connection not ended). */
+export function isOnline(): boolean {
+  return online;
+}
 
 const connectionOptions = {
   host: SERVER_HOST,
@@ -179,6 +186,7 @@ function createBot(): Bot {
   });
 
   listen(newBot, "spawn", () => {
+    online = true;
     reconnectAttempts = 0;
     for (const hook of readyHooks) hook(newBot);
   }, true);
@@ -199,6 +207,7 @@ function createBot(): Bot {
   });
 
   listen(newBot, "end", (reason) => {
+    online = false;
     console.log(`Bot disconnected: ${reason}`);
     scheduleReconnect();
   });

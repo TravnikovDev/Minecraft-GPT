@@ -1,8 +1,10 @@
 import { bot } from "../core/body";
 import {
   breakBlockAt,
+  breakBlockAtResult,
   pickupNearbyItems,
   placeBlock,
+  placeBlockResult,
 } from "../actions/worldInteraction";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
@@ -13,7 +15,7 @@ import { isNatural } from "../core/movements";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
-import { expectOk } from "../core/result";
+import { describeFailure, expectOk } from "../core/result";
 
 export type DirectionType = "north" | "south" | "west" | "east";
 
@@ -29,6 +31,61 @@ const SIDES = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec
 export function directionToward(dx: number, dz: number): DirectionType {
   if (Math.abs(dx) >= Math.abs(dz)) return dx >= 0 ? "east" : "west";
   return dz >= 0 ? "south" : "north";
+}
+
+/**
+ * True for the walking space of a diagonal staircase through `start` (each
+ * step `height` + 1 blocks tall, `width` wide), at any step along its line: a
+ * mine dug one step at a time keeps its next steps clear too.
+ */
+export function inStaircase(p: Vec3, start: Vec3, direction: DirectionType, width: number, height: number, down = true): boolean {
+  const o = OFFSETS[direction];
+  const along = (p.x - start.x) * o.x + (p.z - start.z) * o.z;
+  const lateral = o.x !== 0 ? p.z - start.z : p.x - start.x;
+  if (lateral < 0 || lateral >= width) return false;
+  const base = start.y + (down ? -along : along);
+  return p.y >= base && p.y <= base + height;
+}
+
+/** Why the last tunnel stopped: something it must not dig, a drop it couldn't floor, or nothing to build the floor with. */
+export type TunnelStop = "blocked" | "drop" | "no_filler";
+let lastStop: TunnelStop | null = null;
+
+/** Why the last digDiagonalTunnel / digDiagonalTunnelUp returned false (null when it didn't). */
+export function tunnelStopReason(): TunnelStop | null {
+  return lastStop;
+}
+
+const FLOOR_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"];
+
+/**
+ * The floor under a tunnel step made solid; false (stop digging) when it
+ * can't be and there's a drop under it: stairs never go on into a cave or a
+ * ravine with nothing to stand on. Over a cave the step also gets its side
+ * walls (a tunnel, not an open bridge mobs walk up).
+ */
+async function floorUnder(step: Vec3, keepClear: (p: Vec3) => boolean, direction: DirectionType): Promise<boolean> {
+  const floor = step.offset(0, -1, 0);
+  const wasHole = isHoleBlock(bot.blockAt(floor));
+  if (await ensureBlock(floor, keepClear)) {
+    if (wasHole && bot.blockAt(floor.offset(0, -1, 0))?.boundingBox === "empty") await wallIn(step, keepClear, direction);
+    return true;
+  }
+  const below = bot.blockAt(floor.offset(0, -1, 0));
+  if (below && below.boundingBox !== "empty") return true; // a one-block dip: still walkable
+  lastStop = FLOOR_FILLERS.some((n) => getItemCount(n) > 0) ? "drop" : "no_filler";
+  console.log(`Tunnel stopped: no floor at ${floor}, and a drop under it${lastStop === "no_filler" ? " (nothing to build it with)" : ""}.`);
+  return false;
+}
+
+/** The side walls of a step (feet and head height) where they're open: a cave on either side. */
+async function wallIn(step: Vec3, keepClear: (p: Vec3) => boolean, direction: DirectionType): Promise<void> {
+  for (const side of WALLS[direction]) {
+    for (const h of [0, 1]) {
+      const wall = step.offset(0, h, 0).plus(SIDE_DIRS[side]!);
+      if (!keepClear(wall) && isHoleBlock(bot.blockAt(wall))) await ensureBlock(wall, keepClear);
+    }
+  }
 }
 
 /**
@@ -55,6 +112,7 @@ function stopTunnelAt(pos: Vec3): boolean {
   if (isCommandCancelled()) return true;
   const why = tunnelBlocked(pos);
   if (!why) return false;
+  lastStop = "blocked";
   console.log(`Tunnel stopped: ${why}.`);
   bot.chat(`I stopped digging: ${why}.`);
   return true;
@@ -171,10 +229,13 @@ export async function digDiagonalTunnel(
 ): Promise<boolean> {
   // A shelter's stairs and the mine's single steps aren't mines of their own
   const remember = tunnelName !== "basementEntrance" && options.save !== false;
+  lastStop = null;
   if (!startPosition) startPosition = bot.entity.position.clone();
 
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
+  const start = startPosition;
+  const keepClear = (p: Vec3): boolean => inStaircase(p, start, direction, tunnelSize.width, tunnelSize.height);
 
   for (let w = 0; w < tunnelSize.width; w++) {
     const wOffsetX = direction === "north" || direction === "south" ? w : 0;
@@ -198,9 +259,8 @@ export async function digDiagonalTunnel(
         // Straight on to the next block: each dig already waits for the server
 
         // After digging the floor block, ensure there is a foundation
-        if (h === 0) {
-          await ensureBlock(basePosition.offset(0, -1, 0));
-        }
+        // (bridged over a cave; the tunnel stops at a drop it can't floor)
+        if (h === 0 && !(await floorUnder(basePosition, keepClear, direction))) return false;
       }
 
       await pickupNearbyItems(bot);
@@ -280,12 +340,13 @@ export async function digDoorway(position: Vec3, direction: string) {
     const doorwayBlock = position.offset(offsetX, y, offsetZ);
     await breakBlockAt(doorwayBlock.x, doorwayBlock.y, doorwayBlock.z);
 
-    // Ensure foundation under the floor blocks
+    // Ensure foundation under the floor blocks (never a support block in the doorway itself)
+    const doorway = (p: Vec3): boolean => p.x === doorwayBlock.x && p.z === doorwayBlock.z && p.y >= position.y && p.y <= position.y + 1;
     if (y === 0) {
-      await ensureBlock(doorwayBlock.offset(0, -1, 0));
+      await ensureBlock(doorwayBlock.offset(0, -1, 0), doorway);
     } else if (y === 1) {
       // Ensure ceiling block
-      await ensureBlock(doorwayBlock.offset(0, 1, 0));
+      await ensureBlock(doorwayBlock.offset(0, 1, 0), doorway);
     }
   }
 
@@ -312,6 +373,12 @@ export async function digStraightTunnel(
   // Sideways is across the tunnel: along Z for an east/west tunnel, along X for north/south
   const side = new Vec3(Math.abs(offsetZ), 0, Math.abs(offsetX));
   const half = Math.floor(width / 2);
+  // The tunnel's own space: support blocks never go there
+  const keepClear = (p: Vec3): boolean => {
+    const along = (p.x - startPosition.x) * offsetX + (p.z - startPosition.z) * offsetZ;
+    const across = (p.x - startPosition.x) * side.x + (p.z - startPosition.z) * side.z;
+    return along >= 1 && along <= length && across >= -half && across <= width - 1 - half && p.y >= startPosition.y && p.y <= startPosition.y + 1;
+  };
 
   for (let i = 1; i <= length; i++) {
     const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
@@ -324,7 +391,7 @@ export async function digStraightTunnel(
 
         // Ensure foundation under the floor blocks
         if (y === 0) {
-          await ensureBlock(blockPos.offset(0, -1, 0));
+          await ensureBlock(blockPos.offset(0, -1, 0), keepClear);
         }
       }
     }
@@ -352,6 +419,17 @@ export async function digRoom(
   const across = new Vec3(Math.abs(along.z), 0, Math.abs(along.x));
   const at = (x: number, y: number, z: number): Vec3 =>
     roomStart.offset(across.x * x + along.x * z, y, across.z * x + along.z * z);
+  // The room and its two doorways (the middle column, at each end): walls,
+  // floor and roof get built, never a support block in there
+  const inRoom = (p: Vec3): boolean => {
+    const d = p.minus(roomStart);
+    const x = d.x * across.x + d.z * across.z;
+    const z = d.x * along.x + d.z * along.z;
+    if (d.y < 0 || d.y >= roomSize.height) return false;
+    if (x === 0 && d.y <= 1 && (z === -1 || z === roomSize.length)) return true;
+    return x >= -1 && x <= roomSize.width - 2 && z >= 0 && z < roomSize.length;
+  };
+  const ensure = (p: Vec3): Promise<boolean> => (inRoom(p) ? Promise.resolve(true) : ensureBlock(p, inRoom));
   for (let z = 0; z < roomSize.length; z++) {
     for (let y = 0; y < roomSize.height; y++) {
       for (let x = -1; x < roomSize.width - 1; x++) {
@@ -360,54 +438,98 @@ export async function digRoom(
 
         // Ensure the floor foundation
         if (y === 0) {
-          await ensureBlock(roomBlock.offset(0, -1, 0));
+          await ensure(roomBlock.offset(0, -1, 0));
         }
 
         // Ensure walls
         if (x === -1) {
-          await ensureBlock(at(x - 1, y, z));
+          await ensure(at(x - 1, y, z));
         } else if (x === roomSize.width - 2) {
-          await ensureBlock(at(x + 1, y, z));
+          await ensure(at(x + 1, y, z));
         }
 
         // Ensure sides walls. Currently he blocks doorways
         /* if (z === 0) {
-          await ensureBlock(roomBlock.offset(0, 0, -1));
+          await ensure(roomBlock.offset(0, 0, -1));
         } else */
         if (z === roomSize.length - 1) {
-          await ensureBlock(at(x, y, z + 1));
+          await ensure(at(x, y, z + 1));
         }
 
         // Ensure ceiling block
         if (y === roomSize.height - 1) {
-          await ensureBlock(roomBlock.offset(0, 1, 0));
+          await ensure(roomBlock.offset(0, 1, 0));
         }
       }
     }
   }
 }
 
-/**
- * Ensures that a block at a specific position is solid.
- * If it's air or water, a foundation block (dirt or planks) will be placed.
- * @param position The position of the block.
- */
-export async function ensureBlock(position: Vec3): Promise<void> {
-  // Only a hole needs filling; a solid floor needs nothing (it used to craft
-  // planks for every floor block when the bot carried no dirt or planks)
-  const blockToCheck = bot.blockAt(position);
-  const isHole = blockToCheck?.boundingBox === "empty" || blockToCheck?.name === "water" || blockToCheck?.name === "lava";
-  if (!isHole) return;
+/** Leaves rot away and sand falls: never a floor, wall or roof to rely on. */
+const isWeak = (name: string): boolean => name.endsWith("_leaves");
+const isHoleBlock = (b: { name: string; boundingBox: string } | null): boolean =>
+  b !== null && (b.boundingBox === "empty" || b.name === "water" || b.name === "lava" || isWeak(b.name));
+const isSolidBlock = (b: { name: string; boundingBox: string } | null): boolean =>
+  b !== null && b.boundingBox === "block" && !isWeak(b.name);
 
+/**
+ * The cell to put a support block in when `position` has nothing solid next
+ * to it (stairs going down over a cave or ravine): a neighbour of it that is
+ * open, isn't walking space (`keepClear`), and has something solid to place
+ * against. Like a player bridging: one block out from the last solid one,
+ * then the floor against it. Pure, tested with a made-up world.
+ */
+export function supportFor(position: Vec3, blockAt: (p: Vec3) => { name: string; boundingBox: string } | null, keepClear: (p: Vec3) => boolean = () => false): Vec3 | null {
+  if (SIDES.some((s) => isSolidBlock(blockAt(position.plus(s))))) return null; // nothing needed
+  for (const s of SIDES) {
+    const n = position.plus(s);
+    if (keepClear(n) || !isHoleBlock(blockAt(n))) continue;
+    if (SIDES.some((s2) => isSolidBlock(blockAt(n.plus(s2))))) return n;
+  }
+  return null;
+}
+
+/**
+ * Makes the block at `position` solid: a hole (air, water, lava) or leaves
+ * (they rot away) get dirt or stone. With nothing solid next to it to place
+ * against (a cave under the stairs), a support block goes in first, never in
+ * `keepClear` cells (the tunnel or room it is digging). True when the block
+ * is solid afterwards.
+ * @param position The block that must be solid (a floor, wall or roof cell).
+ * @param keepClear Cells that must stay open (walking space): no support there.
+ */
+export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolean = () => false): Promise<boolean> {
+  const here = bot.blockAt(position);
+  if (!here) return false;
+  if (!isHoleBlock(here)) return true;
   // Dirt first, then stone; never planks (stone and wood are for tools; the
   // shelter burned its cobblestone on floors and couldn't make stone tools)
-  const filler = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((name) => getItemCount(name) > 0);
-  if (!filler) {
-    console.log("I have nothing to fill a hole in the floor with; leaving it.");
-    return;
+  const filler = (): string | null => ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((name) => getItemCount(name) > 0) ?? null;
+  if (!filler()) {
+    console.log(`I have nothing to fill the hole at ${position} with; leaving it.`);
+    return false;
   }
-  await placeBlock(filler, position.x, position.y, position.z);
-  console.log(`Placed ${filler} at ${position} to fix a hole.`);
+  if (isWeak(here.name)) {
+    const cleared = await breakBlockAtResult(position.x, position.y, position.z);
+    if (!cleared.ok) return false;
+  }
+  const support = supportFor(position, (p) => bot.blockAt(p), keepClear);
+  if (support) {
+    const propped = await placeBlockResult(filler()!, support.x, support.y, support.z, "side");
+    if (!propped.ok) {
+      console.log(`Couldn't put a support block at ${support} for the hole at ${position}.`);
+      return false;
+    }
+  }
+  const name = filler();
+  if (!name) return false;
+  const placed = await placeBlockResult(name, position.x, position.y, position.z, "side");
+  if (!placed.ok) {
+    console.log(`The hole at ${position} stays open: ${describeFailure(placed)}.`);
+    return false;
+  }
+  console.log(`Filled the hole at ${position} with ${name}${support ? ` (a support block at ${support} first)` : ""}.`);
+  return true;
 }
 
 /**
@@ -427,6 +549,7 @@ export async function digDiagonalTunnelUp(
   firstStep = 0
 ): Promise<boolean> {
   if (!startPosition) startPosition = bot.entity.position.floored();
+  lastStop = null;
   const { x: offsetX, z: offsetZ } = OFFSETS[direction];
 
   for (let w = 0; w < tunnelSize.width; w++) {
@@ -442,9 +565,7 @@ export async function digDiagonalTunnelUp(
         await breakBlockAt(digPosition.x, digPosition.y, digPosition.z);
 
         // The block under each step is the stair itself: keep it solid
-        if (h === 0) {
-          await ensureBlock(basePosition.offset(0, -1, 0));
-        }
+        if (h === 0 && !(await floorUnder(basePosition, (p) => inStaircase(p, startPosition!, direction, tunnelSize.width, tunnelSize.height, false), direction))) return false;
       }
 
       await pickupNearbyItems(bot);

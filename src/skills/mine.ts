@@ -15,7 +15,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
 import { addPlace, getPlaces } from "../managers/persistenceManager";
 import { currentDimension } from "../actions/perception";
-import { digDiagonalTunnel, digStraightTunnel, type DirectionType } from "../actions/digging";
+import { digDiagonalTunnel, digStraightTunnel, tunnelStopReason, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
 import { TIER, toolTier } from "./capabilities";
@@ -123,14 +123,21 @@ export async function digMine(woodUntilCobblestone = 0): Promise<ActionResult> {
       return ok();
     }
     if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+      const why = tunnelStopReason();
+      // Over a cave with nothing to build the floor with: get dirt or
+      // cobblestone (the planner) and carry on from this step next time
+      if (why === "no_filler") {
+        await saveMine(start, dir, i, 0, null);
+        return fail("missing_items", "nothing to build my mine stairs' floor with over a cave (dirt or cobblestone)");
+      }
       if (i - 1 >= SHALLOWEST_MINE) {
-        // Water or lava below: a mine this deep is still a mine
-        console.log(`Mine: stairs blocked at step ${i}; the mine ends ${i - 1} levels down.`);
+        // Water, lava or a drop it can't floor below: a mine this deep is still a mine
+        console.log(`Mine: stairs stopped at step ${i} (${why ?? "stopped"}); the mine ends ${i - 1} levels down.`);
         await saveMine(start, dir, i, 0, stepAt(start, dir, i - 1));
         return ok();
       }
       await saveMine(start, dir, i, 0, null);
-      return fail("refused", "the mine's stairs hit lava, water or something built near the top");
+      return fail("refused", why === "drop" ? "my mine's stairs reach a drop near the top that I can't build a floor over" : "the mine's stairs hit lava, water or something built near the top");
     }
     await saveMine(start, dir, i + 1, 0, i + 1 >= STAIRS ? stepAt(start, dir, MINE_DEPTH) : null);
   }

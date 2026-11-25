@@ -45,6 +45,7 @@ const changed = new Map<string, string>();
 const key = (p: any) => `${p.x},${p.y},${p.z}`;
 const dug: string[] = [];
 const torches: { at: string; wall: string }[] = [];
+const placed: string[] = [];
 const said: string[] = [];
 function blockAt(p: any) {
   const pos = new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
@@ -74,9 +75,15 @@ const fake: any = {
   },
   placeBlock: async (wall: any, face: any) => {
     const at = wall.position.plus(face);
-    torches.push({ at: key(at), wall: key(wall.position) });
-    changed.set(key(at), "wall_torch");
-    take("torch", 1);
+    const held = fake.heldItem?.name ?? "torch";
+    if (held === "torch") {
+      torches.push({ at: key(at), wall: key(wall.position) });
+      changed.set(key(at), "wall_torch");
+    } else {
+      placed.push(key(at));
+      changed.set(key(at), held);
+    }
+    take(held, 1);
   },
   on: () => {},
   off: () => {},
@@ -94,12 +101,15 @@ const fake: any = {
     },
   },
 };
+const teleport = fake.pathfinder.goto;
 useFakeBot(fake);
 beforeEach(() => {
+  fake.pathfinder.goto = teleport;
   useFakeBot(fake);
   changed.clear();
   dug.length = 0;
   torches.length = 0;
+  placed.length = 0;
   said.length = 0;
   items = [];
 });
@@ -184,4 +194,53 @@ test("with no torches and no coal it says so once and keeps digging", async () =
   expect(await digging.tunnelTo(new Vec3(16, 44, 0), "iron ore")).toBe(true);
   expect(torches.length).toBe(0);
   expect(said.filter((m) => m.includes("no torches")).length).toBeLessThanOrEqual(1);
+});
+
+// A cave under the stairs: x 2..6, y 50..59, z -1..1 all air. Walking
+// (within reach of a block) stands on a stair already dug, as the real
+// pathfinder would, not inside the block it's going to place.
+function carveCave(): void {
+  for (let x = 2; x <= 6; x++) for (let y = 50; y <= 59; y++) for (let z = -1; z <= 1; z++) changed.set(key({ x, y, z }), "air");
+  fake.pathfinder.goto = async (g: any) => {
+    for (let i = 0; i <= 6; i++) {
+      const stair = new Vec3(i, 60 - i, 0);
+      if (g.isEnd(stair) && blockAt(stair).boundingBox === "empty") {
+        fake.entity.position = new Vec3(i + 0.5, 60 - i, 0.5);
+        return;
+      }
+    }
+    fake.entity.position = new Vec3(g.x + 0.5, g.y, g.z + 0.5);
+  };
+}
+
+test("stairs over a cave: each floor gets built, a support block first where nothing is next to it", async () => {
+  carveCave();
+  items = [{ name: "dirt", count: 64 }];
+  fake.entity.position = new Vec3(0.5, 60, 0.5);
+  expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(true);
+  for (let i = 0; i <= 5; i++) expect(blockAt({ x: i, y: 59 - i, z: 0 }).boundingBox).toBe("block"); // every stair has a floor
+  // No block was put in the stairs' walking space
+  for (const k of placed) {
+    const [x, y, z] = k.split(",").map(Number);
+    expect(digging.inStaircase(new Vec3(x, y, z), new Vec3(0, 60, 0), "east", 1, 3)).toBe(false);
+  }
+  expect(placed.length).toBeGreaterThan(4); // floors plus supports
+});
+
+test("stairs over a cave with nothing to build with: the tunnel stops at the drop", async () => {
+  carveCave();
+  items = [];
+  fake.entity.position = new Vec3(0.5, 60, 0.5);
+  expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(false);
+  expect(dug).not.toContain(key({ x: 4, y: 59, z: 0 })); // never went on past the first floorless step
+});
+
+test("a support block goes next to the last solid one, never in the walking space", () => {
+  const solidAt = new Set([key({ x: 2, y: 57, z: 0 })]); // the previous stair's floor
+  const at = (p: any) => (solidAt.has(key(p)) ? { name: "dirt", boundingBox: "block" } : { name: "air", boundingBox: "empty" });
+  const clear = (p: any) => digging.inStaircase(p, new Vec3(0, 60, 0), "east", 1, 3);
+  expect(digging.supportFor(new Vec3(3, 56, 0), at, clear)).toEqual(new Vec3(2, 56, 0)); // under the previous floor
+  // Leaves next to it are no support
+  const leafy = (p: any) => (key(p) === key({ x: 2, y: 56, z: 0 }) ? { name: "oak_leaves", boundingBox: "block" } : at(p));
+  expect(digging.supportFor(new Vec3(3, 56, 0), leafy, clear)).toEqual(new Vec3(2, 56, 0));
 });

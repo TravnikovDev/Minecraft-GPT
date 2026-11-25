@@ -43,6 +43,7 @@ mock.module(`${ROOT}/src/core/body.ts`, () => ({
   onConnectionEnd: (_bot: unknown, fn: () => void) => g.__testEndHooks?.push(fn),
   onLogin: () => {},
   chatSent: () => {},
+  isOnline: () => g.__testBot !== undefined,
 }));
 
 // What the bot says goes straight to the fake bot's chat/whisper (no pacing),

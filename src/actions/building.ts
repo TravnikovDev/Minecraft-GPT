@@ -12,7 +12,7 @@ import { isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
 import { collectBlock } from "./collectBlock";
-import { TABLE_RANGE } from "./crafting";
+import { TABLE_RANGE, tableNear } from "./crafting";
 import {
   addPlace,
   forgetPlaces,
@@ -176,11 +176,18 @@ export function shellIsSolid(shell: Vec3[], roofY: number, blockAt: BlockAt): bo
   return shellGaps(shell, roofY, blockAt) === 0;
 }
 
-/** How many shell cells need building (open, or sand and gravel in the roof that would fall in). */
+/**
+ * A tree's blocks are no wall or roof: leaves rot away once the tree is
+ * gone, and logs get chopped (owner: a roof of logs and leaves isn't a
+ * shelter). They're broken out and built over with dirt or stone.
+ */
+export const isTreeBlock = (name: string): boolean => /_leaves$|_log$|_wood$|_stem$|_hyphae$/.test(name);
+
+/** How many shell cells need building (open, a tree's leaves or logs, or sand and gravel in the roof that would fall in). */
 export function shellGaps(shell: Vec3[], roofY: number, blockAt: BlockAt): number {
   return shell.filter((p) => {
     const b = blockAt(p);
-    if (!b || b.boundingBox !== "block") return true;
+    if (!b || b.boundingBox !== "block" || isTreeBlock(b.name)) return true;
     return p.y >= roofY && FALLING.has(b.name);
   }).length;
 }
@@ -327,7 +334,7 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   // try carries on at the same spot
   await pickupNearbyItems(bot);
   // Short of filler for the gaps: dirt it can see first
-  const gaps = plan.shell.filter((p) => knownBlock(p) && knownBlock(p)!.boundingBox !== "block").length;
+  const gaps = plan.shell.filter((p) => knownBlock(p) && (knownBlock(p)!.boundingBox !== "block" || isTreeBlock(knownBlock(p)!.name))).length;
   const filler = bot.inventory.items().filter((i) => PATCH_FILLERS.includes(i.name) || catalog().isPlanks(i.name)).reduce((c, i) => c + i.count, 0);
   if (gaps > filler) await collectBlock("dirt", gaps - filler + 4, 16, { seenOnly: true });
   const patched = await patchShell(plan.shell);
@@ -365,7 +372,15 @@ const fillerFor = (): string | null =>
  * out of filler or can't place.
  */
 async function patchShell(shell: Vec3[]): Promise<ActionResult> {
-  const solid = (p: Vec3): boolean => knownBlock(p)?.boundingBox === "block";
+  // A tree's leaves and logs count as gaps: each is broken out and built over
+  // in one go when its turn comes (placing breaks what's in the way), so
+  // running out of filler never leaves more holes than there were. A log
+  // with sand or gravel on it stays: breaking it drops that into the room.
+  const holdsUpFalling = (p: Vec3): boolean => FALLING.has(knownBlock(p.offset(0, 1, 0))?.name ?? "");
+  const solid = (p: Vec3): boolean => {
+    const b = knownBlock(p);
+    return b?.boundingBox === "block" && (!isTreeBlock(b.name) || holdsUpFalling(p));
+  };
   // A hillside's open side goes up from the floor a layer per pass, then the roof closes in
   for (let pass = 0; pass < 12; pass++) {
     const gaps = shell.filter((p) => knownBlock(p) && !solid(p));
@@ -529,8 +544,7 @@ export function rememberShelterDoor(): void {
 
 /** True with a crafting table within `range` blocks. */
 export function tableWithin(range: number): boolean {
-  const id = bot.registry.blocksByName["crafting_table"]?.id;
-  return id !== undefined && bot.findBlock({ matching: id, maxDistance: range }) !== null;
+  return tableNear(range) !== null;
 }
 
 /** Puts `item` at `spot` (getting one first), unless it's already there. */

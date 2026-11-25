@@ -200,7 +200,12 @@ export function safeMovements(bot: Bot): pf.Movements {
     block.position && (forbiddenAt(block.position) || isProtected(block.position)) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep] as typeof moves.exclusionAreasStep;
   moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
-  moves.exclusionAreasPlace = [keepOut] as typeof moves.exclusionAreasPlace;
+  // Never a scaffold block in its own shelter's stairs, doorways or room (a
+  // walk out of it put dirt in a furniture spot, fresh-world test)
+  const ownSpace = (block: { position?: { x: number; y: number; z: number } }): number =>
+    block.position && ownPassages.has(`${block.position.x},${block.position.y},${block.position.z}`) ? 10_000 : 0;
+  const placeRules = (block: { position?: { x: number; y: number; z: number } }): number => keepOut(block) + ownSpace(block);
+  moves.exclusionAreasPlace = [placeRules] as typeof moves.exclusionAreasPlace;
   moves.canOpenDoors = true; // fence gates
   // No pillaring just to get somewhere (following, walking up to the owner):
   // a player walks around. Reaching a block up high turns it on for that walk
