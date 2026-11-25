@@ -8,7 +8,6 @@ import { __actionsDelay } from "../utils/utility";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
 import { getItemCount } from "./inventory";
-import { ensurePlanks } from "./ensure";
 import pf from "mineflayer-pathfinder";
 import { isNatural } from "../core/movements";
 import { catalog } from "../core/catalog";
@@ -394,9 +393,8 @@ export async function ensureBlock(position: Vec3): Promise<void> {
   // What a miner carries: the stone it dug out, then dirt, then planks
   const filler = ["cobblestone", "cobbled_deepslate", "dirt", "netherrack", "planks"].find((name) => getItemCount(name) > 0);
   if (!filler) {
-    console.log("I have nothing to fill a hole in the floor with; making planks.");
-    await ensurePlanks(4);
-    if (getItemCount("planks") === 0) return;
+    console.log("I have nothing to fill a hole in the floor with; leaving it.");
+    return;
   }
   const stubName = filler ?? "planks";
   const placeName = stubName === "planks" ? (bot.inventory.items().find((i) => i.name.endsWith("_planks"))?.name ?? "oak_planks") : stubName;

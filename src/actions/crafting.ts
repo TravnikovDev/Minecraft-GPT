@@ -15,7 +15,8 @@ import { goToPosition } from "./movement";
 import { bot } from "../core/body";
 import { isCommandCancelled } from "../core/commandContext";
 import { collectBlock } from "./collectBlock";
-import { ensureCraftingTable } from "./ensure";
+import { craftNow } from "./craftPlanner";
+import { getItemCount } from "./inventory";
 import {
   getInventoryCounts,
   getNearestBlock,
@@ -170,10 +171,11 @@ export async function craftRecipe(
         : `No crafting table nearby, using my own.`
     );
 
-    // Our own table: put it down, craft, and take it back with us
-    const hasCraftingTable = await ensureCraftingTable();
-    if (!hasCraftingTable) {
-      console.log(`Failed to ensure a crafting table to craft ${itemName}.`);
+    // Our own table: put it down, craft, and take it back with us. Made from
+    // what it carries (planks or logs) if needed, but never by going to get
+    // wood: that's the planner's job (skills/acquire), which asks for a table first
+    if (getItemCount("crafting_table") === 0 && !(await craftNow("crafting_table", 1)).ok) {
+      console.log(`No crafting table, and nothing to make one from, to craft ${itemName}.`);
       return false;
     }
     const pos = getNearestFreeSpace(1, 10);
