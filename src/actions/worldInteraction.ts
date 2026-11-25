@@ -86,7 +86,13 @@ export async function placeBlockResult(blockType: string, x: number, y: number, 
   }
 
   const against = placeOn === "side" ? undefined : FACE_BY_NAME[placeOn];
-  return done(await placeBlockAt(blockType, targetDest, { against }));
+  const first = await placeBlockAt(blockType, targetDest, { against });
+  // The spot was in reach but the block it goes against wasn't: closer, once more
+  if (!first.ok && first.reason === "out_of_reach") {
+    const closer = await goTo(new pf.goals.GoalNear(targetDest.x, targetDest.y, targetDest.z, 2));
+    if (closer.ok) return done(await placeBlockAt(blockType, targetDest, { against }));
+  }
+  return done(first);
 }
 
 /** True when the bot's body (0.6 x 1.8) overlaps the block cell at `cell`. */
