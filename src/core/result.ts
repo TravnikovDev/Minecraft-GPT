@@ -90,6 +90,7 @@ export function classifyError(error: unknown): Failed {
     return fail("refused", message);
   }
   if (m.includes("too far") || m.includes("out of reach")) return fail("out_of_reach", message);
+  if (m.includes("forbidden area")) return fail("forbidden", message);
   if (m.includes("missing") || m.includes("not enough")) return fail("missing_items", message);
   if (m.includes("destination full") || m.includes("inventory full") || m.includes("is full")) return fail("full", message);
   return fail("error", message);

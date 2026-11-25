@@ -4,6 +4,7 @@
 import { goToPlayer } from "./movement";
 import { Item } from "prismarine-item";
 import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { tossing } from "./pickup";
 import { catalog } from "../core/catalog";
 import { consumeItem, equipItem, lookAt, tossStack } from "../core/primitives";
@@ -136,13 +137,13 @@ export async function checkForItem(itemName: string): Promise<void> {
   // Also where it put some away, so "do you have iron?" isn't answered "my inventory is empty"
   const { whereStored } = await import("./storage");
   const stored = whereStored(itemName);
-  const inChests = stored.length > 0 ? ` I put ${stored.join("; ")}.` : "";
+  const inChests = stored.length > 0 ? ` In my chests: ${stored.join("; ")}.` : "";
   if (searchableItems.length === 0) {
-    bot.chat(`I don't have any ${itemName.replace(/_/g, " ")} on me.${inChests}`);
+    reply(`I don't have any ${itemName.replace(/_/g, " ")} on me.${inChests}`);
     return;
   }
   const output = searchableItems.map((item) => `${item.name} x ${item.count}`).join(", ");
-  bot.chat(`I have ${output}.${inChests}`);
+  reply(`I have ${output}.${inChests}`);
 }
 
 export async function sayItems(items: Array<Item> | null = null) {
@@ -153,9 +154,9 @@ export async function sayItems(items: Array<Item> | null = null) {
   }
   const output = items.map((item) => `${item.name} x ${item.count}`).join(", ");
   if (output) {
-    bot.chat(`My inventory contains: ${output}`);
+    reply(`My inventory contains: ${output}`);
   } else {
-    bot.chat("My inventory is empty.");
+    reply("My inventory is empty.");
   }
 }
 

@@ -30,21 +30,22 @@ const key = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},$
 const same = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): boolean => a.x === b.x && a.y === b.y && a.z === b.z;
 const checkable = (p: Place): p is Place & { kind: "crafting_table" | "furnace" } => p.kind === "crafting_table" || p.kind === "furnace";
 
-/** Forgets what's remembered at `pos` if the block there (now `blockName`) isn't it any more. */
+/** Forgets what's remembered at `pos` (in this dimension) if the block there (now `blockName`) isn't it any more. */
 async function verify(pos: { x: number; y: number; z: number }, blockName: string): Promise<void> {
-  for (const p of getPlaces().filter((p) => checkable(p) && same(p, pos))) {
+  const dim = currentDimension();
+  for (const p of getPlaces().filter((p) => checkable(p) && same(p, pos) && p.dimension === dim)) {
     if (!stillThere(p.kind as "crafting_table" | "furnace", blockName)) {
       await forgetPlaces((q) => q.kind === p.kind && same(q, pos));
       console.log(`The ${p.kind.replace(/_/g, " ")} at ${key(pos)} is gone (${blockName} now); forgetting it.`);
     }
   }
-  const chest = loadChests().find((c) => same(c, pos));
+  const chest = loadChests().find((c) => same(c, pos) && c.dimension === dim);
   if (chest && !stillThere("chest", blockName)) {
     await forgetChest(pos);
     console.log(`The chest at ${key(pos)} is gone; forgetting it.`);
   }
   const bed = loadBed();
-  if (bed && same(bed, pos) && !stillThere("bed", blockName)) {
+  if (bed && same(bed, pos) && bed.dimension === dim && !stillThere("bed", blockName)) {
     await saveBed(null);
     console.log(`My bed at ${key(pos)} is gone; forgetting it.`);
   }

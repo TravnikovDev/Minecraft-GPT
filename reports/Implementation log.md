@@ -484,3 +484,63 @@ The owner can't test in the game right now; the checks are in `docs/testing-back
   - leases are waited on by polling every 25–100 ms, not by events;
   - "status" counts waiting tasks but not the ones paused by a reflex.
 - **Next:** Phase 5, perception, memory and the Narrator.
+
+## Entry 12: Phase 5, perception, memory and the Narrator (2026-11-25)
+
+**Planned.** The plan's Phase 5:
+- sensors writing beliefs with expiry
+- a memory store (schema v2: places, a chest index, the death spot, forbidden areas)
+- migrating `db.json`
+- one rate-limited Narrator for all chat
+- "status" from real state
+
+The owner asked for the architect to be consulted during the work: once on the design before building, once on the result.
+
+**What happened**
+- **Before any building, a test-isolation bug turned up:** the tests had been writing the bot's real `db.json` (a fake chest at 3, 64, 0 from the overflow test was in it), so earlier runs had replaced the owner's real memory (its bed, its chests). The tests now use a throwaway file (`cc68242`); what was lost can't be recovered from the repository.
+- **The design consult changed the plan in five places:**
+  - The Narrator *replaces* the chat queue that already existed in `body.ts` (which dropped the oldest line, possibly an answer), rather than wrapping 190 call sites.
+  - Typed on-demand reads instead of a belief store that copies live values into stale ones.
+  - A server-protected area is noticed only from blocks the server puts back (a new reason, `reverted`), never from any "refused" (bedrock, sleeping by day…).
+  - The migration as a pure, tested function with a backup and `.passthrough()`.
+  - `roles` and progression stay with Phases 8 and 6.
+- **Built:**
+  - memory v2 (`91ff985`)
+  - the Narrator (`6a8d16c`)
+  - perception, keep-out areas and sightings (`b5f…`, see `git log`)
+  - where-is, keep-out, status and place checks (`7dbb4dd`)
+- **The result review found:**
+  - "where did you die?" forgot the death as soon as the bot went back for its things (recovery cleared it);
+  - the legacy `bot.chat` lines became undroppable public reports (a repeated answer was swallowed by de-duplication, and loops piled up);
+  - a reconnect emptied the queue into the offline digest before the player list arrived;
+  - the reply channel was read when sent, not when said;
+  - "stop" dropped late messages only before the task was aborted;
+  - an unreadable `db.json` would be overwritten;
+  - memory fields a later version adds would be erased;
+  - the pathfinder could still pillar inside a keep-out area;
+  - falling gravel looked like a protected area.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Narrator | `src/core/narrator.ts`, one process-wide outbox paced at 1.2 s. **Kinds:** `reply` (first, never dropped, back on the channel the owner used, taken when said), `report` (never dropped, de-duplicated for 30 s), `chatter` (by topic: the newest wins, at most 4 wait, dropped when its task ends). **Old `bot.chat` calls:** public reports, at most 6 waiting. **Stop and long lines:** a stopped task says nothing more; long messages are split to fit a chat packet, nothing cuts in between the parts, and newlines are removed. **Offline owner:** replies and reports wait; when they join, every answer plus the last 5 reports come as a digest; questions aren't kept (they expire). **Other:** sending starts at spawn (when the player list is known); only replies and reports go into the LLM's conversation; the chat lease is gone; the boundary check counts chat calls (189 → 152, may only go down) |
+| Noisy files converted | combat, the retreat warning, "come here", weapon equipping, the AI's answers, the fast path, inventory and chest answers, crafting, give and discard, the gift and armor notices |
+| Perception | `src/actions/perception.ts`: `owner()` (visible / out of range with where last seen / offline), `threats()` (the combat reflex's own classifier), `vitals()`, `sky()`, sightings (ores and logs noticed while working, 10-minute hints), one `currentDimension()`; each read says "unknown" honestly |
+| Memory v2 | `memory.places` (base, basement, crafting tables, furnaces, mines), one chest index (`contents: null` = never opened, never "no iron"), a death log (the last 3; recovery never clears it), forbidden areas. **Migration** (`src/managers/migrate.ts`): pure and tested; the old file is kept as `db.json.v1.bak`; the command queue and the inventory snapshot are dropped. **Loading:** an unreadable file is set aside, never written over; one bad entry costs only that entry; fields a newer version adds are kept |
+| Keep-out areas | `src/core/forbidden.ts`: marked by the owner ("keep out of here", "you can work here again"), or noticed when the server puts a block back twice within 8 blocks and 2 minutes (30 minutes). Falling blocks and a mob standing in the spot don't count. Every dig and placement, the pathfinder's included, refuses inside one; the path search avoids it; finders (wood, mining, farming) skip it; its own scaffolding inside one is left alone |
+| Answers | `whereIs`: where it died, the base, its bed, tables, furnaces, mines, the chests (and how long ago it looked), which chest holds an item. "status": the task, what paused it, what's next, health and food, the sky, threats, where the owner is |
+| Place checks | `src/actions/placeCheck.ts`: a remembered table, furnace, chest or bed that's gone is forgotten when seen to change or the first time it comes near (unloaded blocks are unknown) |
+
+**Outcome and what follows**
+- **Tests:** 151 pass; new ones cover the Narrator (11), the migration (4), memory and status (6), keep-out and gravel (3).
+- **Defaults chosen (the owner can change them):**
+  - keep-out means no digging or building (not no entry), and harvesting is skipped too, while opening chests inside is allowed;
+  - when the owner is offline, answers and reports wait for a digest;
+  - replies go back the way the owner asked;
+  - a server area lasts 30 minutes or until cleared.
+- **Not done:**
+  - 152 old `bot.chat` lines remain, converted as each file is touched;
+  - display names still come from scattered `replace(/_/g, " ")` helpers.
+- **In-game checks:** `docs/testing-backlog.md`, Phase 5.
+- **Next:** Phase 6, skills and progression to Tier 1.

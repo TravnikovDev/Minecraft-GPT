@@ -12,7 +12,7 @@ import { JSONFile } from "lowdb/node";
 import { resolve } from "path";
 import { z } from "zod";
 import type { DbSchemaType, MemoryType, MineType, PositionType } from "../schemas/types";
-import { DbSchema, PositionSchema } from "../schemas/mainSchemas";
+import { BotProgressSchema, DbSchema, LoreSchema, MemorySchema, PositionSchema } from "../schemas/mainSchemas";
 import type { DirectionType } from "../actions/digging";
 import { DB_VERSION, migrate } from "./migrate";
 
@@ -31,8 +31,19 @@ const db = new Low<DbSchemaType>(adapter, {
  * bot starts with empty memory, so saving never silently stops.
  */
 export async function loadDb(): Promise<void> {
+  let raw: unknown = db.data;
+  if (existsSync(dbPath)) {
+    try {
+      raw = JSON.parse(readFileSync(dbPath, "utf8"));
+    } catch (error) {
+      // Not JSON (a hand edit with a typo): keep it aside, never write over it
+      const aside = `${dbPath}.unreadable-${Date.now()}`;
+      copyFileSync(dbPath, aside);
+      console.error(`Memory: db.json isn't valid JSON (${(error as Error).message}); kept as ${aside}, starting with empty memory.`);
+      raw = { version: DB_VERSION, lore: { events: [] } };
+    }
+  }
   try {
-    const raw: unknown = existsSync(dbPath) ? JSON.parse(readFileSync(dbPath, "utf8")) : db.data;
     const { data, changed } = migrate(raw);
     if (changed && existsSync(dbPath)) {
       const backup = `${dbPath}.v1.bak`;
@@ -40,19 +51,48 @@ export async function loadDb(): Promise<void> {
       console.log(`Memory: db.json upgraded to schema v${DB_VERSION} (old file kept as ${backup}).`);
     }
     const parsed = DbSchema.safeParse(data);
-    if (!parsed.success) {
+    if (parsed.success) {
+      db.data = parsed.data;
+    } else {
+      // One bad entry must not cost the whole memory: keep what's valid
       const aside = `${dbPath}.invalid-${Date.now()}`;
       if (existsSync(dbPath)) copyFileSync(dbPath, aside);
-      console.error(`Memory: db.json doesn't validate; set aside as ${aside}, starting with empty memory.`, parsed.error.issues.slice(0, 5));
-      db.data = { version: DB_VERSION, lore: { events: [] } };
-    } else {
-      db.data = parsed.data;
+      db.data = salvage(data);
+      console.error(`Memory: some of db.json didn't validate; kept the rest (the whole file is in ${aside}).`, parsed.error.issues.slice(0, 5));
     }
     await db.write();
   } catch (error) {
     console.error("Error loading database:", error);
-    db.data ??= { version: DB_VERSION, lore: { events: [] } };
   }
+}
+
+/** Keeps every memory field (and every list entry) that validates, dropping only the bad ones. */
+export function salvage(data: Record<string, unknown>): DbSchemaType {
+  const memoryIn = (data["memory"] ?? {}) as Record<string, unknown>;
+  const memory: Record<string, unknown> = {};
+  const shape = MemorySchema.shape as Record<string, z.ZodTypeAny>;
+  for (const [key, value] of Object.entries(memoryIn)) {
+    const field = shape[key];
+    if (!field) {
+      memory[key] = value; // unknown to this version: kept as it is
+      continue;
+    }
+    if (field.safeParse(value).success) {
+      memory[key] = value;
+      continue;
+    }
+    // A list with a bad entry: keep the good entries
+    const inner = field instanceof z.ZodOptional ? field.unwrap() : field;
+    if (Array.isArray(value) && inner instanceof z.ZodArray) {
+      memory[key] = value.filter((entry) => (inner.element as unknown as z.ZodType).safeParse(entry).success);
+    }
+  }
+  const out: Record<string, unknown> = { ...data, version: DB_VERSION, memory };
+  const lore = LoreSchema.safeParse(data["lore"]);
+  out["lore"] = lore.success ? lore.data : { events: [] };
+  if (data["botProgress"] !== undefined && !BotProgressSchema.safeParse(data["botProgress"]).success) delete out["botProgress"];
+  const parsed = DbSchema.safeParse(out);
+  return parsed.success ? parsed.data : { version: DB_VERSION, lore: { events: [] } };
 }
 
 /** Saves db.json. A validation failure is a bug: it is logged loudly every time. */
@@ -189,9 +229,12 @@ export function getFurnaces(): PositionType[] {
   return getPlaces("furnace").map(pos);
 }
 
-/** Chests it knows, as positions (the contents are in the chest index: core/session). */
-export function getChests(): { location: PositionType }[] {
-  return (getMemory().chests ?? []).map((c) => ({ location: { x: c.x, y: c.y, z: c.z } }));
+/** Chests it knows in a dimension, most recently checked first, as positions (contents: core/session). */
+export function getChests(dimension = OVERWORLD): { location: PositionType }[] {
+  return (getMemory().chests ?? [])
+    .filter((c) => c.dimension === dimension)
+    .sort((a, b) => b.seenAt - a.seenAt)
+    .map((c) => ({ location: { x: c.x, y: c.y, z: c.z } }));
 }
 
 export function getMines(): MineType[] {

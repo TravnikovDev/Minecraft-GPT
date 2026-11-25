@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { reply } from "../core/narrator";
-import { loadBed, loadChests, loadDeath } from "../core/session";
+import { loadBed, loadChests, loadDeath, loadDeaths } from "../core/session";
 import { getPlaces } from "../managers/persistenceManager";
 import { whereStored } from "../actions/storage";
 import { ago } from "../actions/perception";
@@ -26,8 +26,9 @@ const at = (p: { x: number; y: number; z: number }): string => `${p.x}, ${p.y}, 
 export function whereIs(what: z.infer<typeof parameters>["what"], itemName: string | null): string {
   switch (what) {
     case "death": {
-      const d = loadDeath();
-      return d ? `I last died at ${Math.floor(d.x)}, ${Math.floor(d.y)}, ${Math.floor(d.z)} (${d.dimension}), ${ago(d.at)}.` : "I don't remember dying.";
+      // The death log, not the recovery record (going back for its things clears that)
+      const d = loadDeaths().at(-1) ?? loadDeath();
+      return d ? `I last died at ${Math.floor(d.x)}, ${Math.floor(d.y)}, ${Math.floor(d.z)} (${d.dimension.replace(/^minecraft:/, "")}), ${ago(d.at)}.` : "I don't remember dying.";
     }
     case "bed": {
       const b = loadBed();

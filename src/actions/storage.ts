@@ -16,6 +16,7 @@ import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { closeStorage, depositInto, openStorage, STORAGE_BLOCKS, withdrawFrom, type OpenContainer } from "../core/containers";
 import { goTo } from "../core/primitives";
+import { ago } from "./perception";
 import { describeFailure, expectOk, explain, wasStopped } from "../core/result";
 import { forgetChest, loadChests, rememberChest, type KnownChest } from "../core/session";
 import { itemMatcher } from "./inventory";
@@ -320,13 +321,13 @@ export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
   return { taken, missing, full, chestAt: at(chest.position) };
 }
 
-/** Where an item is stored, from what it saw in its chests: "12 diamonds in the chest at x, y, z". */
+/** Where an item is stored, from what it saw in its chests (this dimension): "12 diamonds in the chest at x, y, z (checked 2 h ago)". */
 export function whereStored(itemName: string): string[] {
   const matches = itemMatcher(itemName);
   const found: string[] = [];
-  for (const c of loadChests()) {
+  for (const c of loadChests().filter((c) => c.dimension === dimension())) {
     const here = Object.entries(c.contents ?? {}).filter(([name]) => matches(name));
-    if (here.length > 0) found.push(`${countList(new Map(here))} in the chest at ${at(c)}`);
+    if (here.length > 0) found.push(`${countList(new Map(here))} in the chest at ${at(c)} (checked ${ago(c.seenAt)})`);
   }
   return found;
 }

@@ -4,6 +4,36 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 5: perception, memory and the Narrator (2026-11-25, not yet run)
+
+The bot now remembers places, chests, where it died and where to keep out, across restarts, and answers from memory. Everything it says goes through one Narrator: answers first, task reports never lost, running commentary trimmed. db.json is upgraded on the first start (the old file is kept as `db.json.v1.bak`).
+
+**The plan's checks**
+- [ ] Put cobblestone in a chest it opens ("put the cobblestone in the chest"), restart the bot, then ask "do we have cobblestone?" → "… cobblestone in the chest at x, y, z" from memory, without walking there
+- [ ] Fight a few mobs (or let it) → chat stays readable: no line repeated, commentary like "Attacking zombie!" doesn't pile up
+- [ ] Let it die, then ask "where did you die?" → "I last died at x, y, z (overworld), N min ago."
+
+**Memory**
+- [ ] First start after the update → the log says db.json was upgraded and `db.json.v1.bak` exists; its base, mines and chests are still known ("where is the base?", "where are the chests?")
+- [ ] Break a crafting table it knows (or a chest), then ask "where are the crafting tables?" → the broken one is gone from the answer
+- [ ] Restart, walk it past a remembered chest you broke while it was offline → it forgets it (log: "The chest at … is gone")
+- [ ] "where is your bed?", "where is the mine?", "where is the iron?" → answers from memory, or "I don't know …"
+
+**Keep-out areas**
+- [ ] Stand by some trees and say "keep out of here", then "gather wood" → it picks other trees; no failure loop
+- [ ] "you can work here again" at the same spot → it may use those trees again
+- [ ] On a server with a land claim (or spawn protection), ask it to dig inside → after two blocks put back: "… the server put it back (a protected area?)", and it stops trying there for 30 minutes
+
+**The Narrator**
+- [ ] Ask "where are you?" while it's busy and chatting → the answer comes first
+- [ ] Whisper it a question (`/msg MinecraftGPT where are you`) → the answer is whispered back; ask in public chat → answered in public
+- [ ] Log out while it works, log back in → "While you were away:" and up to 5 lines of what happened
+- [ ] `stop` in the middle of "come here" → no late "Coming: 60% of the way." after it stopped
+- [ ] A long answer from the AI → split over a few lines, nothing cut off
+
+**Status**
+- [ ] "status" while it gathers and a creeper is near → "Gather wood (paused: dealing with a creeper); next: …. Health …, food …. Night …. 1 hostile near (creeper 6 blocks). You're N blocks away. I'm at …"
+
 ## Phase 4: arbiter and reflexes (2026-11-25, not yet run)
 
 One arbiter now decides what the bot does. Reflexes pause a task instead of fighting it; the owner calling the bot cuts in, and what it was doing carries on afterwards with what's left. The bot eats and puts armor on by itself, between its own actions (the auto-eat and armor plugins are gone).

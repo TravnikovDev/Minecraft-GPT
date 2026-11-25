@@ -174,6 +174,7 @@ export async function stopEverything(): Promise<void> {
   stopReflexes(STOP_MUTES_REFLEXES_MS);
   await stopChores("Stopped by player", STOP_MUTES_REFLEXES_MS);
   await stopAll("Stopped by player");
+  dropForStop(); // and anything the stopped work said while winding down
 }
 
 /**

@@ -109,11 +109,15 @@ export const MemorySchema = z.object({
   conversation: z
     .array(z.object({ role: z.enum(["owner", "bot"]), text: z.string(), at: z.number() }))
     .optional(),
+  // The last few deaths, kept for "where did you die?" (recovering items clears lastDeath, not this)
+  deaths: z
+    .array(z.object({ x: z.number(), y: z.number(), z: z.number(), dimension: z.string(), at: z.number() }))
+    .optional(),
   // Points of interest (schema v2): the base, crafting tables, furnaces, mines, farms
   places: z.array(PlaceSchema).optional(),
   // Areas it must not dig or build in: marked by the owner, or protected by the server
   forbidden: z.array(ForbiddenAreaSchema).optional(),
-});
+}).passthrough(); // fields a newer version adds (a diary) survive an older one
 
 // db.json, schema v2. Unknown fields are kept (passthrough), so an older or
 // newer version of the bot never erases what it doesn't know about.

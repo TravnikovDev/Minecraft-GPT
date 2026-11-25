@@ -3,7 +3,7 @@
 // in its chests (it looks again in the nearest one when it doesn't know).
 
 import { z } from "zod";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { chooseChest, describeContents, lookInChest, whereStored } from "../actions/storage";
 import { explain } from "../core/result";
 
@@ -25,27 +25,27 @@ export async function execute(args: any): Promise<void> {
   if (item) {
     const found = whereStored(item);
     if (found.length > 0) {
-      bot.chat(`${found.slice(0, 3).join("; ")}.`);
+      reply(`${found.slice(0, 3).join("; ")}.`);
       return;
     }
   }
   const chest = await chooseChest();
   if (!chest) {
-    bot.chat("I don't know any chest around here.");
+    reply("I don't know any chest around here.");
     return;
   }
   let contents: Map<string, number>;
   try {
     contents = await lookInChest(chest);
   } catch (error) {
-    bot.chat(`I couldn't look in the chest: ${explain(error)}.`);
+    reply(`I couldn't look in the chest: ${explain(error)}.`);
     return;
   }
   const p = chest.position;
   if (item) {
     const again = whereStored(item);
-    bot.chat(again.length > 0 ? `${again.slice(0, 3).join("; ")}.` : `There's no ${item.replace(/_/g, " ")} in the chests I know.`);
+    reply(again.length > 0 ? `${again.slice(0, 3).join("; ")}.` : `There's no ${item.replace(/_/g, " ")} in the chests I know.`);
     return;
   }
-  bot.chat(`The chest at ${p.x}, ${p.y}, ${p.z} has ${describeContents(contents)}.`);
+  reply(`The chest at ${p.x}, ${p.y}, ${p.z} has ${describeContents(contents)}.`);
 }

@@ -13,7 +13,8 @@ import { describeFailure } from "../core/result";
 import { on } from "../core/events";
 import { getCurrentCommandName } from "../core/commandContext";
 import { OWNER_USERNAME } from "../config/env";
-import { ownerDistance, tellOwner } from "../managers/ownerDialog";
+import { ownerDistance } from "../managers/ownerDialog";
+import { chatter } from "../core/narrator";
 
 const NEARBY_BLOCKS = 32; // only report when the owner is around
 const PICKUP_BATCH_MS = 1500; // group pickups that arrive together
@@ -69,7 +70,7 @@ export function registerOwnerUpdates(): void {
     const distance = ownerDistance();
     // Only what the owner threw to it (see item:collected)
     if (items.length > 0 && distance !== null && distance <= NEARBY_BLOCKS) {
-      tellOwner(`Got ${items.join(", ")}, thanks!`);
+      chatter(`Got ${items.join(", ")}, thanks!`, "gifts");
     }
     void keepWeaponInHand();
   };
@@ -89,7 +90,7 @@ export function registerOwnerUpdates(): void {
     if (!piece || !newItem || newItem.name === oldItem?.name) return;
     const distance = ownerDistance();
     if (distance !== null && distance <= NEARBY_BLOCKS) {
-      tellOwner(`I'm wearing ${pretty(newItem.name)} now.`);
+      chatter(`I'm wearing ${pretty(newItem.name)} now.`, "armor");
     }
   });
 }

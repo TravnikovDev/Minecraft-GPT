@@ -5,6 +5,7 @@ import { catalog } from "../core/catalog";
 import { giveToPlayer } from "../actions/inventory";
 import { getNearbyPlayerNames } from "../actions/world";
 import { bot } from "../core/body";
+import { report } from "../core/narrator";
 import { takeOffArmor, wornArmor } from "../actions/armor";
 
 export const description = `When user asks the bot to give an item to a player, the bot will give the item to the player.
@@ -48,7 +49,7 @@ export async function execute(args: any) {
     if (matches.length === 1) item_name = matches[0]!;
     else if (matches.length > 1) {
       const names = matches.map((n) => n.replace(/_/g, " "));
-      bot.chat(`I have ${names.slice(0, -1).join(", ")} and ${names.at(-1)}. Which one?`);
+      report(`I have ${names.slice(0, -1).join(", ")} and ${names.at(-1)}. Which one?`);
       return;
     }
   }
@@ -60,7 +61,7 @@ export async function execute(args: any) {
     if (await takeOffArmor(item_name)) carried = 1;
   }
   if (carried === 0) {
-    bot.chat(`I don't have any ${pretty}.`);
+    report(`I don't have any ${pretty}.`);
     return;
   }
   // A share ("half of your coal") is counted from what it carries now
@@ -79,7 +80,7 @@ export async function execute(args: any) {
 
   // Say what was really handed over
   const given = await giveToPlayer(item_name, theName, num);
-  if (given >= num) bot.chat(`Gave ${given} ${pretty} to ${theName}`);
-  else if (given > 0) bot.chat(`Gave ${given} of ${num} ${pretty} to ${theName}`);
-  else bot.chat(`I couldn't give the ${pretty} to ${theName}.`);
+  if (given >= num) report(`Gave ${given} ${pretty} to ${theName}`);
+  else if (given > 0) report(`Gave ${given} of ${num} ${pretty} to ${theName}`);
+  else report(`I couldn't give the ${pretty} to ${theName}.`);
 }

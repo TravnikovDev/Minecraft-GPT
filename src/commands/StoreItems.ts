@@ -3,7 +3,7 @@
 // duplicate gear, or everything. See actions/storage.ts for what it keeps.
 
 import { z } from "zod";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { storeItems, describeContents } from "../actions/storage";
 
 export const description = `Puts items from the bot's inventory into a chest (the nearest chest it remembers, or one nearby).
@@ -37,18 +37,18 @@ export async function execute(args: any): Promise<void> {
   const { what } = parsed.data;
   const wanted = parsed.data.items ?? [];
   if (what === "items" && wanted.length === 0) {
-    bot.chat("What should I put in the chest?");
+    reply("What should I put in the chest?");
     return;
   }
 
   const result = await storeItems(what, wanted);
   if (!result) {
-    bot.chat("I don't know any chest around here. Place one, or show me one and say 'remember this chest'.");
+    reply("I don't know any chest around here. Place one, or show me one and say 'remember this chest'.");
     return;
   }
   const { stored, leftOver, chestAt, problem } = result;
   if (problem && stored.size === 0) {
-    bot.chat(`I couldn't use the chest at ${chestAt}: ${problem}.`);
+    reply(`I couldn't use the chest at ${chestAt}: ${problem}.`);
     return;
   }
   if (stored.size === 0 && leftOver.size === 0) {
@@ -58,10 +58,10 @@ export async function execute(args: any): Promise<void> {
         : what === "duplicates"
           ? "I don't carry any duplicates."
           : "I have nothing to put away.";
-    bot.chat(none);
+    reply(none);
     return;
   }
   const put = stored.size > 0 ? `Put ${describeContents(stored)} in the chest at ${chestAt}.` : "";
   const full = leftOver.size > 0 ? ` The chest is full; I still have ${describeContents(leftOver)}.` : "";
-  bot.chat(`${put}${full}`.trim());
+  reply(`${put}${full}`.trim());
 }

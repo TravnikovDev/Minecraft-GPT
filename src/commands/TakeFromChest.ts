@@ -3,7 +3,7 @@
 // had them when the bot last looked), or everything in the nearest chest.
 
 import { z } from "zod";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { describeContents, takeItems } from "../actions/storage";
 
 export const description = `Takes items out of a chest (the remembered chest that has them, or the nearest one).
@@ -32,17 +32,17 @@ export async function execute(args: any): Promise<void> {
   }
   const result = await takeItems(parsed.data.items);
   if (!result) {
-    bot.chat("I don't know any chest around here.");
+    reply("I don't know any chest around here.");
     return;
   }
   const { taken, missing, full, chestAt, problem } = result;
   if (problem && taken.size === 0) {
-    bot.chat(`I couldn't use the chest at ${chestAt}: ${problem}.`);
+    reply(`I couldn't use the chest at ${chestAt}: ${problem}.`);
     return;
   }
   const parts: string[] = [];
   if (taken.size > 0) parts.push(`Took ${describeContents(taken)} from the chest at ${chestAt}.`);
   if (missing.length > 0) parts.push(`There's no ${missing.join(" or ")} in it.`);
   if (full) parts.push("My inventory is full now.");
-  bot.chat(parts.join(" ") || "The chest is empty.");
+  reply(parts.join(" ") || "The chest is empty.");
 }

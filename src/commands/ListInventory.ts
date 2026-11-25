@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { listInventory } from "../actions/inventory";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { wornArmor } from "../actions/armor";
 
 export const description = `When user asks the bot to list its inventory, the bot will list all the items in its inventory.
@@ -15,5 +15,5 @@ export const parameters = z.object({});
 export async function execute() {
   await listInventory();
   const worn = wornArmor();
-  if (worn.length > 0) bot.chat(`Wearing: ${worn.map((n) => n.replace(/_/g, " ")).join(", ")}.`);
+  if (worn.length > 0) reply(`Wearing: ${worn.map((n) => n.replace(/_/g, " ")).join(", ")}.`);
 }

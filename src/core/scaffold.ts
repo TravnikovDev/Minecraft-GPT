@@ -9,6 +9,7 @@
 
 import { bot } from "./body";
 import { on } from "./events";
+import { forbiddenAt } from "./forbidden";
 
 type Placed = { x: number; y: number; z: number; name: string | null };
 const placed = new Map<string, Placed>();
@@ -59,7 +60,7 @@ export function forgetScaffold(p: { x: number; y: number; z: number }): void {
 /** Every scaffolding block still standing (and still what it placed), highest first. */
 export function ownScaffolds(): { x: number; y: number; z: number }[] {
   return [...placed.values()]
-    .filter((p) => isOwnScaffold(p))
+    .filter((p) => isOwnScaffold(p) && !forbiddenAt(p)) // inside a keep-out area: left alone
     .map(({ x, y, z }) => ({ x, y, z }))
     .sort((a, b) => b.y - a.y);
 }

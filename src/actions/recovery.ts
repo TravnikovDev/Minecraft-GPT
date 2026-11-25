@@ -5,7 +5,7 @@
 import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
-import { loadDeath, saveDeath } from "../core/session";
+import { loadDeath, saveDeath, logDeath } from "../core/session";
 
 /** Dropped items despawn 5 minutes after death. */
 export const ITEM_DESPAWN_MS = 5 * 60 * 1000;
@@ -36,6 +36,7 @@ export function recordDeath(): void {
   recoveryPending = true;
   loadedFromSession = true;
   void saveDeath({ x: pos.x, y: pos.y, z: pos.z, dimension: lastDeath.dimension, at: lastDeath.at, itemCount: lastDeath.itemCount });
+  void logDeath({ x: pos.x, y: pos.y, z: pos.z, dimension: lastDeath.dimension, at: lastDeath.at });
   console.log(`Recorded death at ${pos.floored()} with ${lastDeath.itemCount} items.`);
 }
 

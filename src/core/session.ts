@@ -22,6 +22,19 @@ export async function saveDeath(death: SavedDeath | null): Promise<void> {
   await updateMemory({ lastDeath: death ?? undefined });
 }
 
+export type DeathEntry = NonNullable<MemoryType["deaths"]>[number];
+const DEATHS_KEPT = 3;
+
+/** The last few deaths, newest last (for "where did you die?"; never cleared by recovering items). */
+export function loadDeaths(): DeathEntry[] {
+  return getMemory().deaths ?? [];
+}
+
+/** Adds a death to the log. */
+export async function logDeath(death: DeathEntry): Promise<void> {
+  await updateMemory({ deaths: [...loadDeaths(), death].slice(-DEATHS_KEPT) });
+}
+
 // --- Owner's last known position -------------------------------------------
 
 export type SavedPosition = NonNullable<MemoryType["ownerPosition"]>;

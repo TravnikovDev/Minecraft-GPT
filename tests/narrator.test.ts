@@ -74,16 +74,44 @@ test("a long message is split at word boundaries to fit a chat line", () => {
   const long = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
   N.report(long);
   expect(sent.length).toBeGreaterThan(1);
-  expect(sent.every((m) => m.length <= 240 + "Owner: ".length)).toBe(true);
+  // Each line fits a chat packet together with "/tell Owner "
+  expect(sent.every((m) => m.length - "Owner: ".length + "/tell Owner ".length <= 255)).toBe(true);
   expect(sent.map((m) => m.slice("Owner: ".length)).join(" ")).toBe(long);
 });
 
 test("a reply goes back the way the owner asked: whispered, or in public chat", () => {
   useSender(0);
-  N.setOwnerChannel("chat");
-  N.reply("Coming!");
+  N.withOwnerChannel("chat", () => N.reply("Coming!"));
   N.report("Collected 3 logs"); // reports are still whispered
   expect(sent).toEqual(["all: Coming!", "Owner: Collected 3 logs"]);
+});
+
+test("the channel is the one the question came on, even if the owner speaks again before the answer goes", async () => {
+  useSender(1_000_000);
+  N.report("busy"); // sent; the rest waits
+  await N.withOwnerChannel("whisper", async () => {
+    await Promise.resolve(); // the LLM thinking...
+    N.withOwnerChannel("chat", () => {}); // ...while the owner says something in public
+    N.reply("You're 10 blocks away.");
+  });
+  N.setSender({ chat: (m: string) => sent.push(`all: ${m}`), whisper: (to: string, m: string) => sent.push(`${to}: ${m}`), ownerName: () => "Owner" }, 0);
+  expect(sent.at(-1)).toBe("Owner: You're 10 blocks away.");
+});
+
+test("an answer never lands between the parts of a long message", () => {
+  useSender(1_000_000);
+  const long = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
+  N.report(long); // first part sent, the rest waits at the front
+  N.reply("Yes!");
+  expect(N.waiting().map((l: any) => l.kind)).toEqual(["report", "reply"]);
+});
+
+test("old code that talks in a loop: only the latest few of its lines wait", () => {
+  useSender(1_000_000);
+  N.report("first");
+  for (let i = 0; i < 20; i++) N.say(`Dug step ${i}`, { kind: "report", to: "all", legacy: true });
+  expect(N.waiting().length).toBe(6);
+  expect(N.waiting().at(-1)!.text).toBe("Dug step 19");
 });
 
 test("while the owner is offline, answers and reports wait; they get a digest when they join", () => {
@@ -92,10 +120,20 @@ test("while the owner is offline, answers and reports wait; they get a digest wh
   N.chatter("Walking", "trip"); // commentary isn't kept
   for (let i = 1; i <= 7; i++) N.report(`Report ${i}`);
   expect(sent).toEqual([]);
+  N.reply("Your answer"); // an answer is never left out of the digest
+  N.say("Hunt anyway? (yes/no)", { kind: "reply", noHold: true }); // a question expires: not kept
   ownerOnline = true;
   N.ownerJoined();
   expect(sent[0]).toBe("Owner: While you were away (and 2 more):");
-  expect(sent.slice(1)).toEqual(["Owner: Report 3", "Owner: Report 4", "Owner: Report 5", "Owner: Report 6", "Owner: Report 7"]);
+  expect(sent.slice(1)).toEqual(["Owner: Report 3", "Owner: Report 4", "Owner: Report 5", "Owner: Report 6", "Owner: Report 7", "Owner: Your answer"]);
+});
+
+test("a stopped task says nothing more", async () => {
+  useSender(0);
+  const task = new AbortController();
+  task.abort("Stopped by player");
+  await runWithSignal(task.signal, async () => N.report("Failed to collect coal ore"));
+  expect(sent).toEqual([]);
 });
 
 test("after 'stop', no commentary and no late report about the stopped work", async () => {

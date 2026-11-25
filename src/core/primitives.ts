@@ -30,6 +30,8 @@ type Pos = { x: number; y: number; z: number };
 
 /** How far the bot can touch a block (from its eyes to the block's middle). */
 export const REACH = 4.5;
+// Blocks that fall: a new one dropping into the gap isn't the server putting it back
+const FALLING = new Set(["sand", "red_sand", "gravel", "suspicious_sand", "suspicious_gravel", "anvil", "chipped_anvil", "damaged_anvil", "pointed_dripstone", "scaffolding"]);
 const DIG_SLACK_MS = 3_000; // on top of the dig's own time (bot.digTime), which already counts water and air
 const PLACE_TIMEOUT_MS = 5_000;
 const EQUIP_TIMEOUT_MS = 5_000;
@@ -195,6 +197,8 @@ async function breakBlockNow(pos: Pos, options: BreakOptions = {}): Promise<Acti
   // the block back then. Only the state after that counts.
   await sleep(settleMs());
   if (knownBlock(at)?.stateId === before) {
+    // Sand or gravel from above falls into the gap: that's not the server
+    if (FALLING.has(block.name) || block.name.endsWith("_concrete_powder")) return ok({ name: block.name, alreadyGone: false });
     await noteRevert(at); // twice close together: a protected area
     return fail("reverted", `${block.name} at ${at} came back`);
   }
@@ -266,8 +270,10 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   const now = changed();
   if (now) return ok({ name: knownBlock(at)!.name });
   if (!placed.ok && placed.reason !== "error" && placed.reason !== "refused") return placed;
-  await noteRevert(at); // twice close together: a protected area
-  return fail("reverted", `${itemName} at ${at} didn't stay`);
+  // Only the server undoing it counts toward a protected area (not a mob standing in the spot)
+  const inTheWay = Object.values(bot.entities).some((e) => e !== bot.entity && e.position.floored().equals(at));
+  if (!inTheWay) await noteRevert(at); // twice close together: a protected area
+  return fail(inTheWay ? "occupied" : "reverted", inTheWay ? `something is standing at ${at}` : `${itemName} at ${at} didn't stay`);
 }
 
 // --- Hands and inventory ---------------------------------------------------------

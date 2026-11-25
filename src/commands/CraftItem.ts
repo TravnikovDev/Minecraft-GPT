@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { craftRecipe } from "../actions/crafting";
 import { planCraft, readyVariants, resolveCraftable, type CraftStep } from "../actions/craftPlanner";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { BotCommands } from "./types";
 import { isCommandCancelled } from "../core/commandContext";
 import { queueCommand } from "../managers/actionManager";
@@ -120,7 +120,7 @@ export async function execute(args: any): Promise<void> {
     if (!pieces[0]!.includes("_")) {
       const materials = [...new Set(pieces.flatMap((p) => readyVariants(p, count).map(materialOf)))];
       if (materials.length > 1) {
-        bot.chat(`I can make that from ${orList(materials)}. Which one?`);
+        reply(`I can make that from ${orList(materials)}. Which one?`);
         return;
       }
     }
@@ -140,13 +140,13 @@ export async function execute(args: any): Promise<void> {
   // A generic name with several variants the bot could make now: the owner picks
   const ready = readyVariants(parsed.data.itemName.trim().toLowerCase().replace(/\s+/g, "_"), count);
   if (ready.length > 1) {
-    bot.chat(`I can make ${orList(ready.map(pretty))}. Which one?`);
+    reply(`I can make ${orList(ready.map(pretty))}. Which one?`);
     return;
   }
 
   const item = resolveCraftable(parsed.data.itemName, count);
   if (!item) {
-    bot.chat(`I don't know how to craft "${pretty(parsed.data.itemName)}".`);
+    reply(`I don't know how to craft "${pretty(parsed.data.itemName)}".`);
     return;
   }
 
@@ -173,7 +173,7 @@ export async function execute(args: any): Promise<void> {
     const need = `To craft ${count} ${pretty(item)} I'm missing ${listOf(plan.missing)}.`;
 
     if (unknown.length > 0) {
-      bot.chat(`${need} I don't know how to get ${listOf(unknown)} yet.`);
+      reply(`${need} I don't know how to get ${listOf(unknown)} yet.`);
       return;
     }
 
@@ -183,7 +183,7 @@ export async function execute(args: any): Promise<void> {
       const hint = plan.missing.some((m) => m.name.endsWith("_wool"))
         ? " I couldn't find enough sheep nearby; you could give me the wool."
         : " I couldn't find enough nearby; you could give them to me.";
-      bot.chat(`${need}${hint}`);
+      reply(`${need}${hint}`);
       return;
     }
 
@@ -219,7 +219,7 @@ export async function execute(args: any): Promise<void> {
     if (isCommandCancelled()) return;
     const ok = await craftRecipe(step.name, step.count);
     if (!ok) {
-      bot.chat(
+      reply(
         step.name === item
           ? `I couldn't craft ${pretty(item)}, even though I have the materials.`
           : `I couldn't make the ${pretty(step.name)} I need for ${pretty(item)}.`
@@ -227,7 +227,7 @@ export async function execute(args: any): Promise<void> {
       return;
     }
   }
-  bot.chat(`Crafted ${count} ${pretty(item)}${parts.length ? ` (made ${listOf(parts)} first)` : ""}.`);
+  reply(`Crafted ${count} ${pretty(item)}${parts.length ? ` (made ${listOf(parts)} first)` : ""}.`);
   // Crafted armor goes on right away (the armor plugin only handles picked-up armor)
   if (isArmorPiece(item)) await wearBestArmor();
 }

@@ -87,7 +87,6 @@ export function directionFromOwner(): string | null {
  * clutter everyone's chat. Falls back to the log when the owner is offline.
  */
 export function tellOwner(message: string): void {
-  console.log(`[to owner] ${message}`);
   say(message, { kind: "report", to: "owner" });
 }
 
@@ -110,9 +109,8 @@ export function askOwner(
   ttlMs = 2 * 60 * 1000
 ): void {
   pending = { question, onYes, ...(onNo ? { onNo } : {}), expiresAt: Date.now() + ttlMs };
-  // A question to the owner is never dropped or delayed behind chatter
-  console.log(`[to owner] ${question} (yes/no)`);
-  say(`${question} (yes/no)`, { kind: "reply", to: "owner" });
+  // A question to the owner goes first; not kept for later (it expires)
+  say(`${question} (yes/no)`, { kind: "reply", to: "owner", noHold: true });
 }
 
 /** True while a question is waiting for the owner's answer. */

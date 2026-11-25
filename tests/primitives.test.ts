@@ -291,3 +291,12 @@ test("the owner's keep-out area: no digging there; cleared, it's fine again", as
   expect(await F.clearForbiddenAt({ x: 1, y: 64, z: 0 })).toBe(1);
   expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ ok: true });
 });
+
+test("gravel falling into the gap isn't the server putting a block back", async () => {
+  world.set("1,64,0", "gravel");
+  server.dig = async () => {}; // more gravel falls in: the block looks the same
+  expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ ok: true });
+  world.set("1,64,1", "gravel");
+  expect(await P.breakBlock({ x: 1, y: 64, z: 1 })).toMatchObject({ ok: true });
+  expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toBeNull(); // no "protected area" in a gravel column
+});

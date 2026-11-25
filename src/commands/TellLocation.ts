@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getBotPosition } from "../actions/movement";
-import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { directionFromOwner, ownerDistance } from "../managers/ownerDialog";
 
 export const description = `Reports the bot's current position (x, y, z coordinates).
@@ -28,7 +28,7 @@ export async function execute(): Promise<void> {
   
   // Send to in-game chat if available
   try {
-    bot.chat(message);
+    reply(message);
   } catch (error) {
     console.error("Failed to send position to chat:", error);
   }

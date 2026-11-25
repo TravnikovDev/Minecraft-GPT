@@ -13,7 +13,7 @@ import { everyWhileConnected } from "./body";
 import { getCurrentCommandName } from "./commandContext";
 import { isSafeMovements, walkingRules } from "./movements";
 import { forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./scaffold";
-import { onForbiddenChange } from "./forbidden";
+import { forbiddenAt, onForbiddenChange } from "./forbidden";
 import { pathing } from "./plugins";
 
 // An area marked or cleared: plan the current route again with it
@@ -57,6 +57,9 @@ export function installPlugins(currentBot: Bot): void {
   // call whose second argument Node ignores) strip all of its listeners.
   const dig = currentBot.dig.bind(currentBot);
   currentBot.dig = (async (block: Parameters<typeof dig>[0], ...rest: unknown[]): Promise<void> => {
+    // Every dig (the pathfinder's and plugins' too) stays out of keep-out areas
+    const keepOut = forbiddenAt(block.position);
+    if (keepOut) throw new Error(`forbidden area: ${keepOut.reason}`);
     const what = block.name;
     const moving = currentBot.pathfinder.isMoving() ? "while walking" : "standing";
     await (dig as (...a: unknown[]) => Promise<void>)(block, ...rest);
@@ -70,6 +73,9 @@ export function installPlugins(currentBot: Bot): void {
   const place = currentBot.placeBlock.bind(currentBot);
   currentBot.placeBlock = (async (reference: Parameters<typeof place>[0], face: Parameters<typeof place>[1]): Promise<void> => {
     const target = reference.position.plus(face);
+    // Every placement (the pathfinder's pillars and bridges too) stays out of keep-out areas
+    const keepOut = forbiddenAt(target);
+    if (keepOut) throw new Error(`forbidden area: ${keepOut.reason}`);
     await place(reference, face);
     if (!isPlacingOnPurpose()) {
       // Remember what it placed, so a block someone puts there later is never taken for it

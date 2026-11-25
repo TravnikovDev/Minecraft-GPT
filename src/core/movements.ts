@@ -150,7 +150,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   moves.canDig = true; // natural terrain only (see above)
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
-  const keepOut = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && forbiddenAt(block.position) ? 100 : 0);
+  const keepOut = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && forbiddenAt(block.position) ? 10_000 : 0);
   moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
   moves.exclusionAreasPlace = [keepOut] as typeof moves.exclusionAreasPlace;
   moves.canOpenDoors = true; // fence gates

@@ -20,7 +20,8 @@ import { loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { queueCommand } from "./managers/actionManager";
 import { abortForDisconnect, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
-import { handleChat } from "./managers/chatGateway";
+import { handleChat, isOwner } from "./managers/chatGateway";
+import { reply } from "./core/narrator";
 import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
 import { pathing } from "./core/plugins";
@@ -141,9 +142,12 @@ onBotCreated((currentBot) => {
   everyWhileConnected(currentBot, 20_000, trackOwnerPosition); // 3 times a minute
   everyWhileConnected(currentBot, 500, syncRidingPosition); // riding: the bot is where its boat is
 
+  // Say hello to the owner when they join; not to everyone already online
+  // when the bot itself (re)connects (mineflayer reports them as joining too)
+  const joinedAt = Date.now();
   listen(currentBot, "playerJoined", (player: mineflayer.Player) => {
-    if (player.username === currentBot.username) return;
-    currentBot.chat(`Hello ${player.username}! I am MinecraftGPT. How can I help you?`);
+    if (player.username === currentBot.username || Date.now() - joinedAt < 5_000 || !isOwner(player.username)) return;
+    reply(`Hello ${player.username}! I'm here.`);
   });
 });
 

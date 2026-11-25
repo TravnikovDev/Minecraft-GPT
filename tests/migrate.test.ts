@@ -75,3 +75,20 @@ test("loading an old db.json keeps a copy of it and reads the places back", asyn
   expect(saved.version).toBe(DB_VERSION);
   expect(saved.futureField).toEqual({ keep: true });
 });
+
+test("one bad entry costs only that entry, and an unreadable file is kept, never written over", async () => {
+  const P = await import(`${ROOT}/src/managers/persistenceManager.ts`);
+  const path = process.env.DB_PATH!;
+  const v2 = migrate(structuredClone(v1), 1000).data;
+  v2.memory.chests.push({ x: "oops" }); // a broken entry
+  writeFileSync(path, JSON.stringify(v2));
+  await P.loadDb();
+  expect(P.getChests().length).toBe(3); // the good ones survive
+  expect(P.getBaseLocation()).toEqual({ x: 10, y: 64, z: 10 });
+
+  writeFileSync(path, '{"version": 2, "memory": {,}'); // a hand edit with a typo
+  await P.loadDb();
+  const { readdirSync } = await import("node:fs");
+  const { dirname, basename } = await import("node:path");
+  expect(readdirSync(dirname(path)).some((f: string) => f.startsWith(`${basename(path)}.unreadable-`))).toBe(true);
+});

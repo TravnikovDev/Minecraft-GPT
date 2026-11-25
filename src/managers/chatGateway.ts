@@ -14,7 +14,7 @@ import { holderOf, isTakenUrgently } from "../core/leases";
 import { ago, owner, sky, threats, vitals } from "../actions/perception";
 import { answerPending, hasPendingQuestion, ownerDistance, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
-import { setOwnerChannel } from "../core/narrator";
+import { withOwnerChannel } from "../core/narrator";
 import { reply } from "../core/narrator";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
@@ -178,12 +178,14 @@ export async function handleChat(username: string, message: string, channel: "ch
 
   const text = stripBotName(message);
   console.log(`Owner says${channel === "whisper" ? " (whisper)" : ""}: ${text}`);
-  setOwnerChannel(channel); // replies go back the way the owner asked
   recordTurn("owner", text);
-  try {
-    if (await tryFastPath(text)) return;
-    await initiateActionFromAI(username, text);
-  } catch (error) {
-    console.error("Error handling owner chat:", error);
-  }
+  // Replies said while handling this message go back the way the owner asked
+  await withOwnerChannel(channel, async () => {
+    try {
+      if (await tryFastPath(text)) return;
+      await initiateActionFromAI(username, text);
+    } catch (error) {
+      console.error("Error handling owner chat:", error);
+    }
+  });
 }

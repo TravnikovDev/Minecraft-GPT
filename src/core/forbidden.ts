@@ -39,10 +39,19 @@ export function forbiddenAreas(): ForbiddenArea[] {
   return (getMemory().forbidden ?? []).filter((a) => a.until === undefined || a.until > now);
 }
 
-/** The area `pos` lies in (in the current dimension), or null. */
+/**
+ * The area `pos` lies in (in the current dimension), or null. The path search
+ * asks this for every block it considers, so with no areas it's one check.
+ */
 export function forbiddenAt(pos: Pos): ForbiddenArea | null {
+  const stored = getMemory().forbidden;
+  if (!stored || stored.length === 0) return null;
   const here = dimension();
-  return forbiddenAreas().find((a) => a.dimension === here && distance(a, pos) <= a.radius) ?? null;
+  const now = Date.now();
+  for (const a of stored) {
+    if ((a.until === undefined || a.until > now) && a.dimension === here && distance(a, pos) <= a.radius) return a;
+  }
+  return null;
 }
 
 async function save(areas: ForbiddenArea[]): Promise<void> {

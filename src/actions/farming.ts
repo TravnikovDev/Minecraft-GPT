@@ -5,6 +5,7 @@
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
+import { forbiddenAt } from "../core/forbidden";
 import { breakBlock, placeBlockAt, useBlock } from "../core/primitives";
 import { describeFailure } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
@@ -42,7 +43,7 @@ export function findRipeCrops(maxDistance = 24, only: string[] | null = null): B
   return bot
     .findBlocks({ matching: ids, maxDistance, count: 512 })
     .map((p) => bot.blockAt(p))
-    .filter((b): b is Block => b !== null && isRipe(b))
+    .filter((b): b is Block => b !== null && isRipe(b) && !forbiddenAt(b.position)) // not in a keep-out area (the owner's farm)
     .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
 }
 

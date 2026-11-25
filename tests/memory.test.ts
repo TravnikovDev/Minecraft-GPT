@@ -49,9 +49,14 @@ beforeEach(async () => {
 });
 
 test("'where did you die?' and 'where's your bed?' from memory, and honest when it doesn't know", async () => {
+  await P.updateMemory({ deaths: [] });
   expect(whereIs("death", null)).toBe("I don't remember dying.");
-  await S.saveDeath({ x: 605.4, y: 49, z: -1242.7, dimension: "overworld", at: Date.now() - 3 * 60_000, itemCount: 30 });
+  const at = Date.now() - 3 * 60_000;
+  await S.saveDeath({ x: 605.4, y: 49, z: -1242.7, dimension: "overworld", at, itemCount: 30 });
+  await S.logDeath({ x: 605.4, y: 49, z: -1242.7, dimension: "overworld", at });
   expect(whereIs("death", null)).toBe("I last died at 605, 49, -1243 (overworld), 3 min ago.");
+  await S.saveDeath(null); // it went back for its things: the recovery record is cleared...
+  expect(whereIs("death", null)).toBe("I last died at 605, 49, -1243 (overworld), 3 min ago."); // ...the answer isn't
   await S.saveBed({ x: 514, y: 79, z: -1140, dimension: "overworld", at: 1 });
   expect(whereIs("bed", null)).toBe("My bed is at 514, 79, -1140.");
 });
@@ -68,7 +73,7 @@ test("places: the base and crafting tables, one or several", async () => {
 test("'do we have iron?': from the chests it looked into; a chest never opened isn't 'no iron'", async () => {
   await S.rememberChest({ x: 5, y: 64, z: 5, dimension: "overworld", contents: { iron_ingot: 12 }, seenAt: Date.now() - 2 * 3_600_000 });
   await P.saveChestLocation({ x: 6, y: 64, z: 6 }); // placed, never opened
-  expect(whereIs("item", "iron_ingot")).toBe("12 iron ingots in the chest at 5, 64, 5.");
+  expect(whereIs("item", "iron_ingot")).toBe("12 iron ingots in the chest at 5, 64, 5 (checked 2 h ago).");
   expect(whereIs("item", "diamond")).toBe("I don't know of any diamond in the chests I've looked in.");
   expect(whereIs("chests", null)).toBe("I know 2 chests: 5, 64, 5 (checked 2 h ago); 6, 64, 6 (never looked inside).");
 });
