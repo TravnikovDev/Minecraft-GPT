@@ -24,7 +24,10 @@ import { hasBed, shelter } from "./capabilities";
 import { buildShelter, enterShelter, leaveShelter } from "../actions/building";
 import { clearDemotions } from "./acquire";
 
-const BLOCKED_FOR_MS = 10 * 60_000;
+// A milestone that failed waits a little (10 minutes left it idle in a field)
+const BLOCKED_FOR_MS = 2 * 60_000;
+// The same reason for several milestones in a row (no wood blocks them all) is said once
+let lastFailureSaid = { why: "", at: 0 };
 const MILESTONE_MAX_MS = 15 * 60_000;
 // A Minecraft night (dusk to dawn) is about 9 real minutes; a backstop past it
 const NIGHT_MAX_MS = 12 * 60_000;
@@ -88,7 +91,13 @@ function milestoneTask(m: Milestone): TaskSpec {
       await announce();
       if (!result.ok && !isCommandCancelled()) {
         blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
-        report(`I couldn't get ${m.title} yet: ${describeFailure(result)}. I'll try again later.`);
+        const why = describeFailure(result);
+        if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < BLOCKED_FOR_MS) {
+          console.log(`Couldn't get ${m.title} either: ${why}.`);
+        } else {
+          report(`I couldn't get ${m.title} yet: ${why}. I'll try again in a couple of minutes.`);
+          lastFailureSaid = { why, at: Date.now() };
+        }
       }
     },
     // After a cut-in: carried on, unless done meanwhile, turned off, or night came

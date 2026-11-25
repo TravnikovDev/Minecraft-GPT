@@ -43,10 +43,13 @@ export async function gatherWood(
       if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
         const collected = logsCount - startingLogs;
         console.log(`Giving up on wood after ${failedAttempts} failed attempts.`);
+        // Say what really happened: trees it couldn't get to are not "no trees"
         bot.chat(
           collected > 0
-            ? `I could only find ${collected} of ${num} logs around here.`
-            : `I couldn't find any trees nearby.`
+            ? `I could only get ${collected} of ${num} logs around here.`
+            : unreachable.size > 0
+              ? `I couldn't get to the trees around here.`
+              : `I couldn't find any trees nearby.`
         );
         return false;
       }
@@ -76,10 +79,14 @@ export async function gatherWood(
       );
 
       if (!destinationReached) {
-        console.log(`Unable to reach the ${woodBlock.name} at ${woodBlock.position}; trying another.`);
-        unreachable.add(woodBlock.position.toString());
+        // The whole tree, not just this log: from where it got stuck the
+        // other logs of that tree were unreachable too, and four of them used
+        // up every try ("no trees nearby" with a forest around)
+        const trunk = findTrunk(woodBlock, (p: Vec3) => bot.blockAt(p));
+        for (const log of trunk) unreachable.add(log.position.toString());
+        console.log(`Unable to reach the ${woodBlock.name} tree at ${woodBlock.position}; trying another tree.`);
         failedAttempts++;
-        continue; // Try finding another wood block
+        continue;
       }
 
       // The whole trunk, bottom up: a floating top keeps its leaves forever,

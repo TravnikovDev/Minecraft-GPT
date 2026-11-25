@@ -14,7 +14,12 @@ import { isCommandCancelled } from "../core/commandContext";
 
 const MAX_ROUNDS = 6;
 const MAX_DEPTH = 6;
-const DEMOTED_FOR_MS = 5 * 60_000;
+// A source that failed twice in a row waits a minute. Once for five minutes
+// was far too harsh: one tree it couldn't reach blocked all wood, and every
+// milestone failed in a row (fresh-world test)
+const DEMOTED_FOR_MS = 60_000;
+const FAILS_BEFORE_DEMOTION = 2;
+const failsInARow = new Map<string, number>();
 
 /** A way to get a raw material. */
 export type Source = {
@@ -91,9 +96,19 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
       }
       const result = await source.run(m.name, m.count);
       if (isCommandCancelled()) return fail("aborted", "stopped");
-      if (!result.ok) {
-        console.log(`Getting ${m.name} by ${source.name} failed; trying something else for a while.`);
-        demotedUntil.set(`${source.name}:${m.name}`, Date.now() + DEMOTED_FOR_MS);
+      const key = `${source.name}:${m.name}`;
+      if (result.ok) {
+        failsInARow.delete(key);
+      } else {
+        const fails = (failsInARow.get(key) ?? 0) + 1;
+        failsInARow.set(key, fails);
+        if (fails >= FAILS_BEFORE_DEMOTION) {
+          console.log(`Getting ${m.name} by ${source.name} failed ${fails} times; trying something else for a minute.`);
+          demotedUntil.set(key, Date.now() + DEMOTED_FOR_MS);
+          failsInARow.delete(key);
+        } else {
+          console.log(`Getting ${m.name} by ${source.name} failed; trying again.`);
+        }
       }
     }
   }
@@ -108,4 +123,5 @@ function demoted(source: Source, material: string): boolean {
 /** Forgets which sources failed (tests, a new day). */
 export function clearDemotions(): void {
   demotedUntil.clear();
+  failsInARow.clear();
 }

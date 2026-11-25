@@ -172,11 +172,12 @@ test("already carried: nothing to do", async () => {
   expect(log).toEqual([]);
 });
 
-test("no trees anywhere: it gives up quickly with the reason, no endless loop", async () => {
+test("no trees anywhere: two tries, then it gives up with the reason, no endless loop", async () => {
   trees = 0;
   const result = await acquire("wooden_pickaxe", 1, world);
   expect(result).toMatchObject({ ok: false, reason: "missing_items" });
-  expect(log.filter((l) => l.startsWith("chop")).length).toBeLessThanOrEqual(1);
+  // Tried twice (one failure isn't enough to give up on wood), then set aside
+  expect(log.filter((l) => l.startsWith("chop")).length).toBe(2);
 });
 
 test("a bed needs wool: no sheep around means no bed, said plainly", async () => {
