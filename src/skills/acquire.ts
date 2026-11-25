@@ -30,6 +30,8 @@ export type Source = {
   needs?: (material: string, count: number) => { item: string; count: number }[];
   /** Gets about `count` of it; ok when it got any. */
   run: (material: string, count: number) => Promise<ActionResult>;
+  /** It collects from the world (trees, stone, ores, animals): those get the margin; making things (smelting) doesn't. */
+  collects?: boolean;
 };
 
 /** What acquire works with: the live game by default, a fake in tests. */
@@ -52,9 +54,9 @@ const demotedUntil = new Map<string, number>();
  * what's needed. `depth` guards the prerequisites (a table, a pickaxe).
  */
 /**
- * How much to gather when `n` are missing: about 20% more, at least one
- * spare (owner: always gather with a 10-30% margin; 15 logs of oak and
- * birch made no 6 chests, fresh-world test). Pure.
+ * How much to collect when `n` raw resources are missing: about 20% more,
+ * at least one spare (owner: a 10-30% margin, only for collecting from the
+ * world, never for items or furniture it makes). Pure.
  */
 export const withMargin = (n: number): number => Math.ceil(n * GATHER_MARGIN);
 const GATHER_MARGIN = 1.2;
@@ -62,10 +64,15 @@ const GATHER_MARGIN = 1.2;
 export async function acquire(item: string, count: number, world: AcquireWorld, depth = 0): Promise<ActionResult> {
   // Deep enough for diamonds: iron pickaxe -> ingots -> furnace -> stone -> wooden pickaxe -> table
   if (depth > MAX_DEPTH) return fail("missing_items", `${item}: too many things needed first`);
-  for (let round = 0; round < MAX_ROUNDS; round++) {
+  // Only rounds that got nothing count against it: a craft that makes 1 of 6
+  // chests at a time is progress (it gave up on the 6th, fresh-world test)
+  let lastHave = -1;
+  for (let round = 0, stalled = 0; stalled < MAX_ROUNDS && round < MAX_ROUNDS * 4; round++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     const have = world.have(item);
     if (have >= count) return ok();
+    if (have <= lastHave) stalled++;
+    lastHave = have;
     const want = count - have;
 
     // A table first when a recipe on the way needs one (its planks would
@@ -102,7 +109,8 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
         const got = await acquire(need.item, need.count, world, depth + 1);
         if (!got.ok) return got;
       }
-      const result = await source.run(m.name, withMargin(m.count));
+      // The margin only for collecting raw resources, never for making things
+      const result = await source.run(m.name, source.collects ? withMargin(m.count) : m.count);
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const key = `${source.name}:${m.name}`;
       if (result.ok) {

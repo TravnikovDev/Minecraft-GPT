@@ -26,6 +26,7 @@ const got = (before: number, after: number, what: string): ActionResult => (afte
 export const SOURCES: Source[] = [
   {
     name: "chopping trees",
+    collects: true,
     gets: (m) => m === "logs" || catalog().isLog(m),
     run: async (_m, count) => {
       const before = carried("logs");
@@ -35,6 +36,7 @@ export const SOURCES: Source[] = [
   },
   {
     name: "mining stone",
+    collects: true,
     gets: (m) => m === "cobblestone",
     // A pickaxe first (any: wood mines stone)
     needs: () => (toolTier("pickaxe") >= TIER.wooden ? [] : [{ item: "wooden_pickaxe", count: 1 }]),
@@ -49,6 +51,7 @@ export const SOURCES: Source[] = [
   },
   {
     name: "hunting sheep",
+    collects: true,
     gets: (m) => /_wool$/.test(m),
     needs: () => (toolTier("sword") >= TIER.wooden ? [] : [{ item: "wooden_sword", count: 1 }]),
     run: async (_m, count) => {
@@ -68,6 +71,7 @@ export const SOURCES: Source[] = [
   {
     // Any ore, with the pickaxe the game requires for it (iron: stone, diamond: iron)
     name: "mining ores",
+    collects: true,
     gets: (m) => m !== "cobblestone" && catalog().oresFor(m).length > 0,
     needs: (m) => {
       const pickaxe = pickaxeFor(m, catalog());
