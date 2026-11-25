@@ -292,8 +292,22 @@ function blockUnderMe(): Block | null {
 /** True when it stands on a tree's leaves or trunk. */
 const onTree = (): boolean => TREE_BLOCK.test(blockUnderMe()?.name ?? "");
 
-export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean } = {}): Promise<ActionResult> {
-  const result = await walkTo(goal, options);
+// A path search that ran out of time gets one more go with this much (down
+// its mine, the way back to an ore "took too long to decide", fresh-world test)
+const LONG_THINK_MS = 15_000;
+
+export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean; thoughtLonger?: boolean } = {}): Promise<ActionResult> {
+  let result = await walkTo(goal, options);
+  if (!result.ok && result.reason === "unreachable" && !options.thoughtLonger && /too? long to decide/i.test(result.detail ?? "")) {
+    const saved = pathing.thinkTimeout;
+    pathing.thinkTimeout = Math.max(saved, LONG_THINK_MS);
+    try {
+      console.log("The way there took too long to work out; thinking longer.");
+      result = await walkTo(goal, options);
+    } finally {
+      pathing.thinkTimeout = saved;
+    }
+  }
   // No way from up a tree: down the trunk, then once more
   if (!result.ok && result.reason === "unreachable" && !options.climbedDown && bot.entity && onTree() && (await climbDownTree())) {
     return goTo(goal, { ...options, climbedDown: true });

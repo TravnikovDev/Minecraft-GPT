@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import pf from "mineflayer-pathfinder";
 import { breakBlockAt, breakBlockAtResult, pickupNearbyItems, placeBlock, placeBlockResult } from "./worldInteraction";
-import { goTo, knownBlock, useBlock } from "../core/primitives";
+import { goTo, knownBlock, useBlock, withinReach } from "../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
@@ -589,14 +589,16 @@ export async function enterShelter(): Promise<ActionResult> {
   if (exitAt && knownBlock(exitAt)?.boundingBox === "empty" && bot.inventory.items().some((i) => isWoodenDoor(i.name))) {
     await putInDoor(new Vec3(exitAt.x, exitAt.y, exitAt.z));
   }
-  // Both doors shut for the night
+  // Both doors shut for the night (walking up to one out of reach first)
   for (const at of [exitAt, cellsOf(room, "door")[0]]) {
     const d = at ? knownBlock(at) : null;
-    if (d && isWoodenDoor(d.name) && d.getProperties()["open"] === true) {
-      const closed = await useBlock(d);
-      if (!closed.ok) console.log(`Couldn't close my shelter door at ${at}: ${describeFailure(closed)}`);
-    }
+    if (!at || !d || !isWoodenDoor(d.name) || d.getProperties()["open"] !== true) continue;
+    if (!withinReach(at)) await goTo(new pf.goals.GoalNear(at.x, at.y, at.z, 2));
+    const closed = await useBlock(knownBlock(at) ?? d);
+    if (!closed.ok) console.log(`Couldn't close my shelter door at ${at.x}, ${at.y}, ${at.z}: ${describeFailure(closed)}`);
   }
+  // Back to its spot in the room
+  if (bot.entity.position.distanceTo(new Vec3(room.x + 0.5, room.y, room.z + 0.5)) > 1.5) await goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
   const doorAt = cellsOf(room, "door")[0];
   const door = doorAt ? knownBlock(doorAt) : null;
   if (door && isWoodenDoor(door.name)) return ok();
