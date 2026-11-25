@@ -172,7 +172,8 @@ const carried = (names: string[]): number => bot.inventory.items().filter((i) =>
 /** What a mining trip is after: the item an ore drops, and how many of it are enough. */
 export type OreWant = { item: string; enough: number; counts: string[] };
 export const COAL: OreWant = { item: "coal", enough: 16, counts: ["coal", "charcoal"] };
-export const IRON: OreWant = { item: "raw_iron", enough: 6, counts: ["raw_iron", "iron_ingot"] };
+// Owner: with 10 or more it takes them home to smelt
+export const IRON: OreWant = { item: "raw_iron", enough: 10, counts: ["raw_iron", "iron_ingot"] };
 
 /**
  * Branch mining until it has enough of what it wants (or a few branches more

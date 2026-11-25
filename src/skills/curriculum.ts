@@ -229,8 +229,8 @@ export async function considerNextStep(): Promise<void> {
   if (next) propose(milestoneTask(next));
 }
 
-/** Milestones done in the mine, where night doesn't matter. */
-const UNDERGROUND = new Set(["mine", "coal", "iron"]);
+/** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
+const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe"]);
 
 /** Mine work it could do now (the next milestone is one underground). */
 function mineWorkTonight(): boolean {

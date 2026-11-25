@@ -8,6 +8,7 @@
 
 import { bot } from "../core/body";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
+import { report } from "../core/narrator";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
@@ -227,7 +228,32 @@ export const MILESTONES: Milestone[] = [
     done: () => Boolean(reachedAt()["iron"]) || carriedOf(IRON.counts) >= IRON.enough,
     achieve: () => branchMine([IRON, COAL]),
   },
+  {
+    id: "iron_pickaxe",
+    title: "an iron pickaxe",
+    tier: 2,
+    requires: ["iron"],
+    done: () => toolTier("pickaxe") >= TIER.iron,
+    achieve: smeltIronAndMakePickaxe,
+  },
 ];
+
+/**
+ * Owner: with its raw iron it goes home, smelts it in the shelter's furnace
+ * and makes an iron pickaxe at the shelter's table.
+ */
+async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
+  const home = await enterShelter(); // the furnace and the table are there
+  if (!home.ok) console.log(`Couldn't get home to smelt (${describeFailure(home)}); smelting where I am.`);
+  const raw = carriedOf(["raw_iron"]);
+  if (raw > 0) {
+    const { smelt } = await import("../actions/cooking");
+    const made = await smelt("raw_iron", raw);
+    if (made === null) console.log("No furnace or fuel to smelt my iron.");
+    else if (made > 0) report(`Smelted ${made} iron ingots.`);
+  }
+  return acquire("iron_pickaxe", 1, liveWorld);
+}
 
 const carriedOf = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
