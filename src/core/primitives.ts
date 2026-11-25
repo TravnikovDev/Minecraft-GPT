@@ -16,7 +16,7 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
-import { avoidStep, isProtected } from "./movements";
+import { avoidStep, isNatural, isProtected } from "./movements";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
@@ -278,6 +278,24 @@ async function resyncStep(step: Vec3): Promise<void> {
   console.log(`Checked the step at ${step} with the server: ${changed ? `it was really ${after.join(" / ")} (I had ${before.join(" / ")})` : `still ${after.join(" / ")}`}.`);
 }
 
+/**
+ * Stuck climbing a step in a tunnel (a 3-high diagonal stair: it hung at the
+ * riser twice, fresh-world tests): a player digs out the block over their
+ * head and jumps again. Breaks the block above its head here and above the
+ * next step's head, when they're natural and solid.
+ */
+async function headroomForStep(next: Vec3): Promise<void> {
+  if (!bot.entity || !bot.blockAt) return;
+  const feet = bot.entity.position.floored();
+  if (next.y <= feet.y) return; // not a climb
+  for (const cell of [feet.offset(0, 3, 0), next.offset(0, 2, 0)]) {
+    const b = bot.blockAt(cell);
+    if (!b || b.boundingBox !== "block" || !isNatural(b.name) || isProtected(cell)) continue;
+    const broken = await breakBlock(cell);
+    console.log(broken.ok ? `Dug out the ${b.name} over my head at ${cell} to get up the step.` : `Couldn't dig the ${b.name} over my head at ${cell}: ${describeFailure(broken)}.`);
+  }
+}
+
 /** The block it stands on: under its middle, or (on an edge) under a corner of its body. */
 function blockUnderMe(): Block | null {
   if (!bot.entity || !bot.blockAt) return null;
@@ -355,7 +373,9 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
       const stuckOn = nextStep as { x: number; y: number; z: number } | null;
       if (walked.reason === "timeout" && stuckOn) {
         avoidStep(stuckOn);
-        await resyncStep(new Vec3(Math.floor(stuckOn.x), Math.floor(stuckOn.y), Math.floor(stuckOn.z)));
+        const next = new Vec3(Math.floor(stuckOn.x), Math.floor(stuckOn.y), Math.floor(stuckOn.z));
+        await resyncStep(next);
+        await headroomForStep(next);
       }
       return walked;
     }
