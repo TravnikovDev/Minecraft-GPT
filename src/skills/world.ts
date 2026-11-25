@@ -11,6 +11,7 @@ import { gatherWood } from "../actions/gatherWood";
 import { collectBlock } from "../actions/collectBlock";
 import type { AcquireWorld, Source } from "./acquire";
 import { carried, hasTableAccess, TIER, toolTier } from "./capabilities";
+import { pickaxeFor, smeltedFrom, STANDS_IN_FOR } from "./techTree";
 
 /** True when every recipe for the item needs a crafting table (3x3). */
 function needsTable(item: string): boolean {
@@ -59,20 +60,69 @@ export const SOURCES: Source[] = [
     },
   },
   {
-    name: "mining coal",
-    gets: (m) => m === "coal",
-    needs: () => (toolTier("pickaxe") >= TIER.wooden ? [] : [{ item: "wooden_pickaxe", count: 1 }]),
-    run: async (_m, count) => {
-      const before = carried("coal");
-      await collectBlock("coal_ore", count, 48);
-      return got(before, carried("coal"), "coal");
+    // Any ore, with the pickaxe the game requires for it (iron: stone, diamond: iron)
+    name: "mining ores",
+    gets: (m) => m !== "cobblestone" && catalog().oresFor(m).length > 0,
+    needs: (m) => {
+      const pickaxe = pickaxeFor(m, catalog());
+      return pickaxe && toolTier("pickaxe") < catalog().toolTier(pickaxe) ? [{ item: pickaxe, count: 1 }] : [];
+    },
+    run: async (m, count) => {
+      const before = carried(m);
+      await collectBlock(m, count, 48);
+      return got(before, carried(m), m.replace(/_/g, " "));
+    },
+  },
+  {
+    // A furnace: ingots, glass, stone; and charcoal from logs when there's no
+    // coal to mine (tried after mining, so coal ore nearby still wins)
+    name: "smelting",
+    gets: (m) => smeltedFrom(m) !== null || STANDS_IN_FOR["charcoal"] === m,
+    needs: (m, count) => {
+      const out = smeltedFrom(m) ? m : "charcoal";
+      const input = smeltedFrom(out)!;
+      const needs = furnaceNear() ? [] : [{ item: "furnace", count: 1 }];
+      // Fuel when it has none: a log makes planks for 6 smelts; logs burn 1.5 each
+      const fuelLogs = hasFuel(input) ? 0 : input === "logs" ? Math.ceil(count / 6) : Math.ceil(count / 1.5);
+      if (input === "logs") return [...needs, { item: "logs", count: count + fuelLogs }];
+      return [...needs, { item: input, count }, ...(fuelLogs ? [{ item: "logs", count: fuelLogs }] : [])];
+    },
+    run: async (m, count) => {
+      const out = smeltedFrom(m) ? m : "charcoal";
+      let input = smeltedFrom(out)!;
+      const before = carried(out);
+      if (input === "logs") {
+        // The log type it has most of; a log of it made into planks for fuel
+        const logs = bot.inventory.items().filter((i) => catalog().isLog(i.name)).sort((a, b) => b.count - a.count);
+        if (!logs[0]) return fail("missing_items", "no logs to make charcoal");
+        input = logs[0].name;
+        const planks = catalog().planksFor(input);
+        if (!hasFuel(input) && planks) await craftNow(planks, 4 * Math.ceil(count / 6));
+      }
+      const { smelt } = await import("../actions/cooking");
+      const made = await smelt(input, count);
+      if (made === null) return fail("missing_items", "no furnace or no fuel");
+      return got(before, carried(out), out.replace(/_/g, " "));
     },
   },
 ];
 
+/** A furnace carried or within 24 blocks. */
+function furnaceNear(): boolean {
+  if (carried("furnace") > 0) return true;
+  const id = bot.registry.blocksByName["furnace"]?.id;
+  return id !== undefined && bot.findBlock({ matching: id, maxDistance: 24 }) !== null;
+}
+
+/** Fuel it carries other than `input` itself: coal, charcoal, planks, or a different log. */
+function hasFuel(input: string): boolean {
+  return bot.inventory.items().some((i) => i.name !== input && (/^(coal|charcoal)$/.test(i.name) || catalog().isPlanks(i.name) || (input !== "logs" && catalog().isLog(i.name))));
+}
+
 /** acquire() in the live game. */
 export const liveWorld: AcquireWorld = {
-  have: (item) => carried(item),
+  // Charcoal counts as coal (torches, campfires, fuel take either)
+  have: (item) => carried(item) + Object.entries(STANDS_IN_FOR).reduce((n, [alt, main]) => (main === item ? n + carried(alt) : n), 0),
   plan: (item, count) => {
     const plan = planCraft(item, count);
     return { missing: plan.missing, needsTable: plan.steps.some((s) => needsTable(s.name)) };

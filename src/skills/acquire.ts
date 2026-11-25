@@ -13,6 +13,7 @@ import { fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 
 const MAX_ROUNDS = 6;
+const MAX_DEPTH = 6;
 const DEMOTED_FOR_MS = 5 * 60_000;
 
 /** A way to get a raw material. */
@@ -20,8 +21,8 @@ export type Source = {
   name: string;
   /** Which missing material (exact name or group like "logs") it gets. */
   gets: (material: string) => boolean;
-  /** What it needs first (a pickaxe to mine stone): items to acquire. */
-  needs?: () => { item: string; count: number }[];
+  /** What it needs first for `count` of `material` (a pickaxe to mine stone, a furnace and logs for charcoal): items to acquire. */
+  needs?: (material: string, count: number) => { item: string; count: number }[];
   /** Gets about `count` of it; ok when it got any. */
   run: (material: string, count: number) => Promise<ActionResult>;
 };
@@ -46,7 +47,8 @@ const demotedUntil = new Map<string, number>();
  * what's needed. `depth` guards the prerequisites (a table, a pickaxe).
  */
 export async function acquire(item: string, count: number, world: AcquireWorld, depth = 0): Promise<ActionResult> {
-  if (depth > 3) return fail("missing_items", `${item}: too many things needed first`);
+  // Deep enough for diamonds: iron pickaxe -> ingots -> furnace -> stone -> wooden pickaxe -> table
+  if (depth > MAX_DEPTH) return fail("missing_items", `${item}: too many things needed first`);
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     const have = world.have(item);
@@ -63,7 +65,7 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
     }
 
     // A raw material itself (logs, cobblestone, wool): straight from a source
-    const direct = world.sources.find((s) => s.gets(item) && !demoted(s));
+    const direct = world.sources.find((s) => s.gets(item) && !demoted(s, item));
     const raw = direct && plan.missing.some((m) => m.name === item) ? [{ name: item, count: want }] : plan.missing;
 
     if (raw.length === 0) {
@@ -72,9 +74,9 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
     }
 
     for (const m of raw) {
-      const source = world.sources.find((s) => s.gets(m.name) && !demoted(s));
+      const source = world.sources.find((s) => s.gets(m.name) && !demoted(s, m.name));
       if (!source) return fail("missing_items", `I don't know how to get ${m.name.replace(/_/g, " ")}`);
-      for (const need of source.needs?.() ?? []) {
+      for (const need of source.needs?.(m.name, m.count) ?? []) {
         if (world.have(need.item) >= need.count) continue;
         const got = await acquire(need.item, need.count, world, depth + 1);
         if (!got.ok) return got;
@@ -83,15 +85,16 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
       if (isCommandCancelled()) return fail("aborted", "stopped");
       if (!result.ok) {
         console.log(`Getting ${m.name} by ${source.name} failed; trying something else for a while.`);
-        demotedUntil.set(source.name, Date.now() + DEMOTED_FOR_MS);
+        demotedUntil.set(`${source.name}:${m.name}`, Date.now() + DEMOTED_FOR_MS);
       }
     }
   }
   return world.have(item) >= count ? ok() : fail("missing_items", `couldn't get ${count} ${item.replace(/_/g, " ")}`);
 }
 
-function demoted(source: Source): boolean {
-  return (demotedUntil.get(source.name) ?? 0) > Date.now();
+/** Set aside for this material only: no coal ore around says nothing about iron. */
+function demoted(source: Source, material: string): boolean {
+  return (demotedUntil.get(`${source.name}:${material}`) ?? 0) > Date.now();
 }
 
 /** Forgets which sources failed (tests, a new day). */

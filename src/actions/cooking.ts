@@ -148,10 +148,13 @@ async function cookOnCampfires(campfires: Block[], foods: string[], limit: numbe
   return cooked;
 }
 
-/** Fuel to put in for `items` cooks: coal/charcoal (8 each), else planks or logs (1.5 each). */
-function pickFuel(items: number): { name: string; amount: number } | null {
+/**
+ * Fuel to put in for `items` cooks: coal/charcoal (8 each), else planks or
+ * logs (1.5 each); never `input` itself (logs being made into charcoal).
+ */
+function pickFuel(items: number, input: string | null = null): { name: string; amount: number } | null {
   for (const [match, perFuel] of [[/^(coal|charcoal)$/, 8], [/_planks$/, 1.5], [/_log$/, 1.5]] as const) {
-    const fuel = bot.inventory.items().find((i) => match.test(i.name));
+    const fuel = bot.inventory.items().find((i) => match.test(i.name) && i.name !== input);
     if (fuel) return { name: fuel.name, amount: Math.min(count(fuel.name), Math.ceil(items / perFuel)) };
   }
   return null;
@@ -173,7 +176,7 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
       const n = Math.min(count(food), limit - cooked, 64);
       if (n === 0) continue;
       if (!window.fuelItem()) {
-        const fuel = pickFuel(n);
+        const fuel = pickFuel(n, food);
         if (!fuel) {
           console.log("Cooking: no fuel (coal, charcoal, planks or logs).");
           break;
@@ -230,6 +233,17 @@ export async function cookFood(only: string | null = null, limit = 64): Promise<
   const oven = nearest(OVENS) ?? (await placeCarried(OVENS));
   if (oven && pickFuel(1)) return cookInOven(oven, foods, limit);
   return null;
+}
+
+/**
+ * Smelts up to `n` of `input` in a furnace (one within 24 blocks, or one it
+ * carries, put down): logs into charcoal, raw iron into ingots, sand into
+ * glass. Returns how many came out, or null with no furnace or no fuel.
+ */
+export async function smelt(input: string, n: number): Promise<number | null> {
+  const furnace = nearest(["furnace"]) ?? (await placeCarried(["furnace"]));
+  if (!furnace || !pickFuel(1, input)) return null;
+  return cookInOven(furnace, [input], n);
 }
 
 /** True when there's somewhere to cook: a lit campfire, a furnace or smoker, or one carried. */
