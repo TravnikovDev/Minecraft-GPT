@@ -544,3 +544,65 @@ The owner asked for the architect to be consulted during the work: once on the d
   - display names still come from scattered `replace(/_/g, " ")` helpers.
 - **In-game checks:** `docs/testing-backlog.md`, Phase 5.
 - **Next:** Phase 6, skills and progression to Tier 1.
+
+## Entry 13: Phase 6, skills, the progression tree and the first day (2026-11-25)
+
+**Planned.** The plan's Phase 6:
+- one planner for getting an item, replacing the recursive ensure helpers;
+- capabilities computed from what the bot has;
+- milestones toward Tier 1 (a player's first day);
+- a curriculum that goes for them when the owner gives no orders.
+
+The architect was consulted on the design before building and reviewed the result.
+
+**What happened**
+- **The recursion was cut first:**
+  - ensure → tools → crafting → gathering no longer calls itself (`8ae7d9a`);
+  - unused progression and lore code was deleted.
+- **The design consult settled these choices:**
+  - a hybrid `acquire(item, n)` over the existing craft planner, with sources for raw materials;
+  - milestones as ordered steps with done-checks;
+  - capabilities computed on demand, never cached;
+  - autonomy off by default;
+  - the night routine as upkeep (bucket 4) over milestones (bucket 5).
+- **Built:**
+  - the planner (`10e9ad6`);
+  - milestones, shelter, curriculum and commands (`d0caf30`).
+- **The owner asked mid-phase for the progression tree:** "you can't make a torch without coal first", and so on.
+  - Crafting itself is never locked for the bot: mineflayer places the items in the grid by hand, so recipe-book unlocks don't matter unless a server turns on `doLimitedCrafting`.
+  - Charcoal comes from a furnace, not a campfire, and a campfire itself needs coal or charcoal.
+  - What really gates progress is materials and tools, so that became the tree (`aa72cd2`).
+- **The result review found:**
+  - furniture landing on the cell that said the shelter existed;
+  - the stuck watcher killing the night task after about 2 minutes, then the scaffold cleanup breaking the seal;
+  - wool planned from string, so the bed never happened;
+  - "stay with me" not stopping anything;
+  - stuck milestones retried forever;
+  - the night counter using the world age;
+  - shelters dug blindly (into a house, half-dug stairs repeated).
+
+  All of these are fixed (`f603843`).
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Planner | `src/skills/acquire.ts`: plan → a table first if a recipe needs one → each missing raw material from a source (with what that source needs first) → craft → check again. Bounded: 6 rounds, depth 6; a failing source is set aside for that material for 5 minutes; the owner's orders clear that. An item with a source goes straight to it, never through a recipe for it (wool, not string) |
+| Progression tree | `src/skills/techTree.ts`. **Ore tiers:** the pickaxe each ore needs comes from the game's harvest data (coal: wood; iron, copper, lapis: stone; diamond, gold, redstone: iron). **Smelting:** what a furnace makes from what (charcoal, ingots, glass, stone, brick). **Sources** (`src/skills/world.ts`): trees, stone, sheep (an explicit count), any ore with the right pickaxe, smelting. Charcoal stands in for coal when no coal ore is around; fuel never burns the item being smelted |
+| Capabilities | `src/skills/capabilities.ts`: tool tiers, food points, table access, shelter, bed, chests, wool, all from the inventory and memory now |
+| Milestones | `src/skills/milestones.ts`, Tier 1: wooden tools, a shelter, stone tools, a food stock (20 points), a bed (spawn set), two chests with the cheap stuff. The first time each is reached it's announced, then the whole first day |
+| Shelter | `src/skills/shelter.ts`: diagonal stairs 5 down, then a room 3x3x2. **Fixed spots:** the bot stands in row 1, the bed goes in the middle and last row, chests in the far corners. **Site:** open sky, natural ground, no liquids; saved before digging so a cut-off dig carries on. **Seal:** 3 blocks at night; it's a "door" the walking rules may dig through but the scaffold cleanup leaves alone |
+| Curriculum | `src/skills/curriculum.ts`. **Turning it on:** off until "go live your life" (remembered; `AUTONOMY=on` also works). **What it proposes:** the next milestone at bucket 5 when nothing at bucket 5 or more urgent runs or waits; the night task at bucket 4 once per world day. **Night task:** no stuck watch, 12 min backstop, resumes after a cut-in. **Limits:** "stop" quiets it for a minute; "stay with me" ends it; failed or stuck milestones are set aside for 10 minutes |
+| Commands | `Autonomy` ("go live your life" / "stay with me") and `Progress` ("what's your progress?"), both instant. After a death, the starter kit is skipped when it lives its own life |
+
+**Outcome and what follows**
+- **Tests:** 172 pass. New ones cover the planner (7, including torches with and without coal and the chain to diamonds), the tree against real 1.20.4 data (3), and the curriculum and shelter layout (12).
+- **Boundary list:** 108 direct calls (from 118).
+- **Defaults chosen (the owner can change them):**
+  - "stop" pauses its own life for a minute, like the chores;
+  - the shelter is dug near the base, in the open.
+- **Not done:**
+  - Tier 2+ milestones (iron tools, a farm), which the tree already supports;
+  - the Sleep and Hunting commands still talk through old `bot.chat` lines.
+- **In-game checks:** `docs/testing-backlog.md`, Phase 6.
+- **Next:** test the first day in a fresh world; then Phase 7.

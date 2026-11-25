@@ -26,8 +26,15 @@ Best in a **fresh world**: open it to LAN, start the bot, and say "go live your 
 - [ ] No trees within reach (a desert or the ocean) → gives up within a minute or two with "couldn't get … logs", not forever
 - [ ] Its pickaxe breaks while mining → it makes a new one from what it carries (no trip to gather)
 
+**The progression tree**
+- [ ] Fresh world, no coal in sight, "make 4 torches" → wood, a table, a wooden pickaxe, cobblestone, a furnace put down, charcoal from logs, then torches
+- [ ] With coal ore in view → it mines the coal instead (no furnace)
+- [ ] With only a wooden pickaxe, "get me iron" → it makes a stone pickaxe first, mines raw iron, smelts it into ingots
+- [ ] "get me a diamond" with nothing → it works up the whole tree (stone pickaxe, iron, furnace, iron pickaxe) or says which step it couldn't do
+
 **The shelter and the night**
-- [ ] First dusk → "Digging a shelter for the night.": stairs 5 down the way it faces, a 3x3 room 2 high at the bottom
+- [ ] First dusk → "Digging a shelter for the night.": stairs 5 down, a 3x3 room 2 high at the bottom; dug in the open (not inside your house), never into water or lava
+- [ ] Cut the dig off ("come here") and let it go back → it finishes the same stairs, no second staircase
 - [ ] Inside at night → the stairs are closed with 3 blocks from inside; no mob gets in
 - [ ] Morning → it opens the stairs and comes out by itself, and goes on with its milestones
 - [ ] Ask it to "come here" at night → it digs out of the shelter (its own blocks) and comes
@@ -35,7 +42,9 @@ Best in a **fresh world**: open it to LAN, start the bot, and say "go live your 
 **Bed and chests**
 - [ ] With sheep around: it hunts 3 of one colour (only as many as needed), crafts a bed, puts it in the shelter and sleeps (spawn point set; "where is your bed?" answers)
 - [ ] No sheep around → "I couldn't get a bed yet: … no sheep around. I'll try again later." and it moves on to the chests
-- [ ] Chests → two chests in niches in the room's wall, not in the walkway; the cheap stuff (dirt, cobblestone…) goes in, tools and food stay with it
+- [ ] Chests → two chests in the far corners of the room, not in the walkway; the cheap stuff (dirt, cobblestone…) goes in, tools and food stay with it
+- [ ] Your own bed nearby → it never takes yours; its bed goes in the middle of its room
+- [ ] A whole night inside → no "I'm stuck" after two minutes; the seal stays closed until morning
 
 ## Phase 5: perception, memory and the Narrator (2026-11-25, not yet run)
 
