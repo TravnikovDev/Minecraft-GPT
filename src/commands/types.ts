@@ -54,6 +54,7 @@ enum BotCommands {
   DeployVehicle = "deployVehicle",
   Stop = "stop",
   ShowMeBase = "showMeBase",
+  HomeChores = "homeChores",
 }
 
 // Type guard to check if a value is a valid BotCommands

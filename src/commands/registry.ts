@@ -47,6 +47,7 @@ import * as Autonomy from "./Autonomy";
 import * as Progress from "./Progress";
 import * as DescribeSurroundings from "./DescribeSurroundings";
 import * as RecoverItems from "./RecoverItems";
+import * as HomeChores from "./HomeChores";
 import * as StarterKit from "./StarterKit";
 import * as Sleep from "./Sleep";
 import * as PlaceItem from "./PlaceItem";
@@ -117,6 +118,7 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.DeployVehicle]: DeployVehicle,
   [BotCommands.Stop]: Stop,
   [BotCommands.ShowMeBase]: ShowMeBase,
+  [BotCommands.HomeChores]: HomeChores,
 };
 
 // Extracting tools for use with validation (zodFunction)

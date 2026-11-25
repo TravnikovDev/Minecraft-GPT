@@ -187,7 +187,8 @@ onBotCreated((currentBot) => {
 
 /**
  * After a death: go back for the dropped items, get basic gear if still empty
- * handed, then return to the owner if they are online. Runs ahead of anything
+ * handed, then home to its chores when it has a shelter and a bed, otherwise
+ * back to the owner if they are online. Runs ahead of anything
  * else in the queue, without asking the owner.
  */
 async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
@@ -199,7 +200,12 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const ownerOnline = Object.keys(currentBot.players).some(
     (name) => name.toLowerCase() === OWNER_USERNAME.toLowerCase()
   );
-  if (ownerOnline) {
+  // A shelter and a bed of its own: home to its chores, like a player, not
+  // back to the owner (owner: put goods away, cook, make pickaxes)
+  const { hasHome } = await import("./commands/HomeChores");
+  if (await hasHome()) {
+    steps.push({ command: BotCommands.HomeChores, args: {} });
+  } else if (ownerOnline) {
     steps.push({ command: BotCommands.GoToPlayer, args: { player_name: OWNER_USERNAME, closeness: 3 } });
   }
   for (const step of steps) {
