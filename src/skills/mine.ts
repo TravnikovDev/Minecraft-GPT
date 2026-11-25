@@ -101,6 +101,10 @@ const stepAt = (start: Pos, dir: DirectionType, i: number): Vec3 => new Vec3(sta
  * water or lava end the mine there when it's deep enough already.
  */
 export async function digMine(woodUntilCobblestone = 0): Promise<ActionResult> {
+  return withScaffoldingTakenDown(() => digMineSteps(woodUntilCobblestone));
+}
+
+async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult> {
   if (myMine()) return ok();
   const slots = shelterSlots();
   if (!slots?.exit || !slots.direction) return fail("not_found", "no shelter with an exit to start a mine from");
@@ -124,6 +128,10 @@ export async function digMine(woodUntilCobblestone = 0): Promise<ActionResult> {
     }
     if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
+      if (why === "no_tool") {
+        await saveMine(start, dir, i, 0, null);
+        return fail("no_tool", "my pickaxe wore out digging the mine");
+      }
       // Over a cave with nothing to build the floor with: get dirt or
       // cobblestone (the planner) and carry on from this step next time
       if (why === "no_filler") {
@@ -144,6 +152,20 @@ export async function digMine(woodUntilCobblestone = 0): Promise<ActionResult> {
   return myMine() ? ok() : fail("error", "the mine wasn't remembered");
 }
 
+/**
+ * Runs a mining job, then takes down the scaffolding it put up on the way
+ * (owner: blocks left standing in its tunnels block the way), unless it was
+ * stopped.
+ */
+export async function withScaffoldingTakenDown(job: () => Promise<ActionResult>): Promise<ActionResult> {
+  const result = await job();
+  if (!isCommandCancelled()) {
+    const { takeDownScaffolding } = await import("../actions/scaffolding");
+    await takeDownScaffolding(true);
+  }
+  return result;
+}
+
 /** Carried count of these items. */
 const carried = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
@@ -158,6 +180,10 @@ export const IRON: OreWant = { item: "raw_iron", enough: 6, counts: ["raw_iron",
  * the ores those uncover.
  */
 export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promise<ActionResult> {
+  return withScaffoldingTakenDown(() => branchMineSteps(wants, branchesThisTrip));
+}
+
+async function branchMineSteps(wants: OreWant[], branchesThisTrip: number): Promise<ActionResult> {
   const mine = myMine();
   if (!mine) return fail("not_found", "no mine yet");
   if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
@@ -175,11 +201,16 @@ export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promis
     if (k > MAX_BRANCHES) return fail("not_found", `my mine is ${MAX_BRANCHES} branches long and still not enough ${still().map((w) => w.item.replace(/_/g, " ")).join(" or ")}`);
     const before = branchAt(mine.bottom, mine.direction, k - 1).main;
     const at = branchAt(mine.bottom, mine.direction, k);
-    if (!(await digStraightTunnel(mine.direction, BRANCH_EVERY, before, 1))) return fail("refused", "the main tunnel hit lava, water or something built");
+    if (!(await digStraightTunnel(mine.direction, BRANCH_EVERY, before, 1))) {
+      // A worn-out pickaxe: the planner makes a new one (at the shelter's table)
+      if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+      return fail("refused", "the main tunnel hit lava, water or something built");
+    }
     // Side tunnels: a lava or water stop just ends that side
     for (const side of [at.left, at.right]) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       await digStraightTunnel(side, BRANCH_LENGTH, at.main, 1);
+      if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
       await goTo(new pf.goals.GoalBlock(at.main.x, at.main.y, at.main.z));
     }
     mine.branches = k;

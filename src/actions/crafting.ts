@@ -95,6 +95,21 @@ export function tableNear(range: number): Vec3 | null {
   return null;
 }
 
+const FAR_TABLE_RANGE = 256;
+
+/** The nearest table it remembers placing within `range` (any distance it would walk back), or null. */
+function rememberedTable(range: number): Vec3 | null {
+  const dim = currentDimension();
+  const here = bot.entity.position;
+  return (
+    getPlaces("crafting_table")
+      .filter((t) => (t.dimension ?? dim) === dim)
+      .map((t) => new Vec3(t.x, t.y, t.z))
+      .filter((p) => p.distanceTo(here) <= range && (bot.blockAt(p)?.name ?? "crafting_table") === "crafting_table")
+      .sort((a, b) => a.distanceTo(here) - b.distanceTo(here))[0] ?? null
+  );
+}
+
 /** The shelter's table spot, when it's near and free (air) right now. */
 function homeTableSpot(): Vec3 | null {
   const dim = currentDimension();
@@ -223,6 +238,15 @@ export async function craftRecipe(
     // what it carries (planks or logs) if needed, but never by going to get
     // wood: that's the planner's job (skills/acquire), which asks for a table first
     if (getItemCount("crafting_table") === 0 && !(await craftNow("crafting_table", 1)).ok) {
+      // Nothing to make one from (deep in its mine, its pickaxe worn out):
+      // back to a table it knows, however far, like a player going home
+      const home = rememberedTable(FAR_TABLE_RANGE);
+      if (home) {
+        console.log(`No crafting table here and nothing to make one; going to mine at ${home}.`);
+        const walked = await travelToResult(() => ({ x: home.x, y: home.y, z: home.z }), { range: 2 });
+        const there = bot.blockAt(home);
+        if (walked.ok && there?.name === "crafting_table") return moveToAndCraft(there);
+      }
       console.log(`No crafting table, and nothing to make one from, to craft ${itemName}.`);
       return false;
     }

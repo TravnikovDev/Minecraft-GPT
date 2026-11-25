@@ -20,6 +20,7 @@ import { canSee, openFaces, type SightWorld } from "../actions/sight";
 import { tunnelBlocked } from "../actions/digging";
 import { mayWanderTo } from "../actions/pickup";
 import { collectBlock } from "../actions/collectBlock";
+import { isCommandCancelled } from "../core/commandContext";
 
 const LOOK_RANGE = 12;
 const FAILED_FOR_MS = 10 * 60_000;
@@ -110,6 +111,9 @@ function oreTask(ore: Block, kind: string, first: boolean): TaskSpec {
       const near = await goTo(new pf.goals.GoalNear(ore.position.x, ore.position.y, ore.position.z, 3));
       const got = near.ok ? await collectBlock(ore.name, 8, LOOK_RANGE + 4, { seenOnly: true }) : 0;
       if (got === 0) failed.set(keyOf(ore), Date.now() + FAILED_FOR_MS);
+      // Its scaffolding from getting there comes down again
+      const { takeDownScaffolding } = await import("../actions/scaffolding");
+      if (!isCommandCancelled()) await takeDownScaffolding(true);
     },
     // Cut off (by a milestone or an order): again later if the ore is still there
     resume: () => (bot.blockAt(ore.position)?.name === ore.name ? oreTask(ore, kind, first) : null),

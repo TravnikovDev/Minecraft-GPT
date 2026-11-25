@@ -11,6 +11,7 @@ import { Vec3 } from "vec3";
 import { bot } from "./body";
 import { on } from "./events";
 import { forbiddenAt } from "./forbidden";
+import { getMemory, updateMemory } from "../managers/persistenceManager";
 
 type Placed = { x: number; y: number; z: number; name: string | null };
 const placed = new Map<string, Placed>();
@@ -35,6 +36,18 @@ export function isPlacingOnPurpose(): boolean {
 /** Records a block the pathfinder placed to get somewhere, and what it was (cobblestone, dirt). */
 export function recordScaffold(p: { x: number; y: number; z: number }, name: string | null = null): void {
   placed.set(key(p), { x: p.x, y: p.y, z: p.z, name });
+  saveSoon();
+}
+
+// Remembered in the world's memory, so a restart still knows which blocks are
+// its scaffolding (a block left in its tunnel before a restart stayed there)
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveSoon(): void {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    updateMemory({ scaffolds: [...placed.values()] }).catch((error: Error) => console.error(`Saving my scaffolding failed: ${error.message}`));
+  }, 2_000);
 }
 
 /**
@@ -50,12 +63,13 @@ export function isOwnScaffold(p: { x: number; y: number; z: number }, nameNow?: 
   if (now === undefined) return true; // not loaded: unknown, keep it
   if (now === entry.name) return true;
   placed.delete(key(p));
+  saveSoon();
   return false;
 }
 
 /** The block is gone (the bot broke it, or it was replaced). */
 export function forgetScaffold(p: { x: number; y: number; z: number }): void {
-  placed.delete(key(p));
+  if (placed.delete(key(p))) saveSoon();
 }
 
 // --- Doors: blocks it closes its shelter with -----------------------------------
@@ -90,10 +104,15 @@ export function ownScaffolds(): { x: number; y: number; z: number }[] {
     .sort((a, b) => b.y - a.y);
 }
 
-/** A new connection: start over (positions from before may not be ours any more). */
+/**
+ * A new connection: the scaffolding it remembers for this world (each is
+ * checked against what's there when used: a changed block is forgotten),
+ * and no doors (those are found again).
+ */
 export function clearScaffolds(): void {
   placed.clear();
   doors.clear();
+  for (const s of getMemory().scaffolds ?? []) placed.set(key(s), s);
 }
 
 // Someone else changed the block (the owner broke it, or built on the spot):

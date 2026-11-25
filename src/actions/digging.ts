@@ -48,8 +48,23 @@ export function inStaircase(p: Vec3, start: Vec3, direction: DirectionType, widt
   return p.y >= base && p.y <= base + height;
 }
 
-/** Why the last tunnel stopped: something it must not dig, a drop it couldn't floor, or nothing to build the floor with. */
-export type TunnelStop = "blocked" | "drop" | "no_filler";
+/** Why the last tunnel stopped: something it must not dig, a drop it couldn't floor, nothing to build the floor with, or no tool that digs it. */
+export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool";
+
+/**
+ * Digs one block of a tunnel; false (stop the tunnel) when it has no tool
+ * that can: it went on trying block after block, many a second, once its
+ * pickaxe wore out deep in its mine (fresh-world test).
+ */
+async function digTunnelBlock(p: Vec3): Promise<boolean> {
+  const dug = await breakBlockAtResult(p.x, p.y, p.z);
+  if (!dug.ok && dug.reason === "no_tool") {
+    lastStop = "no_tool";
+    console.log(`Tunnel stopped: ${describeFailure(dug)}.`);
+    return false;
+  }
+  return true;
+}
 let lastStop: TunnelStop | null = null;
 
 /** Why the last digDiagonalTunnel / digDiagonalTunnelUp returned false (null when it didn't). */
@@ -260,11 +275,7 @@ export async function digDiagonalTunnel(
         // stair, in the back doorway, dug the block over the door)
         if (isProtected(digPosition)) continue;
         if (stopTunnelAt(digPosition)) return false;
-        await breakBlockAt(
-          digPosition.x,
-          digPosition.y,
-          digPosition.z
-        );
+        if (!(await digTunnelBlock(digPosition))) return false;
         // Straight on to the next block: each dig already waits for the server
 
         // After digging the floor block, ensure there is a foundation
@@ -382,6 +393,7 @@ export async function digStraightTunnel(
   // Sideways is across the tunnel: along Z for an east/west tunnel, along X for north/south
   const side = new Vec3(Math.abs(offsetZ), 0, Math.abs(offsetX));
   const half = Math.floor(width / 2);
+  lastStop = null;
   // The tunnel's own space: support blocks never go there
   const keepClear = (p: Vec3): boolean => {
     const along = (p.x - startPosition.x) * offsetX + (p.z - startPosition.z) * offsetZ;
@@ -396,7 +408,7 @@ export async function digStraightTunnel(
       for (let x = -half; x <= width - 1 - half; x++) {
         const blockPos = position.offset(side.x * x, y, side.z * x);
         if (stopTunnelAt(blockPos)) return false;
-        await breakBlockAt(blockPos.x, blockPos.y, blockPos.z);
+        if (!(await digTunnelBlock(blockPos))) return false;
 
         // Ensure foundation under the floor blocks
         if (y === 0) {
@@ -571,7 +583,7 @@ export async function digDiagonalTunnelUp(
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
         if (stopTunnelAt(digPosition)) return false;
-        await breakBlockAt(digPosition.x, digPosition.y, digPosition.z);
+        if (!(await digTunnelBlock(digPosition))) return false;
 
         // The block under each step is the stair itself: keep it solid
         if (h === 0 && !(await floorUnder(basePosition, (p) => inStaircase(p, startPosition!, direction, tunnelSize.width, tunnelSize.height, false), direction))) return false;
