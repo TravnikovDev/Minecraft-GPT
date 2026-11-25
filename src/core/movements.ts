@@ -194,10 +194,6 @@ export function safeMovements(bot: Bot): pf.Movements {
     if (!isNatural(block.name)) moves.blocksCantBreak.add(block.id);
   }
   moves.canDig = true; // natural terrain only (see above)
-  // Walking through berry bushes hurts (5 health on one trip home, fresh-world
-  // test): around them, like a player
-  const berries = bot.registry.blocksByName["sweet_berry_bush"]?.id;
-  if (berries !== undefined) moves.blocksToAvoid.add(berries);
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
@@ -211,16 +207,14 @@ export function safeMovements(bot: Bot): pf.Movements {
   const placeRules = (block: { position?: { x: number; y: number; z: number } }): number => keepOut(block) + ownSpace(block);
   moves.exclusionAreasPlace = [placeRules] as typeof moves.exclusionAreasPlace;
   moves.canOpenDoors = true; // fence gates
-  // No pillaring just to get somewhere (following, walking up to the owner):
-  // a player walks around. Reaching a block up high turns it on for that walk
-  moves.allow1by1towers = false;
-  // Drops up to 5, as it always had: limited to 3 (to spare half a heart on
-  // a 4-block drop) it dug the block under its own feet instead of stepping
-  // down, all its walking and hunting went jerky (owner, fresh-world test)
-  moves.maxDropDown = 5;
-  moves.digCost = 6;
+  // Everything else is mineflayer-pathfinder's own defaults (drops, digging,
+  // pillaring, parkour, sprinting): every tweak of them made the walking
+  // worse somewhere (owner: fewer limits, fewer bugs). The exceptions are
+  // both about placing blocks: a block costs 6, not 1, and no 1x1 pillars;
+  // otherwise the search weighs building everywhere, runs out of time
+  // ("partial" paths) and digs shafts instead of stairs (tests/noShafts)
   moves.placeCost = 6;
-  moves.entityCost = 6;
+  moves.allow1by1towers = false; // same reason: pillars widen the search
   safeRules.add(moves);
   return moves;
 }

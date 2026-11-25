@@ -14,7 +14,7 @@ import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
 import { isCommandCancelled } from "../core/commandContext";
-import { report } from "../core/narrator";
+import { chatter, report } from "../core/narrator";
 import { setSheltered } from "../core/sheltered";
 import { describeFailure } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
@@ -111,6 +111,23 @@ let nightOf = -1; // the day number of the night already handled
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
 const NIGHT_TRIES = 4;
 
+/**
+ * Shut in for the night with raw meat and the shelter's furnace: cooks it,
+ * like a player using the dark hours (owner). Fuel is what it carries (coal,
+ * charcoal, planks, logs); without any it just waits.
+ */
+async function cookAtNight(): Promise<void> {
+  const { cookFood, rawFoodInInventory } = await import("../actions/cooking");
+  if (rawFoodInInventory().length === 0) return;
+  try {
+    const cooked = await cookFood();
+    if (cooked === null) console.log("Night: raw meat to cook, but no furnace or fuel at hand.");
+    else if (cooked > 0) chatter(`Cooked ${cooked} food in my furnace for tomorrow.`, "night");
+  } catch (error) {
+    console.log(`Night: cooking failed: ${(error as Error).message}`);
+  }
+}
+
 function nightTask(): TaskSpec {
   return {
     name: NIGHT_NAME,
@@ -145,6 +162,7 @@ function nightTask(): TaskSpec {
       // Shut in: the reflexes leave what's outside alone until morning
       setSheltered(true);
       try {
+        await cookAtNight();
         if (hasBed()) {
           const { execute: sleepInBed } = await import("../commands/Sleep");
           await sleepInBed({ newBed: false });
