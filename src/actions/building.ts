@@ -547,52 +547,107 @@ export function tableWithin(range: number): boolean {
   return tableNear(range) !== null;
 }
 
-/** Puts `item` at `spot` (getting one first), unless it's already there. */
-async function putAt(item: string, spot: Pos | null, stand?: Pos): Promise<ActionResult> {
-  if (!spot) return ok();
-  if (knownBlock(spot)?.name === item) return ok();
-  if (!bot.inventory.items().some((i) => i.name === item)) {
-    const { acquire } = await import("../skills/acquire");
-    const { liveWorld } = await import("../skills/world");
-    const got = await acquire(item, 1, liveWorld);
-    if (!got.ok) return got;
-    // Making it took it out to the table: back into the room before placing
-    // (it tried to put a chest in from the grass above, fresh-world test)
-    if (stand) {
-      const back = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
-      if (!back.ok) return back;
-    }
-  }
-  const placed = await placeBlockResult(item, spot.x, spot.y, spot.z);
+const FACE_NAMES: Array<[Vec3, string]> = [[new Vec3(1, 0, 0), "east"], [new Vec3(-1, 0, 0), "west"], [new Vec3(0, 0, 1), "south"], [new Vec3(0, 0, -1), "north"]];
+const faceName = (v: Vec3): string | null => FACE_NAMES.find(([d]) => d.equals(v))?.[1] ?? null;
+
+/**
+ * Where it stands to put something in the room's side spot `spot`: the
+ * middle of that same row (owner's setupTheShelter). Placed from there, a
+ * chest faces the middle, so two chests side by side along a wall face the
+ * same way and join into a double chest. Pure.
+ */
+export function rowStand(spot: Pos, stand: Pos, dir: DirectionType): Vec3 {
+  const along = ALONG[dir];
+  const d = new Vec3(spot.x - stand.x, spot.y - stand.y, spot.z - stand.z);
+  const steps = d.x * along.x + d.z * along.z;
+  return new Vec3(stand.x, stand.y, stand.z).plus(along.scaled(steps));
+}
+
+/** The way a chest in `spot` faces when placed from its row's middle (toward the bot), e.g. "west". */
+export function chestFacing(spot: Pos, stand: Pos, dir: DirectionType): string | null {
+  const from = rowStand(spot, stand, dir);
+  const v = new Vec3(Math.sign(from.x - spot.x), 0, Math.sign(from.z - spot.z));
+  return faceName(v);
+}
+
+/** A chest in `spot` facing the way the layout needs (wrong-facing chests never join into double chests). */
+export function rightChest(spot: Pos, stand: Pos, dir: DirectionType): boolean {
+  const b = knownBlock(spot);
+  return b?.name === "chest" && b.getProperties()["facing"] === chestFacing(spot, stand, dir);
+}
+
+/** Stands in the middle of the spot's row and puts `item` there (it must carry one). */
+async function placeFromRow(item: string, spot: Pos, stand: Pos, dir: DirectionType): Promise<ActionResult> {
+  if (isCommandCancelled()) return fail("aborted", "stopped");
+  const from = rowStand(spot, stand, dir);
+  const there = await goTo(new pf.goals.GoalBlock(from.x, from.y, from.z));
+  if (!there.ok) return there;
+  // On the floor under the spot: it looks across the row, so a chest faces the middle
+  const placed = await placeBlockResult(item, spot.x, spot.y, spot.z, "bottom");
   return placed.ok ? ok() : placed;
 }
 
+/** Gets `n` of `item` into the inventory (the planner: wood, a table, crafting). */
+async function carry(item: string, n: number): Promise<ActionResult> {
+  const have = bot.inventory.items().filter((i) => i.name === item).reduce((c, i) => c + i.count, 0);
+  if (have >= n) return ok();
+  const { acquire } = await import("../skills/acquire");
+  const { liveWorld } = await import("../skills/world");
+  return acquire(item, n, liveWorld);
+}
+
 /**
- * Furnishes the shelter: three double chests, a furnace and a crafting table
- * in their spots (remembered from now on). Stops at the first it can't get.
+ * Furnishes the shelter the owner's way: first gets everything (the chests,
+ * the furnace, a table only with none within 50 blocks), then goes in and
+ * puts each piece from the middle of its row, so the chests pair up into
+ * three double chests. A chest facing the wrong way (from an older layout)
+ * is taken out and put back right.
  */
 export async function setupTheShelter(): Promise<ActionResult> {
   const slots = shelterSlots();
-  if (!slots) {
+  if (!slots || !slots.direction) {
     console.error("Basement location is undefined.");
     return fail("not_found", "no shelter to set up");
   }
-  const inside = await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
-  if (!inside.ok) return inside;
-  for (const spot of slots.chests) {
-    const placed = await putAt("chest", spot, slots.stand);
+  const { stand, direction: dir } = slots;
+  const needChests = slots.chests.filter((c) => !rightChest(c, stand, dir));
+  const needFurnace = slots.furnace && knownBlock(slots.furnace)?.name !== "furnace" ? slots.furnace : null;
+  const needTable = slots.table && !tableWithin(TABLE_RANGE) ? slots.table : null;
+
+  // Everything first: each trip to the table is a trip out of the shelter
+  const chestsToMake = needChests.filter((c) => knownBlock(c)?.name !== "chest").length;
+  for (const [item, n] of [["chest", chestsToMake], ["furnace", needFurnace ? 1 : 0], ["crafting_table", needTable ? 1 : 0]] as const) {
+    if (n === 0) continue;
+    const got = await carry(item, n);
+    if (!got.ok) return got;
+  }
+
+  for (const spot of needChests) {
+    // Wrong way round: out, and back in facing the middle
+    if (knownBlock(spot)?.name === "chest") {
+      const from = rowStand(spot, stand, dir);
+      const there = await goTo(new pf.goals.GoalBlock(from.x, from.y, from.z));
+      if (!there.ok) return there;
+      const out = await breakBlockAtResult(spot.x, spot.y, spot.z);
+      if (!out.ok) return out;
+      await pickupNearbyItems(bot);
+    }
+    const placed = await placeFromRow("chest", spot, stand, dir);
     if (!placed.ok) return placed;
     await saveChestLocation(spot);
   }
-  const furnace = await putAt("furnace", slots.furnace, slots.stand);
-  if (!furnace.ok) return furnace;
-  if (slots.furnace) await saveFurnaceLocation(slots.furnace);
-  // A table only if there's none within 50 blocks (owner's rule: never a second one close by)
-  if (!tableWithin(TABLE_RANGE)) {
-    const table = await putAt("crafting_table", slots.table, slots.stand);
-    if (!table.ok) return table;
-    if (slots.table) await saveCraftingTableLocation(slots.table);
+  if (needFurnace) {
+    const placed = await placeFromRow("furnace", needFurnace, stand, dir);
+    if (!placed.ok) return placed;
+    await saveFurnaceLocation(needFurnace);
   }
+  // A table only if there's none within 50 blocks (owner's rule: never a second one close by)
+  if (needTable) {
+    const placed = await placeFromRow("crafting_table", needTable, stand, dir);
+    if (!placed.ok) return placed;
+    await saveCraftingTableLocation(needTable);
+  }
+  await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
   return ok();
 }
 

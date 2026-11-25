@@ -14,7 +14,7 @@ import { liveWorld } from "./world";
 import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, enterShelter, setupTheShelter, shelterSlots, tableWithin } from "../actions/building";
+import { buildShelter, enterShelter, rightChest, setupTheShelter, shelterSlots, tableWithin } from "../actions/building";
 import { TABLE_RANGE } from "../actions/crafting";
 import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
 import { goTo, knownBlock } from "../core/primitives";
@@ -144,7 +144,9 @@ function furnished(): boolean {
   const has = (spot: { x: number; y: number; z: number } | null, name: string): boolean => !spot || knownBlock(spot)?.name === name || !knownBlock(spot);
   // The table: its spot, or any table within 50 blocks (it never places a second one close by)
   const table = has(slots.table, "crafting_table") || tableWithin(TABLE_RANGE);
-  return slots.chests.every((c) => has(c, "chest")) && has(slots.furnace, "furnace") && table;
+  // Chests facing the middle (a wrong-facing pair never joins into a double chest)
+  const chests = slots.chests.every((c) => !knownBlock(c) || (slots.direction ? rightChest(c, slots.stand, slots.direction) : has(c, "chest")));
+  return chests && has(slots.furnace, "furnace") && table;
 }
 
 /** Every milestone, in the order the bot goes for them. */

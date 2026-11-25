@@ -287,3 +287,19 @@ test("what a site leaves to build: none under solid ground, the open roof of a h
   expect(shell.has(key(plan.entrance))).toBe(false);
   expect(shell.has(key(plan.exit))).toBe(false);
 });
+
+test("furniture goes in from the middle of its row, so the chests along a wall face the same way and pair up", () => {
+  const { shelterPlan, rowStand, chestFacing } = realShelter;
+  const s = shelterPlan({ x: 0, y: 70, z: 0 }, "south");
+  const [c0, c1, c2, c3, c4, c5] = s.chests;
+  // Standing in the same row, in the middle column
+  expect(rowStand(c0, s.stand, "south")).toEqual(s.roomStart);
+  expect(rowStand(c5, s.stand, "south")).toEqual(s.roomStart.offset(0, 0, 4));
+  // East-side chests face west (toward the middle), west-side ones east: each pair faces one way
+  expect([c0, c1, c4, c5].map((c) => chestFacing(c, s.stand, "south"))).toEqual(["west", "west", "west", "west"]);
+  expect([c2, c3].map((c) => chestFacing(c, s.stand, "south"))).toEqual(["east", "east"]);
+  // Going east the room runs along x and the chests sit north and south of the middle
+  const e = shelterPlan({ x: 0, y: 70, z: 0 }, "east");
+  expect(chestFacing(e.chests[0]!, e.stand, "east")).toBe("north");
+  expect(chestFacing(e.chests[2]!, e.stand, "east")).toBe("south");
+});
