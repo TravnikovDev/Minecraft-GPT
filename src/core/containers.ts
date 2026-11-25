@@ -12,7 +12,7 @@ import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { beginUse, waitTurn } from "./leases";
 import { currentSignal } from "./commandContext";
-import { carried, syncInventory, withinReach } from "./primitives";
+import { syncInventory, withinReach } from "./primitives";
 import { fail, ok, type ActionResult } from "./result";
 
 /** An open chest or barrel. */
@@ -26,7 +26,20 @@ export type OpenContainer = {
   deposit(itemType: number, metadata: number | null, count: number | null, nbt?: unknown): Promise<void>;
   /** Moves `count` of this exact item from the container to the bot. */
   withdraw(itemType: number, metadata: number | null, count: number | null, nbt?: unknown): Promise<void>;
+  /** The bot's own items as this window shows them (mineflayer's bot.inventory catches up only when it closes). */
+  items?(): Item[];
 };
+
+/**
+ * How many of `name` the bot carries while `open` is open. mineflayer moves
+ * items in the window's copy of the inventory and copies it back to
+ * bot.inventory on close: counting bot.inventory said every deposit "didn't
+ * go in" when it had.
+ */
+function carriedWhileOpen(open: OpenContainer, name: string): number {
+  const items = typeof open.items === "function" ? open.items() : bot.inventory.items();
+  return items.filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
+}
 
 /** Blocks the bot uses for storage. */
 export const STORAGE_BLOCKS = new Set(["chest", "trapped_chest", "barrel"]);
@@ -87,15 +100,15 @@ function roomInContainer(open: OpenContainer, item: { type: number; stackSize: n
 async function depositIntoNow(open: OpenContainer, item: Item, count: number): Promise<ActionResult<number>> {
   const n = Math.min(count, item.count);
   if (roomInContainer(open, item) < n) return fail("full", "the chest is full");
-  const before = carried(item.name);
+  const before = carriedWhileOpen(open, item.name);
   await paceClicks();
   const done = await guarded(`storing ${item.name}`, () => open.deposit(item.type, null, n, item.nbt ?? undefined), {
     timeoutMs: TRANSFER_TIMEOUT_MS,
   });
   if (!done.ok) return done;
   await syncInventory(open); // the server's view, not mineflayer's optimistic one
-  if (!(await until(() => carried(item.name) <= before - n, CONFIRM_MS))) {
-    const moved = before - carried(item.name);
+  if (!(await until(() => carriedWhileOpen(open, item.name) <= before - n, CONFIRM_MS))) {
+    const moved = before - carriedWhileOpen(open, item.name);
     return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't go in`);
   }
   return ok(n);
@@ -109,15 +122,15 @@ async function withdrawFromNow(open: OpenContainer, item: Item, count: number): 
     bot.inventory.items().filter((i) => i.type === item.type).reduce((r, i) => r + Math.max(0, i.stackSize - i.count), 0);
   if (room === 0) return fail("full", "my inventory is full");
   const take = Math.min(n, room);
-  const before = carried(item.name);
+  const before = carriedWhileOpen(open, item.name);
   await paceClicks();
   const done = await guarded(`taking ${item.name}`, () => open.withdraw(item.type, null, take, item.nbt ?? undefined), {
     timeoutMs: TRANSFER_TIMEOUT_MS,
   });
   if (!done.ok) return done;
   await syncInventory(open); // the server's view, not mineflayer's optimistic one
-  if (!(await until(() => carried(item.name) >= before + take, CONFIRM_MS))) {
-    const moved = carried(item.name) - before;
+  if (!(await until(() => carriedWhileOpen(open, item.name) >= before + take, CONFIRM_MS))) {
+    const moved = carriedWhileOpen(open, item.name) - before;
     return moved > 0 ? ok(moved) : fail("refused", `the ${item.name} didn't come out`);
   }
   return ok(take);
