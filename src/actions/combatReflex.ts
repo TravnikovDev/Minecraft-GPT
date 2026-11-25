@@ -12,7 +12,7 @@ import type { Entity } from "prismarine-entity";
 import pf from "mineflayer-pathfinder";
 import { bot, onConnectionEnd } from "../core/body";
 import { report } from "../core/narrator";
-import { equipItem } from "../core/primitives";
+import { equipItem, hitEntity, lookAt } from "../core/primitives";
 import { on } from "../core/events";
 import { fighting, pathing, takeOverBody } from "../core/plugins";
 import { areReflexesMuted, asReflex, registerReflexStopper, setReflexActive } from "../core/reflexes";
@@ -58,10 +58,32 @@ function isNight(): boolean {
 const distanceTo = (e: Entity): number => e.position.distanceTo(bot.entity.position);
 const isAlive = (e: Entity): boolean => Boolean(bot.entities[e.id]) && (e.health === undefined || e.health > 0);
 
-/** The mob to fight within range, or null. */
+// Mobs that fly: chasing one builds dirt pillars after it and keeps the bot
+// out in the open (a phantom kept it from its shelter all night, first game
+// test). A player swings when one swoops in and goes on; so does the bot.
+export const FLYING = new Set(["phantom", "vex", "ghast", "blaze", "bee"]);
+const SWAT_RANGE = 3.2;
+const SWAT_COOLDOWN_MS = 650;
+let lastSwatAt = 0;
+
+/** The mob to fight within range, or null (never a flying one: those get swatted). */
 function pickTarget(range: number): Entity | null {
   const now = Date.now();
-  return getPriorityTargets(range).find((e) => isAlive(e) && (ignored.get(e.id) ?? 0) < now) ?? null;
+  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "") && (ignored.get(e.id) ?? 0) < now) ?? null;
+}
+
+/** A swing at a flying mob within reach, without chasing it or stopping the task's walk. */
+function swatFlyer(): void {
+  if (Date.now() - lastSwatAt < SWAT_COOLDOWN_MS) return;
+  const flyer = bot.nearestEntity((e) => FLYING.has(e.name ?? "") && isAlive(e) && distanceTo(e) <= SWAT_RANGE);
+  if (!flyer) return;
+  lastSwatAt = Date.now();
+  // Face it and swing (the swing counts even if turning was cut short)
+  void lookAt(flyer.position.offset(0, (flyer.height ?? 0.5) / 2, 0))
+    .catch(() => {})
+    .finally(() => {
+      if (isAlive(flyer) && distanceTo(flyer) <= SWAT_RANGE) hitEntity(flyer);
+    });
 }
 
 /** Takes out the best sword or axe (a pickaxe or shovel if that's all there is). */
@@ -131,7 +153,8 @@ function stopRetreat(reason: string): void {
 
 /** The nearest hostile mob within `range` (ignored ones too: they still hurt). */
 function nearestThreat(range: number): Entity | null {
-  return getPriorityTargets(range).find(isAlive) ?? null;
+  // Running from a flyer is no use: it follows; going on (inside) is
+  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "")) ?? null;
 }
 
 function tick(): void {
@@ -164,6 +187,10 @@ function tick(): void {
     }
   }
 
+  if (target && FLYING.has(target.name ?? "")) {
+    finish(`not chasing the ${target.name}`);
+    return;
+  }
   if (target) {
     const over = !isAlive(target) || distanceTo(target) > GIVE_UP_RANGE;
     if (Date.now() - startedAt > MAX_FIGHT_MS) {
@@ -187,6 +214,7 @@ function tick(): void {
   if (areReflexesMuted()) return; // the owner said stop: leave nearby mobs alone
   const mob = pickTarget(isNight() ? NIGHT_RANGE : MELEE_RANGE);
   if (mob) engage(mob);
+  else swatFlyer();
 }
 
 /** Starts the reflex for the current bot instance. */

@@ -16,9 +16,6 @@ const fake: any = Object.assign(new EventEmitter(), {
   health: 20,
   time: { timeOfDay: 1000 },
   inventory: { items: () => [] },
-  get entities() {
-    return entities;
-  },
   nearestEntity: (match: (e: any) => boolean) =>
     Object.values(entities)
       .filter(match)
@@ -29,11 +26,15 @@ const fake: any = Object.assign(new EventEmitter(), {
   pathfinder: { goal: null, setGoal: () => {}, isMoving: () => false },
 });
 useFakeBot(fake);
+const setMobs = (mobs: Record<number, any>): void => {
+  entities = mobs;
+  fake.entities = mobs;
+};
 const { registerCreeperReflex, isCreeperReflexActive } = await import(`${ROOT}/src/actions/creeperReflex.ts`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test("a zombie at arm's length: the creeper 9 blocks away waits, the fight comes first", async () => {
-  entities = { 1: mob(1, "creeper", 9), 2: mob(2, "zombie", 1.5) };
+  setMobs({ 1: mob(1, "creeper", 9), 2: mob(2, "zombie", 1.5) });
   registerCreeperReflex();
   await sleep(400);
   expect(isCreeperReflexActive()).toBe(false);
