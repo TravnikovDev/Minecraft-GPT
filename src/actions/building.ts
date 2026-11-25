@@ -173,11 +173,16 @@ type BlockAt = (p: Vec3) => { name: string; boundingBox: string } | null;
  * with a made-up world). Unloaded cells count as unknown, so not good.
  */
 export function shellIsSolid(shell: Vec3[], roofY: number, blockAt: BlockAt): boolean {
-  return shell.every((p) => {
+  return shellGaps(shell, roofY, blockAt) === 0;
+}
+
+/** How many shell cells need building (open, or sand and gravel in the roof that would fall in). */
+export function shellGaps(shell: Vec3[], roofY: number, blockAt: BlockAt): number {
+  return shell.filter((p) => {
     const b = blockAt(p);
-    if (!b || b.boundingBox !== "block") return false;
-    return !(p.y >= roofY && FALLING.has(b.name));
-  });
+    if (!b || b.boundingBox !== "block") return true;
+    return p.y >= roofY && FALLING.has(b.name);
+  }).length;
 }
 
 /** True with blocks overhead within 12 (a roof: it's inside a house or a cave). */
@@ -192,8 +197,12 @@ function underRoof(p: Vec3): boolean {
 /** The first spot and direction where the whole shelter can be dug (natural ground, no water or lava). */
 function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3; dir: DirectionType } | null {
   const spots = [around];
-  // More spots than before: a fully covered room needs ground that doesn't fall away
-  for (const r of [6, 10, 16, 24]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
+  for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
+  // Any spot it can dig (no water, lava or buildings) will do: missing walls,
+  // roof and floor get built (patchShell). Among them, the one with the least
+  // to build, preferring the closest when it's a tie (owner: there won't
+  // always be a perfect spot)
+  let best: { start: Vec3; dir: DirectionType; gaps: number } | null = null;
   for (const spot of spots) {
     let start: Vec3 | null = null;
     for (let dy = 4; dy >= -4 && !start; dy--) {
@@ -203,14 +212,16 @@ function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3;
       if (here && below && here.boundingBox === "empty" && below.boundingBox === "block") start = p;
     }
     if (!start || underRoof(start)) continue;
-    const dir = DIRECTIONS.find((d) => {
-      const plan = shelterPlan(start!, d, room, depth);
-      // Natural ground to dig (no water, lava or buildings), and a room fully under ground
-      return plan.cells.every((c) => tunnelBlocked(c) === null) && shellIsSolid(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
-    });
-    if (dir) return { start, dir };
+    for (const dir of DIRECTIONS) {
+      const plan = shelterPlan(start, dir, room, depth);
+      if (!plan.cells.every((c) => tunnelBlocked(c) === null)) continue;
+      const gaps = shellGaps(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
+      if (!best || gaps < best.gaps) best = { start, dir, gaps };
+    }
+    if (best?.gaps === 0) break; // can't do better than solid ground all round
   }
-  return null;
+  if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
+  return best ? { start: best.start, dir: best.dir } : null;
 }
 
 /** The latest shelter place in this dimension (finished or not). */
@@ -317,7 +328,7 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   await pickupNearbyItems(bot);
   // Short of filler for the gaps: dirt it can see first
   const gaps = plan.shell.filter((p) => knownBlock(p) && knownBlock(p)!.boundingBox !== "block").length;
-  const filler = PATCH_FILLERS.reduce((n, name) => n + bot.inventory.items().filter((i) => i.name === name).reduce((c, i) => c + i.count, 0), 0);
+  const filler = bot.inventory.items().filter((i) => PATCH_FILLERS.includes(i.name) || catalog().isPlanks(i.name)).reduce((c, i) => c + i.count, 0);
   if (gaps > filler) await collectBlock("dirt", gaps - filler + 4, 16, { seenOnly: true });
   const patched = await patchShell(plan.shell);
   if (!patched.ok) {
@@ -339,7 +350,13 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
 }
 
 // What it patches walls with: dirt first (stone and wood are for tools)
+// What it builds missing walls, roof and floor with: dirt, any stone, then
+// wood (owner: any of these does; there won't always be a perfect spot)
 const PATCH_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "andesite", "diorite", "granite", "tuff", "netherrack"];
+const fillerFor = (): string | null =>
+  PATCH_FILLERS.find((n) => bot.inventory.items().some((i) => i.name === n)) ??
+  bot.inventory.items().find((i) => catalog().isPlanks(i.name))?.name ??
+  null;
 
 /**
  * Fills every gap in the shell, from the ones next to something solid
@@ -349,7 +366,8 @@ const PATCH_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate"
  */
 async function patchShell(shell: Vec3[]): Promise<ActionResult> {
   const solid = (p: Vec3): boolean => knownBlock(p)?.boundingBox === "block";
-  for (let pass = 0; pass < 4; pass++) {
+  // A hillside's open side goes up from the floor a layer per pass, then the roof closes in
+  for (let pass = 0; pass < 12; pass++) {
     const gaps = shell.filter((p) => knownBlock(p) && !solid(p));
     if (gaps.length === 0) return ok();
     // This pass: gaps that have a solid neighbour to place against
@@ -357,8 +375,18 @@ async function patchShell(shell: Vec3[]): Promise<ActionResult> {
     if (placeable.length === 0) break;
     for (const p of placeable) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
-      const filler = PATCH_FILLERS.find((n) => bot.inventory.items().some((i) => i.name === n));
-      if (!filler) return fail("missing_items", `nothing to fill ${gaps.length} gaps in my shelter's walls with`);
+      let filler = fillerFor();
+      // Out of dirt and stone: planks from a log it carries
+      if (!filler && bot.inventory.items().some((i) => catalog().isLog(i.name))) {
+        const log = bot.inventory.items().find((i) => catalog().isLog(i.name))!;
+        const planks = catalog().planksFor(log.name);
+        if (planks) {
+          const { craftNow } = await import("./craftPlanner");
+          await craftNow(planks, 4);
+        }
+        filler = fillerFor();
+      }
+      if (!filler) return fail("missing_items", `nothing to build my shelter's walls with (${gaps.length} gaps)`);
       const placed = await placeBlockResult(filler, p.x, p.y, p.z, "side");
       if (!placed.ok) console.log(`Couldn't fill the shelter wall at ${p}: ${describeFailure(placed)}`);
     }

@@ -263,8 +263,8 @@ test("the owner's order holds even when a milestone is set aside: no stone tools
   expect(real["mine"]).toEqual(["stone_tools", "chests"]);
 });
 
-test("a shelter only where the room is really underground: solid walls and roof, no sand overhead", () => {
-  const { shelterPlan, shellIsSolid } = realShelter;
+test("what a site leaves to build: none under solid ground, the open roof of a hillside, sand overhead", () => {
+  const { shelterPlan, shellIsSolid, shellGaps } = realShelter;
   const plan = shelterPlan({ x: 0, y: 70, z: 0 }, "south");
   const roof = plan.roomStart.y + 3;
   const solid = () => ({ name: "dirt", boundingBox: "block" });
@@ -272,6 +272,9 @@ test("a shelter only where the room is really underground: solid walls and roof,
   // A hillside: the roof's far end is open air
   const hillside = (p: any) => (p.y >= roof && p.z >= 9 ? { name: "air", boundingBox: "empty" } : solid());
   expect(shellIsSolid(plan.shell, roof, hillside)).toBe(false);
+  // Still a site: those roof blocks get built (3 wide x 2 rows open over z 9-10)
+  expect(shellGaps(plan.shell, roof, hillside)).toBe(6);
+  expect(shellGaps(plan.shell, roof, solid)).toBe(0);
   // A beach: sand over the room falls in
   const beach = (p: any) => (p.y >= roof ? { name: "sand", boundingBox: "block" } : solid());
   expect(shellIsSolid(plan.shell, roof, beach)).toBe(false);
