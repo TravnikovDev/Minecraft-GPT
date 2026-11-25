@@ -156,6 +156,11 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
     }
     if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
+      // Stopped (the owner, something more urgent): carry on from this step next time
+      if (isCommandCancelled() || why === null) {
+        await saveMine(start, dir, i, 0, null);
+        return fail("aborted", "stopped");
+      }
       if (why === "no_tool") {
         await saveMine(start, dir, i, 0, null);
         return fail("no_tool", "my pickaxe wore out digging the mine");
@@ -234,9 +239,10 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       report(`My mine's tunnels here are done; digging the stairs ${LEVEL_STEP} steps deeper.`);
       const deeper = await digStairsTo(rec, hubStep(level));
       if (!deeper.ok) {
-        if (deeper.reason === "no_tool" || deeper.reason === "missing_items" || deeper.reason === "aborted") return deeper;
-        // Stairs blocked: this is as deep as it goes
-        await saveMine(start, dir, rec.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true });
+        if (deeper.reason !== "refused") return deeper;
+        // Stairs blocked: this is as deep as it goes (the steps it did dig stay saved)
+        const now = mineRecord() ?? rec;
+        await saveMine(start, dir, now.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true });
         return fail("not_found", `my mine's stairs can't go deeper (${deeper.detail}) and I still have too little ${stillNames()}`);
       }
       await saveMine(start, dir, hubStep(level) + 1, rec.branches, rec.bottom, { level, arms, deepest: false });
@@ -247,7 +253,17 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const way = armDirection(arm, dir);
     const end = hub.plus(STEP[way].scaled(arms[arm].dug));
     const there = await goTo(new pf.goals.GoalBlock(end.x, end.y, end.z));
-    if (!there.ok) return there;
+    if (!there.ok) {
+      if (isCommandCancelled()) return fail("aborted", "stopped");
+      // Can it get to the hub? Then this tunnel's end is what's out of reach:
+      // that tunnel is done, on with the next (it failed there every trip)
+      const atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+      if (!atHub.ok) return there;
+      console.log(`Mine: can't get to the end of my ${arm} tunnel (${there.detail}); it's done.`);
+      arms = { ...arms, [arm]: { dug: arms[arm].dug, blocked: true } };
+      await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
+      continue;
+    }
     const length = Math.min(CHUNK, ARM_LENGTH - arms[arm].dug);
     const dug = await digStraightTunnel(way, length, end, 1);
     const stop = dug ? null : tunnelStopReason();
@@ -275,14 +291,18 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   const from = Math.max(rec.stairs, 1);
   const top = stepAt(start, dir, from - 1);
   const atTop = await goTo(new pf.goals.GoalBlock(top.x, top.y, top.z));
-  if (!atTop.ok) return atTop;
+  // Not there (a walk that failed, a stop): try again next trip; never "as deep as it goes"
+  if (!atTop.ok) return fail(atTop.reason === "aborted" ? "aborted" : "unreachable", atTop.detail);
   for (let i = from; i <= to; i++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+      if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();
       if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");
       if (why === "no_filler") return fail("missing_items", "nothing to build the stairs' floor with over a cave");
-      return fail("refused", why === "drop" ? "a drop I can't build a floor over" : "water, lava or something built");
+      // Only a real blocker means the stairs go no deeper
+      if (why === "blocked" || why === "drop") return fail("refused", why === "drop" ? "a drop I can't build a floor over" : "water or lava I couldn't plug, or something built");
+      return fail("unreachable", "the stairs stopped (I'll try again)");
     }
     await saveMine(start, dir, i + 1, rec.branches, rec.bottom);
   }

@@ -58,12 +58,12 @@ export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool";
  */
 async function digTunnelBlock(p: Vec3): Promise<boolean> {
   const dug = await breakBlockAtResult(p.x, p.y, p.z);
-  if (!dug.ok && dug.reason === "no_tool") {
-    lastStop = "no_tool";
-    console.log(`Tunnel stopped: ${describeFailure(dug)}.`);
-    return false;
-  }
-  return true;
+  if (dug.ok) return true;
+  // No tool: the planner makes one; anything else it couldn't dig (out of
+  // reach, refused, a keep-out area) is a blocker, never counted as dug
+  lastStop = dug.reason === "no_tool" ? "no_tool" : dug.reason === "aborted" ? null : "blocked";
+  console.log(`Tunnel stopped: ${describeFailure(dug)}.`);
+  return false;
 }
 let lastStop: TunnelStop | null = null;
 
@@ -449,10 +449,9 @@ export async function digStraightTunnel(
         if (stopTunnelAt(blockPos)) return false;
         if (!(await digTunnelBlock(blockPos))) return false;
 
-        // Ensure foundation under the floor blocks
-        if (y === 0) {
-          await ensureBlock(blockPos.offset(0, -1, 0), keepClear);
-        }
+        // Ensure foundation under the floor blocks (bridged over a cave; a
+        // drop it can't floor stops the tunnel, never counted as dug)
+        if (y === 0 && !(await floorUnder(blockPos, keepClear, direction))) return false;
       }
     }
     await pickupNearbyItems(bot, 4);
@@ -588,6 +587,9 @@ export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolea
     console.log(`The hole at ${position} stays open: ${describeFailure(placed)}.`);
     return false;
   }
+  // Its own block: a later tunnel digs through it ("something built" otherwise)
+  await rememberPlug(position);
+  if (support) await rememberPlug(support);
   console.log(`Filled the hole at ${position} with ${name}${support ? ` (a support block at ${support} first)` : ""}.`);
   return true;
 }
