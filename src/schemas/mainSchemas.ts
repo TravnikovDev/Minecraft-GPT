@@ -123,6 +123,8 @@ export const MemorySchema = z.object({
   forbidden: z.array(ForbiddenAreaSchema).optional(),
   // Blocks it put down only to get somewhere (it takes them down again; kept across restarts)
   scaffolds: z.array(z.object({ x: z.number(), y: z.number(), z: z.number(), name: z.string().nullable() })).optional(),
+  // Blocks its tunnels put into water or lava (dug through like stone, never taken down)
+  plugs: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).optional(),
 }).passthrough(); // fields a newer version adds (a diary) survive an older one
 
 // db.json, schema v2. Unknown fields are kept (passthrough), so an older or

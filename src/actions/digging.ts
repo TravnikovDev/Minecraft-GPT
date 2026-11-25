@@ -6,13 +6,13 @@ import {
   placeBlock,
   placeBlockResult,
 } from "../actions/worldInteraction";
-import { saveMineLocation } from "../managers/persistenceManager";
+import { getMemory, saveMineLocation, updateMemory } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
 import { isNatural, isProtected, isWoodenDoor } from "../core/movements";
-import { isOwnBlock, recordScaffold } from "../core/scaffold";
+import { isOwnBlock } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
@@ -121,7 +121,7 @@ export function tunnelBlocked(pos: Vec3): string | null {
   const open = block.boundingBox === "empty";
   // Something built stops a tunnel, unless the bot put it there itself (its
   // scaffolding stopped its own iron tunnel, fresh-world test)
-  if (!open && !isNatural(block.name) && !isOwnBlock(pos, block.name)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
+  if (!open && !isNatural(block.name) && !isOwnBlock(pos, block.name) && !isPlug(pos)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
   return null;
 }
 
@@ -133,6 +133,15 @@ export function tunnelBlocked(pos: Vec3): string | null {
  * own so the tunnel digs it). A few passes: flowing water refills. False
  * with nothing to plug it with or a cell it can't fill.
  */
+// Blocks its tunnels put into water or lava: its own, dug through like stone
+// (remembered per world, so a restart still knows them)
+const plugKey = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},${p.z}`;
+const isPlug = (p: { x: number; y: number; z: number }): boolean => (getMemory().plugs ?? []).some((q) => plugKey(q) === plugKey(p));
+async function rememberPlug(p: Vec3): Promise<void> {
+  if (isPlug(p)) return;
+  await updateMemory({ plugs: [...(getMemory().plugs ?? []), { x: p.x, y: p.y, z: p.z }] });
+}
+
 async function plugLiquids(pos: Vec3): Promise<boolean> {
   const liquid = (p: Vec3): boolean => ["water", "lava"].includes(bot.blockAt(p)?.name ?? "");
   for (let pass = 0; pass < 3; pass++) {
@@ -144,8 +153,9 @@ async function plugLiquids(pos: Vec3): Promise<boolean> {
       if (!filler) return false;
       const placed = await placeBlockResult(filler, c.x, c.y, c.z, "side");
       if (!placed.ok) return false;
-      // In the tunnel's own way (the block it digs next): its own block, dug like scaffolding
-      if (c.equals(pos)) recordScaffold(c, filler);
+      // Remembered as its own plug: the tunnel digs through it (cobblestone
+      // otherwise counts as "something built" and stops it)
+      await rememberPlug(c);
     }
     console.log(`Plugged ${cells.length} block(s) of ${kind} next to my tunnel at ${pos}.`);
   }
