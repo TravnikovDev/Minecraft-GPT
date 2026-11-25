@@ -115,19 +115,68 @@ export function protectMine(): void {
 
 /** The stairs' protected cells (floors, side walls but the hubs') and walking cells (each step's feet, head and the cell above). Pure. */
 export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number): { keep: Vec3[]; walk: Vec3[] } {
-  const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
-  const sides = [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]];
   const keep: Vec3[] = [];
   const walk: Vec3[] = [];
   for (let i = 0; i < stairs; i++) {
     const s = stepAt(start, dir, i);
     walk.push(s, s.offset(0, 1, 0), s.offset(0, 2, 0));
-    if (i === 0) continue;
-    keep.push(s.offset(0, -1, 0));
-    if (hubs.has(i)) continue;
-    for (const side of sides) for (let dy = -1; dy <= 2; dy++) keep.push(s.plus(side).offset(0, dy, 0));
+    keep.push(...stepShell(start, dir, i, level));
   }
   return { keep, walk };
+}
+
+/** One step's floor and side walls (none for the doorway, no side walls at a hub). Pure. */
+function stepShell(start: Pos, dir: DirectionType, i: number, level: number): Vec3[] {
+  if (i === 0) return [];
+  const s = stepAt(start, dir, i);
+  const cells = [s.offset(0, -1, 0)];
+  const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
+  if (hubs.has(i)) return cells;
+  for (const side of [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]]) {
+    for (let dy = -1; dy <= 2; dy++) cells.push(s.plus(side).offset(0, dy, 0));
+  }
+  return cells;
+}
+
+// A torch on the stairs every this many steps (owner: a skeleton in its dark
+// stairs shot it at its own door)
+const STAIR_TORCH_EVERY = 6;
+
+/**
+ * Its stairs looked after on the way down: holes in a step's floor or side
+ * walls filled (a walk stuck on a step had dug round it; caves open into
+ * them), and a torch wherever a stretch is dark. Best effort: a hole it can't
+ * fill or a torch it can't make doesn't stop the trip.
+ */
+export async function lookAfterStairs(): Promise<void> {
+  const rec = mineRecord();
+  if (!rec) return;
+  const { isHoleBlock, ensureBlock, lightSpot } = await import("../actions/digging");
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level);
+  const walkSet = new Set(walk.map((c) => c.toString()));
+  const inWalk = (p: Vec3): boolean => walkSet.has(p.toString());
+  const torchIds = ["torch", "wall_torch"].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
+  const darkAt = (s: Vec3): boolean => bot.findBlocks({ matching: torchIds, point: s, maxDistance: 5, count: 1 }).length === 0;
+  let filled = 0;
+  let lit = 0;
+  let noTorch = "";
+  for (let i = 1; i < rec.stairs; i++) {
+    if (isCommandCancelled()) return;
+    const s = stepAt(rec.start, rec.direction, i);
+    const holes = stepShell(rec.start, rec.direction, i, rec.level).filter((c) => isHoleBlock(bot.blockAt(c)));
+    const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
+    if (holes.length === 0 && !torch) continue;
+    const there = await goTo(new pf.goals.GoalBlock(s.x, s.y, s.z));
+    if (!there.ok) continue;
+    for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
+    if (torch) {
+      const placed = await lightSpot(s.offset(0, 1, 0), rec.direction);
+      if (placed === true) lit++;
+      else noTorch = placed; // no torches or coal: not again this trip
+    }
+  }
+  if (filled + lit > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up.`);
+  if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
 async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean }): Promise<void> {
@@ -334,6 +383,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   if (still().length === 0) return ok();
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
+  await lookAfterStairs(); // holes mended and dark stretches lit on the way down
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");

@@ -245,6 +245,16 @@ async function placeTunnelTorch(spot: Vec3, direction: DirectionType): Promise<b
 }
 
 /**
+ * A torch on a wall beside `spot` (an open cell of a tunnel or stairs going
+ * `direction`), crafting torches first if it must. Says why not otherwise.
+ */
+export async function lightSpot(spot: Vec3, direction: DirectionType): Promise<true | string> {
+  const ready = await torchReady();
+  if (ready !== true) return ready;
+  return (await placeTunnelTorch(spot, direction)) ? true : `no wall to put a torch on at ${spot}`;
+}
+
+/**
  * Called once per tunnel step: every `every` steps, lights the tunnel with a
  * torch (crafting some first if needed). Without torches or coal it says so
  * now and then, and keeps digging.
@@ -526,7 +536,7 @@ export async function digRoom(
 
 /** Leaves rot away and sand falls: never a floor, wall or roof to rely on. */
 const isWeak = (name: string): boolean => name.endsWith("_leaves");
-const isHoleBlock = (b: { name: string; boundingBox: string } | null): boolean =>
+export const isHoleBlock = (b: { name: string; boundingBox: string } | null): boolean =>
   b !== null && (b.boundingBox === "empty" || b.name === "water" || b.name === "lava" || isWeak(b.name));
 const isSolidBlock = (b: { name: string; boundingBox: string } | null): boolean =>
   b !== null && b.boundingBox === "block" && !isWeak(b.name);

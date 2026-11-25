@@ -164,6 +164,17 @@ export async function execute(args: any = {}): Promise<void> {
       bot.chat(result.text);
       return;
     }
-    bot.chat(`${whyNoSleep(message)} My bed is at ${where}.`);
+    const why = `${whyNoSleep(message)} My bed is at ${where}.`;
+    // The night routine tries the bed every few seconds: the same "can't
+    // sleep" is said once, not every 30 seconds all night
+    if (why === lastNoSleep.text && Date.now() - lastNoSleep.at < SAME_NO_SLEEP_MS) {
+      console.log(why);
+    } else {
+      bot.chat(why);
+    }
+    lastNoSleep = { text: why, at: Date.now() };
   }
 }
+
+const SAME_NO_SLEEP_MS = 10 * 60_000;
+let lastNoSleep = { text: "", at: 0 };

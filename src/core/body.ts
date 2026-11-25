@@ -247,13 +247,21 @@ function forwardEvents(currentBot: Bot): void {
   // at their hands; a mob's drop or a broken block's drop doesn't. That's how
   // a gift is told apart from the bot's own pickups.
   const thrownBy = new WeakMap<object, string>();
+  // Its own death drops start at its own hands too: with the owner beside it
+  // at its door they were taken for gifts ("Got 2 stick, thanks!")
+  let diedAt = 0;
+  listen(currentBot, "death", () => {
+    diedAt = Date.now();
+  });
   listen(currentBot, "entitySpawn", (entity: { name?: string; position: { x: number; y: number; z: number } }) => {
-    if (entity.name !== "item") return;
+    if (entity.name !== "item" || Date.now() - diedAt < 5_000) return;
+    const own = currentBot.entity?.position.offset(0, 1.32, 0);
     for (const player of Object.values(currentBot.players)) {
       const p = player.entity;
       if (!p || p === currentBot.entity) continue;
       const hands = p.position.offset(0, 1.32, 0); // eye height minus 0.3: where thrown items start
-      if (hands.distanceTo(entity.position as typeof hands) <= 1) {
+      const d = hands.distanceTo(entity.position as typeof hands);
+      if (d <= 1 && !(own && own.distanceTo(entity.position as typeof own) <= d)) {
         thrownBy.set(entity, player.username);
         break;
       }

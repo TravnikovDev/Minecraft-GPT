@@ -152,6 +152,9 @@ async function cookOnCampfires(campfires: Block[], foods: string[], limit: numbe
  * Fuel to put in for `items` cooks: coal/charcoal (8 each), else planks or
  * logs (1.5 each); never `input` itself (logs being made into charcoal).
  */
+/** True when it carries something to burn (coal, charcoal, planks or logs). */
+export const carriesFuel = (): boolean => pickFuel(1) !== null;
+
 function pickFuel(items: number, input: string | null = null): { name: string; amount: number } | null {
   for (const [match, perFuel] of [[/^(coal|charcoal)$/, 8], [/_planks$/, 1.5], [/_log$/, 1.5]] as const) {
     const fuel = bot.inventory.items().find((i) => match.test(i.name) && i.name !== input);

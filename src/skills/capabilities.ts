@@ -16,6 +16,8 @@ import { currentDimension } from "../actions/perception";
 export const TIER = { wooden: 0, stone: 2, iron: 3, diamond: 4 } as const;
 const JUNK_FOOD = new Set(["rotten_flesh", "poisonous_potato", "spider_eye", "pufferfish"]);
 const TABLE_RANGE = 32;
+// Its own tables it walks back to for crafting (actions/crafting FAR_TABLE_RANGE)
+const REMEMBERED_TABLE_RANGE = 256;
 
 /** How many of an exact item, or of a Catalog category ("logs", "planks"), it carries. */
 export function carried(name: string): number {
@@ -44,7 +46,12 @@ export function foodPoints(): number {
 export function hasTableAccess(): boolean {
   if (carried("crafting_table") > 0) return true;
   const id = bot.registry.blocksByName["crafting_table"]?.id;
-  return id !== undefined && Boolean(bot.findBlock({ matching: id, maxDistance: TABLE_RANGE }));
+  if (id !== undefined && bot.findBlock({ matching: id, maxDistance: TABLE_RANGE })) return true;
+  // One of its own it would walk back to (its shelter's): crafting goes there
+  // anyway, so a new table would be wasted planks (it made one 80 blocks out)
+  const dim = currentDimension();
+  const here = bot.entity?.position;
+  return Boolean(here) && getPlaces("crafting_table").some((t) => (t.dimension ?? dim) === dim && here!.distanceTo(new Vec3(t.x, t.y, t.z)) <= REMEMBERED_TABLE_RANGE);
 }
 
 /** Its shelter (the room it dug), in this dimension, if it has one. */

@@ -69,10 +69,32 @@ async function stockFood(): Promise<ActionResult> {
   }
   // Raw meat is worth more cooked: a furnace from the cobblestone it has
   const hasRaw = bot.inventory.items().some((i) => /^(beef|porkchop|mutton|chicken|rabbit|cod|salmon)$/.test(i.name));
-  if (hasRaw) {
-    if (!(await cookFood()) && (await acquire("furnace", 1, liveWorld)).ok) await cookFood();
-  }
+  if (hasRaw) await cookTheMeat(cookFood);
   return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points; no more animals or berries around`);
+}
+
+/**
+ * Raw meat cooked like a player: in its shelter's furnace (walking home from
+ * the hunt), with coal or wood from its chests when it carries no fuel. A
+ * furnace of its own only without one at home, and never without fuel (80
+ * blocks out it made a table and a furnace, then had nothing to burn).
+ */
+async function cookTheMeat(cookFood: () => Promise<number | null>): Promise<void> {
+  if ((await cookFood()) !== null) return;
+  const { carriesFuel } = await import("../actions/cooking");
+  const home = shelterSlots()?.furnace;
+  if (home) {
+    const there = await goTo(new pf.goals.GoalNear(home.x, home.y, home.z, 2));
+    if (!there.ok || isCommandCancelled()) return;
+    if (!carriesFuel()) {
+      const { storedNear, takeItems } = await import("../actions/storage");
+      const fuel = ["coal", "charcoal", "logs"].find((f) => storedNear(f, 32) > 0);
+      if (fuel) await takeItems([{ name: fuel, count: fuel === "logs" ? 6 : 4 }]);
+    }
+    if ((await cookFood()) !== null || knownBlock(home)?.name === "furnace") return;
+  }
+  if (!carriesFuel()) return;
+  if ((await acquire("furnace", 1, liveWorld)).ok) await cookFood();
 }
 
 /** A bed: 3 wool of one colour (from sheep), crafted, put in its slot in the shelter, used (spawn point). */
