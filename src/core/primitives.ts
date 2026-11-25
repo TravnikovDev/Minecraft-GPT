@@ -48,6 +48,10 @@ const CONFIRM_MS = 1_000; // how long the server gets to show the change
 // A walk that gets nowhere for this long is stuck (owner: 8 s at most; a
 // player notices in a few seconds). Digging or building a step counts as going
 export const WALK_NO_PROGRESS_MS = 8_000;
+// Digging or building its way along counts as progress, but not for ever in
+// one spot: it placed the same scaffold block by a tree for over a minute
+// (fresh-world test) and the 8 s limit never came
+const WORK_IN_PLACE_MS = 15_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const floor = (p: Pos): Vec3 => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
@@ -106,14 +110,22 @@ function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; 
   const controller = new AbortController();
   let last = bot.entity.position.clone();
   let lastProgress = Date.now();
+  // Where and when it last really moved (digging or building in place isn't moving)
+  let anchor = bot.entity.position.clone();
+  let lastMoved = Date.now();
   let hopped = false;
   const timer = setInterval(() => {
     if (!bot.entity) return;
     const here = bot.entity.position;
-    const working = Boolean(bot.pathfinder?.isMining?.() || bot.pathfinder?.isBuilding?.());
+    if (here.distanceTo(anchor) > 1.5) {
+      anchor = here.clone();
+      lastMoved = Date.now();
+    }
+    const working = Boolean(bot.pathfinder?.isMining?.() || bot.pathfinder?.isBuilding?.()) && Date.now() - lastMoved < WORK_IN_PLACE_MS;
     if (here.distanceTo(last) > 0.5 || isAnyReflexActive() || working) {
       last = here.clone();
       lastProgress = Date.now();
+      if (isAnyReflexActive()) lastMoved = Date.now();
     } else if (Date.now() - lastProgress > WALK_NO_PROGRESS_MS) {
       // What it was doing, so a stall in a game test can be explained from the log
       const where = `${here.x.toFixed(2)}, ${here.y.toFixed(2)}, ${here.z.toFixed(2)}, ${bot.entity.onGround ? "on the ground" : "not on the ground"}`;

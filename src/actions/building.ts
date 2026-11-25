@@ -411,24 +411,39 @@ async function patchShell(shell: Vec3[]): Promise<ActionResult> {
   return ok();
 }
 
-/** The wooden door for the wood it carries most of (acacia logs -> acacia_door). */
-function doorForMyWood(): string {
+/**
+ * The wooden door it can make from the wood it carries: the kind it has
+ * enough of (a door takes 6 planks of one wood; a log makes 4). Null when no
+ * one kind is enough (a few birch planks and oak logs make no birch door: it
+ * went on chopping oak for a birch door, fresh-world test).
+ */
+function doorForMyWood(): string | null {
   const c = catalog();
-  const wood = bot.inventory
-    .items()
-    .filter((i) => c.isLog(i.name) || c.isPlanks(i.name))
-    .sort((a, b) => b.count - a.count)
-    .map((i) => (c.isPlanks(i.name) ? i.name : c.planksFor(i.name) ?? ""))
-    .map((planks) => planks.replace(/_planks$/, "_door"))
-    .find((door) => bot.registry.itemsByName[door] !== undefined);
-  return wood ?? "oak_door";
+  const planks = new Map<string, number>();
+  for (const i of bot.inventory.items()) {
+    const kind = c.isPlanks(i.name) ? i.name : c.isLog(i.name) ? c.planksFor(i.name) : null;
+    if (!kind) continue;
+    planks.set(kind, (planks.get(kind) ?? 0) + (c.isPlanks(i.name) ? i.count : i.count * 4));
+  }
+  return (
+    [...planks.entries()]
+      .filter(([, n]) => n >= 6)
+      .sort((a, b) => b[1] - a[1])
+      .map(([kind]) => kind.replace(/_planks$/, "_door"))
+      .find((door) => bot.registry.itemsByName[door] !== undefined) ?? null
+  );
 }
 
 /** Makes a wooden door and puts it in the entrance doorway (no door: the night seal is used instead). */
 async function putInDoor(at: Vec3): Promise<void> {
   if (isWoodenDoor(knownBlock(at)?.name ?? "")) return;
   const carriedDoor = bot.inventory.items().find((i) => isWoodenDoor(i.name));
-  const door = carriedDoor?.name ?? doorForMyWood();
+  // Not enough of any one wood: 2 logs of whatever grows nearby first
+  if (!carriedDoor && !doorForMyWood()) {
+    const { gatherWood } = await import("./gatherWood");
+    await gatherWood(2);
+  }
+  const door = carriedDoor?.name ?? doorForMyWood() ?? "oak_door";
   if (!carriedDoor) {
     const { acquire } = await import("../skills/acquire");
     const { liveWorld } = await import("../skills/world");
