@@ -12,7 +12,8 @@ import { chatter } from "../core/narrator";
 import { travelToResult } from "../actions/movement";
 
 const LEG = 48;
-const SIGHT = 32;
+// Found when the server reports one this close: the hunt then walks to it
+const SIGHT = 200;
 const DIRECTIONS: [string, number, number][] = [
   ["north", 0, -1], ["north-east", 1, -1], ["east", 1, 0], ["south-east", 1, 1],
   ["south", 0, 1], ["south-west", -1, 1], ["west", -1, 0], ["north-west", -1, -1],

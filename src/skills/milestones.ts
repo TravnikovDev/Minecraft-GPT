@@ -7,7 +7,7 @@
 // stuff put away. Later tiers are listed for Phase 7 to plan toward.
 
 import { bot } from "../core/body";
-import { fail, ok, type ActionResult } from "../core/result";
+import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
@@ -66,9 +66,14 @@ async function getBed(): Promise<ActionResult> {
   if (!bot.inventory.items().some((i) => i.name.endsWith("_bed"))) {
     let wool = bestWool();
     if (!wool || wool[1] < 3) {
-      const got = await acquire("white_wool", 3, liveWorld);
+      // More of the colour it already has (most sheep are white)
+      const colour = wool?.[0] ?? "white";
+      const got = await acquire(`${colour}_wool`, 3, liveWorld);
       wool = bestWool();
-      if (!got.ok && (!wool || wool[1] < 3)) return fail("missing_items", "I need 3 wool of one colour for a bed (no sheep around)");
+      if (!got.ok && (!wool || wool[1] < 3)) {
+        console.log(`Bed: no 3 ${colour} wool (${describeFailure(got)}); best is ${wool ? `${wool[1]} ${wool[0]}` : "none"}.`);
+        return fail("missing_items", `I need 3 wool of one colour for a bed (${describeFailure(got)})`);
+      }
     }
     const made = await acquire(`${wool![0]}_bed`, 1, liveWorld);
     if (!made.ok) return made;

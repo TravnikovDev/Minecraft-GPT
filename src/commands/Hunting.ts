@@ -11,13 +11,14 @@ import { attackEntity } from "../actions/combat";
 import { collectDrops } from "../actions/pickup";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { fighting } from "../core/plugins";
-import { countList, isGame, lookForAnimals, planHunt, SIGHT_RANGE, KEEP_PER_KIND } from "../actions/hunting";
+import { countList, isGame, knownAnimals, lookForAnimals, planHunt, SIGHT_RANGE, KEEP_PER_KIND } from "../actions/hunting";
+import { travelToResult } from "../actions/movement";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
 import { queueCommand } from "../managers/actionManager";
 import { BotCommands } from "./types";
 
-export const description = `When user asks the bot to hunt, the bot looks around (what it can see within 60 blocks),
-hunts the common game animals there (cows, pigs, sheep, chickens, rabbits), or only the kind the owner names, and leaves
+export const description = `When user asks the bot to hunt, the bot looks around (what it can see within 60 blocks;
+animals it knows are about but can't see, up to 200 blocks, it walks to first), hunts the common game animals there (cows, pigs, sheep, chickens, rabbits), or only the kind the owner names, and leaves
 two of each kind so they can breed. It picks up the drops, reports what it got and asks whether to keep hunting.
 Only for hunting animals; for food in general use gatherFood (farms first).
 Pass count only when the owner says a number ("kill 3 sheep"); "hunt", "go hunting", "hunt some pigs" have no count.
@@ -76,9 +77,25 @@ export async function execute(args: any): Promise<void> {
   const count = parsed.data.count ?? null;
   const what = mobType ? mobType.replace(/_/g, " ") : "game";
 
-  // 1. Look around and say what's there
-  const found = lookForAnimals().filter((p) => p.distance <= maxDistance);
-  const plan = planHunt(found, mobType, count);
+  // 1. Look around and say what's there. None to take in sight, but the
+  // server says some are about (up to 200 blocks): walk there until they are
+  let found = lookForAnimals().filter((p) => p.distance <= maxDistance);
+  let plan = planHunt(found, mobType, count);
+  if (plan.total === 0) {
+    const inView = new Set(found.map((p) => p.id));
+    const far = knownAnimals().find((p) => isGame(p, mobType) && !inView.has(p.id));
+    if (far) {
+      tellOwner(`No ${what} to take in sight; there's ${far.name.replace(/_/g, " ")} about ${Math.round(far.distance)} blocks away, going there.`);
+      const arrived = await travelToResult(() => {
+        const e = bot.entities[far.id];
+        return e ? { x: e.position.x, y: e.position.y, z: e.position.z } : null;
+      }, { range: 6 });
+      if (isCommandCancelled()) return;
+      if (!arrived.ok) console.log(`Couldn't get to the ${far.name}: ${arrived.ok ? "" : arrived.detail}.`);
+      found = lookForAnimals().filter((p) => p.distance <= maxDistance);
+      plan = planHunt(found, mobType, count);
+    }
+  }
   if (plan.seen.size === 0) {
     tellOwner(`I don't see any ${what} around here.`);
     return;

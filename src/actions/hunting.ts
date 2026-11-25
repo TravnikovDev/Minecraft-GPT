@@ -15,6 +15,12 @@ export const GAME_ANIMALS = new Set(["cow", "pig", "sheep", "chicken", "rabbit"]
 /** How far it looks, and how close it notices animals it can't see. */
 export const SIGHT_RANGE = 60;
 export const HEARING_RANGE = 16;
+/**
+ * How far it knows about animals: everything the server tells it about (it
+ * hears them, sees them from a hill...). Out of sight, it walks toward them
+ * until they are in sight, as a player follows the "baa".
+ */
+export const KNOWN_RANGE = 200;
 /** Left alive of each kind on a general hunt, so the herd comes back. */
 export const KEEP_PER_KIND = 2;
 
@@ -92,4 +98,13 @@ export function lookForAnimals(): Prey[] {
   // Why "I don't see any": what the server sent that was out of sight
   console.log(`Looking for animals: ${found.length} in sight or earshot${hidden.length ? `, out of sight: ${hidden.join(", ")}` : ""}.`);
   return found.sort((a, b) => a.distance - b.distance);
+}
+
+/** Every animal the server reports within `range` (in sight or not), nearest first. */
+export function knownAnimals(range = KNOWN_RANGE): Prey[] {
+  const me = bot.entity.position;
+  return Object.values(bot.entities)
+    .filter((e) => e !== bot.entity && !!e.name && catalog().isHuntable(e.name) && e.position.distanceTo(me) <= range)
+    .map((e) => toPrey(e, e.position.distanceTo(me)))
+    .sort((a, b) => a.distance - b.distance);
 }
