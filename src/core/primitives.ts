@@ -354,7 +354,22 @@ function controlsNow(next: { x: number; z: number } | null): string {
   const p = bot.entity.position;
   const want = next ? `, path wants ${deg(Math.atan2(-(Math.floor(next.x) + 0.5 - p.x), -(Math.floor(next.z) + 0.5 - p.z)))}` : "";
   const effects = Object.keys(bot.entity.effects ?? {}).length;
-  return `keys ${held.join("+") || "none"}, facing ${deg(bot.entity.yaw)}${want}${effects ? `, ${effects} effects` : ""}`;
+  // Every block whose collision box touches its body (within 0.1): what physics bumps into
+  const touching: string[] = [];
+  const w = 0.3 + 0.1;
+  for (let x = Math.floor(p.x - w); x <= Math.floor(p.x + w); x++)
+    for (let y = Math.floor(p.y - 0.1); y <= Math.floor(p.y + 1.9); y++)
+      for (let z = Math.floor(p.z - w); z <= Math.floor(p.z + w); z++) {
+        const b = bot.blockAt(new Vec3(x, y, z), false);
+        for (const sh of (b?.shapes ?? []) as number[][]) {
+          const [x0, y0, z0, x1, y1, z1] = [x + sh[0]!, y + sh[1]!, z + sh[2]!, x + sh[3]!, y + sh[4]!, z + sh[5]!];
+          if (x1 >= p.x - w && x0 <= p.x + w && z1 >= p.z - w && z0 <= p.z + w && y1 >= p.y - 0.1 && y0 <= p.y + 1.9) {
+            touching.push(`${b!.name} ${x},${y},${z}`);
+            break;
+          }
+        }
+      }
+  return `keys ${held.join("+") || "none"}, facing ${deg(bot.entity.yaw)}${want}${effects ? `, ${effects} effects` : ""}; touching ${touching.join("; ") || "nothing"}`;
 }
 
 /** The block it stands on: under its middle, or (on an edge) under a corner of its body. */
