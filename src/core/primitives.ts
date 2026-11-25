@@ -224,6 +224,36 @@ export async function climbDownTree(): Promise<boolean> {
   return lower;
 }
 
+/**
+ * A step it keeps failing to enter though its map says it's open: likely a
+ * "ghost" (the server put back a block it dug and the bot never heard; it
+ * pushed against a step of its own stairs for minutes, fresh-world test).
+ * Like a player, it right-clicks there with a pickaxe or sword in hand
+ * (they do nothing to a block): the server answers every click by sending
+ * the clicked block and the one next to it, so the map is right again and
+ * the next path digs it.
+ */
+async function resyncStep(step: Vec3): Promise<void> {
+  const tool = bot.inventory?.items().find((i) => /_pickaxe$|_sword$/.test(i.name));
+  if (!tool || !bot.blockAt) return;
+  const before = [step, step.offset(0, 1, 0)].map((c) => bot.blockAt(c)?.name ?? "?");
+  try {
+    if (bot.heldItem?.name !== tool.name) await bot.equip(tool, "hand");
+    // Its floor's top (answers: floor and feet), then the feet cell's top (feet and head)
+    for (const cell of [step.offset(0, -1, 0), step]) {
+      const b = bot.blockAt(cell);
+      if (b) await bot.activateBlock(b, new Vec3(0, 1, 0));
+    }
+    await sleep(300); // the answers
+  } catch (error) {
+    console.log(`Couldn't check the step at ${step} with the server: ${(error as Error).message}`);
+    return;
+  }
+  const after = [step, step.offset(0, 1, 0)].map((c) => bot.blockAt(c)?.name ?? "?");
+  const changed = after.some((n, i) => n !== before[i]);
+  console.log(`Checked the step at ${step} with the server: ${changed ? `it was really ${after.join(" / ")} (I had ${before.join(" / ")})` : `still ${after.join(" / ")}`}.`);
+}
+
 /** The block it stands on: under its middle, or (on an edge) under a corner of its body. */
 function blockUnderMe(): Block | null {
   if (!bot.entity || !bot.blockAt) return null;
@@ -281,8 +311,14 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
       onStop: () => pathing.stopIf(goal), // never clear a reflex's goal or a paused follow
     });
     if (!walked.ok) {
-      // Stuck on a step: the next walk routes around it
-      if (walked.reason === "timeout" && nextStep) avoidStep(nextStep);
+      // Stuck on a step: the next walk routes around it, and the bot asks the
+      // server what's really there (it may be a block it thinks it dug)
+      // (set by the path listener; TypeScript can't see that)
+      const stuckOn = nextStep as { x: number; y: number; z: number } | null;
+      if (walked.reason === "timeout" && stuckOn) {
+        avoidStep(stuckOn);
+        await resyncStep(new Vec3(Math.floor(stuckOn.x), Math.floor(stuckOn.y), Math.floor(stuckOn.z)));
+      }
       return walked;
     }
   } finally {
