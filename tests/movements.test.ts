@@ -5,7 +5,7 @@ const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
 const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
-const { safeMovements, clearSolidDoors, avoidStep } = await import(`${ROOT}/src/core/movements.ts`);
+const { safeMovements, clearSolidDoors, avoidStep, protectCells, isProtected, setOwnPassages } = await import(`${ROOT}/src/core/movements.ts`);
 beforeEach(() => clearSolidDoors());
 
 const world = new Map<string, any>();
@@ -60,6 +60,24 @@ test("a step a walk got stuck on is routed around for a while", () => {
   const ledge = { position: new Vec3(48, 95, 31) };
   expect(moves.exclusionStep(ledge)).toBe(0);
   avoidStep({ x: 48.4, y: 95, z: 31.2 }); // the stall log's "next" step
-  expect(moves.exclusionStep(ledge)).toBeGreaterThanOrEqual(100);
+  expect(moves.exclusionStep(ledge)).toBeGreaterThan(0); // dearer, not banned:
+  expect(moves.exclusionStep(ledge)).toBeLessThan(100); // the pathfinder drops moves over 100
   expect(moves.exclusionStep({ position: new Vec3(48, 95, 30) })).toBe(0); // only that cell
+});
+
+test("its shelter's walls are never dug through by a walk", () => {
+  const wall = { position: new Vec3(2, 63, 7) };
+  expect(moves.exclusionBreak(wall)).toBe(0);
+  protectCells([{ x: 2, y: 63, z: 7 }]);
+  expect(isProtected({ x: 2.4, y: 63, z: 7.9 })).toBe(true);
+  expect(moves.exclusionBreak(wall)).toBeGreaterThanOrEqual(10_000);
+  protectCells([]);
+  expect(moves.exclusionBreak(wall)).toBe(0);
+});
+
+test("a stall inside its own shelter is never held against the stairs", () => {
+  setOwnPassages([{ x: 0, y: 66, z: 3 }]);
+  avoidStep({ x: 0, y: 66, z: 3 });
+  expect(moves.exclusionStep({ position: new Vec3(0, 66, 3) })).toBe(0);
+  setOwnPassages([]);
 });

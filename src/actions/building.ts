@@ -8,9 +8,10 @@ import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
 import { catalog } from "../core/catalog";
-import { isWoodenDoor } from "../core/movements";
+import { isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
+import { collectBlock } from "./collectBlock";
 import { TABLE_RANGE } from "./crafting";
 import {
   addPlace,
@@ -230,8 +231,15 @@ function unfinished(): { start: Vec3; dir: DirectionType } | null {
   return { start: new Vec3(start.x, start.y, start.z), dir };
 }
 
+/** Counts a failed patch on the unfinished shelter; returns how many so far. */
+async function noteFailedPatch(start: Vec3, dir: DirectionType, room: RoomSize, depth: number): Promise<number> {
+  const tries = ((shelterPlace(true)?.details?.["patchTries"] as number | undefined) ?? 0) + 1;
+  await saveShelter(start, dir, room, depth, true, tries);
+  return tries;
+}
+
 /** Saves the shelter (its stand cell, with every spot in it); `incomplete` until dug. */
-async function saveShelter(start: Vec3, dir: DirectionType, room: RoomSize, depth: number, incomplete: boolean): Promise<void> {
+async function saveShelter(start: Vec3, dir: DirectionType, room: RoomSize, depth: number, incomplete: boolean, patchTries = 0): Promise<void> {
   const plan = shelterPlan(start, dir, room, depth);
   const dim = currentDimension();
   await forgetPlaces((p) => p.kind === "basement" && p.dimension === dim && p.details?.["incomplete"] === true);
@@ -242,6 +250,7 @@ async function saveShelter(start: Vec3, dir: DirectionType, room: RoomSize, dept
     ...plain(plan.stand),
     details: {
       incomplete,
+      patchTries,
       start: plain(start),
       direction: dir,
       room,
@@ -274,6 +283,7 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   if (!(await ensurePickaxe())) return fail("no_tool", "no pickaxe to dig a shelter");
 
   let site = unfinished();
+  const resuming = site !== null;
   if (!site) {
     const base = getBaseLocation();
     const baseHere = base && bot.entity.position.distanceTo(new Vec3(base.x, base.y, base.z)) <= BASE_NEAR;
@@ -285,25 +295,43 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   const plan = shelterPlan(start, dir, roomSize, tunnelDepth);
   const walked = await goTo(new pf.goals.GoalBlock(start.x, start.y, start.z));
   if (!walked.ok) return walked;
-  report("Digging a shelter for the night.");
+  if (!resuming) report("Digging a shelter for the night.");
 
-  // Dig the diagonal tunnel
-  if (!(await digDiagonalTunnel(dir, tunnelDepth, { width: 1, height: STAIRS_HEIGHT }, start, "basementEntrance"))) {
-    return fail("refused", "the stairs hit lava, water or something built");
+  // Already dug out (a retry after patching failed): straight to patching
+  const dugOut = resuming && plan.cells.every((c) => knownBlock(c)?.boundingBox === "empty");
+  if (!dugOut) {
+    // Dig the diagonal tunnel
+    if (!(await digDiagonalTunnel(dir, tunnelDepth, { width: 1, height: STAIRS_HEIGHT }, start, "basementEntrance"))) {
+      return fail("refused", "the stairs hit lava, water or something built");
+    }
+    // Build a doorway at the entrance to basement (end of tunnel)
+    await digDoorway(plan.enter, dir);
+    // Create the room at the end of the tunnel
+    await digRoom(plan.roomStart, roomSize, dir);
+    // Make a doorway on another side of the room: the mine starts there
+    await digDoorway(plan.exit.minus(ALONG[dir]), dir);
   }
-  // Build a doorway at the entrance to basement (end of tunnel)
-  await digDoorway(plan.enter, dir);
-  // Create the room at the end of the tunnel
-  await digRoom(plan.roomStart, roomSize, dir);
-  // Make a doorway on another side of the room: the mine starts there
-  await digDoorway(plan.exit.minus(ALONG[dir]), dir);
   // Pick up what it dug (the dirt and stone to patch with), then make the
   // shell solid, and only then count the shelter as done; otherwise the next
   // try carries on at the same spot
   await pickupNearbyItems(bot);
+  // Short of filler for the gaps: dirt it can see first
+  const gaps = plan.shell.filter((p) => knownBlock(p) && knownBlock(p)!.boundingBox !== "block").length;
+  const filler = PATCH_FILLERS.reduce((n, name) => n + bot.inventory.items().filter((i) => i.name === name).reduce((c, i) => c + i.count, 0), 0);
+  if (gaps > filler) await collectBlock("dirt", gaps - filler + 4, 16, { seenOnly: true });
   const patched = await patchShell(plan.shell);
-  if (!patched.ok) return patched;
+  if (!patched.ok) {
+    // Twice and still gaps: this site won't do; the next try picks another
+    const tries = await noteFailedPatch(start, dir, roomSize, tunnelDepth);
+    if (tries >= 2) {
+      const dim = currentDimension();
+      await forgetPlaces((p) => p.kind === "basement" && p.dimension === dim && p.details?.["incomplete"] === true);
+      console.log(`Shelter at ${start} couldn't be closed up after ${tries} tries; I'll pick another spot.`);
+    }
+    return patched;
+  }
   await saveShelter(start, dir, roomSize, tunnelDepth, false);
+  protectShelter();
   console.log(`Shelter dug: stairs from ${start} going ${dir}, room from ${plan.roomStart}, exit at ${plan.exit}.`);
   await putInDoor(plan.entrance);
   await pickupNearbyItems(bot);
@@ -448,8 +476,21 @@ export async function leaveShelter(): Promise<ActionResult> {
   return ok();
 }
 
+/** Its shelter's shell (walls, roof, floor) protected from walks and collecting; the doorway seal stays breakable. */
+export function protectShelter(): void {
+  const room = shelterPlace(false);
+  const start = room?.details?.["start"] as Pos | undefined;
+  const dir = room?.details?.["direction"] as DirectionType | undefined;
+  if (!room || !start || !dir) return protectCells([]);
+  const plan = shelterPlan(start, dir, (room.details?.["room"] as RoomSize | undefined) ?? DEFAULT_ROOM, (room.details?.["depth"] as number | undefined) ?? DEFAULT_DEPTH);
+  const seal = new Set(cellsOf(room, "seal").map(cellKey));
+  protectCells(plan.shell.filter((p) => !seal.has(cellKey(p))));
+  setOwnPassages(plan.cells);
+}
+
 /** After a restart: blocks closing the doorway are its door again (the walking rules may break them). */
 export function rememberShelterDoor(): void {
+  protectShelter();
   const room = shelterPlace(false);
   if (!room) return;
   for (const p of cellsOf(room, "seal")) {

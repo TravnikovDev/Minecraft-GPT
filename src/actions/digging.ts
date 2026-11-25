@@ -166,8 +166,11 @@ export async function digDiagonalTunnel(
   tunnelSize: { width: number; height: number } = { width: 1, height: 4 },
   startPosition?: Vec3,
   tunnelName: string = `Tunnel-${direction}-${depth}`,
-  torchInterval: number = TORCH_EVERY
+  torchInterval: number = TORCH_EVERY,
+  options: { save?: boolean } = {}
 ): Promise<boolean> {
+  // A shelter's stairs and the mine's single steps aren't mines of their own
+  const remember = tunnelName !== "basementEntrance" && options.save !== false;
   if (!startPosition) startPosition = bot.entity.position.clone();
 
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
@@ -207,9 +210,9 @@ export async function digDiagonalTunnel(
   }
 
   // Commentary (the shelter announces itself)
-  if (tunnelName !== "basementEntrance") chatter(`I've dug ${tunnelName.replace(/-/g, " ")}.`, "digging");
+  if (remember) chatter(`I've dug ${tunnelName.replace(/-/g, " ")}.`, "digging");
 
-  if (tunnelName !== "basementEntrance")
+  if (remember)
     saveMineLocation({
       name: tunnelName,
       direction,

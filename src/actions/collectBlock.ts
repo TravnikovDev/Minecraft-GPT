@@ -12,6 +12,7 @@ import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/re
 import { canSee, openFaces, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
+import { isProtected } from "../core/movements";
 import { recordSighting } from "./perception";
 import { tunnelTo } from "./digging";
 import { makeRoom } from "./overflow";
@@ -93,7 +94,8 @@ export async function collectBlock(
       break;
     }
     // Not ones it gave up on, nor ones in an area it must keep out of
-    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position));
+    // Never its shelter's walls (protected), nor where it must keep out
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && !isProtected(b.position));
     for (const b of blocks.slice(0, 8)) recordSighting(b.name, b.position); // hints for later
 
     if (blocks.length === 0) {
@@ -129,7 +131,10 @@ export async function collectBlock(
       }
 
       // Implement vein mining
-      const veinBlocks = findVeinBlocks(block, num, range, 1);
+      // seenOnly: an ore's vein is fine (it uncovers as it goes), but plain
+      // stone would follow into the hillside, carving a hole (architect review)
+      const isOre = c.isOre(block.name);
+      const veinBlocks = options.seenOnly && !isOre ? [block] : findVeinBlocks(block, num, range, 1);
 
       for (const veinBlock of veinBlocks) {
         if (collected >= num) break;
@@ -141,8 +146,9 @@ export async function collectBlock(
           veinBlock.position.z
         );
         // Mining digs cheaply, so the path search finds stairs down to an
-        // ore instead of timing out (the walking rules forbid shafts)
-        expectOk(await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
+        // ore instead of timing out (the walking rules forbid shafts). Not
+        // for what it can see: it walks there like anyone, no digging its way
+        expectOk(options.seenOnly ? await goTo(goal) : await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
 
         // Break the block and collect drops; only a block really broken counts
         const mined = await mineAndCollect(veinBlock);

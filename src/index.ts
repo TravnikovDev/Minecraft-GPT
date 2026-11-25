@@ -45,7 +45,7 @@ import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
 import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
-import { rememberShelterDoor } from "./actions/building";
+import { protectShelter, rememberShelterDoor } from "./actions/building";
 import { considerOpportunities, resetOpportunities } from "./skills/opportunities";
 
 // A long-running bot must not die on one stray async error (for example a
@@ -105,6 +105,7 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 15_000, considerNextStep); // its own life, when the owner turned it on (skills/curriculum)
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
+  protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
   everyWhileConnected(currentBot, 5_000, considerOpportunities); // ores in sight go on the task list at their priority (skills/opportunities)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);

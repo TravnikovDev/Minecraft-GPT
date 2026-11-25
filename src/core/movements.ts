@@ -51,16 +51,44 @@ export function clearSolidDoors(): void {
 /** Wooden doors (iron doors need redstone, so they stay walls). */
 export const isWoodenDoor = (name: string): boolean => name.endsWith("_door") && name !== "iron_door";
 
+// Its shelter's walls, roof and floor: never dug through by a walk or a
+// collect ("stone in sight" carved into them; a walk from the grass above
+// dug a hole to the sky over the exit). Set by actions/building.
+const protectedCells = new Set<string>();
+
+/** The cells no walk or collect may break (replaces the previous set). */
+export function protectCells(cells: Array<{ x: number; y: number; z: number }>): void {
+  protectedCells.clear();
+  for (const c of cells) protectedCells.add(`${c.x},${c.y},${c.z}`);
+}
+
+/** True for a protected cell (its shelter's shell). */
+export function isProtected(p: { x: number; y: number; z: number }): boolean {
+  return protectedCells.size > 0 && protectedCells.has(`${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`);
+}
+
 // Steps a walk got stuck on (jumping at a ledge it never got up, fresh-world
 // test: the next walk planned the very same step, again and again). For a
 // minute they cost so much that the route goes another way, as a player would.
 const avoidedSteps = new Map<string, number>();
 const AVOID_STEP_MS = 60_000;
-const STUCK_STEP_COST = 100;
+// A cost, not a ban: the pathfinder drops any move over 100, and one stall in
+// the 1-wide shelter stairs must not block the only way in (architect review)
+const STUCK_STEP_COST = 15;
+// Its own shelter's stairs, doorways and room: never avoided
+const ownPassages = new Set<string>();
+
+/** The cells of its own shelter (stairs, doorways, room): stalls there are never held against them. */
+export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>): void {
+  ownPassages.clear();
+  for (const c of cells) ownPassages.add(`${c.x},${c.y},${c.z}`);
+}
 
 /** A step (the cell it was trying to move into) to route around for a while. */
 export function avoidStep(p: { x: number; y: number; z: number }): void {
-  avoidedSteps.set(`${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`, Date.now() + AVOID_STEP_MS);
+  const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+  if (ownPassages.has(key)) return;
+  avoidedSteps.set(key, Date.now() + AVOID_STEP_MS);
 }
 
 function stuckStep(block: { position?: { x: number; y: number; z: number } }): number {
@@ -168,7 +196,8 @@ export function safeMovements(bot: Bot): pf.Movements {
   moves.canDig = true; // natural terrain only (see above)
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
-  const keepOut = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && forbiddenAt(block.position) ? 10_000 : 0);
+  const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
+    block.position && (forbiddenAt(block.position) || isProtected(block.position)) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep] as typeof moves.exclusionAreasStep;
   moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
   moves.exclusionAreasPlace = [keepOut] as typeof moves.exclusionAreasPlace;

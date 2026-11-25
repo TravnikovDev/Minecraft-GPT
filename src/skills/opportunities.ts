@@ -10,7 +10,9 @@
 import type { Block } from "prismarine-block";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
-import { Bucket, currentTask, pendingTasks, propose } from "../core/arbiter";
+import pf from "mineflayer-pathfinder";
+import { Bucket, currentTask, pendingTasks, propose, type TaskSpec } from "../core/arbiter";
+import { goTo } from "../core/primitives";
 import { areChoresMuted } from "../core/chores";
 import { forbiddenAt } from "../core/forbidden";
 import { chatter } from "../core/narrator";
@@ -28,7 +30,8 @@ const ORE_RANK = ["diamond", "emerald", "gold", "iron", "redstone", "lapis", "co
 const GOES_FIRST = ORE_RANK.indexOf("iron");
 
 const failed = new Map<string, number>();
-const keyOf = (b: Block): string => `${b.position.x},${b.position.y},${b.position.z}`;
+// Failures by area (about 4 blocks): an unreachable vein isn't retried block by block
+const keyOf = (b: Block): string => `${Math.floor(b.position.x / 4)},${Math.floor(b.position.y / 4)},${Math.floor(b.position.z / 4)}`;
 
 /** The ore's kind ("deepslate_iron_ore" -> "iron"), or null for anything that isn't one. */
 export function oreKind(name: string): string | null {
@@ -70,8 +73,11 @@ export function bestOreInSight(): Block | null {
   return candidates[0] ?? null;
 }
 
-const alreadyOnIt = (): boolean =>
-  (currentTask()?.name.startsWith(TASK_PREFIX) ?? false) || pendingTasks().some((t) => t.name.startsWith(TASK_PREFIX));
+/** A task for this kind of ore already running or waiting (coal waiting must not hide iron). */
+const alreadyOnIt = (kind: string): boolean => {
+  const mine = (name: string): boolean => name.startsWith(TASK_PREFIX) && name.includes(` ${kind} `);
+  return (currentTask() ? mine(currentTask()!.name) : false) || pendingTasks().some((t) => mine(t.name));
+};
 
 /**
  * Called every few seconds: when nothing urgent is going on (no owner's
@@ -79,27 +85,36 @@ const alreadyOnIt = (): boolean =>
  * list at the priority it deserves.
  */
 export function considerOpportunities(): void {
-  if (!bot.entity || areChoresMuted() || alreadyOnIt()) return;
+  if (!bot.entity || areChoresMuted()) return;
   const running = currentTask();
   if (running && running.bucket < Bucket.Self) return; // the owner's command, a threat, upkeep: not now
   const ore = bestOreInSight();
   if (!ore) return;
   const kind = oreKind(ore.name)!;
+  if (alreadyOnIt(kind)) return;
   const first = oreRank(kind) <= GOES_FIRST;
-  const name = `${TASK_PREFIX}${ore.name.replace(/_/g, " ")} I saw`;
-  console.log(`Opportunity: ${ore.name} in sight at ${ore.position}; ${first ? "before my next milestone" : "when I'm free"}.`);
-  propose(
-    {
-      name,
-      bucket: first ? Bucket.Self : Bucket.Idle,
-      run: async () => {
-        chatter(`There's ${kind} ore right there; mining it.`, "opportunity");
-        const got = await collectBlock(ore.name, 8, LOOK_RANGE + 4, { seenOnly: true });
-        if (got === 0) failed.set(keyOf(ore), Date.now() + FAILED_FOR_MS);
-      },
+  console.log(`Opportunity: ${ore.name} in sight at ${ore.position}; ${first ? "now, then back to what I was doing" : "when I'm free"}.`);
+  propose(oreTask(ore, kind, first), { front: first });
+}
+
+/** The task for an ore it saw: walk there, mine it (and its vein), give up on that spot for a while if it can't. */
+function oreTask(ore: Block, kind: string, first: boolean): TaskSpec {
+  const spec: TaskSpec = {
+    name: `${TASK_PREFIX} ${kind} ore I saw`.replace("  ", " "),
+    bucket: first ? Bucket.Self : Bucket.Idle,
+    // Iron and better: worth stopping the milestone for (it carries on afterwards)
+    interrupts: first,
+    run: async () => {
+      chatter(`There's ${kind} ore over there; mining it.`, "opportunity");
+      // Where it saw it: the task may have waited, and the bot moved on
+      const near = await goTo(new pf.goals.GoalNear(ore.position.x, ore.position.y, ore.position.z, 3));
+      const got = near.ok ? await collectBlock(ore.name, 8, LOOK_RANGE + 4, { seenOnly: true }) : 0;
+      if (got === 0) failed.set(keyOf(ore), Date.now() + FAILED_FOR_MS);
     },
-    { front: first }
-  );
+    // Cut off (by a milestone or an order): again later if the ore is still there
+    resume: () => (bot.blockAt(ore.position)?.name === ore.name ? oreTask(ore, kind, first) : null),
+  };
+  return spec;
 }
 
 /** Forgets ores it failed at (a new connection; tests). */
