@@ -436,6 +436,17 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number; steppedByHand?:
     movedBack++;
   };
   bot.on?.("forcedMove" as never, onForced as never);
+  // The first few server teleports of a walk, raw, with where the bot was
+  // just before (it keeps getting put back at a step it's pushing into)
+  let shown = 0;
+  const client = (bot as unknown as { _client?: { prependListener?: (e: string, f: (p: unknown) => void) => void; removeListener?: (e: string, f: (p: unknown) => void) => void } })._client;
+  const onTeleport = (packet: unknown): void => {
+    if (shown++ >= 3 || !bot.entity) return;
+    const p = bot.entity.position;
+    const v = bot.entity.velocity;
+    console.log(`Server teleport ${shown}: ${JSON.stringify(packet)}; I was at ${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)} moving ${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)}, ${bot.entity.onGround ? "on the ground" : "in the air"}.`);
+  };
+  client?.prependListener?.("position", onTeleport);
   const block = (dy: number): string => bot.blockAt(bot.entity.position.floored().offset(0, dy, 0))?.name ?? "?";
   const watchdog = walkWatchdog(
     () =>
@@ -480,6 +491,7 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number; steppedByHand?:
     watchdog.stop();
     bot.removeListener?.("path_update" as never, onPath as never);
     bot.removeListener?.("forcedMove" as never, onForced as never);
+    client?.removeListener?.("position", onTeleport);
     // Only a walk in progress can be blamed for being stuck (not one that ended, at a chest or a table)
     if (spot && lastGoal === spot) lastGoal = null;
   }
