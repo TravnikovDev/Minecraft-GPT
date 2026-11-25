@@ -3,6 +3,7 @@
 // most common commands (stop, come, follow, status) are handled by code with
 // no LLM call, so they work instantly and even when OpenAI is unreachable.
 
+import { noteOwnerSaid } from "../planner/diaryHooks";
 import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { BotCommands } from "../commands/types";
@@ -179,6 +180,7 @@ export async function handleChat(username: string, message: string, channel: "ch
   const text = stripBotName(message);
   console.log(`Owner says${channel === "whisper" ? " (whisper)" : ""}: ${text}`);
   recordTurn("owner", text);
+  noteOwnerSaid(text);
   // Replies said while handling this message go back the way the owner asked
   await withOwnerChannel(channel, async () => {
     try {

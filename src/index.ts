@@ -48,6 +48,7 @@ import { BotCommands } from "./commands/types";
 import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
 import { protectShelter, rememberShelterDoor } from "./actions/building";
 import { registerFaceFix } from "./core/faces";
+import { registerDiary } from "./planner/diaryHooks";
 import { considerOpportunities, resetOpportunities } from "./skills/opportunities";
 
 // A long-running bot must not die on one stray async error (for example a
@@ -108,6 +109,7 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 15_000, considerNextStep); // its own life, when the owner turned it on (skills/curriculum)
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
+  registerDiary(); // the diary code writes for the day planner (Phase 7)
   registerFaceFix(); // never a hair inside a block face (the server put it back 20 times a second)
   protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
   void import("./skills/mine")

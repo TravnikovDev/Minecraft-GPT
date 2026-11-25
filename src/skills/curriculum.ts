@@ -10,6 +10,7 @@
 //   up again in the morning.
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
+import { noteMilestone, noteMilestoneFailed } from "../planner/diaryHooks";
 import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
@@ -73,6 +74,7 @@ async function announce(): Promise<void> {
     const done = MILESTONES.filter((x) => x.tier === m.tier && x.done()).length;
     const total = MILESTONES.filter((x) => x.tier === m.tier).length;
     report(`Milestone: ${m.title} (${done} of ${total} ${m.tier === 1 ? "for my first day" : m.tier === 2 ? "for my mine" : "for iron and diamonds"}).`);
+    noteMilestone(m.title);
   }
   if (tier1Reached() && !getMemory().milestones?.["tier1"]) {
     await updateMemory({ milestones: { ...(getMemory().milestones ?? {}), tier1: Date.now() } });
@@ -92,6 +94,7 @@ function milestoneTask(m: Milestone): TaskSpec {
       if (!result.ok && !isCommandCancelled()) {
         blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
         const why = describeFailure(result);
+        noteMilestoneFailed(m.title, why);
         if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < BLOCKED_FOR_MS) {
           console.log(`Couldn't get ${m.title} either: ${why}.`);
         } else {

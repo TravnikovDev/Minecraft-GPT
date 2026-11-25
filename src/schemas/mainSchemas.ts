@@ -127,6 +127,35 @@ export const MemorySchema = z.object({
   scaffolds: z.array(z.object({ x: z.number(), y: z.number(), z: z.number(), name: z.string().nullable() })).optional(),
   // Blocks its tunnels put into water or lava (dug through like stone, never taken down)
   plugs: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).optional(),
+  // Phase 7. The diary code writes, one entry per game day (raw lines until
+  // the planner summarises the day), and the day summaries that replace them
+  diary: z
+    .array(
+      z.object({
+        day: z.number(),
+        lines: z.array(z.object({ at: z.number(), time: z.string(), text: z.string(), times: z.number().optional() })),
+        gains: z.record(z.string(), z.number()).optional(),
+      })
+    )
+    .optional(),
+  daySummaries: z.array(z.object({ day: z.number(), text: z.string() })).optional(),
+  // The day plan the model made (validated), and how far it got
+  plan: z
+    .object({
+      madeAt: z.number(),
+      day: z.number(),
+      narrative: z.string(),
+      steps: z.array(
+        z.object({
+          goal: z.string(),
+          args: z.record(z.string(), z.unknown()),
+          why: z.string(),
+          status: z.enum(["pending", "running", "done", "failed", "skipped"]),
+          reason: z.string().optional(),
+        })
+      ),
+    })
+    .optional(),
 }).passthrough(); // fields a newer version adds (a diary) survive an older one
 
 // db.json, schema v2. Unknown fields are kept (passthrough), so an older or
