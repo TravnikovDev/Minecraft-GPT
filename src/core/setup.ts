@@ -38,6 +38,12 @@ export function installPlugins(currentBot: Bot): void {
 
   const rules = walkingRules(currentBot);
   currentBot.pathfinder.setMovements(rules);
+  // After placing a block, the pathfinder walks back to a remembered spot
+  // before planning any route, and never forgets that spot (not even for a
+  // new goal). With the spot gone (its scaffolding taken down) it pushed
+  // forward against a wall forever: every walk "no path computed yet", the
+  // bot standing idle in daylight (first game test). Off: placements are ours.
+  (currentBot.pathfinder as unknown as { LOSWhenPlacingBlocks: boolean }).LOSWhenPlacingBlocks = false; // set at runtime, not in the types
   currentBot.pvp.movements = rules;
 
   // Backstop: if anything ever swaps in other walking rules (a plugin's
