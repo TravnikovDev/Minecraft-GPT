@@ -51,6 +51,14 @@ const demotedUntil = new Map<string, number>();
  * Gets `count` of `item` (an exact item, or "logs"), crafting and gathering
  * what's needed. `depth` guards the prerequisites (a table, a pickaxe).
  */
+/**
+ * How much to gather when `n` are missing: about 20% more, at least one
+ * spare (owner: always gather with a 10-30% margin; 15 logs of oak and
+ * birch made no 6 chests, fresh-world test). Pure.
+ */
+export const withMargin = (n: number): number => Math.ceil(n * GATHER_MARGIN);
+const GATHER_MARGIN = 1.2;
+
 export async function acquire(item: string, count: number, world: AcquireWorld, depth = 0): Promise<ActionResult> {
   // Deep enough for diamonds: iron pickaxe -> ingots -> furnace -> stone -> wooden pickaxe -> table
   if (depth > MAX_DEPTH) return fail("missing_items", `${item}: too many things needed first`);
@@ -94,7 +102,7 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
         const got = await acquire(need.item, need.count, world, depth + 1);
         if (!got.ok) return got;
       }
-      const result = await source.run(m.name, m.count);
+      const result = await source.run(m.name, withMargin(m.count));
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const key = `${source.name}:${m.name}`;
       if (result.ok) {

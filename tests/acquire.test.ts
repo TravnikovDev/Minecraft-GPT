@@ -7,7 +7,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { acquire, clearDemotions } = await import(`${ROOT}/src/skills/acquire.ts`);
+const { acquire, clearDemotions, withMargin } = await import(`${ROOT}/src/skills/acquire.ts`);
 
 // A tiny game: recipes (what each craft takes) and an inventory
 const RECIPES: Record<string, { makes: number; takes: Record<string, number>; table?: boolean }> = {
@@ -199,7 +199,9 @@ test("torches with no coal ore around: a furnace from cobblestone, charcoal from
   expect(inv.torch).toBeGreaterThanOrEqual(4);
   const at = (what: string) => log.findIndex((l) => l.startsWith(what));
   expect(at("mine coal")).toBeGreaterThanOrEqual(0); // tried coal ore first
-  expect(at("craft wooden_pickaxe")).toBeLessThan(at("mine cobblestone") === -1 ? at("mine 8") : at("mine cobblestone"));
+  const firstStone = log.findIndex((l) => /^mine \d+$/.test(l)); // the stone source logs "mine <n>"
+  expect(firstStone).toBeGreaterThanOrEqual(0);
+  expect(at("craft wooden_pickaxe")).toBeLessThan(firstStone);
   expect(at("craft furnace")).toBeLessThan(at("smelt coal"));
   expect(at("smelt coal")).toBeLessThan(at("craft torch"));
 });
@@ -231,4 +233,8 @@ test("a craft that claims success but makes nothing: it goes to the source inste
   expect(result.ok).toBe(true);
   expect(inv.white_wool).toBe(3);
   expect(log).toContain("hunt 1");
+});
+
+test("gathering takes about 20% more than is missing, at least one spare", () => {
+  expect([1, 2, 5, 8, 11, 16].map(withMargin)).toEqual([2, 3, 6, 10, 14, 20]);
 });
