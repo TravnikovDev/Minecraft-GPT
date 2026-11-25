@@ -17,6 +17,7 @@ import { markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, collectDrops, isIdle, mayWanderTo, noRealWork } from "./pickup";
 import { placeBlock } from "./worldInteraction";
 import { tellOwner } from "../managers/ownerDialog";
+import { getMemory } from "../managers/persistenceManager";
 
 type BlockAt = (pos: Vec3) => Block | null;
 
@@ -152,13 +153,25 @@ async function replantStump(tree: Felled): Promise<string | null> {
 const RETRY_MS = 2 * 60_000; // leaves still falling: look again later
 
 /**
+ * True while it lives on its own and its first day isn't done (shelter,
+ * tools, furniture, food, bed): replanting waits until then. Owner: it spent
+ * the first day regrowing trees instead of getting ready for the night; it's
+ * the lowest of chores.
+ */
+export function firstDayUnderway(): boolean {
+  const memory = getMemory();
+  const living = memory.autonomy?.on ?? process.env["AUTONOMY"] === "on";
+  return living && !memory.milestones?.["tier1"];
+}
+
+/**
  * Called every few seconds: while idle, goes back to trees it cut a minute
  * or more ago, collects the saplings around each stump and plants them.
  * A stump it has no sapling for yet stays on the list (leaves keep falling
  * for minutes; jungle trees rarely drop one) and is tried again later.
  */
 export async function replantWhenIdle(): Promise<void> {
-  if (felled.length === 0 || !isIdle()) return;
+  if (felled.length === 0 || !isIdle() || firstDayUnderway()) return;
   const now = Date.now();
   for (let i = felled.length - 1; i >= 0; i--) {
     if (now - felled[i].at <= FORGET_AFTER_MS) continue;

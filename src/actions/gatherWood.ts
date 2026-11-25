@@ -6,7 +6,7 @@ import { goToPosition, moveAway } from "../actions/movement";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
 import { recordSighting } from "./perception";
-import { findTrunk, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
+import { findTrunk, firstDayUnderway, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
 import { takeDownScaffolding } from "./scaffolding";
 
 // Give up after this many failed attempts in a row to find or reach a tree
@@ -124,7 +124,7 @@ export async function gatherWood(
     }
 
     console.log(`Wood gathering complete! Total logs collected: ${logsCount}.`);
-    if (treesToReplant() > 0) bot.chat("Once the leaves fall I'll pick up the saplings and replant the trees.");
+    if (treesToReplant() > 0 && !firstDayUnderway()) bot.chat("Once the leaves fall I'll pick up the saplings and replant the trees.");
     return true;
   } catch (error) {
     console.error("Failed to gather wood:", error);
