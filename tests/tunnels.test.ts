@@ -250,6 +250,23 @@ test("a support block goes next to the last solid one, never in the walking spac
   expect(digging.supportFor(new Vec3(3, 56, 0), leafy, clear)).toEqual(new Vec3(2, 56, 0));
 });
 
+test("a floor two blocks from anything solid (over water): a short bridge of supports, solid end first", () => {
+  // Only the previous step's floor is solid; the next floor is two cells out from it
+  const solidAt = new Set([key({ x: 2, y: 57, z: 0 })]);
+  const at = (p: any) => (solidAt.has(key(p)) ? { name: "stone", boundingBox: "block" } : { name: "water", boundingBox: "empty" });
+  const clear = (p: any) => digging.inStaircase(p, new Vec3(0, 60, 0), "east", 1, 3);
+  const chain = digging.supportChain(new Vec3(4, 56, 0), at, clear);
+  expect(chain).not.toBeNull();
+  expect(chain.length).toBe(2);
+  // The first one is beside the solid block, the last beside the hole
+  const touches = (a: any, b: any) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.z - b.z) === 1;
+  expect(touches(chain[0], { x: 2, y: 57, z: 0 })).toBe(true);
+  expect(touches(chain[1], { x: 4, y: 56, z: 0 })).toBe(true);
+  for (const c of chain) expect(clear(c)).toBe(false);
+  // Too far: nothing
+  expect(digging.supportChain(new Vec3(9, 50, 0), at, clear)).toBeNull();
+});
+
 test("water next to the tunnel: it plugs it with dirt and digs on", async () => {
   changed.set(key({ x: 3, y: 57, z: 1 }), "water"); // beside the 3rd step
   walkOnStairs();

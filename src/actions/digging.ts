@@ -539,11 +539,40 @@ const isSolidBlock = (b: { name: string; boundingBox: string } | null): boolean 
  * then the floor against it. Pure, tested with a made-up world.
  */
 export function supportFor(position: Vec3, blockAt: (p: Vec3) => { name: string; boundingBox: string } | null, keepClear: (p: Vec3) => boolean = () => false): Vec3 | null {
-  if (SIDES.some((s) => isSolidBlock(blockAt(position.plus(s))))) return null; // nothing needed
-  for (const s of SIDES) {
-    const n = position.plus(s);
-    if (keepClear(n) || !isHoleBlock(blockAt(n))) continue;
-    if (SIDES.some((s2) => isSolidBlock(blockAt(n.plus(s2))))) return n;
+  const chain = supportChain(position, blockAt, keepClear, 1);
+  return chain && chain.length === 1 ? chain[0]! : null;
+}
+
+/**
+ * The support blocks a hole needs before it can be filled, in the order to
+ * place them: none when something solid is next to it already; otherwise the
+ * shortest run (up to `maxBlocks`) of open cells from one beside something
+ * solid to one beside the hole, never through `keepClear` cells. Its stairs
+ * stopped over water two blocks from the nearest stone ("nothing to put it
+ * against"), and the mine ended there. Null when there is none. Pure.
+ */
+export function supportChain(position: Vec3, blockAt: (p: Vec3) => { name: string; boundingBox: string } | null, keepClear: (p: Vec3) => boolean = () => false, maxBlocks = 3): Vec3[] | null {
+  const solidNext = (c: Vec3): boolean => SIDES.some((s) => isSolidBlock(blockAt(c.plus(s))));
+  if (solidNext(position)) return [];
+  const key = (c: Vec3): string => `${c.x},${c.y},${c.z}`;
+  // Breadth first out from the hole: the first open cell beside something solid ends it
+  let frontier: Vec3[][] = [[position]];
+  const seen = new Set([key(position)]);
+  for (let depth = 0; depth < maxBlocks; depth++) {
+    const next: Vec3[][] = [];
+    for (const path of frontier) {
+      for (const s of SIDES) {
+        const n = path[path.length - 1]!.plus(s);
+        if (seen.has(key(n))) continue;
+        seen.add(key(n));
+        if (keepClear(n) || !isHoleBlock(blockAt(n))) continue;
+        const longer = [...path, n];
+        // Placed from the solid end back toward the hole
+        if (solidNext(n)) return longer.slice(1).reverse();
+        next.push(longer);
+      }
+    }
+    frontier = next;
   }
   return null;
 }
@@ -572,14 +601,17 @@ export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolea
     const cleared = await breakBlockAtResult(position.x, position.y, position.z);
     if (!cleared.ok) return false;
   }
-  const support = supportFor(position, (p) => bot.blockAt(p), keepClear);
-  if (support) {
+  const supports = supportChain(position, (p) => bot.blockAt(p), keepClear) ?? [];
+  for (const support of supports) {
+    if (!filler()) return false;
     const propped = await placeBlockResult(filler()!, support.x, support.y, support.z, "side");
     if (!propped.ok) {
       console.log(`Couldn't put a support block at ${support} for the hole at ${position}.`);
       return false;
     }
+    await rememberPlug(support);
   }
+  const support = supports.length > 0 ? supports[0] : null;
   const name = filler();
   if (!name) return false;
   const placed = await placeBlockResult(name, position.x, position.y, position.z, "side");
@@ -589,8 +621,7 @@ export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolea
   }
   // Its own block: a later tunnel digs through it ("something built" otherwise)
   await rememberPlug(position);
-  if (support) await rememberPlug(support);
-  console.log(`Filled the hole at ${position} with ${name}${support ? ` (a support block at ${support} first)` : ""}.`);
+  console.log(`Filled the hole at ${position} with ${name}${support ? ` (${supports.length} support block${supports.length > 1 ? "s" : ""} from ${support} first)` : ""}.`);
   return true;
 }
 
