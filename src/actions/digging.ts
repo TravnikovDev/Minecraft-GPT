@@ -12,7 +12,7 @@ import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
 import { isNatural, isProtected, isWoodenDoor } from "../core/movements";
-import { isOwnBlock } from "../core/scaffold";
+import { isOwnBlock, recordScaffold } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
@@ -123,6 +123,33 @@ export function tunnelBlocked(pos: Vec3): string | null {
   // scaffolding stopped its own iron tunnel, fresh-world test)
   if (!open && !isNatural(block.name) && !isOwnBlock(pos, block.name)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
   return null;
+}
+
+/**
+ * Water or lava in or next to the block a tunnel is about to dig: a player
+ * plugs it with a block first (its main tunnel ended at a pool of water and
+ * every iron trip stopped there, fresh-world test). Fills each liquid cell
+ * (dirt first; cobblestone placed in the tunnel's own way is marked as its
+ * own so the tunnel digs it). A few passes: flowing water refills. False
+ * with nothing to plug it with or a cell it can't fill.
+ */
+async function plugLiquids(pos: Vec3): Promise<boolean> {
+  const liquid = (p: Vec3): boolean => ["water", "lava"].includes(bot.blockAt(p)?.name ?? "");
+  for (let pass = 0; pass < 3; pass++) {
+    const cells = [pos, ...SIDES.map((s) => pos.plus(s))].filter(liquid);
+    if (cells.length === 0) return true;
+    const kind = bot.blockAt(cells[0]!)?.name ?? "water";
+    for (const c of cells) {
+      const filler = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((n) => getItemCount(n) > 0);
+      if (!filler) return false;
+      const placed = await placeBlockResult(filler, c.x, c.y, c.z, "side");
+      if (!placed.ok) return false;
+      // In the tunnel's own way (the block it digs next): its own block, dug like scaffolding
+      if (c.equals(pos)) recordScaffold(c, filler);
+    }
+    console.log(`Plugged ${cells.length} block(s) of ${kind} next to my tunnel at ${pos}.`);
+  }
+  return ![pos, ...SIDES.map((s) => pos.plus(s))].some(liquid);
 }
 
 /** Checks one block before a tunnel digs it; logs and tells the owner when it must stop. */
@@ -274,6 +301,7 @@ export async function digDiagonalTunnel(
         // Its shelter's walls, roof and floor: never dug (the mine's first
         // stair, in the back doorway, dug the block over the door)
         if (isProtected(digPosition)) continue;
+        await plugLiquids(digPosition);
         if (stopTunnelAt(digPosition)) return false;
         if (!(await digTunnelBlock(digPosition))) return false;
         // Straight on to the next block: each dig already waits for the server
@@ -407,6 +435,7 @@ export async function digStraightTunnel(
     for (let y = 0; y < 2; y++) {
       for (let x = -half; x <= width - 1 - half; x++) {
         const blockPos = position.offset(side.x * x, y, side.z * x);
+        await plugLiquids(blockPos);
         if (stopTunnelAt(blockPos)) return false;
         if (!(await digTunnelBlock(blockPos))) return false;
 
@@ -582,6 +611,7 @@ export async function digDiagonalTunnelUp(
 
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
+        await plugLiquids(digPosition);
         if (stopTunnelAt(digPosition)) return false;
         if (!(await digTunnelBlock(digPosition))) return false;
 

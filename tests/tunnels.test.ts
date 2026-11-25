@@ -201,6 +201,11 @@ test("with no torches and no coal it says so once and keeps digging", async () =
 // pathfinder would, not inside the block it's going to place.
 function carveCave(): void {
   for (let x = 2; x <= 6; x++) for (let y = 50; y <= 59; y++) for (let z = -1; z <= 1; z++) changed.set(key({ x, y, z }), "air");
+  walkOnStairs();
+}
+
+/** Walking stands on a stair already dug (as the pathfinder would), not in the block it's after. */
+function walkOnStairs(): void {
   fake.pathfinder.goto = async (g: any) => {
     for (let i = 0; i <= 6; i++) {
       const stair = new Vec3(i, 60 - i, 0);
@@ -243,4 +248,20 @@ test("a support block goes next to the last solid one, never in the walking spac
   // Leaves next to it are no support
   const leafy = (p: any) => (key(p) === key({ x: 2, y: 56, z: 0 }) ? { name: "oak_leaves", boundingBox: "block" } : at(p));
   expect(digging.supportFor(new Vec3(3, 56, 0), leafy, clear)).toEqual(new Vec3(2, 56, 0));
+});
+
+test("water next to the tunnel: it plugs it with dirt and digs on", async () => {
+  changed.set(key({ x: 3, y: 57, z: 1 }), "water"); // beside the 3rd step
+  walkOnStairs();
+  items = [{ name: "dirt", count: 16 }];
+  fake.entity.position = new Vec3(0.5, 60, 0.5);
+  expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(true);
+  expect(blockAt({ x: 3, y: 57, z: 1 }).name).toBe("dirt");
+});
+
+test("water next to the tunnel and nothing to plug it with: it stops", async () => {
+  changed.set(key({ x: 3, y: 57, z: 1 }), "water");
+  items = [];
+  fake.entity.position = new Vec3(0.5, 60, 0.5);
+  expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(false);
 });
