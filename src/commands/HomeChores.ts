@@ -36,10 +36,13 @@ export async function execute(): Promise<void> {
     return;
   }
   report("Home. Putting things away, cooking and checking my tools.");
+  // What didn't work, said at the end (never a plain "done" when it wasn't)
+  const problems: string[] = [];
 
   // Cheap stuff in the chests (it keeps its working supply)
   const { storeItems } = await import("../actions/storage");
-  await storeItems("lowValue");
+  const stored = await storeItems("lowValue");
+  if (stored?.problem) problems.push(`couldn't put things away (${stored.problem})`);
   if (isCommandCancelled()) return;
 
   // Raw meat in the furnace
@@ -47,6 +50,7 @@ export async function execute(): Promise<void> {
   if (rawFoodInInventory().length > 0) {
     const cooked = await cookFood();
     if (cooked !== null && cooked > 0) report(`Cooked ${cooked} food.`);
+    else if (cooked === null) problems.push("no furnace or fuel to cook my raw food");
   }
   if (isCommandCancelled()) return;
 
@@ -57,13 +61,13 @@ export async function execute(): Promise<void> {
   if (rawIron > 0 && toolTier("pickaxe") < TIER.iron) {
     const { smeltIronAndMakePickaxe } = await import("../skills/milestones");
     const made = await smeltIronAndMakePickaxe();
-    if (!made.ok) console.log(`Home: no iron pickaxe yet (${describeFailure(made)}).`);
+    if (!made.ok) problems.push(`no iron pickaxe yet (${describeFailure(made)})`);
   }
   for (const [kind, item] of [["pickaxe", "stone_pickaxe"], ["sword", "stone_sword"]] as const) {
     if (isCommandCancelled()) return;
     if (toolTier(kind) >= TIER.stone) continue;
     const made = await acquire(item, 1, liveWorld);
-    if (!made.ok) report(`I couldn't make a ${item.replace(/_/g, " ")}: ${describeFailure(made)}.`);
+    if (!made.ok) problems.push(`no ${item.replace(/_/g, " ")} (${describeFailure(made)})`);
   }
-  report("Done at home.");
+  report(problems.length === 0 ? "Done at home." : `Done at home, except: ${problems.join("; ")}.`);
 }

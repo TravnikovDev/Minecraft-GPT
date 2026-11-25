@@ -44,6 +44,7 @@ mock.module(`${ROOT}/src/core/body.ts`, () => ({
   onLogin: () => {},
   chatSent: () => {},
   isOnline: () => g.__testBot !== undefined,
+  listen: (target: { on?: (e: string, f: (...a: unknown[]) => void) => void }, event: string, handler: (...a: unknown[]) => void) => target?.on?.(event, handler),
 }));
 
 // What the bot says goes straight to the fake bot's chat/whisper (no pacing),

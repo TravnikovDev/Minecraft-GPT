@@ -84,8 +84,11 @@ export function loadChests(): KnownChest[] {
 
 /** Remembers a chest and what's in it now (replacing what it knew about that spot). */
 export async function rememberChest(chest: KnownChest): Promise<void> {
+  const before = loadChests().find((c) => samePlace(c, chest));
   const others = loadChests().filter((c) => !samePlace(c, chest));
-  await updateMemory({ chests: [...others, chest] });
+  // Once its own, always its own (opening it again doesn't say who placed it)
+  const own = chest.own ?? before?.own;
+  await updateMemory({ chests: [...others, own ? { ...chest, own } : chest] });
 }
 
 /** Forgets a chest (it was broken or isn't there any more). */

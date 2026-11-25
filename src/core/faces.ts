@@ -10,7 +10,7 @@
 // (owner: "THERE ARE WALKABLE PATH"; "server moved me back 373 times").
 
 import { Vec3 } from "vec3";
-import { bot } from "./body";
+import { bot, listen } from "./body";
 
 const HALF_WIDTH = 0.3;
 const HEIGHT = 1.8;
@@ -40,7 +40,10 @@ export function offTheFaces(pos: { x: number; y: number; z: number }, blocks: Bo
       [b.maxZ - minZ, () => (z = b.maxZ + HALF_WIDTH + CLEARANCE)],
     ];
     const [depth, push] = depths.reduce((a, c) => (c[0] < a[0] ? c : a));
-    if (depth < HAIR) push();
+    // A hair into a floor or ceiling is the physics' business, not a side
+    // push off an edge (architect review)
+    const vertical = Math.min(maxY - b.minY, b.maxY - minY);
+    if (depth < HAIR && depth <= vertical) push();
   }
   return { x, z };
 }
@@ -72,6 +75,7 @@ function unstick(): void {
  * goes to the server): off any block face it ended up a hair inside.
  */
 export function registerFaceFix(): void {
-  bot.on("forcedMove", unstick);
-  bot.on("physicsTick", unstick);
+  // Through listen(): per connection, and a throw never lands in mineflayer's physics loop
+  listen(bot, "forcedMove", unstick);
+  listen(bot, "physicsTick", unstick);
 }

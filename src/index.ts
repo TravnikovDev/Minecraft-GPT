@@ -110,7 +110,9 @@ onConnectionReady((currentBot) => {
   resetOpportunities();
   registerFaceFix(); // never a hair inside a block face (the server put it back 20 times a second)
   protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
-  void import("./skills/mine").then((m) => m.protectMine()); // and its mine stairs (lazy: skills load commands)
+  void import("./skills/mine")
+    .then((m) => m.protectMine()) // and its mine stairs (lazy: skills load commands)
+    .catch((error: unknown) => console.error("Couldn't protect my mine stairs:", error));
   everyWhileConnected(currentBot, 5_000, considerOpportunities); // ores in sight go on the task list at their priority (skills/opportunities)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);

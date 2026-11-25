@@ -91,7 +91,7 @@ async function cookTheMeat(cookFood: () => Promise<number | null>): Promise<void
     if (!carriesFuel()) {
       const { storedNear, takeItems } = await import("../actions/storage");
       const fuel = ["coal", "charcoal", "logs"].find((f) => storedNear(f, 32) > 0);
-      if (fuel) await takeItems([{ name: fuel, count: fuel === "logs" ? 6 : 4 }]);
+      if (fuel) await takeItems([{ name: fuel, count: fuel === "logs" ? 6 : 4 }], true);
     }
     if ((await cookFood()) !== null || knownBlock(home)?.name === "furnace") return;
   }

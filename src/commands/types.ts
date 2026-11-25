@@ -11,7 +11,11 @@ export type CommandKey = keyof typeof All;
 /** A command's name, as chat and the model use it: "goToPlayer". */
 type BotCommands = Uncapitalize<CommandKey>;
 
-/** The name of a command from its key, so `BotCommands.GoToPlayer` is "goToPlayer". */
+/**
+ * The name of a command from its key, so `BotCommands.GoToPlayer` is
+ * "goToPlayer". It can't be listed (`Object.values` is empty): the registry
+ * (commands/registry) is the list to go through.
+ */
 const BotCommands = new Proxy({} as { readonly [K in CommandKey]: Uncapitalize<K> }, {
   get: (_target, key) => (typeof key === "string" ? key.charAt(0).toLowerCase() + key.slice(1) : undefined),
 });

@@ -13,9 +13,7 @@ export async function executeTool(command: string, args: any) {
   console.log(`Executing tool command ${command}`);
 
   const commandModule = commandRegistry[command as BotCommands];
-  if (commandModule) {
-    await commandModule.execute(args);
-  } else {
-    console.error(`Error: command ${command} not found in registry.`);
-  }
+  // An unknown name is a failed task, never a quiet "done" (architect review)
+  if (!commandModule) throw new Error(`unknown command "${command}"`);
+  await commandModule.execute(args);
 }

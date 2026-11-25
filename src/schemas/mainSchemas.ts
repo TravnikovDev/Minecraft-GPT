@@ -103,6 +103,8 @@ export const MemorySchema = z.object({
         dimension: z.string(),
         contents: z.record(z.string(), z.number()).nullable(),
         seenAt: z.number(),
+        // A chest it placed itself (its own, for the planner to take from)
+        own: z.boolean().optional(),
       })
     )
     .optional(),

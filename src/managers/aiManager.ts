@@ -198,7 +198,7 @@ export async function initiateActionFromAI(
 ): Promise<void> {
   const { response, toolCalls } = await handleOpenAIResponse(username, message);
   let answered = false; // the reply is said once, however many tools were called
-  // Lazily: the registry loads every command, and a static import closes a cycle
+  // Lazily: the registry loads every command
   const { isBotAction } = await import("../commands/registry");
 
   for (const toolCall of toolCalls) {

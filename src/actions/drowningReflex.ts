@@ -48,20 +48,37 @@ function isWaterAt(dy: number): boolean {
 
 const headUnderwater = (): boolean => isWaterAt(1.62);
 
+/** A block as the drop check sees it: its name, its collision, and (water) its level. */
+export type CellLook = { name: string; boundingBox: string; level?: number } | null;
+
 /**
- * True when pushing forward could carry it off a drop: the spot ahead has no
- * floor or water within a few blocks below. At the top of a waterfall it swam
- * out into the open and fell ten blocks, three times, and died (owner's game).
+ * True when the cells straight down from the spot ahead (its own height
+ * first, then up to 3 below) hold no floor: nothing solid, and no still
+ * water over something solid. Flowing and falling water are no floor: at the
+ * top of a waterfall the spot ahead is water, and pushing on into it it fell
+ * ten blocks, three times, and died (owner's game). Pure.
  */
+export function isDropAhead(column: CellLook[]): boolean {
+  for (let i = 0; i < column.length; i++) {
+    const b = column[i];
+    if (!b) return true; // not loaded: don't go
+    if (b.boundingBox === "block") return false;
+    if (WATER_BLOCKS.has(b.name) && (b.level ?? 0) === 0 && column.slice(i + 1).some((c) => c?.boundingBox === "block")) return false;
+  }
+  return true;
+}
+
+/** The drop check at the spot 0.8 ahead of where it faces. */
 function dropAhead(): boolean {
   const p = bot.entity.position;
   const ahead = new Vec3(p.x - Math.sin(bot.entity.yaw) * 0.8, p.y, p.z - Math.cos(bot.entity.yaw) * 0.8).floored();
-  for (let dy = 0; dy >= -3; dy--) {
+  const column: CellLook[] = [0, -1, -2, -3].map((dy) => {
     const b = bot.blockAt(ahead.offset(0, dy, 0));
-    if (!b) return true;
-    if (b.boundingBox === "block" || WATER_BLOCKS.has(b.name)) return false;
-  }
-  return true;
+    if (!b) return null;
+    const level = Number((b.getProperties() as { level?: number | string }).level ?? 0);
+    return { name: b.name, boundingBox: b.boundingBox, level };
+  });
+  return isDropAhead(column);
 }
 
 function finish(): void {

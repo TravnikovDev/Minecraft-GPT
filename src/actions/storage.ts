@@ -19,6 +19,7 @@ import { goTo } from "../core/primitives";
 import { ago } from "./perception";
 import { describeFailure, expectOk, explain, wasStopped } from "../core/result";
 import { forgetChest, loadChests, rememberChest, type KnownChest } from "../core/session";
+import { shelter } from "../skills/capabilities";
 import { itemMatcher } from "./inventory";
 import { countList } from "./hunting";
 
@@ -220,10 +221,10 @@ async function stillThere(c: KnownChest): Promise<Block | null> {
  * The chest to use: a remembered one (nearest first; for taking items, one
  * that had them), else the nearest chest or barrel it can see around.
  */
-export async function chooseChest(holding?: (contents: Record<string, number>) => boolean): Promise<Block | null> {
+export async function chooseChest(holding?: (contents: Record<string, number>) => boolean, ownOnly = false): Promise<Block | null> {
   const me = bot.entity.position;
   const known = loadChests()
-    .filter((c) => c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= REMEMBERED_RANGE)
+    .filter((c) => (!ownOnly || ownChest(c)) && c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= REMEMBERED_RANGE)
     // A chest never opened (contents unknown) can't be said to hold anything
     .filter((c) => !holding || (c.contents !== null && holding(c.contents)))
     .sort((a, b) => me.distanceTo(new Vec3(a.x, a.y, a.z)) - me.distanceTo(new Vec3(b.x, b.y, b.z)));
@@ -231,6 +232,9 @@ export async function chooseChest(holding?: (contents: Record<string, number>) =
     const block = await stillThere(c);
     if (block) return block;
   }
+  // Looking for one that holds something: only chests it knows hold it, never
+  // whatever chest is around (architect review: it would open strange chests)
+  if (holding) return null;
   const ids = [...STORAGE_BLOCKS].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
   return bot.findBlock({ matching: ids, maxDistance: SEARCH_RADIUS });
 }
@@ -303,11 +307,15 @@ export type TakeResult = {
   problem?: string;
 } | null;
 
-/** Takes items (or everything, with no list) from the chest that has them. */
-export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
+/**
+ * Takes items (or everything, with no list) from the chest that has them.
+ * `ownOnly`: only from its own chests that had them (the planner), never the
+ * nearest chest around.
+ */
+export async function takeItems(wanted: Wanted[] | null, ownOnly = false): Promise<TakeResult> {
   const holds = (contents: Record<string, number>): boolean =>
     !wanted || wanted.some((w) => Object.keys(contents).some(itemMatcher(w.name)));
-  const chest = (await chooseChest(holds)) ?? (await chooseChest());
+  const chest = ownOnly ? await chooseChest(holds, true) : ((await chooseChest(holds)) ?? (await chooseChest()));
   if (!chest) return null;
   const taken = new Map<string, number>();
   const missing: string[] = [];
@@ -341,13 +349,27 @@ export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
   return { taken, missing, full, chestAt: at(chest.position) };
 }
 
-/** How many of an item (exact name or group like "logs") its chests within `range` hold, as last seen. */
+// Its shelter's chests count as its own (older memory has no "own" mark)
+const SHELTER_CHEST_RANGE = 8;
+
+/** True for a chest of its own: one it placed, or one in its shelter. Never the owner's or one it found. */
+function ownChest(c: KnownChest): boolean {
+  if (c.own) return true;
+  const home = shelter();
+  return home !== null && new Vec3(home.x, home.y, home.z).distanceTo(new Vec3(c.x, c.y, c.z)) <= SHELTER_CHEST_RANGE;
+}
+
+/**
+ * How many of an item (exact name or group like "logs") its own chests
+ * within `range` hold, as last seen. Only its own: the owner's chests it has
+ * looked into are the owner's (architect review).
+ */
 export function storedNear(itemName: string, range = REMEMBERED_RANGE): number {
   if (!bot.entity) return 0;
   const matches = itemMatcher(itemName);
   const me = bot.entity.position;
   return loadChests()
-    .filter((c) => c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= range)
+    .filter((c) => ownChest(c) && c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= range)
     .reduce((n, c) => n + Object.entries(c.contents ?? {}).filter(([name]) => matches(name)).reduce((m, [, k]) => m + k, 0), 0);
 }
 

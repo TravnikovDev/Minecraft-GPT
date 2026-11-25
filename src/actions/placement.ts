@@ -118,11 +118,20 @@ export async function placeChestOutOfTheWay(itemName = "chest"): Promise<Block |
     const dug = (await breakBlockAt(niche.x, niche.y + 1, niche.z)) && (await breakBlockAt(niche.x, niche.y, niche.z));
     if (dug && (await placeBlock(itemName, niche.x, niche.y, niche.z))) {
       const placed = bot.blockAt(niche);
-      if (placed?.name === itemName) return placed;
+      if (placed?.name === itemName) return markOwn(placed);
     }
     console.log(`Placing the ${itemName} in the niche at ${niche} failed; trying free ground.`);
   }
-  return placeItemNear(itemName);
+  const placed = await placeItemNear(itemName);
+  return placed ? markOwn(placed) : null;
+}
+
+/** A chest it just placed is its own (the planner takes only from its own chests). */
+async function markOwn(chest: Block): Promise<Block> {
+  const { rememberChest } = await import("../core/session");
+  const p = chest.position;
+  await rememberChest({ x: p.x, y: p.y, z: p.z, dimension: (bot.game as { dimension?: string }).dimension ?? "overworld", contents: {}, seenAt: Date.now(), own: true });
+  return chest;
 }
 
 /** The nearest bed block within range, if any. */

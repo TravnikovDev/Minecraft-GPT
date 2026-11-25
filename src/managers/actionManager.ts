@@ -9,7 +9,6 @@
 import { CommandSchema } from "../schemas/mainSchemas";
 import type { CommandType } from "../schemas/types";
 import { BotCommands } from "../commands/types";
-import { executeTool } from "./toolManager";
 import { Bucket, cancelRunning, currentTask, onTaskEnd, propose, resetArbiter, stopAll, type TaskSpec } from "../core/arbiter";
 import { currentSignal, getCurrentCommandName, isCommandCancelled, progressOf } from "../core/commandContext";
 import { stopReflexes } from "../core/reflexes";
@@ -121,6 +120,9 @@ function commandTask(command: CommandType, resumed = false): TaskSpec {
     },
     run: async () => {
       signal = currentSignal();
+      // Lazily: toolManager loads the registry, which loads every command, and
+      // commands import this file (the one seam that breaks that cycle)
+      const { executeTool } = await import("./toolManager");
       await executeTool(command.command, command.args);
     },
     onEnd: (outcome) => {

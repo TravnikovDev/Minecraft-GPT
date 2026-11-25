@@ -166,7 +166,10 @@ export async function lookAfterStairs(): Promise<void> {
     const holes = stepShell(rec.start, rec.direction, i, rec.level).filter((c) => isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     if (holes.length === 0 && !torch) continue;
-    const there = await goTo(new pf.goals.GoalBlock(s.x, s.y, s.z));
+    // A hole in this step's own floor can't be stood on: fill it from the step above
+    const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
+    const stand = floorHole ? stepAt(rec.start, rec.direction, i - 1) : s;
+    const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
     if (!there.ok) continue;
     for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
     if (torch) {
@@ -315,7 +318,7 @@ async function paveSteps(): Promise<ActionResult> {
     const cobble = Math.ceil((steps.length - have) / 4) * 6 - carried(["cobblestone"]);
     if (cobble > 0) {
       const { takeItems } = await import("../actions/storage");
-      await takeItems([{ name: "cobblestone", count: cobble + 4 }]);
+      await takeItems([{ name: "cobblestone", count: cobble + 4 }], true);
     }
     const { acquire } = await import("./acquire");
     const { liveWorld } = await import("./world");
