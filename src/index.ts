@@ -16,7 +16,8 @@ import { bot, connect, everyWhileConnected, listen, onBotCreated, onChatSent, on
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
 import { saveBed } from "./core/session";
 import { on } from "./core/events";
-import { loadDb, removeAllCommands } from "./managers/persistenceManager";
+import { removeAllCommands, useWorld, worldIdFrom } from "./managers/persistenceManager";
+import { existsSync } from "node:fs";
 import { queueCommand } from "./managers/actionManager";
 import { abortForDisconnect, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
@@ -47,7 +48,8 @@ process.on("uncaughtException", (error) => {
 });
 
 // Load Database before starting bot
-await loadDb();
+// Memory is per world: it's loaded when the server says which world this is (login)
+if (existsSync("db.json")) console.log("Memory: db.json is from before memory was kept per world; it isn't used (worlds/ holds each world's memory).");
 
 // One-off owner commands don't survive a restart: without fresh intent from
 // the owner they would resume on their own. Remembered places are kept.
@@ -132,6 +134,15 @@ on("bot:died", ({ position }) => {
 
 /** Event handlers for every new Bot instance. */
 onBotCreated((currentBot) => {
+  // Which world this is: its memory is loaded before the bot spawns (and
+  // switched if a respawn lands in a different world, behind a proxy)
+  const loadWorld = (packet: { hashedSeed?: unknown }): void => {
+    const id = worldIdFrom(packet.hashedSeed);
+    if (id) void useWorld(id);
+    else console.error("Memory: the server sent no world seed; memory stays as it is.");
+  };
+  listen(currentBot._client, "login", loadWorld);
+  listen(currentBot._client, "respawn", loadWorld);
   // Chat and whispers go through the gateway: owner only, fast path first
   listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message, "chat"));
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message, "whisper"));

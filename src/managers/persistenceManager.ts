@@ -1,15 +1,22 @@
 // Path: src/managers/persistenceManager.ts
-// db.json: what the bot remembers across restarts (schema v2, see
+// What the bot remembers across restarts, one file per world:
+// worlds/<world id>.json next to db.json. The world id is the hashed seed the
+// server sends at login (the same for a world across restarts and LAN ports;
+// two worlds made from the same seed share it). Until the bot has logged in
+// there is no world, and nothing is saved. The single db.json from before
+// memory was kept per world is left alone.
+//
+// Each world file (schema v2, see
 // managers/migrate.ts). Points of interest (base, crafting tables, furnaces,
 // mines) live in memory.places, chests in the chest index (memory.chests),
 // plus the death spot, the owner's last position, its bed, the recent
 // conversation and the areas it must keep out of. The old getter and setter
 // names are kept as adapters over memory.places.
 
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
-import { resolve } from "path";
+import { dirname, join, resolve } from "path";
 import { z } from "zod";
 import type { DbSchemaType, MemoryType, MineType, PositionType } from "../schemas/types";
 import { BotProgressSchema, DbSchema, LoreSchema, MemorySchema, PositionSchema } from "../schemas/mainSchemas";
@@ -17,13 +24,48 @@ import type { DirectionType } from "../actions/digging";
 import { DB_VERSION, migrate } from "./migrate";
 
 // DB_PATH lets tests use a throwaway file instead of the bot's real memory
-const dbPath = resolve(process.env["DB_PATH"] ?? "db.json");
-const adapter = new JSONFile<DbSchemaType>(dbPath);
-const db = new Low<DbSchemaType>(adapter, {
-  version: DB_VERSION,
-  lore: { events: [] },
-  botProgress: { currentLevel: 1, craftableTier: 1, unlockedRecipes: [] },
-});
+const legacyPath = resolve(process.env["DB_PATH"] ?? "db.json");
+const worldsDir = join(dirname(legacyPath), "worlds");
+let dbPath = legacyPath;
+let currentWorld: string | null = null;
+// Saving starts once a file is loaded (a world's, or the test file)
+let loaded = false;
+const freshDb = (path: string): Low<DbSchemaType> =>
+  new Low<DbSchemaType>(new JSONFile<DbSchemaType>(path), {
+    version: DB_VERSION,
+    lore: { events: [] },
+    botProgress: { currentLevel: 1, craftableTier: 1, unlockedRecipes: [] },
+  });
+let db = freshDb(dbPath);
+
+/** The world id from the login packet's hashed seed (64 bits, as protodef gives them: [high, low] or a bigint). */
+export function worldIdFrom(hashedSeed: unknown): string | null {
+  try {
+    const v = Array.isArray(hashedSeed)
+      ? (BigInt((hashedSeed[0] as number) >>> 0) << 32n) | BigInt((hashedSeed[1] as number) >>> 0)
+      : BigInt(hashedSeed as bigint | number | string);
+    return BigInt.asUintN(64, v).toString(16).padStart(16, "0");
+  } catch {
+    return null;
+  }
+}
+
+/** The world whose memory is loaded (null before the first login). */
+export function currentWorldId(): string | null {
+  return currentWorld;
+}
+
+/** Switches memory to this world's file (loading it, or starting empty). */
+export async function useWorld(id: string): Promise<void> {
+  if (id === currentWorld) return;
+  currentWorld = id;
+  mkdirSync(worldsDir, { recursive: true });
+  dbPath = join(worldsDir, `${id}.json`);
+  const known = existsSync(dbPath);
+  db = freshDb(dbPath);
+  await loadDb();
+  console.log(`Memory: world ${id} (${known ? "remembered" : "new"}, ${dbPath}).`);
+}
 
 /**
  * Loads db.json, bringing an older one up to v2 (a copy of the old file is
@@ -31,6 +73,7 @@ const db = new Low<DbSchemaType>(adapter, {
  * bot starts with empty memory, so saving never silently stops.
  */
 export async function loadDb(): Promise<void> {
+  loaded = true;
   let raw: unknown = db.data;
   if (existsSync(dbPath)) {
     try {
@@ -97,6 +140,7 @@ export function salvage(data: Record<string, unknown>): DbSchemaType {
 
 /** Saves db.json. A validation failure is a bug: it is logged loudly every time. */
 export async function saveDb(): Promise<void> {
+  if (!loaded) return; // no world yet: nothing to save it under
   try {
     const parsed = DbSchema.safeParse(db.data);
     if (!parsed.success) {

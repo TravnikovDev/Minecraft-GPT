@@ -11,6 +11,8 @@ import { askOwner, tellOwner } from "../managers/ownerDialog";
 import { inventoryFull } from "../actions/storage";
 import { makeRoom } from "../actions/overflow";
 import { isArmorPiece, wearBestArmor } from "../actions/armor";
+import { catalog } from "../core/catalog";
+import { describeFailure } from "../core/result";
 
 export const description = `When player is asking the bot to craft an item, the bot works out the recipe, makes the
 parts it can (planks from logs, sticks from planks), uses or places a crafting table, and crafts the item. If raw
@@ -75,26 +77,11 @@ function isUnusualMatch(requested: string, item: string): boolean {
   return prefix.includes("_") && !PLAIN_PREFIXES.has(prefix);
 }
 
-// When the bot last went to gather materials for an item; if the retry still
-// lacks them, it explains instead of asking the same question again
-const GATHER_MEMORY_MS = 5 * 60 * 1000;
-const lastGatherFor = new Map<string, number>();
+// The owner said yes to getting what's missing: the next try (within 5
+// minutes) gets it all with the planner, along the progression tree
+const GATHER_APPROVAL_MS = 5 * 60 * 1000;
+const gatherApproved = new Map<string, number>();
 const listOf = (items: CraftStep[]): string => items.map((m) => `${m.count} ${pretty(m.name)}`).join(", ");
-
-/** The command that gathers a missing raw material, or null if the bot can't yet. */
-function gatherCommandFor(material: CraftStep): { command: BotCommands; args: object } | null {
-  if (material.name === "logs") {
-    return { command: BotCommands.GatherWood, args: { num: material.count } };
-  }
-  if (material.name === "cobblestone") {
-    return { command: BotCommands.CollectBlocks, args: { blockType: "stone", num: material.count, range: null } };
-  }
-  if (material.name.endsWith("_wool")) {
-    // Each sheep drops one wool of its color; white sheep are by far the most common
-    return { command: BotCommands.Hunting, args: { mobType: "sheep", count: material.count, maxDistance: null } };
-  }
-  return null;
-}
 
 // Implement the CraftItem action
 export async function execute(args: any): Promise<void> {
@@ -168,38 +155,39 @@ export async function execute(args: any): Promise<void> {
   console.log(`Craft plan for ${count} ${item}:`, JSON.stringify(plan));
 
   if (plan.missing.length > 0) {
-    const gathers = plan.missing.map((m) => ({ material: m, gather: gatherCommandFor(m) }));
-    const unknown = gathers.filter((g) => !g.gather).map((g) => g.material);
+    // The planner is loaded when used: it reaches back to the command registry
+    const { acquire } = await import("../skills/acquire");
+    const { liveWorld } = await import("../skills/world");
+    const { carried } = await import("../skills/capabilities");
+    const { howToGet } = await import("../skills/techTree");
     const need = `To craft ${count} ${pretty(item)} I'm missing ${listOf(plan.missing)}.`;
-
+    const unknown = plan.missing.filter((m) => !liveWorld.sources.some((source) => source.gets(m.name)));
     if (unknown.length > 0) {
       reply(`${need} I don't know how to get ${listOf(unknown)} yet.`);
       return;
     }
 
-    const triedAt = lastGatherFor.get(item);
-    if (triedAt && Date.now() - triedAt < GATHER_MEMORY_MS) {
-      lastGatherFor.delete(item);
-      const hint = plan.missing.some((m) => m.name.endsWith("_wool"))
-        ? " I couldn't find enough sheep nearby; you could give me the wool."
-        : " I couldn't find enough nearby; you could give them to me.";
-      reply(`${need}${hint}`);
+    // Approved: the whole chain (tools, a furnace, mining, smelting), then the craft
+    const approvedAt = gatherApproved.get(item);
+    if (approvedAt && Date.now() - approvedAt < GATHER_APPROVAL_MS) {
+      gatherApproved.delete(item);
+      const target = carried(item) + count;
+      const got = await acquire(item, target, liveWorld);
+      if (isCommandCancelled()) return;
+      if (!got.ok) {
+        reply(`I couldn't make ${count} ${pretty(item)}: ${describeFailure(got)}.`);
+        return;
+      }
+      reply(`Crafted ${count} ${pretty(item)}.`);
+      if (isArmorPiece(item)) await wearBestArmor();
       return;
     }
 
-    askOwner(`${need} Should I go get them?`, async () => {
+    // Say what the progression tree asks for, so a long trip isn't a surprise
+    const how = plan.missing.map((m) => howToGet(m.name, catalog())).filter((h): h is string => h !== null);
+    askOwner(`${need}${how.length ? ` (${how.join("; ")})` : ""} Should I go get them?`, async () => {
       tellOwner("Okay, going to get them!");
-      lastGatherFor.set(item, Date.now());
-      for (const { gather } of gathers) {
-        queueCommand({
-          id: crypto.randomUUID(),
-          command: gather!.command,
-          priority: 3,
-          retryCount: 0,
-          args: gather!.args,
-        });
-      }
-      // Then try the craft again (it re-plans with the new inventory)
+      gatherApproved.set(item, Date.now());
       queueCommand({
         id: crypto.randomUUID(),
         command: BotCommands.CraftItem,

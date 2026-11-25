@@ -2,5 +2,7 @@ node_modules/
 dist/
 .env
 db.json
+db.json.*
+worlds/
 *.tmp
 .DS_Store

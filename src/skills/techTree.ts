@@ -50,3 +50,21 @@ export function pickaxeFor(item: string, catalog: Catalog): string | null {
 export function smeltedFrom(item: string): string | null {
   return SMELTING[item] ?? null;
 }
+
+const pretty = (name: string): string => name.replace(/_/g, " ");
+
+/**
+ * How a material is got, for telling the owner ("iron ingot: smelted from raw
+ * iron in a furnace; raw iron needs a stone pickaxe"); null for the plain ones
+ * (logs, cobblestone, wool).
+ */
+export function howToGet(item: string, catalog: Catalog): string | null {
+  if (item === "coal") return "coal: mined with a wooden pickaxe, or charcoal made from logs in a furnace";
+  const input = smeltedFrom(item);
+  if (input) {
+    const pickaxe = input === "logs" ? null : pickaxeFor(input, catalog);
+    return `${pretty(item)}: smelted from ${pretty(input)} in a furnace${pickaxe ? `; ${pretty(input)} needs a ${pretty(pickaxe)}` : ""}`;
+  }
+  const pickaxe = pickaxeFor(item, catalog);
+  return pickaxe ? `${pretty(item)}: mined with a ${pretty(pickaxe)}` : null;
+}

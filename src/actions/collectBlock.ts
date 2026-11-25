@@ -62,9 +62,10 @@ export async function collectBlock(
     console.log(`"${blockType}" is not a block or anything ores drop.`);
     return 0;
   }
-  if (blockType === "dirt") {
-    blockTypes.push("grass_block");
-  }
+  // What a player asks for is often the drop, not the block: cobblestone comes
+  // from stone, cobbled deepslate from deepslate, dirt from grass too
+  const FROM: Record<string, string[]> = { cobblestone: ["stone"], cobbled_deepslate: ["deepslate"], dirt: ["grass_block"] };
+  for (const source of FROM[blockType] ?? []) if (c.isBlock(source) && !blockTypes.includes(source)) blockTypes.push(source);
 
   let collected = 0;
   let failures = 0;
