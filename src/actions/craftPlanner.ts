@@ -217,9 +217,30 @@ export function readyVariants(requested: string, count: number): string[] {
 export async function craftNow(item: string, count = 1): Promise<{ ok: boolean; missing: CraftStep[] }> {
   const { craftRecipe } = await import("./crafting");
   const plan = planCraft(item, count);
-  if (plan.missing.length > 0) return { ok: false, missing: plan.missing };
-  for (const step of plan.steps) {
-    if (!(await craftRecipe(step.name, step.count))) return { ok: false, missing: [] };
+  if (plan.missing.length === 0) {
+    for (const step of plan.steps) {
+      if (!(await craftRecipe(step.name, step.count))) return { ok: false, missing: [] };
+    }
+    return { ok: true, missing: [] };
   }
-  return { ok: true, missing: [] };
+  // Not all from one recipe: a chest takes 8 planks of one wood, so oak and
+  // birch together make no 6 chests in one go (fresh-world test). One craft
+  // at a time instead, each from whatever fits.
+  const id = bot.registry.itemsByName[item]?.id;
+  const have = (): number => bot.inventory.items().filter((i) => i.type === id).reduce((n, i) => n + i.count, 0);
+  const target = have() + count;
+  let progressed = false;
+  while (have() < target) {
+    const one = planCraft(item, 1);
+    if (one.missing.length > 0) break;
+    const before = have();
+    for (const step of one.steps) {
+      if (!(await craftRecipe(step.name, step.count))) return { ok: false, missing: [] };
+    }
+    if (have() <= before) return { ok: false, missing: [] };
+    progressed = true;
+  }
+  if (have() >= target) return { ok: true, missing: [] };
+  const rest = planCraft(item, target - have());
+  return { ok: false, missing: progressed || rest.missing.length > 0 ? rest.missing : plan.missing };
 }

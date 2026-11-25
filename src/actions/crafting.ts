@@ -158,14 +158,21 @@ export async function craftRecipe(
   async function moveToAndCraft(craftingTable: Block): Promise<boolean> {
     console.log(`Crafting table at ${craftingTable.position}, moving to it.`);
     try {
-      // One walk: pathing already retries when a reflex (creeper, fight) cuts in
-      if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) {
+      // One walk: pathing already retries when a reflex (creeper, fight) cuts
+      // in. Into real reach of the table (the long-trip walker counts close
+      // sideways as there: it stood on a tree 3 blocks up and every craft
+      // failed "out of my reach", fresh-world test)
+      if (!withinReach(craftingTable.position)) {
         const p = craftingTable.position;
-        await goToPosition(p.x, p.y, p.z, 1);
+        const near = await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 2));
+        if (!near.ok && !withinReach(p)) {
+          const far = await goToPosition(p.x, p.y, p.z, 1);
+          if (far) await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 2));
+        }
       }
       // Opening the table only works within reach; don't wait 20 s on a
       // window that can't open
-      if (bot.entity.position.distanceTo(craftingTable.position) > 4.5) return false;
+      if (!withinReach(craftingTable.position)) return false;
       const recipes = bot.recipesFor(itemId, null, 1, craftingTable);
       return await attemptCraft(recipes, craftingTable);
     } catch (err) {
@@ -182,7 +189,7 @@ export async function craftRecipe(
     const tables = nearbyTables(craftingTableRange).slice(0, MAX_TABLES_TRIED);
     for (const table of tables) {
       if (await moveToAndCraft(table)) return true;
-      if (bot.entity.position.distanceTo(table.position) <= 4.5) {
+      if (withinReach(table.position)) {
         // Reached it and still couldn't craft: another table won't help
         console.log(`Couldn't craft ${itemName} at the crafting table at ${table.position}.`);
         return false;

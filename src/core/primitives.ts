@@ -50,8 +50,8 @@ const CONFIRM_MS = 1_000; // how long the server gets to show the change
 export const WALK_NO_PROGRESS_MS = 8_000;
 // Digging or building its way along counts as progress, but not for ever in
 // one spot: it placed the same scaffold block by a tree for over a minute
-// (fresh-world test) and the 8 s limit never came
-const WORK_IN_PLACE_MS = 15_000;
+// (fresh-world test) and the 8 s limit never came: 8 s of it at most
+const WORK_IN_PLACE_MS = 8_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const floor = (p: Pos): Vec3 => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
