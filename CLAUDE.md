@@ -84,6 +84,9 @@ Everything the bot does is a task in one arbiter (`src/core/arbiter.ts`), by pri
 2. Reflexes (creeper, drowning, combat) don't cancel tasks: they take the body's resources urgently (`src/core/leases.ts`), and the task waits at its next action. Upkeep (eating, armor) borrows the hands between actions.
 3. Reflex code runs inside `asReflex(name, ...)`; tasks never call `bot.*` directly (`core/primitives.ts` waits its turn for them).
 4. Idle chores are lowest-priority tasks (`src/core/chores.ts`); a task with no progress is nudged, replanned, then given up (`src/managers/stuckWatch.ts`).
+5. Its own life (`src/skills/curriculum.ts`) is off until the owner says "go live your life" (`memory.autonomy`, or `AUTONOMY=on`): it proposes the next milestone (`src/skills/milestones.ts`) at bucket 5 and the night routine (`src/skills/shelter.ts`) at bucket 4.
+
+Getting an item goes through one planner, `acquire(item, n)` (`src/skills/acquire.ts`, sources in `src/skills/world.ts`); the `ensure*` helpers are thin wrappers over it and must not call each other. What the bot has right now (tool tiers, food, shelter, bed) is computed in `src/skills/capabilities.ts`, never cached. Command modules load `skills/curriculum` and other commands lazily (`await import(...)`): a static import closes a cycle through `commands/registry.ts`.
 
 ## OpenAI Integration
 The bot communicates with OpenAI through:

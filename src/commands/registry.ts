@@ -43,6 +43,8 @@ import * as TellLocation from "./TellLocation";
 import * as WhereIs from "./WhereIs";
 import * as KeepOut from "./KeepOut";
 import * as AllowHere from "./AllowHere";
+import * as Autonomy from "./Autonomy";
+import * as Progress from "./Progress";
 import * as DescribeSurroundings from "./DescribeSurroundings";
 import * as RecoverItems from "./RecoverItems";
 import * as StarterKit from "./StarterKit";
@@ -100,6 +102,8 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.WhereIs]: WhereIs,
   [BotCommands.KeepOut]: KeepOut,
   [BotCommands.AllowHere]: AllowHere,
+  [BotCommands.Autonomy]: Autonomy,
+  [BotCommands.Progress]: Progress,
   [BotCommands.DescribeSurroundings]: DescribeSurroundings,
   [BotCommands.RecoverItems]: RecoverItems,
   [BotCommands.StarterKit]: StarterKit,

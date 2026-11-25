@@ -35,7 +35,7 @@ async function makeWoodenTool(item: string): Promise<boolean> {
 }
 
 /** Harvests ripe sweet berry bushes nearby (right-click), then picks up the berries. */
-async function pickBerries(): Promise<void> {
+export async function pickBerries(): Promise<void> {
   const bushId = bot.registry.blocksByName["sweet_berry_bush"]?.id;
   if (bushId === undefined) return;
   const spots = bot.findBlocks({ matching: bushId, maxDistance: 24, count: 6 });

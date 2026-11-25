@@ -112,20 +112,6 @@ export async function saveDb(): Promise<void> {
 /** Kept for callers from before schema v2: commands are no longer stored (they never survive a restart). */
 export async function removeAllCommands(): Promise<void> {}
 
-// --- Lore -------------------------------------------------------------------
-
-export async function addLoreEvent(event: string): Promise<void> {
-  const parsed = z.string().safeParse(event);
-  if (!parsed.success || !db.data) return;
-  db.data.lore ??= { events: [] };
-  db.data.lore.events.push(parsed.data);
-  await saveDb();
-}
-
-export function getAllLoreEvents(): string[] {
-  return db.data?.lore?.events || [];
-}
-
 // --- Session memory (survives restarts) --------------------------------------
 
 /** The persisted session memory. */
@@ -248,16 +234,4 @@ export function getMines(): MineType[] {
       depth: d.depth ?? 0,
     };
   });
-}
-
-// --- Progress (Phase 6 replaces this) --------------------------------------------
-
-export async function saveBotProgress(progress: { currentLevel: number; craftableTier: number; unlockedRecipes: string[] }): Promise<void> {
-  if (!db.data) return;
-  db.data.botProgress = progress;
-  await saveDb();
-}
-
-export function getBotProgress(): { currentLevel: number; craftableTier: number; unlockedRecipes: string[] } {
-  return db.data?.botProgress ?? { currentLevel: 1, craftableTier: 1, unlockedRecipes: [] };
 }

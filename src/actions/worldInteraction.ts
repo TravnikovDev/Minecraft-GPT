@@ -100,9 +100,15 @@ export async function replaceBrokenTool(block: Block): Promise<boolean> {
   if (replacingTool || inChore() || (kind !== "pickaxe" && kind !== "axe" && kind !== "shovel")) return false;
   replacingTool = true;
   try {
-    const { ensureTool } = await import("./ensureTools");
-    console.log(`No ${kind} that can break ${block.name}: making one.`);
-    if (!(await ensureTool(kind, 1))) return false;
+    // Only from what it carries (never going off for wood or stone: if it
+    // can't, the "no_tool" failure goes up and the planner sorts it out)
+    const { craftNow, planCraft } = await import("./craftPlanner");
+    const best = ["netherite", "diamond", "iron", "stone", "wooden"]
+      .map((tier) => `${tier}_${kind}`)
+      .find((item) => bot.registry.itemsByName[item] && planCraft(item, 1).missing.length === 0);
+    if (!best) return false;
+    console.log(`No ${kind} that can break ${block.name}: making a ${best.replace(/_/g, " ")}.`);
+    if (!(await craftNow(best, 1)).ok) return false;
     await tools.equipForBlock(block);
     return block.canHarvest(bot.heldItem ? bot.heldItem.type : null);
   } catch (error) {

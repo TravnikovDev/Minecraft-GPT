@@ -39,17 +39,3 @@ test("hunting: grown animals by entity type; babies and monsters are skipped", (
   expect(isHuntable({ name: "goat", metadata: {} } as any)).toBe(true); // the old fixed list missed it
 });
 
-test("every name in the progression tiers is a real item or a Catalog category", async () => {
-  const c = createCatalog(registry);
-  const src = await Bun.file(`${ROOT}/src/managers/botProgress.ts`).text();
-  const levels = await Bun.file(`${ROOT}/src/progress/botLevels.ts`).text();
-  // Only item fields (requiredItems, unlockedRecipes, { name: ... }), not task ids or comments
-  const itemLines = (src + "\n" + levels)
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && /requiredItems|unlockedRecipes|\{ name:/.test(l));
-  const names = itemLines.flatMap((l) => [...l.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]!));
-  expect(names.length).toBeGreaterThan(10);
-  const categories = ["planks", "logs", "food"];
-  const bad = names.filter((n) => !c.isItem(n) && !categories.includes(n));
-  expect(bad).toEqual([]);
-});

@@ -25,6 +25,9 @@ const botProxy = new Proxy(
   {
     get: (_t, key) => {
       const value = g.__testBot?.[key];
+      // A listener removed late (a timer from the previous test file) may
+      // reach a fake that never had listeners
+      if (value === undefined && (key === "removeListener" || key === "off")) return () => {};
       return typeof value === "function" ? value.bind(g.__testBot) : value;
     },
     set: (_t, key, value) => {
