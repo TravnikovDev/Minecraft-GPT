@@ -1,10 +1,12 @@
 // Path: src/skills/mine.ts
 // The bot's mine (owner's design): from the exit in the shelter room's far
-// wall, a diagonal staircase 10 levels down, then branch mining at the bottom
-// like a player: the main tunnel goes on 3 blocks at a time, with side
-// tunnels 5 long to the left and right, and the ores it uncovers (coal, iron)
-// are mined as it goes. Progress is remembered with the mine, so the next
-// trip carries on where the last one stopped.
+// wall, a diagonal staircase down. Where the stairs end is a hub: from it the
+// bot digs three long tunnels, forward (the stairs' way), then right, then
+// left, up to 50 blocks each, mining the ores they uncover. A blocker (water
+// or lava it can't plug, a drop, something built) ends that tunnel and it
+// goes on with the next. When all three are done, the stairs go 20 steps
+// deeper to a new hub, and it starts over. Progress is remembered with the
+// mine, so the next trip carries on where the last one stopped.
 
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
@@ -22,9 +24,11 @@ import { TIER, toolTier } from "./capabilities";
 import { catalog } from "../core/catalog";
 
 export const MINE_DEPTH = 10;
-const BRANCH_EVERY = 3;
-const BRANCH_LENGTH = 5;
-const MAX_BRANCHES = 24; // about 72 blocks of main tunnel: plenty for a first mine
+const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
+export const ARM_LENGTH = 50; // each tunnel from a hub
+export const LEVEL_STEP = 20; // stairs further down to the next hub
+const CHUNK = 5; // dug at a time, then the ores it uncovered
+const MAX_LEVELS = 4; // hubs at 10, 30, 50, 70 steps: deep enough for diamonds
 const ORE_REACH = 6; // ores this close to a fresh tunnel get mined
 const MINE_NAME = "shelter mine";
 
@@ -39,24 +43,39 @@ export function mineBottom(exit: Pos, dir: DirectionType): Vec3 {
   return new Vec3(exit.x, exit.y, exit.z).plus(STEP[dir].scaled(MINE_DEPTH)).offset(0, -MINE_DEPTH, 0);
 }
 
-/** Branch `k` (1, 2, ...): where the main tunnel is then, and the two side directions. */
-export function branchAt(bottom: Pos, dir: DirectionType, k: number): { main: Vec3; left: DirectionType; right: DirectionType } {
-  return { main: new Vec3(bottom.x, bottom.y, bottom.z).plus(STEP[dir].scaled(BRANCH_EVERY * k)), left: LEFT[dir], right: RIGHT[dir] };
+/** The three tunnels from a hub, in the order they're dug. */
+export const ARMS = ["forward", "right", "left"] as const;
+export type ArmName = (typeof ARMS)[number];
+export type Arm = { dug: number; blocked: boolean };
+export type Arms = Record<ArmName, Arm>;
+const freshArms = (): Arms => ({ forward: { dug: 0, blocked: false }, right: { dug: 0, blocked: false }, left: { dug: 0, blocked: false } });
+
+/** The tunnel to dig next at this hub (forward, then right, then left), or null when all three are done. Pure. */
+export function nextArm(arms: Arms): ArmName | null {
+  return ARMS.find((a) => !arms[a].blocked && arms[a].dug < ARM_LENGTH) ?? null;
 }
+
+/** Which way an arm goes from the hub. Pure. */
+export function armDirection(arm: ArmName, dir: DirectionType): DirectionType {
+  return arm === "forward" ? dir : arm === "right" ? RIGHT[dir] : LEFT[dir];
+}
+
+/** The stair step a hub sits on: the first at the bottom of the stairs, each next one LEVEL_STEP deeper. Pure. */
+export const hubStep = (level: number): number => MINE_DEPTH + level * LEVEL_STEP;
 
 // Stairs are steps 0..MINE_DEPTH: the exit cell, then one down per step
 const STAIRS = MINE_DEPTH + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
-type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null };
+type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean };
 
 /** The mine record (stairs maybe not finished): stairs dug so far, branches done, the bottom once finished. */
 function mineRecord(): MineRecord | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
   if (!mine) return null;
-  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean };
   if (!d.direction) return null;
   // Older records (one dig of steps 0..10, saved when done) are finished
   const stairs = d.stairs ?? (d.depth === MINE_DEPTH ? STAIRS : 0);
@@ -67,17 +86,26 @@ function mineRecord(): MineRecord | null {
     stairs,
     branches: d.branches ?? 0,
     bottom: done && d.endsAt ? new Vec3(d.endsAt.x, d.endsAt.y, d.endsAt.z) : null,
+    level: d.level ?? 0,
+    // An older mine (main tunnel with side branches): its main tunnel is the
+    // start of the forward tunnel
+    arms: d.arms ?? { ...freshArms(), forward: { dug: Math.min(ARM_LENGTH, (d.branches ?? 0) * BRANCH_EVERY), blocked: false } },
+    deepest: d.deepest ?? false,
   };
 }
 
-async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null): Promise<void> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
+  const keep = levels ?? (() => {
+    const rec = mineRecord();
+    return rec ? { level: rec.level, arms: rec.arms, deepest: rec.deepest } : { level: 0, arms: freshArms(), deepest: false };
+  })();
   await addPlace({
     kind: "mine",
     name: MINE_NAME,
     dimension: currentDimension(),
     ...start,
-    details: { direction, depth: MINE_DEPTH, stairs, done: bottom !== null, endsAt: { x: endsAt.x, y: endsAt.y, z: endsAt.z }, branches },
+    details: { direction, depth: MINE_DEPTH, stairs, done: bottom !== null, endsAt: { x: endsAt.x, y: endsAt.y, z: endsAt.z }, branches, ...keep },
   });
 }
 
@@ -176,53 +204,89 @@ export const COAL: OreWant = { item: "coal", enough: 16, counts: ["coal", "charc
 export const IRON: OreWant = { item: "raw_iron", enough: 10, counts: ["raw_iron", "iron_ingot"] };
 
 /**
- * Branch mining until it has enough of what it wants (or a few branches more
- * if this trip finds nothing): main tunnel 3 on, a side tunnel each way, and
- * the ores those uncover.
+ * Mining until it has enough of what it wants (or a trip's worth of digging,
+ * CHUNK blocks at a time): the hub's forward, right and left tunnels in
+ * turn, deeper when all three are done, and the ores they uncover.
  */
-export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promise<ActionResult> {
-  return withScaffoldingTakenDown(() => branchMineSteps(wants, branchesThisTrip));
+export async function branchMine(wants: OreWant[], chunksThisTrip = 12): Promise<ActionResult> {
+  return withScaffoldingTakenDown(() => branchMineSteps(wants, chunksThisTrip));
 }
 
-async function branchMineSteps(wants: OreWant[], branchesThisTrip: number): Promise<ActionResult> {
-  const mine = myMine();
-  if (!mine) return fail("not_found", "no mine yet");
+async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<ActionResult> {
+  const first = myMine();
+  if (!first) return fail("not_found", "no mine yet");
   if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
   const still = (): OreWant[] => wants.filter((w) => carried(w.counts) < w.enough);
   if (still().length === 0) return ok();
+  const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
-  // Down the stairs to where the last trip stopped
-  const from = mine.branches > 0 ? branchAt(mine.bottom, mine.direction, mine.branches).main : mine.bottom;
-  const there = await goTo(new pf.goals.GoalBlock(from.x, from.y, from.z));
-  if (!there.ok) return there;
-
-  for (let i = 0; i < branchesThisTrip && still().length > 0; i++) {
+  for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
-    const k = mine.branches + 1;
-    if (k > MAX_BRANCHES) return fail("not_found", `my mine is ${MAX_BRANCHES} branches long and still not enough ${still().map((w) => w.item.replace(/_/g, " ")).join(" or ")}`);
-    const before = branchAt(mine.bottom, mine.direction, k - 1).main;
-    const at = branchAt(mine.bottom, mine.direction, k);
-    if (!(await digStraightTunnel(mine.direction, BRANCH_EVERY, before, 1))) {
-      // A worn-out pickaxe: the planner makes a new one (at the shelter's table)
-      if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
-      return fail("refused", "the main tunnel hit lava, water or something built");
+    const rec = mineRecord()!;
+    const { start, direction: dir } = rec;
+    let { level, arms } = rec;
+    let arm = nextArm(arms);
+    // All three tunnels at this hub done: 20 steps further down, a new hub
+    if (!arm) {
+      if (rec.deepest || level + 1 >= MAX_LEVELS) return fail("not_found", `my mine goes no deeper and I still have too little ${stillNames()}`);
+      level += 1;
+      arms = freshArms();
+      report(`My mine's tunnels here are done; digging the stairs ${LEVEL_STEP} steps deeper.`);
+      const deeper = await digStairsTo(rec, hubStep(level));
+      if (!deeper.ok) {
+        if (deeper.reason === "no_tool" || deeper.reason === "missing_items" || deeper.reason === "aborted") return deeper;
+        // Stairs blocked: this is as deep as it goes
+        await saveMine(start, dir, rec.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true });
+        return fail("not_found", `my mine's stairs can't go deeper (${deeper.detail}) and I still have too little ${stillNames()}`);
+      }
+      await saveMine(start, dir, hubStep(level) + 1, rec.branches, rec.bottom, { level, arms, deepest: false });
+      arm = nextArm(arms)!;
     }
-    // Side tunnels: a lava or water stop just ends that side
-    for (const side of [at.left, at.right]) {
-      if (isCommandCancelled()) return fail("aborted", "stopped");
-      await digStraightTunnel(side, BRANCH_LENGTH, at.main, 1);
-      if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
-      await goTo(new pf.goals.GoalBlock(at.main.x, at.main.y, at.main.z));
-    }
-    mine.branches = k;
-    await saveMine(mine.start, mine.direction, STAIRS, k, mine.bottom);
-    // What the new tunnels uncovered (ores only: stone comes from the digging itself)
+    // Down to where this tunnel ends now, then on a few blocks
+    const hub = stepAt(start, dir, hubStep(level));
+    const way = armDirection(arm, dir);
+    const end = hub.plus(STEP[way].scaled(arms[arm].dug));
+    const there = await goTo(new pf.goals.GoalBlock(end.x, end.y, end.z));
+    if (!there.ok) return there;
+    const length = Math.min(CHUNK, ARM_LENGTH - arms[arm].dug);
+    const dug = await digStraightTunnel(way, length, end, 1);
+    const stop = dug ? null : tunnelStopReason();
+    if (stop === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug, blocked: true } };
+    if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${stop === "drop" ? "a drop" : stop === "no_filler" ? "water I had nothing to plug" : "a blocker"}; on with the next one.`, "mining");
+    else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
+    await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
+    // What the new tunnel uncovered (ores only: stone comes from the digging itself)
     for (const want of still().filter((w) => isOre(w.item))) {
       const got = await collectBlock(want.item, want.enough - carried(want.counts), ORE_REACH);
       if (got > 0) chatter(`Found ${want.item.replace(/_/g, " ")}: ${carried(want.counts)} of ${want.enough}.`, "mining");
     }
   }
-  return still().length === 0 ? ok() : fail("missing_items", `not enough ${still().map((w) => w.item.replace(/_/g, " ")).join(" or ")} yet (I'll mine on next time)`);
+  return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
+}
+
+/**
+ * Digs the mine's stairs on down to step `to` (a step at a time, from where
+ * they end now), remembering each one. A blocked step stops it.
+ */
+async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
+  const { start, direction: dir } = rec;
+  const from = Math.max(rec.stairs, 1);
+  const top = stepAt(start, dir, from - 1);
+  const atTop = await goTo(new pf.goals.GoalBlock(top.x, top.y, top.z));
+  if (!atTop.ok) return atTop;
+  for (let i = from; i <= to; i++) {
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+      const why = tunnelStopReason();
+      if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");
+      if (why === "no_filler") return fail("missing_items", "nothing to build the stairs' floor with over a cave");
+      return fail("refused", why === "drop" ? "a drop I can't build a floor over" : "water, lava or something built");
+    }
+    await saveMine(start, dir, i + 1, rec.branches, rec.bottom);
+  }
+  return ok();
 }
 
 /** An item ores drop (coal, raw iron), as opposed to plain stone. */
@@ -271,5 +335,5 @@ export async function mineFor(item: string, count: number): Promise<ActionResult
     if (!dug.ok) return dug;
     if (enough()) return ok();
   }
-  return branchMine([{ item, enough: target, counts }], 12);
+  return branchMine([{ item, enough: target, counts }], 16);
 }
