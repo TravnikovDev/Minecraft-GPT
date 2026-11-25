@@ -203,7 +203,8 @@ export async function chooseChest(holding?: (contents: Record<string, number>) =
   const me = bot.entity.position;
   const known = loadChests()
     .filter((c) => c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= REMEMBERED_RANGE)
-    .filter((c) => !holding || holding(c.contents))
+    // A chest never opened (contents unknown) can't be said to hold anything
+    .filter((c) => !holding || (c.contents !== null && holding(c.contents)))
     .sort((a, b) => me.distanceTo(new Vec3(a.x, a.y, a.z)) - me.distanceTo(new Vec3(b.x, b.y, b.z)));
   for (const c of known) {
     const block = await stillThere(c);
@@ -324,7 +325,7 @@ export function whereStored(itemName: string): string[] {
   const matches = itemMatcher(itemName);
   const found: string[] = [];
   for (const c of loadChests()) {
-    const here = Object.entries(c.contents).filter(([name]) => matches(name));
+    const here = Object.entries(c.contents ?? {}).filter(([name]) => matches(name));
     if (here.length > 0) found.push(`${countList(new Map(here))} in the chest at ${at(c)}`);
   }
   return found;

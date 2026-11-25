@@ -1,7 +1,7 @@
 // Path: src/managers/botProgress.ts
 
 import { bot } from "../core/body";
-import { getInventory, getBotProgress, saveBotProgress } from "./persistenceManager";
+import { getBotProgress, saveBotProgress } from "./persistenceManager";
 import { getItemCraftingRecipes } from "../utils/minecraftData";
 
 // Define crafting tiers for progression
@@ -96,7 +96,7 @@ export class BotProgress {
   // Check if the bot has gathered the required items to progress to the next tier
   private async checkRecipeProgression(): Promise<void> {
     try {
-      const inventory = getInventory();
+      const inventory = bot.inventory?.items() ?? []; // live, not a stale snapshot
       const currentTier = craftingTiers.find(tier => tier.level === this.craftableTier);
       
       if (!currentTier) return;
@@ -165,7 +165,7 @@ export class BotProgress {
 
   // Check if the bot's inventory shows it can progress to a higher tier
   public async updateTierBasedOnInventory(): Promise<void> {
-    const inventory = getInventory();
+    const inventory = bot.inventory?.items() ?? []; // live, not a stale snapshot
     let progressUpdated = false;
     
     // Check each tier above current tier

@@ -53,6 +53,31 @@ export const BotProgressSchema = z.object({
   unlockedRecipes: z.array(z.string())
 });
 
+/** A remembered point of interest (memory schema v2). */
+export const PlaceSchema = z.object({
+  kind: z.enum(["base", "basement", "crafting_table", "furnace", "mine", "farm"]),
+  name: z.string().optional(),
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  dimension: z.string(),
+  at: z.number(),
+  // Kind-specific details (a mine's direction, depth and end)
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** An area the bot must not dig or build in. */
+export const ForbiddenAreaSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  radius: z.number(),
+  dimension: z.string(),
+  reason: z.string(),
+  source: z.enum(["owner", "server"]),
+  until: z.number().optional(), // forgotten after this (server-detected areas)
+});
+
 // Session memory that survives bot restarts
 export const MemorySchema = z.object({
   lastDeath: z
@@ -68,6 +93,7 @@ export const MemorySchema = z.object({
   ownerPosition: z.object({ x: z.number(), y: z.number(), z: z.number(), at: z.number() }).optional(),
   bed: z.object({ x: z.number(), y: z.number(), z: z.number(), dimension: z.string(), at: z.number() }).optional(),
   // Chests the bot knows: where, and what was inside when it last looked
+  // (contents null: known chest, never opened; it never answers "no iron")
   chests: z
     .array(
       z.object({
@@ -75,7 +101,7 @@ export const MemorySchema = z.object({
         y: z.number(),
         z: z.number(),
         dimension: z.string(),
-        contents: z.record(z.string(), z.number()),
+        contents: z.record(z.string(), z.number()).nullable(),
         seenAt: z.number(),
       })
     )
@@ -83,23 +109,19 @@ export const MemorySchema = z.object({
   conversation: z
     .array(z.object({ role: z.enum(["owner", "bot"]), text: z.string(), at: z.number() }))
     .optional(),
+  // Points of interest (schema v2): the base, crafting tables, furnaces, mines, farms
+  places: z.array(PlaceSchema).optional(),
+  // Areas it must not dig or build in: marked by the owner, or protected by the server
+  forbidden: z.array(ForbiddenAreaSchema).optional(),
 });
 
-export const DbSchema = z.object({
-  commands: z.array(CommandSchema),
-  memory: MemorySchema.optional(),
-  lore: LoreSchema.optional(),
-  inventory: InventorySchema.optional(),
-  botProgress: BotProgressSchema.optional(),
-  baseLocation: z
-    .object({
-      baseName: z.string(),
-      location: PositionSchema,
-      basementLocation: PositionSchema.optional(),
-      craftTable: z.array(PositionSchema),
-      furnace: z.array(PositionSchema),
-      chests: z.array(ChestSchema),
-      mines: z.array(MineSchema),
-    })
-    .optional(),
-});
+// db.json, schema v2. Unknown fields are kept (passthrough), so an older or
+// newer version of the bot never erases what it doesn't know about.
+export const DbSchema = z
+  .object({
+    version: z.number().optional(),
+    memory: MemorySchema.optional(),
+    lore: LoreSchema.optional(),
+    botProgress: BotProgressSchema.optional(),
+  })
+  .passthrough();

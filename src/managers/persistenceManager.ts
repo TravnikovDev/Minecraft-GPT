@@ -1,61 +1,67 @@
 // Path: src/managers/persistenceManager.ts
+// db.json: what the bot remembers across restarts (schema v2, see
+// managers/migrate.ts). Points of interest (base, crafting tables, furnaces,
+// mines) live in memory.places, chests in the chest index (memory.chests),
+// plus the death spot, the owner's last position, its bed, the recent
+// conversation and the areas it must keep out of. The old getter and setter
+// names are kept as adapters over memory.places.
 
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import { resolve } from "path";
 import { z } from "zod";
-import type {
-  ChestType,
-  DbSchemaType,
-  InventoryItemType,
-  MemoryType,
-  MineType,
-  PositionType,
-} from "../schemas/types";
-import {
-  DbSchema,
-  InventorySchema,
-  MineSchema,
-  PositionSchema,
-} from "../schemas/mainSchemas";
+import type { DbSchemaType, MemoryType, MineType, PositionType } from "../schemas/types";
+import { DbSchema, PositionSchema } from "../schemas/mainSchemas";
 import type { DirectionType } from "../actions/digging";
+import { DB_VERSION, migrate } from "./migrate";
 
-// Database Setup
 // DB_PATH lets tests use a throwaway file instead of the bot's real memory
-const dbPath = resolve(process.env.DB_PATH ?? "db.json");
+const dbPath = resolve(process.env["DB_PATH"] ?? "db.json");
 const adapter = new JSONFile<DbSchemaType>(dbPath);
 const db = new Low<DbSchemaType>(adapter, {
-  commands: [],
+  version: DB_VERSION,
   lore: { events: [] },
-  inventory: [],
-  botProgress: {
-    currentLevel: 1,
-    craftableTier: 1,
-    unlockedRecipes: []
-  }
+  botProgress: { currentLevel: 1, craftableTier: 1, unlockedRecipes: [] },
 });
 
-// Load Database
-export async function loadDb() {
+/**
+ * Loads db.json, bringing an older one up to v2 (a copy of the old file is
+ * kept as db.json.v1.bak). A file that doesn't validate is set aside and the
+ * bot starts with empty memory, so saving never silently stops.
+ */
+export async function loadDb(): Promise<void> {
   try {
-    await db.read();
-    const parsedData = DbSchema.safeParse(db.data);
-    if (!parsedData.success) {
-      throw new Error("Database validation failed", parsedData.error);
+    const raw: unknown = existsSync(dbPath) ? JSON.parse(readFileSync(dbPath, "utf8")) : db.data;
+    const { data, changed } = migrate(raw);
+    if (changed && existsSync(dbPath)) {
+      const backup = `${dbPath}.v1.bak`;
+      if (!existsSync(backup)) copyFileSync(dbPath, backup);
+      console.log(`Memory: db.json upgraded to schema v${DB_VERSION} (old file kept as ${backup}).`);
     }
-    db.data = parsedData.data;
+    const parsed = DbSchema.safeParse(data);
+    if (!parsed.success) {
+      const aside = `${dbPath}.invalid-${Date.now()}`;
+      if (existsSync(dbPath)) copyFileSync(dbPath, aside);
+      console.error(`Memory: db.json doesn't validate; set aside as ${aside}, starting with empty memory.`, parsed.error.issues.slice(0, 5));
+      db.data = { version: DB_VERSION, lore: { events: [] } };
+    } else {
+      db.data = parsed.data;
+    }
     await db.write();
   } catch (error) {
     console.error("Error loading database:", error);
+    db.data ??= { version: DB_VERSION, lore: { events: [] } };
   }
 }
 
-// Save Data to Database
-export async function saveDb() {
+/** Saves db.json. A validation failure is a bug: it is logged loudly every time. */
+export async function saveDb(): Promise<void> {
   try {
-    const parsedData = DbSchema.safeParse(db.data);
-    if (!parsedData.success) {
-      throw new Error("Database validation failed", parsedData.error);
+    const parsed = DbSchema.safeParse(db.data);
+    if (!parsed.success) {
+      console.error("Memory NOT saved: it doesn't validate (a bug).", parsed.error.issues.slice(0, 5));
+      return;
     }
     await db.write();
   } catch (error) {
@@ -63,273 +69,26 @@ export async function saveDb() {
   }
 }
 
-/**
- * Clears the old command queue kept in db.json (commands now live in the
- * arbiter, in memory, and never survive a restart). Kept so a db.json from
- * before Phase 4 doesn't carry stale commands around.
- */
-export async function removeAllCommands() {
-  try {
-    if (db.data) {
-      db.data.commands = [];
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error removing all commands from database:", error);
-  }
+/** Kept for callers from before schema v2: commands are no longer stored (they never survive a restart). */
+export async function removeAllCommands(): Promise<void> {}
+
+// --- Lore -------------------------------------------------------------------
+
+export async function addLoreEvent(event: string): Promise<void> {
+  const parsed = z.string().safeParse(event);
+  if (!parsed.success || !db.data) return;
+  db.data.lore ??= { events: [] };
+  db.data.lore.events.push(parsed.data);
+  await saveDb();
 }
 
-
-// Add Lore Event to Database
-export async function addLoreEvent(event: string) {
-  try {
-    const parsedEvent = z.string().safeParse(event);
-    if (!parsedEvent.success) {
-      throw new Error("Lore event validation failed");
-    }
-    db.data?.lore?.events.push(parsedEvent.data);
-    await saveDb();
-  } catch (error) {
-    console.error("Error adding lore event to database:", error);
-  }
-}
-
-// Get All Lore Events from Database
 export function getAllLoreEvents(): string[] {
   return db.data?.lore?.events || [];
 }
 
-// Sync Inventory with Database
-export async function syncInventory(
-  inventory: InventoryItemType[]
-): Promise<void> {
-  try {
-    const parsedInventory = InventorySchema.safeParse(inventory);
-    if (!parsedInventory.success) {
-      throw new Error("Inventory validation failed");
-    }
-    if (db.data) {
-      db.data.inventory = parsedInventory.data;
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error syncing inventory to database:", error);
-  }
-}
-
-// Get Inventory
-export function getInventory(): InventoryItemType[] {
-  return db.data?.inventory || [];
-}
-
-// Set Base Location
-export async function saveBaseLocation(
-  baseName = "defaultBaseName",
-  location: PositionType
-) {
-  try {
-    const parsedLocation = PositionSchema.safeParse(location);
-    if (!parsedLocation.success) {
-      throw new Error(
-        "Base location validation failed: " + parsedLocation.error
-      );
-    }
-    if (db.data) {
-      db.data.baseLocation = {
-        baseName,
-        location: parsedLocation.data,
-        craftTable: [],
-        furnace: [],
-        chests: [],
-        mines: [],
-      };
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error setting base location in database:", error);
-  }
-}
-
-export async function saveBasementLocation(location: PositionType) {
-  try {
-    const parsedLocation = PositionSchema.safeParse(location);
-    if (!parsedLocation.success) {
-      throw new Error(
-        "Basement location validation failed: " + parsedLocation.error
-      );
-    }
-    if (db.data?.baseLocation) {
-      db.data.baseLocation.basementLocation = parsedLocation.data;
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error setting basement location in database:", error);
-  }
-}
-
-// save Crafting Table
-export async function saveCraftingTableLocation(
-  position: PositionType
-): Promise<void> {
-  try {
-    const parsedPosition = PositionSchema.safeParse(position);
-    if (!parsedPosition.success) {
-      throw new Error(
-        "Crafting table position validation failed: " + parsedPosition.error
-      );
-    }
-    if (db.data?.baseLocation) {
-      db.data.baseLocation.craftTable.push(parsedPosition.data);
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error placing crafting table in database:", error);
-  }
-}
-
-// save Furnace
-export async function saveFurnaceLocation(
-  position: PositionType
-): Promise<void> {
-  try {
-    const parsedPosition = PositionSchema.safeParse(position);
-    if (!parsedPosition.success) {
-      throw new Error(
-        "Furnace position validation failed: " + parsedPosition.error
-      );
-    }
-    if (db.data?.baseLocation) {
-      db.data.baseLocation.furnace?.push(parsedPosition.data);
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error placing furnace in database:", error);
-  }
-}
-
-// save Chest
-export async function saveChestLocation(position: PositionType): Promise<void> {
-  try {
-    const parsedPosition = PositionSchema.safeParse(position);
-    if (!parsedPosition.success) {
-      throw new Error(
-        "Chest position validation failed: " + parsedPosition.error
-      );
-    }
-    if (db.data?.baseLocation) {
-      db.data.baseLocation.chests.push({
-        type: "Miscellaneous", // or another appropriate type
-        location: parsedPosition.data,
-        items: [],
-      });
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error placing chest in database:", error);
-  }
-}
-// TODO: update chest items function
-
-// save Mine
-export async function saveMineLocation(mine: {
-  name: string;
-  direction: DirectionType;
-  startsAt: PositionType;
-  endsAt: PositionType;
-  depth: number;
-}): Promise<void> {
-  try {
-    const parsedMine = MineSchema.safeParse(mine);
-    if (!parsedMine.success) {
-      throw new Error("Mine validation failed: " + parsedMine.error);
-    }
-    if (db.data?.baseLocation) {
-      if (!db.data.baseLocation.mines) {
-        db.data.baseLocation.mines = [];
-      }
-      db.data.baseLocation.mines.push(parsedMine.data);
-      await saveDb();
-    }
-  } catch (error) {
-    console.error("Error digging mine in database:", error);
-  }
-}
-
-// Get Base Location
-export function getBaseLocation(): PositionType | undefined {
-  return db.data?.baseLocation?.location;
-}
-
-export function getBasementLocation(): PositionType | undefined {
-  return db.data?.baseLocation?.basementLocation;
-}
-
-// Get Crafting Table
-export function getCraftingTables(): PositionType[] | undefined {
-  return db.data?.baseLocation?.craftTable;
-}
-
-// Get Furnace
-export function getFurnaces(): PositionType[] | undefined {
-  return db.data?.baseLocation?.furnace;
-}
-
-// Get Chests
-export function getChests(): ChestType[] | undefined {
-  return db.data?.baseLocation?.chests;
-}
-
-// Get Mines
-export function getMines(): MineType[] | undefined {
-  return db.data?.baseLocation?.mines;
-}
-
-// Save Bot Progress
-export async function saveBotProgress(progress: {
-  currentLevel: number;
-  craftableTier: number;
-  unlockedRecipes: string[];
-}): Promise<void> {
-  try {
-    if (db.data) {
-      // Ensure botProgress field exists
-      if (!db.data.botProgress) {
-        db.data.botProgress = {
-          currentLevel: 1,
-          craftableTier: 1,
-          unlockedRecipes: []
-        };
-      }
-      
-      // Update with new progress
-      db.data.botProgress = progress;
-      await saveDb();
-      console.log(`Bot progress saved: Level ${progress.currentLevel}, Tier ${progress.craftableTier}`);
-    }
-  } catch (error) {
-    console.error("Error saving bot progress to database:", error);
-  }
-}
-
-// Get Bot Progress
-export function getBotProgress(): { 
-  currentLevel: number; 
-  craftableTier: number;
-  unlockedRecipes: string[];
-} {
-  if (!db.data?.botProgress) {
-    return {
-      currentLevel: 1,
-      craftableTier: 1,
-      unlockedRecipes: []
-    };
-  }
-  return db.data.botProgress;
-}
-
 // --- Session memory (survives restarts) --------------------------------------
 
-/** The persisted session memory (death spot, owner position, conversation). */
+/** The persisted session memory. */
 export function getMemory(): MemoryType {
   return db.data?.memory ?? {};
 }
@@ -339,4 +98,123 @@ export async function updateMemory(patch: Partial<MemoryType>): Promise<void> {
   if (!db.data) return;
   db.data.memory = { ...(db.data.memory ?? {}), ...patch };
   await saveDb();
+}
+
+// --- Points of interest (memory.places) ----------------------------------------
+
+export type Place = NonNullable<MemoryType["places"]>[number];
+type PlaceKind = Place["kind"];
+const OVERWORLD = "overworld";
+
+/** Every remembered place of a kind, newest last. */
+export function getPlaces(kind?: PlaceKind): Place[] {
+  const all = getMemory().places ?? [];
+  return kind ? all.filter((p) => p.kind === kind) : all;
+}
+
+/** Remembers a place (replacing one of the same kind at the same spot). */
+export async function addPlace(place: Omit<Place, "at" | "dimension"> & { dimension?: string }): Promise<void> {
+  const others = getPlaces().filter((p) => !(p.kind === place.kind && p.x === place.x && p.y === place.y && p.z === place.z));
+  await updateMemory({ places: [...others, { dimension: OVERWORLD, ...place, at: Date.now() }] });
+}
+
+/** Forgets places matching `which` (a table that was broken). Returns how many. */
+export async function forgetPlaces(which: (p: Place) => boolean): Promise<number> {
+  const all = getPlaces();
+  const kept = all.filter((p) => !which(p));
+  if (kept.length !== all.length) await updateMemory({ places: kept });
+  return all.length - kept.length;
+}
+
+const pos = (p: Place): PositionType => ({ x: p.x, y: p.y, z: p.z });
+
+/** Sets the base (one base; the old one is replaced). */
+export async function saveBaseLocation(baseName = "base", location: PositionType): Promise<void> {
+  const parsed = PositionSchema.safeParse(location);
+  if (!parsed.success) return;
+  await forgetPlaces((p) => p.kind === "base");
+  await addPlace({ kind: "base", name: baseName, ...parsed.data });
+}
+
+export async function saveBasementLocation(location: PositionType): Promise<void> {
+  await forgetPlaces((p) => p.kind === "basement");
+  await addPlace({ kind: "basement", ...location });
+}
+
+export async function saveCraftingTableLocation(position: PositionType): Promise<void> {
+  await addPlace({ kind: "crafting_table", ...position });
+}
+
+export async function saveFurnaceLocation(position: PositionType): Promise<void> {
+  await addPlace({ kind: "furnace", ...position });
+}
+
+/** A chest it placed: in the chest index, contents unknown until it looks inside. */
+export async function saveChestLocation(position: PositionType): Promise<void> {
+  const chests = getMemory().chests ?? [];
+  if (chests.some((c) => c.x === position.x && c.y === position.y && c.z === position.z)) return;
+  await updateMemory({ chests: [...chests, { ...position, dimension: OVERWORLD, contents: null, seenAt: 0 }] });
+}
+
+export async function saveMineLocation(mine: {
+  name: string;
+  direction: DirectionType;
+  startsAt: PositionType;
+  endsAt: PositionType;
+  depth: number;
+}): Promise<void> {
+  await addPlace({
+    kind: "mine",
+    name: mine.name,
+    ...mine.startsAt,
+    details: { direction: mine.direction, depth: mine.depth, endsAt: mine.endsAt },
+  });
+}
+
+export function getBaseLocation(): PositionType | undefined {
+  const base = getPlaces("base").at(-1);
+  return base ? pos(base) : undefined;
+}
+
+export function getBasementLocation(): PositionType | undefined {
+  const basement = getPlaces("basement").at(-1);
+  return basement ? pos(basement) : undefined;
+}
+
+export function getCraftingTables(): PositionType[] {
+  return getPlaces("crafting_table").map(pos);
+}
+
+export function getFurnaces(): PositionType[] {
+  return getPlaces("furnace").map(pos);
+}
+
+/** Chests it knows, as positions (the contents are in the chest index: core/session). */
+export function getChests(): { location: PositionType }[] {
+  return (getMemory().chests ?? []).map((c) => ({ location: { x: c.x, y: c.y, z: c.z } }));
+}
+
+export function getMines(): MineType[] {
+  return getPlaces("mine").map((m) => {
+    const d = (m.details ?? {}) as { direction?: DirectionType; depth?: number; endsAt?: PositionType };
+    return {
+      name: m.name ?? "mine",
+      direction: d.direction ?? "north",
+      startsAt: pos(m),
+      endsAt: d.endsAt ?? pos(m),
+      depth: d.depth ?? 0,
+    };
+  });
+}
+
+// --- Progress (Phase 6 replaces this) --------------------------------------------
+
+export async function saveBotProgress(progress: { currentLevel: number; craftableTier: number; unlockedRecipes: string[] }): Promise<void> {
+  if (!db.data) return;
+  db.data.botProgress = progress;
+  await saveDb();
+}
+
+export function getBotProgress(): { currentLevel: number; craftableTier: number; unlockedRecipes: string[] } {
+  return db.data?.botProgress ?? { currentLevel: 1, craftableTier: 1, unlockedRecipes: [] };
 }
