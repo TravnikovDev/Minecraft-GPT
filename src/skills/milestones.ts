@@ -156,7 +156,10 @@ export const MILESTONES: Milestone[] = [
     title: "wooden tools",
     tier: 1,
     // A player's first set: dirt everywhere wants a shovel, trees an axe
-    done: () => (["pickaxe", "axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.wooden),
+    // Once it has had stone tools, never back to wood: worn-out tools are
+    // remade as stone (or iron) by the stone tools milestone (owner: it made
+    // wooden tools again after its pickaxes broke in the mine)
+    done: () => Boolean(reachedAt()["stone_tools"]) || (["pickaxe", "axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.wooden),
     achieve: () => getAll(["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword"]),
   },
   {

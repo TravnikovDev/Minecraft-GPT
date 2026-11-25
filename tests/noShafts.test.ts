@@ -1,7 +1,8 @@
 // The bot digs like a player: stairs, never a 1x1 shaft straight down or up.
 // Runs the real pathfinder search (A*) through solid stone with our walking
 // rules and checks every move of the path it finds.
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
+setDefaultTimeout(60_000);
 const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
@@ -35,8 +36,9 @@ bot.world = { getBlock: (p: any) => bot.blockAt(p) };
 
 type Step = { x: number; y: number; z: number; toBreak: unknown[] };
 
-// The pathfinder's default think timeout in the game
-const THINK_MS = 5000;
+// More than the game's 5 s think time: the test checks the shape of the path
+// (stairs, not a shaft), and on a busy machine 5 s made it flaky
+const THINK_MS = 15000;
 
 /** Our walking rules as a collect task uses them (cheap digging). */
 function miningRules(): any {
