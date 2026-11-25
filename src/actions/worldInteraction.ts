@@ -69,9 +69,11 @@ export async function placeBlockResult(blockType: string, x: number, y: number, 
     if (!cleared.ok) return done(cleared);
   }
 
-  // Standing in the spot: step back (blocks can't go where the bot is)
-  const feet = bot.entity.position;
-  if (!PLACE_WHILE_STANDING.has(blockType) && (feet.distanceTo(targetDest) < 1 || feet.offset(0, 1, 0).distanceTo(targetDest) < 1)) {
+  // Standing in the spot: step back (blocks can't go where the bot is). Its
+  // body is 0.6 wide and 1.8 tall: only a real overlap counts. Measuring from
+  // the block's corner took the next cell for this one, so it walked away up
+  // its stairs and sealed its shelter from the outside.
+  if (!PLACE_WHILE_STANDING.has(blockType) && bodyOverlaps(targetDest)) {
     const away = await goTo(new pf.goals.GoalInvert(new pf.goals.GoalNear(targetDest.x, targetDest.y, targetDest.z, 2)));
     if (!away.ok && wasStopped(away)) return done(away);
   }
@@ -84,6 +86,16 @@ export async function placeBlockResult(blockType: string, x: number, y: number, 
 
   const against = placeOn === "side" ? undefined : FACE_BY_NAME[placeOn];
   return done(await placeBlockAt(blockType, targetDest, { against }));
+}
+
+/** True when the bot's body (0.6 x 1.8) overlaps the block cell at `cell`. */
+export function bodyOverlaps(cell: Vec3, at: Vec3 = bot.entity.position): boolean {
+  const half = 0.3;
+  return (
+    at.x + half > cell.x && at.x - half < cell.x + 1 &&
+    at.z + half > cell.z && at.z - half < cell.z + 1 &&
+    at.y + 1.8 > cell.y && at.y < cell.y + 1
+  );
 }
 
 let replacingTool = false;

@@ -145,7 +145,7 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
   const onPath = (r: { status: string; path: unknown[] }): void => {
     lastPath = `${r.status}, ${r.path.length} moves`;
   };
-  bot.on("path_update" as never, onPath as never);
+  bot.on?.("path_update" as never, onPath as never);
   const block = (dy: number): string => bot.blockAt(bot.entity.position.floored().offset(0, dy, 0))?.name ?? "?";
   const watchdog = walkWatchdog(
     () =>
@@ -162,7 +162,7 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
     if (!walked.ok) return walked;
   } finally {
     watchdog.stop();
-    bot.removeListener("path_update" as never, onPath as never);
+    bot.removeListener?.("path_update" as never, onPath as never);
     // Only a walk in progress can be blamed for being stuck (not one that ended, at a chest or a table)
     if (spot && lastGoal === spot) lastGoal = null;
   }
