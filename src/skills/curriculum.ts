@@ -185,6 +185,13 @@ function nightTask(): TaskSpec {
         inside = await enterShelter();
       }
       if (!inside.ok) {
+        // Down in its mine with mine work to do: it stays and works the night
+        // through (under ground the night doesn't matter), rather than trying
+        // to climb out again and again
+        if (mineWorkTonight() && bot.entity.position.y < (shelter()?.y ?? 0) - 2) {
+          reportOnce(`I can't get back up to my shelter (${describeFailure(inside)}); working on in my mine tonight.`);
+          return;
+        }
         reportOnce(`I couldn't get into my shelter: ${describeFailure(inside)}.`);
         // Again in a minute, not only next night (and not every few seconds)
         nightRetryAt = Date.now() + NIGHT_RETRY_MS;

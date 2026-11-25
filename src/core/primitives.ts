@@ -358,7 +358,15 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
     () =>
       `goal ${spot ? `${spot.x}, ${spot.y}, ${spot.z}` : goal.constructor.name}; path ${lastPath}; ` +
       `moving ${bot.pathfinder?.isMoving() ?? "?"}, mining ${bot.pathfinder?.isMining() ?? "?"}, building ${bot.pathfinder?.isBuilding() ?? "?"}; ` +
-      `below ${block(-1)}, feet ${block(0)}, head ${block(1)}`
+      `below ${block(-1)}, feet ${block(0)}, head ${block(1)}, over head ${block(2)}` +
+      // And around the step it's trying to reach: why it can't get onto it
+      (nextStep
+        ? (() => {
+            const n = nextStep as { x: number; y: number; z: number };
+            const at = (dy: number): string => bot.blockAt(new Vec3(Math.floor(n.x), Math.floor(n.y) + dy, Math.floor(n.z)))?.name ?? "?";
+            return `; next step: floor ${at(-1)}, feet ${at(0)}, head ${at(1)}, over head ${at(2)}`;
+          })()
+        : "")
   );
   try {
     const walked = await guarded("walking", (signal) => pathing.goto(goal, signal), {
