@@ -239,7 +239,93 @@ export const MILESTONES: Milestone[] = [
     done: () => toolTier("pickaxe") >= TIER.iron,
     achieve: smeltIronAndMakePickaxe,
   },
+
+  // --- Tier 3: iron and diamonds (a player's next steps) ----------------------
+  {
+    id: "iron_tools",
+    title: "iron tools",
+    tier: 3,
+    requires: ["iron_pickaxe"],
+    done: () => (["sword", "axe", "shovel"] as const).every((k) => toolTier(k) >= TIER.iron),
+    achieve: () => makeFromIron([["iron_sword", 2], ["iron_axe", 3], ["iron_shovel", 1]]),
+  },
+  {
+    id: "iron_armor",
+    title: "iron armor",
+    tier: 3,
+    requires: ["iron_tools"],
+    done: () => IRON_ARMOR.every(([piece]) => owns(piece)),
+    achieve: async () => {
+      const made = await makeFromIron(IRON_ARMOR.map(([piece, n]) => [piece, n]));
+      if (!made.ok) return made;
+      // Put it on
+      const { equipItem } = await import("../core/primitives");
+      for (const [piece, , slot] of IRON_ARMOR) if (carriedOf([piece]) > 0) await equipItem(piece, slot);
+      return ok();
+    },
+  },
+  {
+    id: "diamonds",
+    title: "diamonds",
+    tier: 3,
+    requires: ["iron_pickaxe"],
+    // Deep in the mine: its hubs go 20 steps deeper each time all three tunnels are done
+    done: () => carriedOf(["diamond"]) >= DIAMONDS || toolTier("pickaxe") >= TIER.diamond,
+    achieve: () => branchMine([{ item: "diamond", enough: DIAMONDS, counts: ["diamond"] }], 20),
+  },
+  {
+    id: "diamond_pickaxe",
+    title: "a diamond pickaxe",
+    tier: 3,
+    requires: ["diamonds"],
+    done: () => toolTier("pickaxe") >= TIER.diamond,
+    achieve: async () => {
+      await enterShelter(); // its table
+      return acquire("diamond_pickaxe", 1, liveWorld);
+    },
+  },
 ];
+
+const DIAMONDS = 3;
+// Each piece, the ingots it takes, and where it's worn
+const IRON_ARMOR: Array<[string, number, "head" | "torso" | "legs" | "feet"]> = [
+  ["iron_helmet", 5, "head"],
+  ["iron_chestplate", 8, "torso"],
+  ["iron_leggings", 7, "legs"],
+  ["iron_boots", 4, "feet"],
+];
+
+/** Carried or worn. */
+function owns(item: string): boolean {
+  if (carriedOf([item]) > 0) return true;
+  return [5, 6, 7, 8].some((slot) => bot.inventory.slots[slot]?.name === item);
+}
+
+/**
+ * Makes these iron things (each with the ingots it takes) it doesn't have
+ * yet: mines the raw iron missing (its mine), smelts it at home and crafts
+ * them at the shelter's table.
+ */
+async function makeFromIron(things: Array<[string, number]>): Promise<ActionResult> {
+  const missing = things.filter(([item]) => !owns(item));
+  const ingots = missing.reduce((n, [, cost]) => n + cost, 0);
+  if (ingots === 0) return ok();
+  const have = (): number => carriedOf(["iron_ingot"]) + carriedOf(["raw_iron"]);
+  if (have() < ingots) {
+    const mined = await branchMine([{ item: "raw_iron", enough: ingots - carriedOf(["iron_ingot"]), counts: ["raw_iron"] }], 20);
+    if (!mined.ok && have() < ingots) return mined;
+  }
+  // Home: the furnace for the raw iron, the table for the crafting
+  const home = await enterShelter();
+  if (!home.ok) console.log(`Couldn't get home to smelt (${describeFailure(home)}); smelting where I am.`);
+  const raw = carriedOf(["raw_iron"]);
+  if (raw > 0) {
+    const { smelt } = await import("../actions/cooking");
+    const made = await smelt("raw_iron", raw);
+    if (made !== null && made > 0) report(`Smelted ${made} iron ingots.`);
+  }
+  return getAll(missing.map(([item]) => item));
+}
 
 /**
  * Owner: with its raw iron it goes home, smelts it in the shelter's furnace

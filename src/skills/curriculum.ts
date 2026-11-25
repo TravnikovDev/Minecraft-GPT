@@ -72,7 +72,7 @@ async function announce(): Promise<void> {
   for (const m of await noteReached()) {
     const done = MILESTONES.filter((x) => x.tier === m.tier && x.done()).length;
     const total = MILESTONES.filter((x) => x.tier === m.tier).length;
-    report(`Milestone: ${m.title} (${done} of ${total} ${m.tier === 1 ? "for my first day" : "for my mine"}).`);
+    report(`Milestone: ${m.title} (${done} of ${total} ${m.tier === 1 ? "for my first day" : m.tier === 2 ? "for my mine" : "for iron and diamonds"}).`);
   }
   if (tier1Reached() && !getMemory().milestones?.["tier1"]) {
     await updateMemory({ milestones: { ...(getMemory().milestones ?? {}), tier1: Date.now() } });
@@ -251,7 +251,7 @@ export async function considerNextStep(): Promise<void> {
 }
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
-const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe"]);
+const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "diamonds", "diamond_pickaxe"]);
 
 /** Mine work it could do now (the next milestone is one underground). */
 function mineWorkTonight(): boolean {
