@@ -173,25 +173,27 @@ test("the next milestone: the first not done and not set aside; null when the fi
   expect(M.tier1Reached(list)).toBe(true);
 });
 
-test("the shelter's shape: stairs 5 down the way it faces, sealed at the bottom, fixed spots in the room", () => {
+test("the shelter's shape: stairs 5 down, a corridor with a door, then a room with fixed spots", () => {
   const { shelterLayout } = realShelter;
   const s = shelterLayout({ x: 10, y: 70, z: -4 }, "north");
   const at = (p: any) => [p.x, p.y, p.z];
   expect(at(s.bottom)).toEqual([10, 65, -9]);
-  expect(s.seal.map((p: any) => p.y)).toEqual([65, 66, 67]);
-  expect(at(s.stand)).toEqual([10, 65, -10]); // first row, by the stairs
-  expect(at(s.bed)).toEqual([10, 65, -11]); // foot in the middle row, head in the last
-  expect(s.chests.map(at)).toEqual([[11, 65, -12], [9, 65, -12]]); // the last row's corners
-  // Nothing is ever put where it stands, or on the way in
+  expect(at(s.door)).toEqual([10, 65, -11]); // the corridor's middle
+  expect(s.seal.map(at)).toEqual([[10, 65, -11], [10, 66, -11]]); // no door: two blocks there
+  expect(at(s.stand)).toEqual([10, 65, -13]); // the room's first row, past the corridor
+  expect(at(s.bed)).toEqual([10, 65, -14]);
+  expect(s.chests.map(at)).toEqual([[11, 65, -15], [9, 65, -15]]);
   const key = (p: any) => at(p).join(",");
+  const dug = new Set(s.cells.map(key));
+  // Room to stand on both sides of the door, and the door's two blocks are dug
+  for (const p of [s.door, s.door.offset(0, 1, 0), s.door.offset(0, 0, 1), s.door.offset(0, 0, -1)]) expect(dug.has(key(p))).toBe(true);
+  // Never furnished where it stands or in the corridor
   const furnished = new Set([key(s.bed), key(s.bed.offset(0, 0, -1)), ...s.chests.map(key)]);
   expect(furnished.has(key(s.stand))).toBe(false);
-  expect(s.seal.some((p: any) => furnished.has(key(p)))).toBe(false);
-  // Every furnished spot is a dug cell
-  const dug = new Set(s.cells.map(key));
+  expect(furnished.has(key(s.door))).toBe(false);
   for (const f of furnished) expect(dug.has(f)).toBe(true);
   const e = shelterLayout({ x: 0, y: 64, z: 0 }, "east");
-  expect([e.stand.x, e.stand.z]).toEqual([6, 0]);
+  expect([e.stand.x, e.stand.z]).toEqual([9, 0]);
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
