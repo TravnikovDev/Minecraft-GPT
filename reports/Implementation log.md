@@ -717,7 +717,6 @@ The architect was consulted on the design before building and reviewed the resul
 | Phase 6 cleanup | One command list (`src/commands/all.ts`) and one `isHostile` (`ed9151d`) |
 
 **Outcome and what follows**
-- **Tests:** 215 pass.
 - **Seen working in the game:**
   - the first day, 6 of 6; coal, iron, smelting, an iron pickaxe and iron tools;
   - the hub plan through one level: forward 50, right blocked, left 50, then the stairs 20 steps deeper, and the next level's forward tunnel;
@@ -725,5 +724,13 @@ The architect was consulted on the design before building and reviewed the resul
   - after the face fix: long walks, hunting trips and the mine stairs with no stall at all (the server put it back twice in half an hour instead of 20–30 times a second);
   - home chores after a death, and stone tools from the cobblestone in its chests.
 - **Not yet seen:** bridging over water, the stairs looked after (holes and torches), cooking at home after a far hunt, the gift and can't-sleep fixes, paving, iron armour and diamonds.
-- **Phase 6 left to close:** the split of `worldInteraction.ts`; the 2–3 seed run the plan asks for (forest, plains, cherry).
+- **Phase 6 cleanup, finished afterwards:** `worldInteraction.ts` split into `blockPlacing`, `blockBreaking`, `objectUse`, `riding` and `vehicleDeploy` (`c5b4617`).
+- **Architect's review of the day** (`a821add`):
+  - the hand step was removed, now that its cause is fixed: it wrote the movement keys outside the lease model;
+  - the drowning reflex counted falling water as a floor, so the waterfall case wasn't really fixed: now a tested pure check;
+  - the planner's chest source would have taken from the owner's chests: chests now record `own`, and the planner uses only its own;
+  - one lazy seam for running commands; an unknown command fails instead of a quiet "done"; home chores say what didn't work.
+  - Recorded as plan changes (Phase 6 status, Phase 7 "Before starting", and a rule under "Throughout"). Left for later: marking an unreachable table, a Narrator "say once" facility, a dimension on protected cells.
+- **Tests:** 218 pass.
+- **Phase 6 left to close:** only the 2–3 seed run the plan asks for (forest, plains, cherry).
 - **Next:** Phase 7, the diary and the LLM day planner.

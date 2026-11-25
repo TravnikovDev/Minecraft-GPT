@@ -277,6 +277,14 @@ It survives the first night, and it reports milestones in chat.
 
 **In-game check.** Start a fresh world, log in only to watch, and the bot reaches Tier 1 by the end of the first in-game day. Repeat with 2–3 seeds, including a forest, a plains and a cherry biome.
 
+**Status (2026-11-26).** Code done; see Log Entries 13–15.
+- Tier 1 reached in the owner's hillside world (6 of 6), and the bot went on into the mine, coal, iron and iron tools.
+- Cleanup done: `worldInteraction.ts` split by concern, one `isHostile`, commands listed once in `src/commands/all.ts`, `loreManager` gone.
+- Left: the 2–3 seed run (forest, plains, cherry).
+- Added from the architect's review (2026-11-26):
+  - the chest index records whose chest it is (`own`); the planner takes only from its own chests;
+  - routine commands (home chores, recovery) become skills that return a typed result, with thin command wrappers, before Phase 7's diary needs them.
+
 ---
 
 ## Phase 7: Diary and LLM day planner
@@ -289,6 +297,12 @@ It survives the first night, and it reports milestones in chat.
 - Its diary is readable, and you can ask "what did you do today?"
 - It falls back to its own milestone plan when the API is down or the budget is used up.
 - Monthly LLM cost stays well under $10, and is logged.
+
+**Before starting.** From the architect's review (2026-11-26):
+- Commands run through one lazy seam (`actionManager` loads `toolManager` at run time); keep new goal modules behind it so the command cycle doesn't come back.
+- Routine commands return typed results (see Phase 6 status), so the diary isn't fed false successes.
+- The Narrator gets a "same line at most once per N minutes" facility (today it's done by hand in `Sleep` and `queueCommand`).
+- A remembered table that can't be reached is marked for a few minutes, so `hasTableAccess` stops counting it.
 
 **Actions**
 1. **Diary writer.** Each typed result becomes a short, human-sounding template line: milestones, gains, fights, deaths and their causes, discoveries, failures with reasons, owner interactions. Days are split by game time.
@@ -395,6 +409,7 @@ It survives the first night, and it reports milestones in chat.
 - **Versions:**
   - Watch for mineflayer support of 26.2 and 26.3, and for pathfinder 2.5.0 on npm (switch back from the pinned commit when it lands).
   - Keep auto-eat on v4 unless there's a reason to move.
+- **Workarounds:** when the root cause of a problem is found, delete the workaround for it in the same phase (the hand step outlived the face fix by two commits).
 - **Cost:** keep LLM calls out of loops. Phase 7's monthly cap protects the $10 budget.
 - **Testing:** after every phase, re-run the Phase 0 checklist in your real game, plus that phase's checks.
 - **Docs:** keep `CLAUDE.md` and the architecture report in sync with what is actually built.
