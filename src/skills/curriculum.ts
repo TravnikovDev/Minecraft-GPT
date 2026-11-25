@@ -164,6 +164,12 @@ function nightTask(): TaskSpec {
       setSheltered(true);
       try {
         await cookAtNight();
+        // Mine work to do: on through the back door, mining all night (the
+        // milestone is proposed as soon as this routine ends)
+        if (mineWorkTonight()) {
+          chatter("Night: carrying on in my mine.", "night");
+          return;
+        }
         if (hasBed()) {
           const { execute: sleepInBed } = await import("../commands/Sleep");
           await sleepInBed({ newBed: false });
@@ -195,9 +201,22 @@ export async function considerNextStep(): Promise<void> {
     propose(nightTask());
     return;
   }
-  if (busyWith(Bucket.Self) || isNight()) return;
+  if (busyWith(Bucket.Self)) return;
   const next = nextMilestone(MILESTONES, isBlocked);
+  // At night only work underground, and only once it's home (the night
+  // routine ran: in through the shelter, doors shut): in the mine day and
+  // night are the same, it only needs torches (owner)
+  if (isNight() && !(next && UNDERGROUND.has(next.id) && nightOf === day)) return;
   if (next) propose(milestoneTask(next));
+}
+
+/** Milestones done in the mine, where night doesn't matter. */
+const UNDERGROUND = new Set(["mine", "coal", "iron"]);
+
+/** Mine work it could do now (the next milestone is one underground). */
+function mineWorkTonight(): boolean {
+  const next = nextMilestone(MILESTONES, isBlocked);
+  return next !== null && UNDERGROUND.has(next.id);
 }
 
 /** The milestones, for "what's your progress?". */
