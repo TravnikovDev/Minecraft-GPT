@@ -16,7 +16,7 @@ import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
-import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
+import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, unpavedSteps } from "./mine";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
@@ -265,6 +265,17 @@ export const MILESTONES: Milestone[] = [
     },
   },
   {
+    id: "paved_stairs",
+    title: "paved mine stairs",
+    tier: 3,
+    requires: ["iron_pickaxe"],
+    // Owner: once 200 cobblestone have piled up, the mine's stairs get
+    // cobblestone stair blocks (and a block more headroom); until then (or
+    // with every step paved) there's nothing to do
+    done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
+    achieve: paveMineStairs,
+  },
+  {
     id: "diamonds",
     title: "diamonds",
     tier: 3,
@@ -287,6 +298,13 @@ export const MILESTONES: Milestone[] = [
 ];
 
 const DIAMONDS = 3;
+const PAVE_AFTER = 200;
+
+/** Cobblestone it carries and has in its chests (as last seen). */
+function cobblestoneOwned(): number {
+  const stored = (getMemory().chests ?? []).reduce((n, c) => n + ((c.contents as Record<string, number> | null)?.["cobblestone"] ?? 0), 0);
+  return carriedOf(["cobblestone"]) + stored;
+}
 // Each piece, the ingots it takes, and where it's worn
 const IRON_ARMOR: Array<[string, number, "head" | "torso" | "legs" | "feet"]> = [
   ["iron_helmet", 5, "head"],

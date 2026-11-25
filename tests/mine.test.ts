@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { mineBottom, MINE_DEPTH, nextArm, armDirection, hubStep, ARM_LENGTH, LEVEL_STEP } = await import(`${ROOT}/src/skills/mine.ts`);
+const { mineBottom, MINE_DEPTH, nextArm, armDirection, hubStep, ARM_LENGTH, LEVEL_STEP, stepsToPave } = await import(`${ROOT}/src/skills/mine.ts`);
 
 test("the stairs end 10 down and 10 on from the exit", () => {
   const b = mineBottom({ x: 10, y: 65, z: -17 }, "north");
@@ -36,4 +36,15 @@ test("right and left are the stairs' right and left", () => {
 
 test("hubs: at the stairs' bottom, then every 20 steps deeper", () => {
   expect([0, 1, 2].map(hubStep)).toEqual([MINE_DEPTH, MINE_DEPTH + LEVEL_STEP, MINE_DEPTH + 2 * LEVEL_STEP]);
+});
+
+test("paving: every step below the doorway with a step below it, hubs left flat", () => {
+  // Stairs down to the first hub (steps 0..10): steps 1..9 (10 is the hub)
+  expect(stepsToPave(11, 0)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  // Dug on to the second hub (steps 0..30): the first hub (10) and the second (30) stay flat
+  const deep = stepsToPave(31, 1);
+  expect(deep).not.toContain(0);
+  expect(deep).not.toContain(10);
+  expect(deep).not.toContain(30);
+  expect(deep.length).toBe(28);
 });

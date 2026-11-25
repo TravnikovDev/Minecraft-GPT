@@ -220,9 +220,9 @@ test("a blocked first-day milestone holds the mine back until the day is done", 
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
-  const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe"];
+  const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "cobblestone_stairs"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
-  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "diamonds", "diamond_pickaxe"]);
+  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe"]);
   expect(REAL.find((m) => m.id === "chests")?.title).toContain("chests, furnace, table");
 });
 

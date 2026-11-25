@@ -185,6 +185,78 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
 }
 
 /**
+ * The stair steps that get a stair block (owner: cobblestone stairs all the
+ * way down make the walk quick): every step below the doorway (step 0) that
+ * has a dug step below it to stand on, except the hubs, which stay flat for
+ * their tunnels. Pure.
+ */
+export function stepsToPave(stairs: number, level: number): number[] {
+  const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
+  const steps: number[] = [];
+  for (let i = 1; i + 1 < stairs; i++) if (!hubs.has(i)) steps.push(i);
+  return steps;
+}
+
+/** The steps of its mine's stairs still without a stair block (as far as it can see). */
+export function unpavedSteps(): number[] {
+  const rec = mineRecord();
+  if (!rec?.bottom) return [];
+  return stepsToPave(rec.stairs, rec.level).filter((i) => {
+    const b = bot.blockAt(stepAt(rec.start, rec.direction, i));
+    return b !== null && !b.name.endsWith("_stairs");
+  });
+}
+
+/**
+ * Paves its mine's stairs: one more block of headroom over each step, then a
+ * cobblestone stair block on it, placed standing on the step below and
+ * facing up the tunnel, so its high side is toward the shelter and walking
+ * up is a slope, not a jump per step.
+ */
+export async function paveMineStairs(): Promise<ActionResult> {
+  return withScaffoldingTakenDown(paveSteps);
+}
+
+async function paveSteps(): Promise<ActionResult> {
+  const rec = mineRecord();
+  if (!rec?.bottom) return fail("not_found", "no mine yet");
+  const steps = unpavedSteps();
+  if (steps.length === 0) return ok();
+  const have = carried(["cobblestone_stairs"]);
+  if (have < steps.length) {
+    // Cobblestone from its chests (6 make 4 stairs), crafted at the shelter's table
+    const cobble = Math.ceil((steps.length - have) / 4) * 6 - carried(["cobblestone"]);
+    if (cobble > 0) {
+      const { takeItems } = await import("../actions/storage");
+      await takeItems([{ name: "cobblestone", count: cobble + 4 }]);
+    }
+    const { acquire } = await import("./acquire");
+    const { liveWorld } = await import("./world");
+    const made = await acquire("cobblestone_stairs", steps.length, liveWorld);
+    if (!made.ok && carried(["cobblestone_stairs"]) === 0) return made;
+  }
+  report(`Paving my mine's stairs: ${steps.length} steps.`);
+  const { breakBlock } = await import("../core/primitives");
+  const { placeBlockResult } = await import("../actions/worldInteraction");
+  let paved = 0;
+  for (const i of steps) {
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    if (carried(["cobblestone_stairs"]) === 0) break;
+    const step = stepAt(rec.start, rec.direction, i);
+    const below = stepAt(rec.start, rec.direction, i + 1);
+    const there = await goTo(new pf.goals.GoalBlock(below.x, below.y, below.z));
+    if (!there.ok) continue;
+    // One block more headroom over the step (a stair raises the floor half a block)
+    const head = step.offset(0, 3, 0);
+    if (bot.blockAt(head)?.boundingBox === "block") await breakBlock(head);
+    const placed = await placeBlockResult("cobblestone_stairs", step.x, step.y, step.z, "bottom");
+    if (placed.ok) paved++;
+  }
+  console.log(`Mine: paved ${paved} of ${steps.length} stair steps.`);
+  return unpavedSteps().length === 0 ? ok() : fail("refused", `${unpavedSteps().length} of my mine's steps aren't paved yet`);
+}
+
+/**
  * Runs a mining job, then takes down the scaffolding it put up on the way
  * (owner: blocks left standing in its tunnels block the way), unless it was
  * stopped.

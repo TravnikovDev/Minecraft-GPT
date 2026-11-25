@@ -251,7 +251,7 @@ export async function considerNextStep(): Promise<void> {
 }
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
-const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "diamonds", "diamond_pickaxe"]);
+const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe"]);
 
 /** Mine work it could do now (the next milestone is one underground). */
 function mineWorkTonight(): boolean {
