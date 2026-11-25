@@ -18,6 +18,10 @@ export type ForbiddenArea = NonNullable<MemoryType["forbidden"]>[number];
 type Pos = { x: number; y: number; z: number };
 
 const REVERT_RADIUS = 8;
+// Reverts nearby before it guesses "protected": two were too few (a placement
+// the server refused twice in its own mine, fresh-world test, kept it out of
+// its mine for half an hour)
+const REVERTS_FOR_AREA = 4;
 const REVERT_WINDOW_MS = 2 * 60_000;
 const SERVER_AREA_RADIUS = 4;
 const SERVER_AREA_MS = 30 * 60_000;
@@ -100,11 +104,21 @@ export async function noteRevert(pos: Pos): Promise<boolean> {
   while (reverts.length > 0 && now - reverts[0]!.at > REVERT_WINDOW_MS) reverts.shift();
   const near = reverts.filter((r) => distance(r, pos) <= REVERT_RADIUS);
   reverts.push({ x: pos.x, y: pos.y, z: pos.z, at: now });
-  if (near.length === 0 || forbiddenAt(pos)) return false;
+  if (near.length < REVERTS_FOR_AREA - 1 || forbiddenAt(pos)) return false;
   const all = [...near, pos];
   const center = { x: all.reduce((s, p) => s + p.x, 0) / all.length, y: all.reduce((s, p) => s + p.y, 0) / all.length, z: all.reduce((s, p) => s + p.z, 0) / all.length };
   await markForbidden(center, SERVER_AREA_RADIUS, "the server keeps putting blocks back (a protected area?)", "server", SERVER_AREA_MS);
   return true;
+}
+
+/**
+ * Forgets areas it only guessed were protected (a new connection: a fresh
+ * look; areas the owner marked stay).
+ */
+export async function forgetServerGuesses(): Promise<void> {
+  const areas = getMemory().forbidden ?? [];
+  const kept = areas.filter((a) => a.source !== "server");
+  if (kept.length !== areas.length) await updateMemory({ forbidden: kept });
 }
 
 /** Forgets recent reverts (tests). */

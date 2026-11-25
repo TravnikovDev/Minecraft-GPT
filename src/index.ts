@@ -15,6 +15,7 @@ for (const level of ["log", "error", "warn"] as const) {
 import { clearSolidDoors } from "./core/movements";
 import { installPlugins } from "./core/setup";
 import { clearScaffolds } from "./core/scaffold";
+import { forgetServerGuesses } from "./core/forbidden";
 import { registerDoorOpener } from "./actions/doors";
 import { autoWearArmor } from "./actions/armor";
 import { tidyUpWhileIdle } from "./actions/pickup";
@@ -99,6 +100,7 @@ onConnectionReady((currentBot) => {
   registerDoorOpener(); // opens doors on the way and closes them behind
   clearSolidDoors(); // doors that wouldn't open last connection may open now
   clearScaffolds(); // scaffolding from before may have been changed since
+  void forgetServerGuesses(); // "protected?" guesses from before get a fresh look
   resetStuckWatch(); // stuck counters from an old connection don't apply
   everyWhileConnected(currentBot, 5_000, checkProgress); // nudge, replan, give up (managers/stuckWatch)
   resetCurriculum(); // milestones set aside on the old connection get another chance

@@ -272,13 +272,15 @@ test("arriving while standing on farmland (or a slab) counts, as the pathfinder 
   expect(await P.goTo(new pf.goals.GoalBlock(10, 64, 0))).toMatchObject({ ok: true });
 });
 
-test("two blocks put back close together: a protected area it then keeps out of", async () => {
-  world.set("1,64,0", "dirt");
-  world.set("1,64,1", "dirt");
+test("four blocks put back close together: a protected area it then keeps out of", async () => {
+  for (let z = 0; z < 4; z++) world.set(`1,64,${z}`, "dirt");
   server.dig = async (b) => {}; // the server keeps every block
-  expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ reason: "reverted" });
-  expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toBeNull(); // once is not a claim (falling sand, water...)
-  expect(await P.breakBlock({ x: 1, y: 64, z: 1 })).toMatchObject({ reason: "reverted" });
+  // A few refusals are not a claim (falling sand, water, a placement it got wrong)
+  for (let z = 0; z < 3; z++) {
+    expect(await P.breakBlock({ x: 1, y: 64, z })).toMatchObject({ reason: "reverted" });
+    expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toBeNull();
+  }
+  expect(await P.breakBlock({ x: 1, y: 64, z: 3 })).toMatchObject({ reason: "reverted" });
   expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toMatchObject({ source: "server" });
   inv = [item("cobblestone", 5)];
   expect(await P.placeBlockAt("cobblestone", { x: 2, y: 64, z: 0 })).toMatchObject({ ok: false, reason: "forbidden" });
