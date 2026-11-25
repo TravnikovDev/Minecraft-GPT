@@ -110,6 +110,17 @@ let nightOf = -1; // the day number of the night already handled
 
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
 const NIGHT_TRIES = 4;
+const NIGHT_RETRY_MS = 60_000;
+// A night routine that failed: proposed again from this time (0: no retry due)
+let nightRetryAt = 0;
+let lastNightReport = "";
+
+/** Says a night failure once, not every retry. */
+function reportOnce(text: string): void {
+  if (text === lastNightReport) return console.log(text);
+  lastNightReport = text;
+  report(text);
+}
 
 /**
  * Shut in for the night with raw meat and the shelter's furnace: cooks it,
@@ -138,13 +149,19 @@ function nightTask(): TaskSpec {
     // The owner called it out at night: back in afterwards
     resume: () => (isNight() && autonomyOn() ? nightTask() : null),
     run: async () => {
-      // No shelter, or one with a hole or a missing door: dig or mend it first
-      if (!shelter() || !shelterIntact()) {
+      // No shelter: dig one. A hole or a missing door: mend it as well as it
+      // can, then in anyway (a door it can't make in the dark must never
+      // leave it outside; the doorway gets blocks then)
+      if (!shelter()) {
         const dug = await buildShelter();
         if (!dug.ok) {
-          report(`I couldn't dig a shelter for the night: ${describeFailure(dug)}.`);
+          reportOnce(`I couldn't dig a shelter for the night: ${describeFailure(dug)}.`);
+          nightRetryAt = Date.now() + NIGHT_RETRY_MS;
           return;
         }
+      } else if (!shelterIntact()) {
+        const mended = await buildShelter();
+        if (!mended.ok) console.log(`Night: couldn't fully mend my shelter (${describeFailure(mended)}); going in anyway.`);
       }
       // Getting in: a few tries (a walk can fail once; giving up left it
       // standing outside all night, fresh-world test)
@@ -155,9 +172,9 @@ function nightTask(): TaskSpec {
         inside = await enterShelter();
       }
       if (!inside.ok) {
-        report(`I couldn't get into my shelter: ${describeFailure(inside)}.`);
-        // Let the routine be proposed again in a while, not only next night
-        nightOf = -1;
+        reportOnce(`I couldn't get into my shelter: ${describeFailure(inside)}.`);
+        // Again in a minute, not only next night (and not every few seconds)
+        nightRetryAt = Date.now() + NIGHT_RETRY_MS;
         return;
       }
       // Shut in: the reflexes leave what's outside alone until morning
@@ -196,8 +213,10 @@ export async function considerNextStep(): Promise<void> {
   // but waits for the owner's commands
   // The world's day (it moves on when someone sleeps; the age doesn't)
   const day = bot.time?.day ?? 0;
-  if (isNight() && !bot.isSleeping && nightOf !== day && !busyWith(Bucket.Upkeep)) {
+  const retryDue = nightRetryAt > 0 && Date.now() >= nightRetryAt;
+  if (isNight() && !bot.isSleeping && (nightOf !== day || retryDue) && !busyWith(Bucket.Upkeep)) {
     nightOf = day;
+    nightRetryAt = 0;
     propose(nightTask());
     return;
   }

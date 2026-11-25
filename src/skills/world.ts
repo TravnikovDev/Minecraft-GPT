@@ -136,7 +136,8 @@ export const liveWorld: AcquireWorld = {
   // Charcoal counts as coal (torches, campfires, fuel take either)
   have: (item) => carried(item) + Object.entries(STANDS_IN_FOR).reduce((n, [alt, main]) => (main === item ? n + carried(alt) : n), 0),
   plan: (item, count) => {
-    const plan = planCraft(item, count);
+    // `count` more than it carries (the plan counts what's carried as made)
+    const plan = planCraft(item, carried(item) + count);
     return { missing: plan.missing, needsTable: plan.steps.some((s) => needsTable(s.name)) };
   },
   craft: async (item, count) => (await craftNow(item, count)).ok,

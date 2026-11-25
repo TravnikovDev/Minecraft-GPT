@@ -16,6 +16,7 @@ import {
   addPlace,
   forgetPlaces,
   getBaseLocation,
+  getMemory,
   getPlaces,
   saveChestLocation,
   saveCraftingTableLocation,
@@ -372,7 +373,9 @@ function myShelterPlan(): { room: NonNullable<ReturnType<typeof shelterPlace>>; 
 function shellHole(p: Vec3): boolean {
   const b = knownBlock(p);
   if (!b) return false; // not loaded: nothing to say
-  if (b.boundingBox !== "block") return true;
+  // Open (air or liquid); a torch or a ladder on the wall isn't a hole
+  if (["air", "cave_air", "void_air", "water", "lava"].includes(b.name)) return true;
+  if (b.boundingBox !== "block") return false;
   return isTreeBlock(b.name) && !FALLING.has(knownBlock(p.offset(0, 1, 0))?.name ?? "");
 }
 
@@ -555,7 +558,10 @@ async function walkHome(room: { x: number; y: number; z: number; details?: Recor
   // room "took too long to decide" from 15 blocks away (fresh-world test):
   // it weighed digging down through the ground everywhere
   const top = room.details?.["start"] as Pos | undefined;
-  const inside = shelterPlace(false) && bot.entity.position.distanceTo(new Vec3(room.x, room.y, room.z)) <= 6 && bot.entity.position.y < (top?.y ?? Infinity) - 1;
+  // Already under ground near home (the room, or down its mine): straight
+  // there, not out to the surface and back in
+  const here = bot.entity.position;
+  const inside = Math.hypot(here.x - room.x, here.z - room.z) <= 32 && here.y < (top?.y ?? Infinity) - 1;
   if (top && !inside) {
     const atTop = (): boolean => bot.entity.position.distanceTo(new Vec3(top.x + 0.5, top.y, top.z + 0.5)) <= 1.5;
     if (bot.entity.position.distanceTo(new Vec3(top.x, top.y, top.z)) > 16) {
@@ -678,6 +684,18 @@ export function rightChest(spot: Pos, stand: Pos, dir: DirectionType): boolean {
   return b?.name === "chest" && b.getProperties()["facing"] === chestFacing(spot, stand, dir);
 }
 
+/**
+ * The chest in this spot will do: facing the right way, or facing wrong but
+ * with things in it (taking it out would spill them; it stays).
+ */
+export function chestInPlace(spot: Pos, stand: Pos, dir: DirectionType): boolean {
+  if (rightChest(spot, stand, dir)) return true;
+  if (knownBlock(spot)?.name !== "chest") return false;
+  const known = (getMemory().chests ?? []).find((c) => c.x === spot.x && c.y === spot.y && c.z === spot.z);
+  // Never looked into (it placed it) or known empty: safe to turn round
+  return !(known?.contents === null || known === undefined || (Array.isArray(known.contents) && known.contents.length === 0));
+}
+
 /** Stands in the middle of the spot's row and puts `item` there (it must carry one). */
 async function placeFromRow(item: string, spot: Pos, stand: Pos, dir: DirectionType): Promise<ActionResult> {
   if (isCommandCancelled()) return fail("aborted", "stopped");
@@ -727,7 +745,7 @@ export async function setupTheShelter(): Promise<ActionResult> {
     { item: "chest", spot: chests[5] },
   ];
   const done = (step: { item: string; spot: Pos | null | undefined }): boolean =>
-    !step.spot || (step.item === "chest" ? rightChest(step.spot, stand, dir) : knownBlock(step.spot)?.name === step.item);
+    !step.spot || (step.item === "chest" ? chestInPlace(step.spot, stand, dir) : knownBlock(step.spot)?.name === step.item);
   const todo = steps.filter((step) => !done(step));
 
   // Prepare resources first: each trip to a table is a trip out of the shelter

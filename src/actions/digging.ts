@@ -11,7 +11,8 @@ import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
-import { isNatural, isWoodenDoor } from "../core/movements";
+import { isNatural, isProtected, isWoodenDoor } from "../core/movements";
+import { isOwnBlock } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
@@ -103,7 +104,9 @@ export function tunnelBlocked(pos: Vec3): string | null {
     if (liquid === "lava" || liquid === "water") return `${liquid} next to ${pos}`;
   }
   const open = block.boundingBox === "empty";
-  if (!open && !isNatural(block.name)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
+  // Something built stops a tunnel, unless the bot put it there itself (its
+  // scaffolding stopped its own iron tunnel, fresh-world test)
+  if (!open && !isNatural(block.name) && !isOwnBlock(pos, block.name)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;
   return null;
 }
 
@@ -253,6 +256,9 @@ export async function digDiagonalTunnel(
         // Its own door in the way (the mine starts in the shelter's back
         // doorway): a passage, walked through, never dug out
         if (isWoodenDoor(bot.blockAt(digPosition)?.name ?? "")) continue;
+        // Its shelter's walls, roof and floor: never dug (the mine's first
+        // stair, in the back doorway, dug the block over the door)
+        if (isProtected(digPosition)) continue;
         if (stopTunnelAt(digPosition)) return false;
         await breakBlockAt(
           digPosition.x,

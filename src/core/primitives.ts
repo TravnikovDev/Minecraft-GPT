@@ -16,13 +16,13 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
-import { avoidStep } from "./movements";
+import { avoidStep, isProtected } from "./movements";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
 import { beginUse, takeoverCount, waitTurn, type Resource } from "./leases";
 import { currentSignal } from "./commandContext";
-import { placingOnPurpose } from "./scaffold";
+import { isOwnBlock, placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
 import { describeFailure, fail, ok, type ActionResult } from "./result";
 import pf from "mineflayer-pathfinder";
@@ -162,6 +162,19 @@ export function lastWalkGoal(): Pos | null {
 
 // Leaves and trunks: what it stands on when it spawned on top of a tree
 const TREE_BLOCK = /_leaves$|_log$|_wood$|_stem$/;
+// Blocks a right-click uses (the pathfinder's own list)
+const INTERACTABLE: string[] = require("mineflayer-pathfinder/lib/interactable.json");
+
+/** A real tree: leaves around it (a log cabin's roof has none), and nothing it or the owner built. */
+function naturalTreeAround(at: Vec3): boolean {
+  if (isProtected(at) || isOwnBlock(at)) return false;
+  for (let dx = -2; dx <= 2; dx++)
+    for (let dy = -2; dy <= 2; dy++)
+      for (let dz = -2; dz <= 2; dz++) {
+        if (bot.blockAt(at.offset(dx, dy, dz))?.name.endsWith("_leaves")) return true;
+      }
+  return false;
+}
 
 /**
  * The top of the trunk under or next to it: the nearest log column within 3
@@ -191,6 +204,9 @@ function trunkBelow(): Vec3 | null {
  */
 export async function climbDownTree(): Promise<boolean> {
   if (!onTree()) return false;
+  // Only a real tree, never a wooden roof someone built
+  const under = blockUnderMe();
+  if (!under || !naturalTreeAround(under.position)) return false;
   const start = bot.entity.position.floored();
   const trunk = trunkBelow();
   console.log(`Up a tree at ${start}: ${trunk ? `chopping down the trunk at ${trunk.x}, ${trunk.z}` : "no trunk under me; digging straight down"}.`);
@@ -205,6 +221,7 @@ export async function climbDownTree(): Promise<boolean> {
     if (currentSignal()?.aborted) break;
     const below = blockUnderMe();
     if (!below || !TREE_BLOCK.test(below.name)) break; // on the ground
+    if (isProtected(below.position) || isOwnBlock(below.position)) break;
     const p = below.position;
     let drop = 0;
     while (drop < 5 && bot.blockAt(p.offset(0, -1 - drop, 0))?.boundingBox === "empty") drop++;
@@ -237,12 +254,19 @@ async function resyncStep(step: Vec3): Promise<void> {
   const tool = bot.inventory?.items().find((i) => /_pickaxe$|_sword$/.test(i.name));
   if (!tool || !bot.blockAt) return;
   const before = [step, step.offset(0, 1, 0)].map((c) => bot.blockAt(c)?.name ?? "?");
+  // Only air or a plain block is clicked: never a door, chest, bed, gate or
+  // anything else a right-click would use
+  const usable = new Set<string>(INTERACTABLE);
+  const harmless = (b: Block): boolean => b.name.endsWith("air") || (b.boundingBox === "block" && !usable.has(b.name) && !/_door$|_trapdoor$|_bed$|chest|barrel|furnace|_gate$/.test(b.name));
   try {
-    if (bot.heldItem?.name !== tool.name) await bot.equip(tool, "hand");
+    if (bot.heldItem?.name !== tool.name) {
+      const held = await equipItem(tool.name);
+      if (!held.ok) return;
+    }
     // Its floor's top (answers: floor and feet), then the feet cell's top (feet and head)
     for (const cell of [step.offset(0, -1, 0), step]) {
       const b = bot.blockAt(cell);
-      if (b) await bot.activateBlock(b, new Vec3(0, 1, 0));
+      if (b && harmless(b)) await bot.activateBlock(b, new Vec3(0, 1, 0));
     }
     await sleep(300); // the answers
   } catch (error) {
