@@ -161,7 +161,14 @@ export async function goToPlayer(username: string, distance = 3): Promise<boolea
     console.log(`Could not find ${username}.`);
     return false;
   }
-  const result = await goTo(new pf.goals.GoalFollow(playerEntity, distance));
+  // Fixed legs toward where the player is now, re-aimed each leg. A
+  // GoalFollow throws its path away whenever the player moves a couple of
+  // blocks, so with the owner walking about it kept planning and never set
+  // off (20 s of standing still, then "stuck")
+  const result = await travelToResult(() => {
+    const p = bot.players[username]?.entity?.position;
+    return p ? { x: p.x, y: p.y, z: p.z } : null;
+  }, { range: distance });
   if (!result.ok) {
     console.log(`Couldn't get to ${username}: ${describeFailure(result)}`);
     return false;
