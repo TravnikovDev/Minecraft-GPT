@@ -44,7 +44,9 @@ const CRAFT_TIMEOUT_MS = 25_000;
 const CRAFT_BATCH = 8; // recipe runs per craft call (each run is several window clicks)
 const USE_TIMEOUT_MS = 5_000;
 const CONFIRM_MS = 1_000; // how long the server gets to show the change
-const WALK_NO_PROGRESS_MS = 20_000; // a walk that gets no closer for this long has given up
+// A walk that gets nowhere for this long is stuck (owner: 8 s at most; a
+// player notices in a few seconds). Digging or building a step counts as going
+export const WALK_NO_PROGRESS_MS = 8_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const floor = (p: Pos): Vec3 => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
@@ -106,7 +108,8 @@ function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; 
   const timer = setInterval(() => {
     if (!bot.entity) return;
     const here = bot.entity.position;
-    if (here.distanceTo(last) > 0.5 || isAnyReflexActive()) {
+    const working = Boolean(bot.pathfinder?.isMining?.() || bot.pathfinder?.isBuilding?.());
+    if (here.distanceTo(last) > 0.5 || isAnyReflexActive() || working) {
       last = here.clone();
       lastProgress = Date.now();
     } else if (Date.now() - lastProgress > WALK_NO_PROGRESS_MS) {

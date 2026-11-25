@@ -46,7 +46,9 @@ export async function travelToResult(
   const total = Math.max(1, distXZ(bot.entity.position, first));
   const reported = new Set<number>();
   const savedThink = pathing.thinkTimeout;
-  pathing.thinkTimeout = 10000; // a leg of rough terrain can need more than the 5 s default
+  // A leg of rough terrain can need more than the 5 s default, but planning
+  // must stay under the 8 s a walk may stand still (core/primitives)
+  pathing.thinkTimeout = 6000;
   let failures = 0;
   let crossings = 0;
   let last: ActionResult = fail("unreachable", "no way found");
