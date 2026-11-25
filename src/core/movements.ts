@@ -17,7 +17,7 @@
 
 import type { Bot } from "mineflayer";
 import pf from "mineflayer-pathfinder";
-import { isOwnScaffold } from "./scaffold";
+import { isOwnBlock } from "./scaffold";
 import { forbiddenAt } from "./forbidden";
 
 // Natural blocks the bot may dig through when its path needs it
@@ -83,7 +83,7 @@ function withoutDigging(neighbors: { toBreak: { x: number; y: number; z: number 
   const before = neighbors.length;
   generate();
   const added = neighbors[neighbors.length - 1];
-  if (neighbors.length > before && added.toBreak.some((p) => !isOwnScaffold(p))) neighbors.pop();
+  if (neighbors.length > before && added.toBreak.some((p) => !isOwnBlock(p))) neighbors.pop();
 }
 
 /** Builds a fresh copy of the walking rules (only for a one-off variant, e.g. no digging). */
@@ -112,7 +112,7 @@ export function safeMovements(bot: Bot): pf.Movements {
       const [block] = args;
       // Never in an area it must keep out of, its own scaffolding included
       if (block?.position && forbiddenAt(block.position)) return false;
-      if (block?.position && isOwnScaffold(block.position, block.name)) {
+      if (block?.position && isOwnBlock(block.position, block.name)) {
         // Only "built" is waived: next to water or lava, or under sand and
         // gravel, its own scaffolding stays too (same checks as for any block)
         if (!this.canDig) return false;

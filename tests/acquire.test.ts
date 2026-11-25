@@ -18,6 +18,8 @@ const RECIPES: Record<string, { makes: number; takes: Record<string, number>; ta
   stone_pickaxe: { makes: 1, takes: { cobblestone: 3, stick: 2 }, table: true },
   white_bed: { makes: 1, takes: { white_wool: 3, oak_planks: 3 }, table: true },
   furnace: { makes: 1, takes: { cobblestone: 8 }, table: true },
+  // Wool has a recipe too (4 string): the planner must still go to the sheep
+  white_wool: { makes: 1, takes: { string: 4 } },
   torch: { makes: 4, takes: { coal: 1, stick: 1 } },
   iron_pickaxe: { makes: 1, takes: { iron_ingot: 3, stick: 2 }, table: true },
 };
@@ -31,18 +33,24 @@ let trees = 10;
 let sheep = 0;
 let coalOre = 0;
 
+// Like the real planner: deeper parts are crafted only when their inputs are
+// at hand, or they're basic parts (planks, sticks, a table); otherwise the
+// part itself is what's missing (a bed needs wool, not string)
+const ALWAYS_EXPAND = new Set(["oak_planks", "stick", "crafting_table"]);
+
 /** Raw materials missing for `count` of `item`, expanding what can be crafted. */
-function missing(item: string, count: number, have = { ...inv }, out: Record<string, number> = {}, steps: string[] = []): Record<string, number> {
+function missing(item: string, count: number, have = { ...inv }, out: Record<string, number> = {}, steps: string[] = [], depth = 0): Record<string, number> {
   const r = RECIPES[item];
   const short = Math.max(0, count - (have[item] ?? 0));
-  if (!r) {
+  const partsShort = r && Object.entries(r.takes).some(([part, n]) => (have[part] ?? 0) < n * Math.ceil(short / r.makes));
+  if (!r || (depth > 0 && short > 0 && partsShort && !ALWAYS_EXPAND.has(item))) {
     if (short > 0) out[item] = (out[item] ?? 0) + short;
     have[item] = Math.max(0, (have[item] ?? 0) - count);
     return out;
   }
   if (short > 0) {
     const times = Math.ceil(short / r.makes);
-    for (const [part, n] of Object.entries(r.takes)) missing(part, n * times, have, out, steps);
+    for (const [part, n] of Object.entries(r.takes)) missing(part, n * times, have, out, steps, depth + 1);
     steps.push(item);
     have[item] = (have[item] ?? 0) + times * r.makes;
   }

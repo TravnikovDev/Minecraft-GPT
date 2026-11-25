@@ -173,14 +173,25 @@ test("the next milestone: the first not done and not set aside; null when the fi
   expect(M.tier1Reached(list)).toBe(true);
 });
 
-test("the shelter's shape: stairs 5 down the way it faces, sealed at the bottom, room beyond", () => {
+test("the shelter's shape: stairs 5 down the way it faces, sealed at the bottom, fixed spots in the room", () => {
   const { shelterLayout } = realShelter;
   const s = shelterLayout({ x: 10, y: 70, z: -4 }, "north");
-  expect([s.bottom.x, s.bottom.y, s.bottom.z]).toEqual([10, 65, -9]);
+  const at = (p: any) => [p.x, p.y, p.z];
+  expect(at(s.bottom)).toEqual([10, 65, -9]);
   expect(s.seal.map((p: any) => p.y)).toEqual([65, 66, 67]);
-  expect([s.center.x, s.center.y, s.center.z]).toEqual([10, 65, -11]);
+  expect(at(s.stand)).toEqual([10, 65, -10]); // first row, by the stairs
+  expect(at(s.bed)).toEqual([10, 65, -11]); // foot in the middle row, head in the last
+  expect(s.chests.map(at)).toEqual([[11, 65, -12], [9, 65, -12]]); // the last row's corners
+  // Nothing is ever put where it stands, or on the way in
+  const key = (p: any) => at(p).join(",");
+  const furnished = new Set([key(s.bed), key(s.bed.offset(0, 0, -1)), ...s.chests.map(key)]);
+  expect(furnished.has(key(s.stand))).toBe(false);
+  expect(s.seal.some((p: any) => furnished.has(key(p)))).toBe(false);
+  // Every furnished spot is a dug cell
+  const dug = new Set(s.cells.map(key));
+  for (const f of furnished) expect(dug.has(f)).toBe(true);
   const e = shelterLayout({ x: 0, y: 64, z: 0 }, "east");
-  expect([e.center.x, e.center.z]).toEqual([7, 0]);
+  expect([e.stand.x, e.stand.z]).toEqual([6, 0]);
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
@@ -188,3 +199,25 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests"]);
 });
+
+test("stay with me: the milestone it's on ends now, and no new one starts", async () => {
+  M.MILESTONES.splice(0, M.MILESTONES.length, fakeMilestone("tools", 2_000), fakeMilestone("food"));
+  await C.setAutonomy(true);
+  await sleep(100);
+  expect(A.currentTask()?.name).toBe("milestone: tools");
+  await C.setAutonomy(false);
+  await sleep(1_500); // past the next look at what's next
+  expect(A.currentTask()).toBeNull();
+  expect(runs).toEqual(["tools"]);
+  expect(done.size).toBe(0);
+}, 10_000);
+
+test("a milestone given up as stuck is set aside; it goes on to the next", async () => {
+  M.MILESTONES.splice(0, M.MILESTONES.length, fakeMilestone("tools", 2_000), fakeMilestone("food"));
+  await P.updateMemory({ autonomy: { on: true, since: Date.now() } });
+  await C.considerNextStep();
+  await sleep(100);
+  await A.cancelRunning("stuck", false); // what the stuck watcher does
+  for (let i = 0; i < 60 && !done.has("food"); i++) await sleep(50);
+  expect(runs).toEqual(["tools", "food"]);
+}, 10_000);

@@ -50,10 +50,10 @@ export function hasTableAccess(): boolean {
 /** Its shelter (the room it dug), in this dimension, if it has one. */
 export function shelter(): { x: number; y: number; z: number; details?: Record<string, unknown> } | null {
   const room = getPlaces("basement")
-    .filter((p) => p.dimension === currentDimension())
+    .filter((p) => p.dimension === currentDimension() && p.details?.["incomplete"] !== true)
     .at(-1);
   if (!room) return null;
-  // Loaded and filled in (someone built over it): it's gone; not loaded: still believed
+  // Its stand cell (never furnished), loaded and filled in (someone built over it): it's gone; not loaded: still believed
   const block = bot.blockAt(new Vec3(room.x, room.y, room.z));
   if (block && block.boundingBox === "block") return null;
   return room;

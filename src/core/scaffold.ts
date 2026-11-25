@@ -57,6 +57,30 @@ export function forgetScaffold(p: { x: number; y: number; z: number }): void {
   placed.delete(key(p));
 }
 
+// --- Doors: blocks it closes its shelter with -----------------------------------
+// Not scaffolding (the idle cleanup never takes them down), but the walking
+// rules may dig through them, so "come here" at night gets it out.
+const doors = new Map<string, Placed>();
+
+/** Records a block it closed its shelter with. */
+export function markDoor(p: { x: number; y: number; z: number }, name: string | null): void {
+  doors.set(key(p), { x: p.x, y: p.y, z: p.z, name });
+}
+
+/** Forgets a door block (opened, or someone else changed it). */
+export function forgetDoor(p: { x: number; y: number; z: number }): void {
+  doors.delete(key(p));
+}
+
+/** True for its own scaffolding or shelter door, still what it placed: the walking rules may break it. */
+export function isOwnBlock(p: { x: number; y: number; z: number }, nameNow?: string): boolean {
+  if (isOwnScaffold(p, nameNow)) return true;
+  const door = doors.get(key(p));
+  if (!door) return false;
+  const now = nameNow ?? bot.blockAt?.(p as never)?.name;
+  return door.name === null || now === undefined || now === door.name;
+}
+
 /** Every scaffolding block still standing (and still what it placed), highest first. */
 export function ownScaffolds(): { x: number; y: number; z: number }[] {
   return [...placed.values()]
@@ -68,11 +92,15 @@ export function ownScaffolds(): { x: number; y: number; z: number }[] {
 /** A new connection: start over (positions from before may not be ours any more). */
 export function clearScaffolds(): void {
   placed.clear();
+  doors.clear();
 }
 
 // Someone else changed the block (the owner broke it, or built on the spot):
 // it's not the bot's scaffolding any more. The bot's own digs and placements
 // don't count (they're marked self-caused, or recorded right after).
 on("block:changed", ({ position, selfCaused }) => {
-  if (!selfCaused) forgetScaffold(position);
+  if (!selfCaused) {
+    forgetScaffold(position);
+    forgetDoor(position);
+  }
 });

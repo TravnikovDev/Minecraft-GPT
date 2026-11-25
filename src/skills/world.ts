@@ -49,14 +49,15 @@ export const SOURCES: Source[] = [
     name: "hunting sheep",
     gets: (m) => /_wool$/.test(m),
     needs: () => (toolTier("sword") >= TIER.wooden ? [] : [{ item: "wooden_sword", count: 1 }]),
-    run: async (m, count) => {
-      const before = carried(m);
+    run: async (_m, count) => {
+      const allWool = (): number => bot.inventory.items().filter((i) => /_wool$/.test(i.name)).reduce((n, i) => n + i.count, 0);
+      const before = allWool();
       // An explicit count: a general hunt leaves two of each kind to breed
       // Loaded when used: the command modules reach back to the registry, which reaches here
       const { execute: hunt } = await import("../commands/Hunting");
       await hunt({ maxDistance: 60, mobType: "sheep", count: Math.max(1, count) });
-      const wool = bot.inventory.items().filter((i) => /_wool$/.test(i.name)).reduce((n, i) => n + i.count, 0);
-      return wool > 0 || carried(m) > before ? ok() : fail("missing_items", "found no sheep");
+      // Any colour counts (the bed takes whichever it has 3 of); wool it already had doesn't
+      return allWool() > before ? ok() : fail("missing_items", "found no sheep");
     },
   },
   {

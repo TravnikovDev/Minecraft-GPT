@@ -1,5 +1,5 @@
 {
-  "src/actions/digging.ts": 6,
+  "src/actions/digging.ts": 5,
   "src/actions/ensureLocation.ts": 2,
   "src/actions/gatherWood.ts": 3,
   "src/commands/AttackNearest.ts": 5,

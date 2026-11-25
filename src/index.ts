@@ -35,6 +35,7 @@ import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
 import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
+import { rememberShelterDoor } from "./skills/shelter";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going
@@ -90,6 +91,7 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 5_000, checkProgress); // nudge, replan, give up (managers/stuckWatch)
   resetCurriculum(); // milestones set aside on the old connection get another chance
   everyWhileConnected(currentBot, 15_000, considerNextStep); // its own life, when the owner turned it on (skills/curriculum)
+  everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 

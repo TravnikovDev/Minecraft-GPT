@@ -64,9 +64,11 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
       continue; // plan again with the table
     }
 
-    // A raw material itself (logs, cobblestone, wool): straight from a source
+    // A raw material itself (logs, cobblestone, wool, coal): straight from
+    // its source, not through some recipe for it (wool from string, coal
+    // from a coal block) unless that recipe can be made right now
     const direct = world.sources.find((s) => s.gets(item) && !demoted(s, item));
-    const raw = direct && plan.missing.some((m) => m.name === item) ? [{ name: item, count: want }] : plan.missing;
+    const raw = direct && plan.missing.length > 0 ? [{ name: item, count: want }] : plan.missing;
 
     if (raw.length === 0) {
       if (!(await world.craft(item, want))) console.log(`Crafting ${item} didn't work this round; planning again.`);

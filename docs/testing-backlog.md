@@ -4,6 +4,39 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 6: skills and the first day (2026-11-25, not yet run)
+
+The bot can now live its own life when the owner lets it: it works through a player's first day (wooden tools, a shelter, stone tools, food, a bed, two chests) and goes into its shelter at night. It's **off until you say so**. Every "make me X" now goes through one planner that gets the materials, a table and the tools first.
+
+Best in a **fresh world**: open it to LAN, start the bot, and say "go live your life".
+
+**The plan's checks**
+- [ ] Fresh world, "go live your life" → within a game day: "Milestone: wooden tools (1 of 6 …)", then a shelter, stone tools, food, a bed, chests, and finally "I've got everything for my first day …"
+- [ ] Give it an order halfway ("come here") → it comes; a few seconds after, it goes back to the milestone it was on
+- [ ] "stop" while it works on a milestone → it stops, and doesn't start the next one for a minute
+
+**Autonomy and progress**
+- [ ] Before "go live your life": it stands and waits; no tree cutting near your base
+- [ ] "what's your progress?" → "First day: N of 6 done (…); still to do: …"
+- [ ] "stay with me" / "take a break" → "Okay, I'll wait for your orders."; the current milestone finishes or you say stop, no new one starts
+- [ ] Restart the bot after "go live your life" → it carries on by itself (the choice is remembered)
+
+**The planner (acquire)**
+- [ ] Empty inventory, "make a stone pickaxe" → chops a tree, makes a table, a wooden pickaxe, mines stone, then the stone pickaxe; no back-and-forth loop
+- [ ] No trees within reach (a desert or the ocean) → gives up within a minute or two with "couldn't get … logs", not forever
+- [ ] Its pickaxe breaks while mining → it makes a new one from what it carries (no trip to gather)
+
+**The shelter and the night**
+- [ ] First dusk → "Digging a shelter for the night.": stairs 5 down the way it faces, a 3x3 room 2 high at the bottom
+- [ ] Inside at night → the stairs are closed with 3 blocks from inside; no mob gets in
+- [ ] Morning → it opens the stairs and comes out by itself, and goes on with its milestones
+- [ ] Ask it to "come here" at night → it digs out of the shelter (its own blocks) and comes
+
+**Bed and chests**
+- [ ] With sheep around: it hunts 3 of one colour (only as many as needed), crafts a bed, puts it in the shelter and sleeps (spawn point set; "where is your bed?" answers)
+- [ ] No sheep around → "I couldn't get a bed yet: … no sheep around. I'll try again later." and it moves on to the chests
+- [ ] Chests → two chests in niches in the room's wall, not in the walkway; the cheap stuff (dirt, cobblestone…) goes in, tools and food stay with it
+
 ## Phase 5: perception, memory and the Narrator (2026-11-25, not yet run)
 
 The bot now remembers places, chests, where it died and where to keep out, across restarts, and answers from memory. Everything it says goes through one Narrator: answers first, task reports never lost, running commentary trimmed. db.json is upgraded on the first start (the old file is kept as `db.json.v1.bak`).

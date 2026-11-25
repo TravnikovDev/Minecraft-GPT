@@ -7,6 +7,7 @@ import {
 import { __actionsDelay } from "../utils/utility";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
+import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
 import { isNatural } from "../core/movements";
@@ -206,7 +207,8 @@ export async function digDiagonalTunnel(
     }
   }
 
-  bot.chat(`I've dug ${tunnelName}`);
+  // Commentary (the shelter announces itself)
+  if (tunnelName !== "basementEntrance") chatter(`I've dug ${tunnelName.replace(/-/g, " ")}.`, "digging");
 
   if (tunnelName !== "basementEntrance")
     saveMineLocation({

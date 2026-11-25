@@ -11,7 +11,7 @@
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
 import { bot } from "../core/body";
-import { Bucket, currentTask, onTaskEnd, pendingTasks, propose } from "../core/arbiter";
+import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
 import { isCommandCancelled } from "../core/commandContext";
 import { report } from "../core/narrator";
@@ -21,8 +21,16 @@ import { sky } from "../actions/perception";
 import { MILESTONES, nextMilestone, noteReached, tier1Reached, type Milestone } from "./milestones";
 import { hasBed, shelter } from "./capabilities";
 import { buildShelter, enterShelter, leaveShelter } from "./shelter";
+import { clearDemotions } from "./acquire";
 
 const BLOCKED_FOR_MS = 10 * 60_000;
+const MILESTONE_MAX_MS = 15 * 60_000;
+// A Minecraft night (dusk to dawn) is about 9 real minutes; a backstop past it
+const NIGHT_MAX_MS = 12 * 60_000;
+const MILESTONE_PREFIX = "milestone: ";
+const NIGHT_NAME = "night: going to my shelter";
+const isOwnLife = (task: { name: string; bucket: number }): boolean =>
+  (task.bucket === Bucket.Self && task.name.startsWith(MILESTONE_PREFIX)) || task.name === NIGHT_NAME;
 const blockedUntil = new Map<string, number>();
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -34,7 +42,14 @@ export function autonomyOn(): boolean {
 /** The owner turns it on ("go live your life") or off ("stay with me"). */
 export async function setAutonomy(on: boolean): Promise<void> {
   await updateMemory({ autonomy: { on, since: Date.now() } });
-  if (on) void considerNextStep();
+  if (on) {
+    void considerNextStep();
+    return;
+  }
+  // "Stay with me": its own milestones and night routine end now
+  dropPending(isOwnLife);
+  const running = currentTask();
+  if (running && isOwnLife(running)) await cancelRunning("the owner wants me to wait for orders", false);
 }
 
 const isBlocked = (id: string): boolean => (blockedUntil.get(id) ?? 0) > Date.now();
@@ -62,10 +77,11 @@ async function announce(): Promise<void> {
 }
 
 /** The task that goes for a milestone (resumed from where things stand if something cuts in). */
-function milestoneTask(m: Milestone) {
-  const spec = {
-    name: `milestone: ${m.title}`,
+function milestoneTask(m: Milestone): TaskSpec {
+  const spec: TaskSpec = {
+    name: `${MILESTONE_PREFIX}${m.title}`,
     bucket: Bucket.Self,
+    maxMs: MILESTONE_MAX_MS,
     run: async () => {
       const result = await m.achieve();
       await announce();
@@ -74,7 +90,8 @@ function milestoneTask(m: Milestone) {
         report(`I couldn't get ${m.title} yet: ${describeFailure(result)}. I'll try again later.`);
       }
     },
-    resume: () => (m.done() ? null : milestoneTask(m)),
+    // After a cut-in: carried on, unless done meanwhile, turned off, or night came
+    resume: () => (m.done() || !autonomyOn() || isNight() ? null : milestoneTask(m)),
   };
   return spec;
 }
@@ -82,10 +99,15 @@ function milestoneTask(m: Milestone) {
 let nightOf = -1; // the day number of the night already handled
 
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
-function nightTask() {
+function nightTask(): TaskSpec {
   return {
-    name: "night: going to my shelter",
+    name: NIGHT_NAME,
     bucket: Bucket.Upkeep,
+    // Waiting for the morning is standing still on purpose
+    watchProgress: false,
+    maxMs: NIGHT_MAX_MS,
+    // The owner called it out at night: back in afterwards
+    resume: () => (isNight() && autonomyOn() ? nightTask() : null),
     run: async () => {
       if (!shelter()) {
         const dug = await buildShelter();
@@ -119,7 +141,8 @@ export async function considerNextStep(): Promise<void> {
   await announce();
   // Night comes first: it cuts in on a milestone (upkeep outranks "self"),
   // but waits for the owner's commands
-  const day = Math.floor((bot.time?.age ?? 0) / 24000);
+  // The world's day (it moves on when someone sleeps; the age doesn't)
+  const day = bot.time?.day ?? 0;
   if (isNight() && !bot.isSleeping && nightOf !== day && !busyWith(Bucket.Upkeep)) {
     nightOf = day;
     propose(nightTask());
@@ -145,7 +168,19 @@ export function resetCurriculum(): void {
   blockedUntil.clear();
 }
 
-// A task ending is a good moment to look at what's next
-onTaskEnd(() => {
+// A task ending is a good moment to look at what's next. A milestone given up
+// as stuck or too long is set aside for a while, like one that failed.
+onTaskEnd((task, outcome) => {
+  const why = String(task.signal.reason ?? "");
+  if (outcome === "cancelled" && task.name.startsWith(MILESTONE_PREFIX) && (why === "stuck" || why === "took too long")) {
+    const m = MILESTONES.find((x) => `${MILESTONE_PREFIX}${x.title}` === task.name);
+    if (m) blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
+  }
   setTimeout(() => void considerNextStep(), 1_000);
+});
+
+// The owner's own orders get a fresh start: a source that failed during its
+// own life (no sheep found) shouldn't block "make me a bed"
+onTaskStart((task) => {
+  if (task.bucket === Bucket.Owner) clearDemotions();
 });

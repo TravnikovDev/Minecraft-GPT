@@ -12,7 +12,10 @@ import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
 import { bestWool, chestsNear, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, enterShelter } from "./shelter";
+import { buildShelter, enterShelter, shelterSlots } from "./shelter";
+import { knownBlock } from "../core/primitives";
+import { catalog } from "../core/catalog";
+import { placeBlockResult } from "../actions/worldInteraction";
 
 export type Milestone = {
   id: string;
@@ -51,10 +54,9 @@ async function stockFood(): Promise<ActionResult> {
   return foodPoints() >= FOOD_STOCK ? ok() : fail("missing_items", `only ${foodPoints()} food points; no more animals or berries around`);
 }
 
-/** A bed: 3 wool of one colour (from sheep), crafted, put in the shelter, used (spawn point). */
+/** A bed: 3 wool of one colour (from sheep), crafted, put in its slot in the shelter, used (spawn point). */
 async function getBed(): Promise<ActionResult> {
-  const carriedBed = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
-  if (!carriedBed) {
+  if (!bot.inventory.items().some((i) => i.name.endsWith("_bed"))) {
     let wool = bestWool();
     if (!wool || wool[1] < 3) {
       const got = await acquire("white_wool", 3, liveWorld);
@@ -64,32 +66,41 @@ async function getBed(): Promise<ActionResult> {
     const made = await acquire(`${wool![0]}_bed`, 1, liveWorld);
     if (!made.ok) return made;
   }
-  if (shelter()) {
-    const inside = await enterShelter();
-    if (!inside.ok) console.log("Couldn't get into the shelter; putting the bed down here.");
+  // In the shelter, in the bed's own spot (never the nearest bed: that may be the owner's)
+  const inside = await enterShelter();
+  if (!inside.ok) return inside;
+  const slot = shelterSlots()?.bed;
+  if (!slot) return fail("not_found", "no spot for a bed in the shelter");
+  if (!catalog().isBed(knownBlock(slot)?.name ?? "")) {
+    const bedItem = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
+    if (!bedItem) return fail("missing_items", "no bed to put down");
+    // Placed from the stand cell, facing on: the head goes into the last row
+    const placed = await placeBlockResult(bedItem.name, slot.x, slot.y, slot.z);
+    if (!placed.ok) return placed;
   }
   const { execute: sleep } = await import("../commands/Sleep");
-  await sleep({ newBed: true }); // puts it down and uses it: the spawn point is set
-  return hasBed() ? ok() : fail("refused", "the bed didn't take (no free spot, or the server said no)");
+  await sleep({ newBed: false }); // its new bed is the nearest: uses it (by day too), so the spawn point is set
+  return hasBed() ? ok() : fail("refused", "the bed didn't take (the server said no)");
 }
 
-/** Two chests in the shelter, with the cheap stuff put away in them. */
+/** Two chests in their spots in the shelter, with the cheap stuff put away in them. */
 async function setUpChests(): Promise<ActionResult> {
-  const room = shelter();
-  if (!room) return fail("not_found", "no shelter for the chests yet");
-  const { placeChestOutOfTheWay } = await import("../actions/placement");
+  const slots = shelterSlots();
+  if (!slots) return fail("not_found", "no shelter for the chests yet");
   const { lookInChest, storeItems } = await import("../actions/storage");
   const inside = await enterShelter();
   if (!inside.ok) return inside;
-  while (chestsNear(room) < 2) {
+  for (const slot of slots.chests) {
+    if (knownBlock(slot)?.name === "chest") continue;
     const got = await acquire("chest", 1, liveWorld);
     if (!got.ok) return got;
-    const placed = await placeChestOutOfTheWay("chest"); // in a niche in the room's wall
-    if (!placed) return fail("occupied", "no spot for a chest in the shelter");
-    await lookInChest(placed); // remembered from now on
+    const placed = await placeBlockResult("chest", slot.x, slot.y, slot.z);
+    if (!placed.ok) return placed;
+    const block = knownBlock(slot);
+    if (block?.name === "chest") await lookInChest(block); // remembered from now on
   }
   await storeItems("lowValue");
-  return chestsNear(room) >= 2 ? ok() : fail("refused", "the chests didn't stay");
+  return chestsNear(slots.stand) >= 2 ? ok() : fail("refused", "the chests didn't stay");
 }
 
 /** Every milestone, in the order the bot goes for them. */
