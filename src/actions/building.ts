@@ -491,6 +491,13 @@ export function shelterSlots(): {
 export async function enterShelter(): Promise<ActionResult> {
   const room = shelterPlace(false);
   if (!room) return fail("not_found", "no shelter");
+  // From far off: the long-trip walker first (in legs; one 40-block plan
+  // "took too long to decide", fresh-world test), then the last steps in
+  if (bot.entity.position.distanceTo(new Vec3(room.x, room.y, room.z)) > 16) {
+    const { travelToResult } = await import("./movement");
+    const near = await travelToResult(() => ({ x: room.x, y: room.y, z: room.z }), { range: 3 });
+    if (!near.ok) console.log(`On the way to my shelter: ${describeFailure(near)}; trying the last stretch anyway.`);
+  }
   const walked = await goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
   if (!walked.ok) return walked;
   const doorAt = cellsOf(room, "door")[0];

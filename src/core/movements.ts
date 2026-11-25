@@ -194,6 +194,10 @@ export function safeMovements(bot: Bot): pf.Movements {
     if (!isNatural(block.name)) moves.blocksCantBreak.add(block.id);
   }
   moves.canDig = true; // natural terrain only (see above)
+  // Walking through berry bushes hurts (5 health on one trip home, fresh-world
+  // test): around them, like a player
+  const berries = bot.registry.blocksByName["sweet_berry_bush"]?.id;
+  if (berries !== undefined) moves.blocksToAvoid.add(berries);
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
