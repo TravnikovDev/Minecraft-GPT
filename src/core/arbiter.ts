@@ -178,14 +178,18 @@ function start(entry: Entry): void {
   }
   console.log(`Task started: ${spec.name} (bucket ${spec.bucket}${entry.resumed ? ", resumed" : ""}).`);
 
-  const done: Promise<Outcome> = runWithSignal(abort.signal, () => spec.run()).then(
-    () => (abort.signal.aborted ? "cancelled" : "done"),
+  // Recorded as running before its code starts: what the task does before its
+  // first pause (asking, checking what's running) must see itself running
+  let settle: (outcome: Outcome) => void = () => {};
+  const done = new Promise<Outcome>((resolve) => (settle = resolve));
+  running = { ...entry, abort, done, startedAt: Date.now() };
+  runWithSignal(abort.signal, () => spec.run()).then(
+    () => settle(abort.signal.aborted ? "cancelled" : "done"),
     (error) => {
       if (!abort.signal.aborted) console.error(`Task ${spec.name} failed:`, error);
-      return abort.signal.aborted ? "cancelled" : "failed";
+      settle(abort.signal.aborted ? "cancelled" : "failed");
     }
   );
-  running = { ...entry, abort, done, startedAt: Date.now() };
   void done.then((outcome) => {
     clearTimeout(limit);
     finish(entry.id, outcome);

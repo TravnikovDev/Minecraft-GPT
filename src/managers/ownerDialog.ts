@@ -7,6 +7,7 @@ import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { loadOwnerPosition, saveOwnerPosition } from "../core/session";
 import { say } from "../core/narrator";
+import { Bucket, currentTask } from "../core/arbiter";
 
 
 /** The owner's name as the server spells it, if they are online. */
@@ -106,8 +107,17 @@ export function askOwner(
   question: string,
   onYes: () => Promise<void>,
   onNo?: () => Promise<void>,
-  ttlMs = 2 * 60 * 1000
+  ttlMs = 2 * 60 * 1000,
+  onMyOwn: "yes" | "no" = "no"
 ): void {
+  // Its own errands (living its own life, a role, upkeep): nobody answers
+  // these, so it decides and carries on (the owner's rule)
+  const running = currentTask();
+  if (running && running.bucket >= Bucket.Role) {
+    console.log(`Deciding on my own (${running.name}): "${question}" -> ${onMyOwn}.`);
+    void (onMyOwn === "yes" ? onYes() : (onNo?.() ?? Promise.resolve())).catch((error) => console.error("My own decision failed:", error));
+    return;
+  }
   pending = { question, onYes, ...(onNo ? { onNo } : {}), expiresAt: Date.now() + ttlMs };
   // A question to the owner goes first; not kept for later (it expires)
   say(`${question} (yes/no)`, { kind: "reply", to: "owner", noHold: true });

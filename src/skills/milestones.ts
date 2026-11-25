@@ -11,6 +11,8 @@ import { fail, ok, type ActionResult } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
+import { animalsInSight, exploreFor } from "./explore";
+import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, chestsNear, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, enterShelter, shelterSlots } from "./shelter";
 import { knownBlock } from "../core/primitives";
@@ -46,6 +48,11 @@ async function stockFood(): Promise<ActionResult> {
   const { cookFood } = await import("../actions/cooking");
   if (foodPoints() < FOOD_STOCK) await pickBerries();
   if (foodPoints() < FOOD_STOCK) await hunt({ maxDistance: 60, mobType: null, count: 4 });
+  // Hunted out around here: go farther and hunt there (a player doesn't wait hungry)
+  for (let trip = 0; trip < 2 && foodPoints() < FOOD_STOCK && !isCommandCancelled(); trip++) {
+    if (!(await exploreFor("animals", animalsInSight))) break;
+    await hunt({ maxDistance: 40, mobType: null, count: 4 });
+  }
   // Raw meat is worth more cooked: a furnace from the cobblestone it has
   const hasRaw = bot.inventory.items().some((i) => /^(beef|porkchop|mutton|chicken|rabbit|cod|salmon)$/.test(i.name));
   if (hasRaw) {

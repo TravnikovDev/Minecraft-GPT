@@ -52,6 +52,9 @@ export const SOURCES: Source[] = [
     run: async (_m, count) => {
       const allWool = (): number => bot.inventory.items().filter((i) => /_wool$/.test(i.name)).reduce((n, i) => n + i.count, 0);
       const before = allWool();
+      // None near the shelter any more: look farther first
+      const { exploreFor, inSight } = await import("./explore");
+      await exploreFor("sheep", () => inSight((n) => n === "sheep"));
       // An explicit count: a general hunt leaves two of each kind to breed
       // Loaded when used: the command modules reach back to the registry, which reaches here
       const { execute: hunt } = await import("../commands/Hunting");
