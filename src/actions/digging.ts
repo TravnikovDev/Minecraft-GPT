@@ -4,7 +4,6 @@ import {
   pickupNearbyItems,
   placeBlock,
 } from "../actions/worldInteraction";
-import { __actionsDelay } from "../utils/utility";
 import { saveMineLocation } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";
@@ -188,12 +187,12 @@ export async function digDiagonalTunnel(
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
         if (stopTunnelAt(digPosition)) return false;
-        const digResult = await breakBlockAt(
+        await breakBlockAt(
           digPosition.x,
           digPosition.y,
           digPosition.z
         );
-        await __actionsDelay(digResult ? 1000 : 200);
+        // Straight on to the next block: each dig already waits for the server
 
         // After digging the floor block, ensure there is a foundation
         if (h === 0) {
@@ -349,7 +348,6 @@ export async function digRoom(
       for (let x = -1; x < roomSize.width - 1; x++) {
         const roomBlock = roomStart.offset(x, y, z);
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
-        await __actionsDelay(1000);
 
         // Ensure the floor foundation
         if (y === 0) {
@@ -433,8 +431,7 @@ export async function digDiagonalTunnelUp(
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
         if (stopTunnelAt(digPosition)) return false;
-        const digResult = await breakBlockAt(digPosition.x, digPosition.y, digPosition.z);
-        await __actionsDelay(digResult ? 1000 : 200);
+        await breakBlockAt(digPosition.x, digPosition.y, digPosition.z);
 
         // The block under each step is the stair itself: keep it solid
         if (h === 0) {

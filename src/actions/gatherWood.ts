@@ -3,7 +3,6 @@ import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
-import { __actionsDelay } from "../utils/utility";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
 import { recordSighting } from "./perception";
@@ -97,15 +96,14 @@ export async function gatherWood(
       try {
         for (const aLog of aTree) {
           if (isCommandCancelled()) return false;
+          // Log after log, like a player (each break already waits for the server)
           await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
-          await __actionsDelay(1200); // Simulate gathering delay
         }
         // Off the pillar it built to reach the top, and its scaffolding gone,
         // before moving on (otherwise it bridges from tree to tree)
         await takeDownScaffolding();
         rememberFelledTree(stumps, woodBlock.name); // back for the saplings once the leaves fall
         await pickupNearbyItems(bot);
-        await __actionsDelay(2500);
         const newCount = getLogsCount();
         failedAttempts = newCount > logsCount ? 0 : failedAttempts + 1;
         logsCount = newCount;

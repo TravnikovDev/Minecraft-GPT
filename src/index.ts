@@ -3,6 +3,15 @@
 // connection owner in core/body.ts), connects, and runs the command loop.
 
 import mineflayer from "mineflayer";
+
+// Every log line carries the time, so slow spots in a game test can be measured
+for (const level of ["log", "error", "warn"] as const) {
+  const original = console[level].bind(console);
+  console[level] = (...args: unknown[]): void => {
+    const now = new Date();
+    original(`${now.toTimeString().slice(0, 8)}.${String(now.getMilliseconds()).padStart(3, "0")}`, ...args);
+  };
+}
 import { clearSolidDoors } from "./core/movements";
 import { installPlugins } from "./core/setup";
 import { clearScaffolds } from "./core/scaffold";
