@@ -110,6 +110,14 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
   registerDiary(); // the diary code writes for the day planner (Phase 7)
+  // The day planner (lazy: it loads the skills): fresh guards per connection,
+  // and a new plan after a death or when the plan is blocked
+  void import("./planner/planner")
+    .then(({ planDay, resetPlanner }) => {
+      resetPlanner();
+      return import("./planner/runner").then(({ registerPlanRunner }) => registerPlanRunner(autonomyOn, (why) => void planDay(why)));
+    })
+    .catch((error: unknown) => console.error("Couldn't start the day planner:", error));
   registerFaceFix(); // never a hair inside a block face (the server put it back 20 times a second)
   protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
   void import("./skills/mine")
@@ -188,6 +196,8 @@ onBotCreated((currentBot) => {
   listen(currentBot, "playerJoined", (player: mineflayer.Player) => {
     if (player.username === currentBot.username || Date.now() - joinedAt < 5_000 || !isOwner(player.username)) return;
     reply(`Hello ${player.username}! I'm here.`);
+    // Living its own life: the owner is back, a good moment to (re)plan and share it
+    if (autonomyOn()) void import("./planner/planner").then(({ planDay, planningOn }) => planningOn(true) && planDay("owner joined"));
   });
 });
 

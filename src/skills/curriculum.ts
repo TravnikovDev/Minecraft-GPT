@@ -252,12 +252,46 @@ export async function considerNextStep(): Promise<void> {
     return;
   }
   if (busyWith(Bucket.Self)) return;
+  // Past its first day the day plan decides what's next (Phase 7); with no
+  // plan step to do (not made yet, the model unavailable, the money spent)
+  // the next milestone below is the fallback
+  if (await planStepProposed(day)) return;
   const next = nextMilestone(MILESTONES, isBlocked);
   // At night only work underground, and only once it's home (the night
   // routine ran: in through the shelter, doors shut): in the mine day and
   // night are the same, it only needs torches (owner)
   if (isNight() && !(next && UNDERGROUND.has(next.id) && nightOf === day)) return;
   if (next) propose(milestoneTask(next));
+}
+
+/** Plan steps that make sense at night: under ground, like its night milestones. */
+const nightStep = (goal: string, args: Record<string, unknown>): boolean =>
+  goal === "mineFor" || (goal === "reachMilestone" && UNDERGROUND.has(String(args["milestone"])));
+
+/**
+ * The day plan's part in choosing what's next: plans at dusk (once a game
+ * day) and when it has no steps left, and proposes the next step. True when
+ * it proposed one.
+ */
+async function planStepProposed(day: number): Promise<boolean> {
+  const { planningOn, planDay, duskDue, markDuskPlanned } = await import("../planner/planner");
+  if (!planningOn(autonomyOn())) return false;
+  if (duskDue()) {
+    markDuskPlanned();
+    void planDay("dusk");
+  }
+  const { nextStep } = await import("../planner/plan");
+  const { planStepTask } = await import("../planner/runner");
+  const next = nextStep();
+  if (!next) {
+    void planDay("idle");
+    return false;
+  }
+  if (isNight() && !(nightStep(next.step.goal, next.step.args) && nightOf === day)) return true; // the plan waits for the morning
+  const task = planStepTask(next.index, next.step);
+  if (!task) return false;
+  propose(task);
+  return true;
 }
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */

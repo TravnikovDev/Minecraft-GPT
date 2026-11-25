@@ -23,10 +23,12 @@ export function taskLine(task: { name: string; bucket: number }, outcome: "done"
   const owners = task.bucket === Bucket.Owner;
   if (outcome === "done") {
     if (task.name.startsWith("night")) return "Spent the night in my shelter.";
-    // A milestone's success is written when it's reached (curriculum), its failure there too
-    if (task.name.startsWith("milestone: ")) return null;
+    // A milestone's success is written when it's reached (curriculum), its
+    // failure there too; a plan step's by the plan runner
+    if (task.name.startsWith("milestone: ") || task.name.startsWith("plan: ")) return null;
     return owners ? `Did what the owner asked: ${what}.` : `Done: ${what}.`;
   }
+  if (task.name.startsWith("plan: ")) return null;
   if (outcome === "failed") return `Couldn't finish ${what}${owners ? " (the owner's order)" : ""}.`;
   // Cancelled: only the telling reasons
   if (reason === "stuck" || reason === "took too long") return `Gave up on ${what}: ${reason}.`;

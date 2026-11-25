@@ -1,0 +1,146 @@
+// Path: src/planner/plan.ts
+// The day plan (Phase 7): its strict schema (what the model must answer),
+// the validator (every plan is untrusted input), and the plan store in world
+// memory that the curriculum runs in bucket B5, one step at a time.
+
+import { z } from "zod";
+import { getMemory, updateMemory } from "../managers/persistenceManager";
+import { GOALS, goalNamed, openMilestones, type Feasible } from "./goals";
+
+/** The step count the plan must have, enforced in code (the model gave 2 when asked for 3-5). */
+export const MIN_STEPS = 3;
+export const MAX_STEPS = 8;
+
+// One flat step: the goal and every goal's arguments, null when not used
+// (strict tools want every field present; the validator picks the goal's own)
+export const StepSchema = z.object({
+  goal: z.enum(GOALS.map((g) => g.name) as [string, ...string[]]),
+  milestone: z.string().nullable().describe("reachMilestone: the milestone id"),
+  item: z.string().nullable().describe("mineFor or craft: the exact Minecraft item id"),
+  count: z.number().int().nullable().describe("gatherWood, mineFor, craft: how many"),
+  lookFor: z.enum(["animals", "sheep"]).nullable().describe("explore: what to look for"),
+  why: z.string().describe("one short reason, in character"),
+});
+export type RawStep = z.infer<typeof StepSchema>;
+
+export const DayPlanSchema = z.object({
+  narrative: z.string().describe("one or two sentences in character: what you'll do and why"),
+  steps: z.array(StepSchema).describe(`${MIN_STEPS} to ${MAX_STEPS} goals, in the order to do them`),
+  daySummary: z.string().describe("the whole of today so far, in 2-4 sentences, for your long-term memory (update today's earlier summary if one is given)"),
+  ownerMessage: z.string().nullable().describe("a short question or suggestion for the owner when they're online, else null"),
+});
+export type DayPlan = z.infer<typeof DayPlanSchema>;
+
+export type PlanStep = { goal: string; args: Record<string, unknown>; why: string; status: "pending" | "running" | "done" | "failed" | "skipped"; reason?: string };
+export type StoredPlan = { madeAt: number; day: number; narrative: string; steps: PlanStep[] };
+
+/** The goal's own arguments out of a flat step ({goal: "mineFor", item, count}). */
+function argsFor(step: RawStep): Record<string, unknown> {
+  const goal = goalNamed(step.goal);
+  if (!goal) return {};
+  const all = step as unknown as Record<string, unknown>;
+  // Left out (null): the goal's default, if it has one ("mineFor raw_iron" means 10)
+  return Object.fromEntries(Object.keys(goal.args.shape).map((k) => [k, all[k] ?? goal.defaults?.[k] ?? all[k]]));
+}
+
+/**
+ * The plan's steps checked one by one: a known goal, its arguments valid,
+ * possible now, not the same as an earlier step. At most MAX_STEPS are kept;
+ * fewer than MIN_STEPS are topped up with the next open milestones (the
+ * fallback plan). Rejected steps keep their reason for the diary.
+ * `feasible` is injectable for tests.
+ */
+export function validateSteps(
+  raw: RawStep[],
+  feasible: (goal: string, args: Record<string, unknown>) => Feasible = (goal, args) => goalNamed(goal)?.feasible(args) ?? { ok: false, why: "unknown goal" },
+  open: () => string[] = openMilestones
+): { accepted: PlanStep[]; rejected: { step: string; why: string }[] } {
+  const accepted: PlanStep[] = [];
+  const rejected: { step: string; why: string }[] = [];
+  const seen = new Set<string>();
+  for (const step of raw) {
+    const goal = goalNamed(step.goal);
+    const label = `${step.goal}${step.milestone ? ` ${step.milestone}` : ""}${step.item ? ` ${step.item}` : ""}`;
+    if (!goal) {
+      rejected.push({ step: label, why: "not a goal it knows" });
+      continue;
+    }
+    const parsed = goal.args.safeParse(argsFor(step));
+    if (!parsed.success) {
+      rejected.push({ step: label, why: `bad arguments (${parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", ")})` });
+      continue;
+    }
+    const args = parsed.data as Record<string, unknown>;
+    const key = `${step.goal}:${JSON.stringify(args)}`;
+    if (seen.has(key)) continue; // the same step twice: once is enough
+    const can = feasible(step.goal, args);
+    if (!can.ok) {
+      rejected.push({ step: label, why: can.why });
+      continue;
+    }
+    if (accepted.length >= MAX_STEPS) {
+      rejected.push({ step: label, why: `more than ${MAX_STEPS} steps` });
+      continue;
+    }
+    seen.add(key);
+    accepted.push({ goal: step.goal, args, why: step.why, status: "pending" });
+  }
+  // Too short: the next open milestones fill it up (code's own plan)
+  for (const id of open()) {
+    if (accepted.length >= MIN_STEPS) break;
+    const key = `reachMilestone:${JSON.stringify({ milestone: id })}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    accepted.push({ goal: "reachMilestone", args: { milestone: id }, why: "next on my list", status: "pending" });
+  }
+  return { accepted, rejected };
+}
+
+// --- The plan store (world memory) --------------------------------------------
+
+/** The plan it's following, if any. */
+export function currentPlan(): StoredPlan | null {
+  return (getMemory().plan as StoredPlan | undefined) ?? null;
+}
+
+/** Saves a new plan (replacing the old one). */
+export async function savePlan(plan: StoredPlan): Promise<void> {
+  await updateMemory({ plan });
+}
+
+/** The next step still to do, with its index. */
+export function nextStep(plan: StoredPlan | null = currentPlan()): { index: number; step: PlanStep } | null {
+  if (!plan) return null;
+  const index = plan.steps.findIndex((s) => s.status === "pending" || s.status === "running");
+  return index >= 0 ? { index, step: plan.steps[index]! } : null;
+}
+
+/** Marks a step (running, done, failed or skipped, with why). */
+export async function markStep(index: number, status: PlanStep["status"], reason?: string): Promise<void> {
+  const plan = currentPlan();
+  const step = plan?.steps[index];
+  if (!plan || !step) return;
+  const steps = plan.steps.map((s, i) => (i === index ? { ...s, status, ...(reason ? { reason } : {}) } : s));
+  await savePlan({ ...plan, steps });
+}
+
+/** Failed steps at the end of the plan's done part, in a row (two or more: the plan is blocked). */
+export function failuresInARow(plan: StoredPlan | null = currentPlan()): number {
+  if (!plan) return 0;
+  let n = 0;
+  for (const s of plan.steps) {
+    if (s.status === "failed") n++;
+    else if (s.status === "done") n = 0;
+  }
+  return n;
+}
+
+/** The plan as one chat line: "Today: coal, then iron tools (2 of 4 done)." */
+export function describePlan(plan: StoredPlan | null = currentPlan()): string {
+  if (!plan) return "I don't have a plan yet.";
+  const label = (s: PlanStep): string => goalNamed(s.goal)?.describe(s.args) ?? s.goal;
+  const done = plan.steps.filter((s) => s.status === "done").length;
+  const left = plan.steps.filter((s) => s.status === "pending" || s.status === "running");
+  if (left.length === 0) return `My plan for day ${plan.day} is finished (${done} of ${plan.steps.length} done).`;
+  return `${plan.narrative} Next: ${left.map(label).join(", then ")} (${done} of ${plan.steps.length} done).`;
+}
