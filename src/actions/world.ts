@@ -30,16 +30,23 @@ export function getNearestFreeSpace(
     count: 1000,
   });
 
+  // Never where the bot stands (feet or head): a block can't go there
+  const me = bot.entity.position;
+  const occupied = (p: Vec3): boolean =>
+    Math.abs(p.x + 0.5 - me.x) < 1.1 && Math.abs(p.z + 0.5 - me.z) < 1.1 && p.y >= Math.floor(me.y) && p.y <= Math.floor(me.y) + 1;
   for (let i = 0; i < empty_pos.length; i++) {
     let empty = true;
     for (let x = 0; x < size; x++) {
       for (let z = 0; z < size; z++) {
         const top = bot.blockAt(empty_pos[i].offset(x, 0, z));
         const bottom = bot.blockAt(empty_pos[i].offset(x, -1, z));
+        // On solid ground: grass and flowers drop items but hold nothing up
         if (
           !top ||
           top.name !== "air" ||
+          occupied(empty_pos[i].offset(x, 0, z)) ||
           !bottom ||
+          bottom.boundingBox !== "block" ||
           (bottom.drops?.length ?? 0) === 0 ||
           !bottom.diggable
         ) {

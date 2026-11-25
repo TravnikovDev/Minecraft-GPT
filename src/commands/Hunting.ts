@@ -4,6 +4,7 @@
 // and ask whether to go on. The planning lives in actions/hunting.ts.
 
 import { z } from "zod";
+import { Bucket, currentTask } from "../core/arbiter";
 import type { Entity } from "prismarine-entity";
 import { bot } from "../core/body";
 import { attackEntity } from "../actions/combat";
@@ -138,7 +139,9 @@ export async function execute(args: any): Promise<void> {
       : `Hunted ${countList(taken)}${gained.size > 0 ? `, got ${countList(gained)}` : ""}.`;
 
   const more = planHunt(lookForAnimals(), mobType, null);
-  if (more.total > 0) {
+  // Only the owner's own hunt asks to go on; its own errands (food, wool) just report
+  const forOwner = currentTask()?.bucket === Bucket.Owner;
+  if (more.total > 0 && forOwner) {
     askOwner(`${catchReport} I still see ${countList(more.take)} to hunt. Keep hunting?`, async () => {
       queueCommand({
         id: crypto.randomUUID(),
@@ -148,6 +151,8 @@ export async function execute(args: any): Promise<void> {
         args: { maxDistance, mobType, count: null },
       });
     });
+  } else if (more.total > 0) {
+    tellOwner(catchReport);
   } else {
     tellOwner(`${catchReport} That's all the ${what} I can take around here.`);
   }

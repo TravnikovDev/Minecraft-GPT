@@ -99,7 +99,7 @@ function atGoal(goal: Goal): boolean {
  * Watches a walk: gives up when the bot gets no closer for a while (not
  * counting time a reflex holds it: running from a creeper, a fight).
  */
-function walkWatchdog(): { signal: AbortSignal; stop: () => void } {
+function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; stop: () => void } {
   const controller = new AbortController();
   let last = bot.entity.position.clone();
   let lastProgress = Date.now();
@@ -110,6 +110,8 @@ function walkWatchdog(): { signal: AbortSignal; stop: () => void } {
       last = here.clone();
       lastProgress = Date.now();
     } else if (Date.now() - lastProgress > WALK_NO_PROGRESS_MS) {
+      // What it was doing, so a stall in a game test can be explained from the log
+      console.log(`Walk stalled at ${here.floored()}: ${explain()}`);
       controller.abort(`no progress for ${WALK_NO_PROGRESS_MS / 1000}s`);
     }
   }, 1_000);
@@ -138,7 +140,19 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
     if (failed) return fail("unreachable", `${failed} a little while ago`);
     lastGoal = spot;
   }
-  const watchdog = walkWatchdog();
+  // The pathfinder's last word on this walk (a path, no path, a timeout)
+  let lastPath = "no path computed yet";
+  const onPath = (r: { status: string; path: unknown[] }): void => {
+    lastPath = `${r.status}, ${r.path.length} moves`;
+  };
+  bot.on("path_update" as never, onPath as never);
+  const block = (dy: number): string => bot.blockAt(bot.entity.position.floored().offset(0, dy, 0))?.name ?? "?";
+  const watchdog = walkWatchdog(
+    () =>
+      `goal ${spot ? `${spot.x}, ${spot.y}, ${spot.z}` : goal.constructor.name}; path ${lastPath}; ` +
+      `moving ${bot.pathfinder?.isMoving() ?? "?"}, mining ${bot.pathfinder?.isMining() ?? "?"}, building ${bot.pathfinder?.isBuilding() ?? "?"}; ` +
+      `below ${block(-1)}, feet ${block(0)}, head ${block(1)}`
+  );
   try {
     const walked = await guarded("walking", (signal) => pathing.goto(goal, signal), {
       timeoutMs: options.timeoutMs ?? 10 * 60_000, // the watchdog ends stuck walks long before this
@@ -148,6 +162,7 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
     if (!walked.ok) return walked;
   } finally {
     watchdog.stop();
+    bot.removeListener("path_update" as never, onPath as never);
     // Only a walk in progress can be blamed for being stuck (not one that ended, at a chest or a table)
     if (spot && lastGoal === spot) lastGoal = null;
   }
