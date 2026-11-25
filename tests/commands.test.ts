@@ -20,7 +20,10 @@ useFakeBot(fake);
 const ran: string[] = [];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ctx = await import(`${ROOT}/src/core/commandContext.ts`);
+// The real module (its tool list), with executeTool replaced
+const realTools = await import(`${ROOT}/src/managers/toolManager.ts`);
 mock.module(`${ROOT}/src/managers/toolManager.ts`, () => ({
+  ...realTools,
   executeTool: async (name: string, args: any) => {
     const label = `${name}${args && Object.keys(args).length ? " " + JSON.stringify(args) : ""}`;
     ran.push(`start ${label}`);

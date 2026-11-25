@@ -40,6 +40,9 @@ import * as ShowMeBase from "./ShowMeBase";
 import * as GoToCoordinates from "./GoToCoordinates";
 import * as GoToNamedLocation from "./GoToNamedLocation";
 import * as TellLocation from "./TellLocation";
+import * as WhereIs from "./WhereIs";
+import * as KeepOut from "./KeepOut";
+import * as AllowHere from "./AllowHere";
 import * as DescribeSurroundings from "./DescribeSurroundings";
 import * as RecoverItems from "./RecoverItems";
 import * as StarterKit from "./StarterKit";
@@ -94,6 +97,9 @@ export const commandRegistry: Record<BotCommands, CommandModule> = {
   [BotCommands.GiveItemToAPlayer]: GiveItemToAPlayer,
   [BotCommands.CraftStoneTools]: CraftStoneTools,
   [BotCommands.TellLocation]: TellLocation,
+  [BotCommands.WhereIs]: WhereIs,
+  [BotCommands.KeepOut]: KeepOut,
+  [BotCommands.AllowHere]: AllowHere,
   [BotCommands.DescribeSurroundings]: DescribeSurroundings,
   [BotCommands.RecoverItems]: RecoverItems,
   [BotCommands.StarterKit]: StarterKit,

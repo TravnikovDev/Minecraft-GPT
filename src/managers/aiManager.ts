@@ -12,11 +12,15 @@ import { directionFromOwner, ownerDistance } from "./ownerDialog";
 import { recentConversation } from "../core/session";
 import { wornArmor } from "../actions/armor";
 import { checkNames } from "./nameGate";
+import { sky, threats } from "../actions/perception";
 
 // Questions answered from current state: they run immediately, even while the
 // bot is busy with something else, instead of waiting in the queue
 const INSTANT_COMMANDS = new Set<string>([
   BotCommands.TellLocation,
+  BotCommands.WhereIs,
+  BotCommands.KeepOut,
+  BotCommands.AllowHere,
   BotCommands.ListInventory,
   BotCommands.CheckForItem,
   BotCommands.DescribeSurroundings,
@@ -44,7 +48,11 @@ function stateLine(): string {
   const worn = wornArmor().join(", ") || "no armor";
   const free = bot.inventory?.emptySlotCount() ?? 0;
   const slots = free === 0 ? "inventory FULL" : `${free} free inventory slots`;
-  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; wearing ${worn}; ${slots}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20]`;
+  const s = sky();
+  const t = threats();
+  const time = s.known ? `; ${s.value.phase}${s.value.raining ? ", raining" : ""}` : "";
+  const danger = t.known && t.value.length > 0 ? `; ${t.value.length} hostile mobs near` : "";
+  return `[bot state: at ${where}; owner ${owner}; current task ${task}; holding ${held}; wearing ${worn}; ${slots}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20${time}${danger}]`;
 }
 
 // Initialize OpenAI Client

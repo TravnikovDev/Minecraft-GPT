@@ -25,6 +25,8 @@ import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
 import { pathing } from "./core/plugins";
 import { eatWhenHungry } from "./actions/upkeep";
+import { checkPlacesNearby, resetPlaceChecks } from "./actions/placeCheck";
+import { resetPerception } from "./actions/perception";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
 import { registerDrowningReflex } from "./actions/drowningReflex";
@@ -73,6 +75,9 @@ onConnectionReady((currentBot) => {
   onConnectionEnd(currentBot, abortForDisconnect); // a running task must not drive the next connection
   registerCombatReflex(); // fights back when mobs attack, pausing the task
   everyWhileConnected(currentBot, 2_000, eatWhenHungry); // eats between the task's actions (actions/upkeep)
+  resetPlaceChecks(); // check remembered places again as it comes near
+  everyWhileConnected(currentBot, 10_000, checkPlacesNearby); // forget tables, chests, beds that are gone
+  resetPerception(); // sightings from before may be out of date
   registerOwnerUpdates(); // pickup/armor whispers and weapon-in-hand
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
   registerDrowningReflex(); // and so is running out of air underwater

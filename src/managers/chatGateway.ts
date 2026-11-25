@@ -9,12 +9,13 @@ import { BotCommands } from "../commands/types";
 import { initiateActionFromAI } from "./aiManager";
 import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
 import { executeTool } from "./toolManager";
-import { Bucket, pendingTasks } from "../core/arbiter";
+import { Bucket, currentTask, pendingTasks } from "../core/arbiter";
+import { holderOf, isTakenUrgently } from "../core/leases";
+import { ago, owner, sky, threats, vitals } from "../actions/perception";
 import { answerPending, hasPendingQuestion, ownerDistance, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
 import { setOwnerChannel } from "../core/narrator";
 import { reply } from "../core/narrator";
-import { pathing } from "../core/plugins";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
 // message (allowing "please", the bot's name and trailing punctuation).
@@ -41,25 +42,55 @@ function stripBotName(message: string): string {
   return message.replace(new RegExp(`^@?${name}[,:\\s]+`, "i"), "").trim();
 }
 
-/** Builds a short status line from the bot's real state. */
-async function statusMessage(): Promise<string> {
-  const current = getCurrentCommandName();
-  const queued = pendingTasks().filter((t) => t.bucket <= Bucket.Self).length;
+// What a reflex holding the body is doing, for "status"
+const PAUSED_BY: Record<string, string> = {
+  drowning: "swimming up for air",
+  creeper: "dealing with a creeper",
+  combat: "fighting",
+  eating: "eating",
+  unstuck: "getting unstuck",
+};
+const pretty = (name: string): string => name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+
+/**
+ * "status" / "what are you doing?" from real state: the arbiter (the task,
+ * what paused it, what's next) and perception (health, food, the sky,
+ * threats, where the owner is). Exported for tests.
+ */
+export function statusMessage(): string {
+  const task = currentTask();
+  const waitingTasks = pendingTasks().filter((t) => t.bucket <= Bucket.Self);
+  const holder = holderOf("movement");
+  const pausedBy = holder && isTakenUrgently("movement") && holder.bucket <= 1 ? PAUSED_BY[holder.name] ?? holder.name : null;
+
+  const doing = !task
+    ? pausedBy
+      ? pretty(pausedBy).replace(/^./, (c) => c.toUpperCase())
+      : "Idle"
+    : task.name === BotCommands.FollowPlayer
+      ? "Following you"
+      : `${pretty(task.name).replace(/^./, (c) => c.toUpperCase())}${pausedBy ? ` (paused: ${pausedBy})` : ""}`;
+  const next = waitingTasks.length > 0 ? `; next: ${pretty(waitingTasks[0]!.name)}${waitingTasks.length > 1 ? ` (+${waitingTasks.length - 1} more)` : ""}` : "";
+
+  const parts: string[] = [`${doing}${next}.`];
+  const v = vitals();
+  if (v.known) parts.push(`Health ${v.value.health}/20, food ${v.value.food}/20.`);
+  const s = sky();
+  if (s.known) parts.push(`${s.value.phase[0]!.toUpperCase()}${s.value.phase.slice(1)}${s.value.thundering ? ", thunderstorm" : s.value.raining ? ", raining" : ""}.`);
+  const t = threats();
+  if (t.known && t.value.length > 0) {
+    const nearest = t.value.reduce((a, b) => (b.distance < a.distance ? b : a));
+    parts.push(`${t.value.length} hostile${t.value.length === 1 ? "" : "s"} near (${nearest.name} ${Math.round(nearest.distance)} blocks).`);
+  }
+  const o = owner();
+  if (o.known) {
+    const st = o.value;
+    if (st.state === "visible") parts.push(`You're ${Math.round(st.distance)} blocks away.`);
+    else if (st.state === "out of range") parts.push(st.lastKnown ? `I can't see you; you were last near ${Math.round(st.lastKnown.x)}, ${Math.round(st.lastKnown.z)} ${ago(st.lastKnown.at)}.` : "I can't see you from here.");
+  }
   const pos = bot.entity?.position;
-  const where = pos ? `at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}` : "somewhere";
-  const doing = current ? `Doing ${current}` : "Idle";
-  const next = queued > 0 ? `, ${queued} more queued` : "";
-  const owner = bot.players[OWNER_USERNAME]?.entity;
-  const ownerInfo = owner && pos
-    ? ` You're ${Math.round(owner.position.distanceTo(pos))} blocks away.`
-    : " I can't see you from here.";
-
-  console.log(
-    `[status] pos=${pos?.toString()} owner=${owner ? owner.position.toString() : "not visible"} ` +
-      `pathfinderMoving=${pathing.isMoving()}`
-  );
-
-  return `${doing}${next}. Health ${Math.round(bot.health)}/20, food ${bot.food}/20, ${where}.${ownerInfo}`;
+  if (pos) parts.push(`I'm at ${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)}.`);
+  return parts.join(" ");
 }
 
 /** Handles the owner's simple commands. Returns true if the message was handled. */
@@ -126,7 +157,7 @@ async function tryFastPath(message: string): Promise<boolean> {
 
   if (STATUS.test(message)) {
     console.log("Fast path: status");
-    reply(await statusMessage());
+    reply(statusMessage());
     return true;
   }
 
