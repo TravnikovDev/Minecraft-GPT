@@ -341,6 +341,16 @@ export async function takeItems(wanted: Wanted[] | null): Promise<TakeResult> {
   return { taken, missing, full, chestAt: at(chest.position) };
 }
 
+/** How many of an item (exact name or group like "logs") its chests within `range` hold, as last seen. */
+export function storedNear(itemName: string, range = REMEMBERED_RANGE): number {
+  if (!bot.entity) return 0;
+  const matches = itemMatcher(itemName);
+  const me = bot.entity.position;
+  return loadChests()
+    .filter((c) => c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= range)
+    .reduce((n, c) => n + Object.entries(c.contents ?? {}).filter(([name]) => matches(name)).reduce((m, [, k]) => m + k, 0), 0);
+}
+
 /** Where an item is stored, from what it saw in its chests (this dimension): "12 diamonds in the chest at x, y, z (checked 2 h ago)". */
 export function whereStored(itemName: string): string[] {
   const matches = itemMatcher(itemName);

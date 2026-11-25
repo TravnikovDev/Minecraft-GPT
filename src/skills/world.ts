@@ -10,6 +10,7 @@ import { craftNow, planCraft } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
 import type { AcquireWorld, Source } from "./acquire";
 import { carried, hasTableAccess, TIER, toolTier } from "./capabilities";
+import { storedNear } from "../actions/storage";
 import { pickaxeFor, smeltedFrom, STANDS_IN_FOR } from "./techTree";
 
 /** True when every recipe for the item needs a crafting table (3x3). */
@@ -24,6 +25,19 @@ const got = (before: number, after: number, what: string): ActionResult => (afte
 
 /** Where raw materials come from, in the order they're tried. */
 export const SOURCES: Source[] = [
+  {
+    // What its own chests hold comes first, like a player: it lost its
+    // pickaxes and wanted cobblestone for new ones, with a pile of it at
+    // home, and "didn't know how to get cobblestone"
+    name: "taking from my chests",
+    gets: (m) => storedNear(m) > 0,
+    run: async (m, count) => {
+      const before = carried(m);
+      const { takeItems } = await import("../actions/storage");
+      await takeItems([{ name: m, count }]);
+      return got(before, carried(m), `${m.replace(/_/g, " ")} in my chests`);
+    },
+  },
   {
     name: "chopping trees",
     collects: true,
