@@ -21,7 +21,8 @@ import {
 import type { DirectionType } from "../actions/digging";
 
 // Database Setup
-const dbPath = resolve("db.json");
+// DB_PATH lets tests use a throwaway file instead of the bot's real memory
+const dbPath = resolve(process.env.DB_PATH ?? "db.json");
 const adapter = new JSONFile<DbSchemaType>(dbPath);
 const db = new Low<DbSchemaType>(adapter, {
   commands: [],
