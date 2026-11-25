@@ -16,6 +16,7 @@ const fake: any = Object.assign(new EventEmitter(), {
   health: 20,
   time: { timeOfDay: 1000 },
   inventory: { items: () => [] },
+  world: { raycast: () => null, getBlock: () => null }, // open ground: it can see the creeper
   nearestEntity: (match: (e: any) => boolean) =>
     Object.values(entities)
       .filter(match)

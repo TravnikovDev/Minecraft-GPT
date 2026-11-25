@@ -7,6 +7,8 @@
 import type { Entity } from "prismarine-entity";
 import { bestMeleeWeapon } from "./combat";
 import { catalog } from "../core/catalog";
+import { canSeePoint, type SightWorld } from "./sight";
+import { isSheltered } from "../core/sheltered";
 import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
 import { equipItem, hitEntity, lookAt, lookToward, setControl } from "../core/primitives";
@@ -85,9 +87,17 @@ async function tick(): Promise<void> {
     return;
   }
   const radius = isNight() ? NIGHT_RADIUS : DAY_RADIUS;
-  const creeper = bot.nearestEntity(
-    (e) => e.name === "creeper" && e.position.distanceTo(bot.entity.position) <= (active ? SAFE_DISTANCE + 4 : radius)
-  );
+  // Only a creeper it can see (or one right by it): through ground it can't
+  // reach the bot, and going for it digs the bot out of its shelter
+  const eyes = bot.entity.position.offset(0, 1.62, 0);
+  const creeper = bot.nearestEntity((e) => {
+    if (e.name !== "creeper") return false;
+    const d = e.position.distanceTo(bot.entity.position);
+    if (d > (active ? SAFE_DISTANCE + 4 : radius)) return false;
+    if (d <= CREEPER_FIRST_WITHIN) return true;
+    if (isSheltered()) return false;
+    return canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
+  });
   if (!creeper) {
     finish();
     return;

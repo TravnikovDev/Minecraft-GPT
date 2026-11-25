@@ -15,6 +15,7 @@ import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskE
 import { areChoresMuted } from "../core/chores";
 import { isCommandCancelled } from "../core/commandContext";
 import { report } from "../core/narrator";
+import { setSheltered } from "../core/sheltered";
 import { describeFailure } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
@@ -121,12 +122,18 @@ function nightTask(): TaskSpec {
         report(`I couldn't get into my shelter: ${describeFailure(inside)}.`);
         return;
       }
-      if (hasBed()) {
-        const { execute: sleepInBed } = await import("../commands/Sleep");
-        await sleepInBed({ newBed: false });
+      // Shut in: the reflexes leave what's outside alone until morning
+      setSheltered(true);
+      try {
+        if (hasBed()) {
+          const { execute: sleepInBed } = await import("../commands/Sleep");
+          await sleepInBed({ newBed: false });
+        }
+        // Wait for the morning (or for something more urgent to cut in)
+        while (isNight() && !isCommandCancelled()) await sleep(2_000);
+      } finally {
+        setSheltered(false);
       }
-      // Wait for the morning (or for something more urgent to cut in)
-      while (isNight() && !isCommandCancelled()) await sleep(2_000);
       if (!isCommandCancelled()) await leaveShelter();
     },
   };

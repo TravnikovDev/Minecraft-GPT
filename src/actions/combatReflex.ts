@@ -17,6 +17,8 @@ import { on } from "../core/events";
 import { fighting, pathing, takeOverBody } from "../core/plugins";
 import { areReflexesMuted, asReflex, registerReflexStopper, setReflexActive } from "../core/reflexes";
 import { bestMeleeWeapon, getPriorityTargets } from "./combat";
+import { canSeePoint, type SightWorld } from "./sight";
+import { isSheltered } from "../core/sheltered";
 import { isCreeperReflexActive } from "./creeperReflex";
 import { isDrowningReflexActive } from "./drowningReflex";
 
@@ -66,10 +68,24 @@ const SWAT_RANGE = 3.2;
 const SWAT_COOLDOWN_MS = 650;
 let lastSwatAt = 0;
 
+/**
+ * A mob it could fight from here: within reach, or in plain sight. Through
+ * ground or walls it's no reason to go anywhere (it dug out of its shelter to
+ * fight a phantom 5 blocks of earth away). Shut in its shelter: only what is
+ * in the room with it.
+ */
+function canFight(e: Entity): boolean {
+  const d = distanceTo(e);
+  if (d <= MELEE_RANGE) return true;
+  if (isSheltered()) return false;
+  const eyes = bot.entity.position.offset(0, 1.62, 0);
+  return canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, (e.height ?? 1.8) / 2, 0), d + 1);
+}
+
 /** The mob to fight within range, or null (never a flying one: those get swatted). */
 function pickTarget(range: number): Entity | null {
   const now = Date.now();
-  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "") && (ignored.get(e.id) ?? 0) < now) ?? null;
+  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "") && canFight(e) && (ignored.get(e.id) ?? 0) < now) ?? null;
 }
 
 /** A swing at a flying mob within reach, without chasing it or stopping the task's walk. */
@@ -154,7 +170,8 @@ function stopRetreat(reason: string): void {
 /** The nearest hostile mob within `range` (ignored ones too: they still hurt). */
 function nearestThreat(range: number): Entity | null {
   // Running from a flyer is no use: it follows; going on (inside) is
-  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "")) ?? null;
+  // Shut in, there's nowhere better to be: no running out into the night
+  return getPriorityTargets(range).find((e) => isAlive(e) && !FLYING.has(e.name ?? "") && canFight(e)) ?? null;
 }
 
 function tick(): void {
@@ -192,7 +209,8 @@ function tick(): void {
     return;
   }
   if (target) {
-    const over = !isAlive(target) || distanceTo(target) > GIVE_UP_RANGE;
+    // Gone behind a wall or ground (or it's shut in and the mob is outside): let it be
+    const over = !isAlive(target) || distanceTo(target) > GIVE_UP_RANGE || !canFight(target);
     if (Date.now() - startedAt > MAX_FIGHT_MS) {
       ignored.set(target.id, Date.now() + IGNORE_MS);
       finish(`gave up on ${target.name} (couldn't finish it)`);
