@@ -433,7 +433,7 @@ async function pickUpBoat(boat: Entity): Promise<void> {
     hitEntity(boat);
     await sleep(350);
   }
-  const { pickupNearbyItems } = await import("./worldInteraction");
+  const { pickupNearbyItems } = await import("./pickup");
   await pickupNearbyItems(bot, 6);
 }
 

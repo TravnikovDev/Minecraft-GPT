@@ -6,7 +6,7 @@ import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
 useFakeBot({ entity: { position: new Vec3(0.5, 64, 0.5) } });
-const { bodyOverlaps } = await import(`${ROOT}/src/actions/worldInteraction.ts`);
+const { bodyOverlaps } = await import(`${ROOT}/src/actions/blockPlacing.ts`);
 
 test("the cell it stands in, and the one at head height, overlap; neighbours don't", () => {
   const at = new Vec3(-24.5, 61, 35.5); // the middle of cell (-25, 61, 35)

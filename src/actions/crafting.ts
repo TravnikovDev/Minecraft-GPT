@@ -10,7 +10,7 @@ import { Recipe } from "prismarine-recipe";
 import { craftWith, goTo, withinReach } from "../core/primitives";
 import { closeWindow, openFurnaceAt, windowStep } from "../core/containers";
 import { describeFailure } from "../core/result";
-import { placeBlock } from "./worldInteraction";
+import { placeBlock } from "./blockPlacing";
 import pf from "mineflayer-pathfinder";
 import { goToPosition, travelToResult } from "./movement";
 import { bot } from "../core/body";

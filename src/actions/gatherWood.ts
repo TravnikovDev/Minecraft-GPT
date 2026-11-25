@@ -1,7 +1,8 @@
 import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
-import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
+import { breakBlockAt } from "./blockBreaking";
+import { pickupNearbyItems } from "./pickup";
 import { climbDownTree } from "../core/primitives";
 import { goToPosition, moveAway } from "../actions/movement";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";

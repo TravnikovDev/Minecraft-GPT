@@ -1,11 +1,7 @@
 import { bot } from "../core/body";
-import {
-  breakBlockAt,
-  breakBlockAtResult,
-  pickupNearbyItems,
-  placeBlock,
-  placeBlockResult,
-} from "../actions/worldInteraction";
+import { breakBlockAt, breakBlockAtResult } from "./blockBreaking";
+import { placeBlock, placeBlockResult } from "./blockPlacing";
+import { pickupNearbyItems } from "./pickup";
 import { getMemory, saveMineLocation, updateMemory } from "../managers/persistenceManager";
 import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";

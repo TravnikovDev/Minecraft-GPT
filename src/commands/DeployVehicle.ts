@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { deployVehicle } from "../actions/worldInteraction.js";
+import { deployVehicle } from "../actions/vehicleDeploy.js";
 import { bot } from "../core/body";
 
 export const description = `Makes the bot deploy a vehicle (minecart, boat) in the world or place a saddle on an animal.

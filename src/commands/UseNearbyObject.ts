@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { useNearbyObject } from "../actions/worldInteraction.js";
+import { useNearbyObject } from "../actions/objectUse.js";
 import { bot } from "../core/body";
 
 export const description = `Makes the bot interact with a nearby object such as vehicles, animals, or interactive blocks.

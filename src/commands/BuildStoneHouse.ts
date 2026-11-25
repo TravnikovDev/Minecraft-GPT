@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { Vec3 } from "vec3";
-import { placeBlock } from "../actions/worldInteraction";
+import { placeBlock } from "../actions/blockPlacing";
 
 export const description = `When user asks the bot to build a stone house, the bot will build a stone house with cobblestone 
 walls, a wooden roof, and essential items inside the house. If no dimensions are provided, the bot will build a default 5x6x5`;

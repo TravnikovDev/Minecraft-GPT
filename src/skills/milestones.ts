@@ -20,7 +20,9 @@ import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, unpavedSteps }
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
-import { breakBlockAtResult, pickupNearbyItems, placeBlockResult } from "../actions/worldInteraction";
+import { breakBlockAtResult } from "../actions/blockBreaking";
+import { placeBlockResult } from "../actions/blockPlacing";
+import { pickupNearbyItems } from "../actions/pickup";
 
 export type Milestone = {
   id: string;

@@ -10,6 +10,7 @@
 // but the game won't let anyone pick up a fresh drop for its first half second.
 
 import type { Entity } from "prismarine-entity";
+import type { Bot } from "mineflayer";
 import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
@@ -222,4 +223,10 @@ export async function tidyUpWhileIdle(): Promise<void> {
       console.log(`Tidying up stopped: ${(error as Error).message}`);
     }
   });
+}
+
+/** Picks up the items within `distance` (see collectDrops above). */
+export async function pickupNearbyItems(_bot: Bot, distance = 8): Promise<boolean> {
+  await collectDrops(distance);
+  return true;
 }

@@ -1,16 +1,19 @@
 // Path: src/actions/farming.ts
 // Harvesting farms: ripe crops are broken, their drops picked up and the
 // farmland replanted with the matching seed, so the farm keeps producing.
+// Also tilling ground with a hoe and sowing it (tillAndSow).
 
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
+import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
+import { catalog } from "../core/catalog";
 import { forbiddenAt } from "../core/forbidden";
-import { breakBlock, placeBlockAt, useBlock } from "../core/primitives";
+import { breakBlock, equipItem, goTo, knownBlock, placeBlockAt, useBlock, withinReach } from "../core/primitives";
 import { describeFailure } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { goToPosition } from "./movement";
-import { pickupNearbyItems } from "./worldInteraction";
+import { pickupNearbyItems } from "./pickup";
 
 type Crop = { ripeAge: number | null; seed: string | null };
 
@@ -109,4 +112,76 @@ export async function harvestCrops(
   }
   await pickupNearbyItems(bot, 8);
   return harvested;
+}
+
+/**
+ * Tills grass or dirt at x, y, z with a hoe (checking it turned to farmland)
+ * and, with `seedType`, sows on top of it.
+ */
+export async function tillAndSow(x: number, y: number, z: number, seedType: string | null = null): Promise<boolean> {
+  const blockPos = new Vec3(Math.round(x), Math.round(y), Math.round(z));
+  const block = knownBlock(blockPos);
+  if (!block) {
+    console.log(`No block known at ${blockPos} (not loaded).`);
+    return false;
+  }
+  if (block.name !== "grass_block" && block.name !== "dirt" && block.name !== "farmland") {
+    console.log(`Cannot till ${block.name}, must be grass_block or dirt.`);
+    return false;
+  }
+  const abovePos = blockPos.offset(0, 1, 0);
+  const above = knownBlock(abovePos);
+  if (!above || above.name !== "air") {
+    console.log(`Cannot till, there is ${above?.name ?? "something unknown"} above the block.`);
+    return false;
+  }
+  if (!withinReach(blockPos)) {
+    const walked = await goTo(new pf.goals.GoalNear(blockPos.x, blockPos.y, blockPos.z, 3));
+    if (!walked.ok) {
+      console.log(`Can't get to the ground to till: ${describeFailure(walked)}`);
+      return false;
+    }
+  }
+  if (block.name !== "farmland") {
+    const hoe = bot.inventory.items().find((item) => catalog().toolKind(item.name) === "hoe");
+    if (!hoe) {
+      console.log(`Cannot till, no hoes.`);
+      return false;
+    }
+    const held = await equipItem(hoe.name, "hand");
+    const used = held.ok ? await useBlock(block) : held;
+    if (!used.ok || !(await settlesTo(blockPos, "farmland"))) {
+      console.log(`Tilling at ${blockPos} didn't work${used.ok ? "" : `: ${describeFailure(used)}`}.`);
+      return false;
+    }
+    console.log(`Tilled block at ${blockPos}.`);
+  }
+
+  if (seedType) {
+    if (seedType.endsWith("seed") && !seedType.endsWith("seeds")) seedType += "s"; // Fixes common mistake
+    const wanted = seedType;
+    const seeds = bot.inventory.items().find((item) => item.name === wanted);
+    if (!seeds) {
+      console.log(`No ${seedType} to plant.`);
+      return false;
+    }
+    // Seeds go on top of the farmland (they used to be "placed" below it)
+    const sown = await placeBlockAt(seeds.name, abovePos, { against: new Vec3(0, -1, 0) });
+    if (!sown.ok) {
+      console.log(`Couldn't plant ${seedType} at ${abovePos}: ${describeFailure(sown)}`);
+      return false;
+    }
+    console.log(`Planted ${seedType} at ${abovePos}.`);
+  }
+  return true;
+}
+
+/** Waits briefly for the block at `pos` to become `name` (the server's answer). */
+async function settlesTo(pos: Vec3, name: string, ms = 1000): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (knownBlock(pos)?.name === name) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return knownBlock(pos)?.name === name;
 }

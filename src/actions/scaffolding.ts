@@ -13,7 +13,7 @@ import { wasStopped } from "../core/result";
 import { isOwnScaffold, ownScaffolds } from "../core/scaffold";
 import { isCommandCancelled, markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, isIdle, mayWanderTo, noRealWork } from "./pickup";
-import { breakBlockAt } from "./worldInteraction";
+import { breakBlockAt } from "./blockBreaking";
 
 const REACH = 4.5;
 const CLEANUP_RADIUS = 24;

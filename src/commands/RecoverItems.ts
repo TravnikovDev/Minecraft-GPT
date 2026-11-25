@@ -5,7 +5,7 @@ import { Vec3 } from "vec3";
 import { tunnelTo } from "../actions/digging";
 import { bot } from "../core/body";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
-import { pickupNearbyItems } from "../actions/worldInteraction";
+import { pickupNearbyItems } from "../actions/pickup";
 import { canReachBeforeDespawn, clearLastDeath, getLastDeath } from "../actions/recovery";
 import { isCommandCancelled } from "../core/commandContext";
 import { tellOwner } from "../managers/ownerDialog";

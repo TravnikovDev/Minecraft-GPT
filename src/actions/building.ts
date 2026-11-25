@@ -2,7 +2,9 @@
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import pf from "mineflayer-pathfinder";
-import { breakBlockAt, breakBlockAtResult, pickupNearbyItems, placeBlock, placeBlockResult } from "./worldInteraction";
+import { breakBlockAt, breakBlockAtResult } from "./blockBreaking";
+import { placeBlock, placeBlockResult } from "./blockPlacing";
+import { pickupNearbyItems } from "./pickup";
 import { goTo, knownBlock, useBlock, withinReach } from "../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";

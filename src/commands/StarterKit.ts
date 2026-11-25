@@ -7,7 +7,7 @@ import { describeFailure } from "../core/result";
 import { craftNow } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
 import { goToPosition } from "../actions/movement";
-import { pickupNearbyItems } from "../actions/worldInteraction";
+import { pickupNearbyItems } from "../actions/pickup";
 import { foodCount, hasPickaxe, hasWeapon } from "../actions/recovery";
 import { execute as hunt } from "./Hunting";
 import { isCommandCancelled } from "../core/commandContext";

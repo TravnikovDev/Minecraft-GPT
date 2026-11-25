@@ -15,7 +15,7 @@ import { goTo } from "../core/primitives";
 import { expectOk, wasStopped } from "../core/result";
 import { markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, collectDrops, isIdle, mayWanderTo, noRealWork } from "./pickup";
-import { placeBlock } from "./worldInteraction";
+import { placeBlock } from "./blockPlacing";
 import { tellOwner } from "../managers/ownerDialog";
 import { getMemory } from "../managers/persistenceManager";
 

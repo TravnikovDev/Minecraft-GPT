@@ -324,7 +324,7 @@ async function paveSteps(): Promise<ActionResult> {
   }
   report(`Paving my mine's stairs: ${steps.length} steps.`);
   const { breakBlock } = await import("../core/primitives");
-  const { placeBlockResult } = await import("../actions/worldInteraction");
+  const { placeBlockResult } = await import("../actions/blockPlacing");
   let paved = 0;
   for (const i of steps) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
