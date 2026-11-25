@@ -129,8 +129,9 @@ test("an owner's task waiting: it doesn't start a milestone in front of it", asy
 });
 
 test("stop keeps it quiet: no milestone while the owner's stop holds", async () => {
-  await P.updateMemory({ autonomy: { on: true, since: Date.now() } });
+  // Stop first: a "what's next" timer left by the previous test must find it quiet
   await stopChores("Stopped by player", 60_000);
+  await P.updateMemory({ autonomy: { on: true, since: Date.now() } });
   await C.considerNextStep();
   await idle();
   expect(runs).toEqual([]);

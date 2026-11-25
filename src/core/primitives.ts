@@ -105,6 +105,7 @@ function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; 
   const controller = new AbortController();
   let last = bot.entity.position.clone();
   let lastProgress = Date.now();
+  let hopped = false;
   const timer = setInterval(() => {
     if (!bot.entity) return;
     const here = bot.entity.position;
@@ -114,7 +115,18 @@ function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; 
       lastProgress = Date.now();
     } else if (Date.now() - lastProgress > WALK_NO_PROGRESS_MS) {
       // What it was doing, so a stall in a game test can be explained from the log
-      console.log(`Walk stalled at ${here.floored()}: ${explain()}`);
+      const where = `${here.x.toFixed(2)}, ${here.y.toFixed(2)}, ${here.z.toFixed(2)}, ${bot.entity.onGround ? "on the ground" : "not on the ground"}`;
+      if (!hopped) {
+        // A player hops when stuck (wedged on a tree's leaves after chopping
+        // its top, first game test): once, then a few more seconds to move
+        hopped = true;
+        console.log(`Walk stuck at ${where}: hopping. ${explain()}`);
+        bot.setControlState("jump", true);
+        setTimeout(() => bot.setControlState?.("jump", false), 400);
+        lastProgress = Date.now() - WALK_NO_PROGRESS_MS / 2;
+        return;
+      }
+      console.log(`Walk stalled at ${here.floored()} (${where}): ${explain()}`);
       controller.abort(`no progress for ${WALK_NO_PROGRESS_MS / 1000}s`);
     }
   }, 1_000);
