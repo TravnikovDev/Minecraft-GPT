@@ -29,8 +29,8 @@ useFakeBot(fake);
 
 // The shelter's digging and doors are game work (tested in game); here they just log
 const shelterLog: string[] = [];
-const realShelter = await import(`${ROOT}/src/skills/shelter.ts`);
-mock.module(`${ROOT}/src/skills/shelter.ts`, () => ({
+const realShelter = await import(`${ROOT}/src/actions/building.ts`);
+mock.module(`${ROOT}/src/actions/building.ts`, () => ({
   ...realShelter,
   buildShelter: async () => (shelterLog.push("build"), { ok: true, value: undefined }),
   enterShelter: async () => (shelterLog.push("enter"), { ok: true, value: undefined }),
@@ -175,26 +175,31 @@ test("the next milestone: the first not done and not set aside, then the next ti
   expect(M.nextMilestone(list)).toBeNull();
 });
 
-test("the shelter's shape: stairs, a corridor with a door, a 3x4 room with a clear walkway to the exit", () => {
-  const { shelterLayout } = realShelter;
-  const s = shelterLayout({ x: 10, y: 70, z: -4 }, "north");
+test("the owner's shelter, in any direction: stairs, entrance doorway, a 3x5 room, exit doorway", () => {
+  const { shelterPlan } = realShelter;
+  // South, as the original: stairs 4 down, the doorway, the room from 2 past the last stair
+  const s = shelterPlan({ x: 0, y: 70, z: 0 }, "south");
   const at = (p: any) => [p.x, p.y, p.z];
-  expect(at(s.bottom)).toEqual([10, 65, -9]);
-  expect(at(s.door)).toEqual([10, 65, -11]);
-  expect(at(s.stand)).toEqual([10, 65, -13]);
-  expect(at(s.bedStand)).toEqual([11, 65, -13]); // behind the bed, along the side wall
-  expect(at(s.bed)).toEqual([11, 65, -14]); // head goes to -15
-  expect(s.chests.map(at)).toEqual([[11, 65, -16], [9, 65, -16]]); // the far corners
-  expect(at(s.exit)).toEqual([10, 65, -17]); // the far wall's middle: the mine starts there
+  expect(at(s.enter)).toEqual([0, 66, 4]);
+  expect(at(s.entrance)).toEqual([0, 66, 5]);
+  expect(at(s.roomStart)).toEqual([0, 66, 6]);
+  expect(at(s.exit)).toEqual([0, 66, 11]); // past the room's 5 rows: the mine starts here
+  // setupTheShelter's spots, as they always were (x across, z along)
+  expect(s.chests.map(at)).toEqual([[1, 66, 6], [1, 66, 7], [-1, 66, 6], [-1, 66, 7], [1, 66, 9], [1, 66, 10]]);
+  expect(at(s.furnace)).toEqual([1, 66, 8]);
+  expect(at(s.table)).toEqual([-1, 66, 8]);
+  expect(at(s.bed)).toEqual([-1, 66, 9]); // head at z 10, along the wall
+  // The middle column is clear from the entrance to the exit
   const key = (p: any) => at(p).join(",");
+  const furnished = new Set([...s.chests.map(key), key(s.furnace), key(s.table), key(s.bed), "-1,66,10"]);
+  for (let z = 6; z <= 10; z++) expect(furnished.has(`0,66,${z}`)).toBe(false);
   const dug = new Set(s.cells.map(key));
-  const furnished = new Set([key(s.bed), key(s.bed.offset(0, 0, -1)), ...s.chests.map(key)]);
-  // The walkway from the stand cell to the exit stays clear
-  for (let z = -13; z >= -16; z--) expect(furnished.has(`10,65,${z}`)).toBe(false);
   for (const f of furnished) expect(dug.has(f)).toBe(true);
-  expect(dug.has(key(s.exit))).toBe(false); // dug with the mine, not the shelter
-  const e = shelterLayout({ x: 0, y: 64, z: 0 }, "east");
-  expect([e.stand.x, e.stand.z]).toEqual([9, 0]);
+  // Turned to face north, the same shape
+  const n = shelterPlan({ x: 0, y: 70, z: 0 }, "north");
+  expect(at(n.roomStart)).toEqual([0, 66, -6]);
+  expect(at(n.exit)).toEqual([0, 66, -11]);
+  expect(at(n.furnace)).toEqual([1, 66, -8]);
 });
 
 test("after the first day it goes on to the mine: a mine, then coal, then iron", () => {
@@ -217,6 +222,7 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests", "mine", "coal", "iron"]);
+  expect(REAL.find((m) => m.id === "chests")?.title).toContain("chests, furnace, table");
 });
 
 test("stay with me: the milestone it's on ends now, and no new one starts", async () => {

@@ -18,7 +18,8 @@ import { currentDimension } from "../actions/perception";
 import { digDiagonalTunnel, digStraightTunnel, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
 import { ensurePickaxe } from "../actions/ensureTools";
-import { shelterSlots } from "./shelter";
+import { shelterSlots } from "../actions/building";
+import { catalog } from "../core/catalog";
 
 export const MINE_DEPTH = 10;
 const BRANCH_EVERY = 3;
@@ -116,11 +117,32 @@ export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promis
       ...mine.start,
       details: { direction: mine.direction, depth: MINE_DEPTH, endsAt: { x: mine.bottom.x, y: mine.bottom.y, z: mine.bottom.z }, branches: k },
     });
-    // What the new tunnels uncovered
-    for (const want of still()) {
+    // What the new tunnels uncovered (ores only: stone comes from the digging itself)
+    for (const want of still().filter((w) => isOre(w.item))) {
       const got = await collectBlock(want.item, want.enough - carried(want.counts), ORE_REACH);
       if (got > 0) chatter(`Found ${want.item.replace(/_/g, " ")}: ${carried(want.counts)} of ${want.enough}.`, "mining");
     }
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${still().map((w) => w.item.replace(/_/g, " ")).join(" or ")} yet (I'll mine on next time)`);
+}
+
+/** An item ores drop (coal, raw iron), as opposed to plain stone. */
+function isOre(item: string): boolean {
+  return item !== "cobblestone" && catalog().oresFor(item).length > 0;
+}
+
+/**
+ * Gets about `count` more of `item` (cobblestone, coal, raw iron...) the way
+ * a player does: down its mine, carrying on with the tunnel. Digs the mine's
+ * stairs first if it has none (those alone give plenty of cobblestone).
+ */
+export async function mineFor(item: string, count: number): Promise<ActionResult> {
+  const counts = item === "coal" ? COAL.counts : item === "raw_iron" ? IRON.counts : [item];
+  const target = carried(counts) + count;
+  if (!myMine()) {
+    const dug = await digMine();
+    if (!dug.ok) return dug;
+    if (carried(counts) >= target) return ok();
+  }
+  return branchMine([{ item, enough: target, counts }], 12);
 }

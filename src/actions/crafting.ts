@@ -3,6 +3,7 @@
 // checked craft and window primitives in core/.
 
 import * as gameData from "../utils/minecraftData";
+import { Vec3 } from "vec3";
 import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
@@ -76,6 +77,15 @@ function nearHome(at: { x: number; y: number; z: number }): boolean {
   return getPlaces()
     .filter((p) => (p.kind === "basement" || p.kind === "base") && p.dimension === dim)
     .some((p) => Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z) <= HOME_RADIUS);
+}
+
+/** The shelter's table spot, when it's near and free (air) right now. */
+function homeTableSpot(): Vec3 | null {
+  const dim = currentDimension();
+  const room = getPlaces("basement").filter((p) => p.dimension === dim && p.details?.["incomplete"] !== true).at(-1);
+  const spot = room?.details?.["table"] as { x: number; y: number; z: number } | undefined;
+  if (!spot || bot.entity.position.distanceTo(new Vec3(spot.x, spot.y, spot.z)) > HOME_RADIUS) return null;
+  return bot.blockAt(new Vec3(spot.x, spot.y, spot.z))?.name === "air" ? new Vec3(spot.x, spot.y, spot.z) : null;
 }
 
 /** Breaks the crafting table the bot put down for a craft and picks it up again. */
@@ -190,7 +200,8 @@ export async function craftRecipe(
       console.log(`No crafting table, and nothing to make one from, to craft ${itemName}.`);
       return false;
     }
-    const pos = getNearestFreeSpace(1, 10);
+    // At home its table has a spot in the shelter (the owner's layout)
+    const pos = homeTableSpot() ?? getNearestFreeSpace(1, 10);
     if (!pos) {
       console.log("No suitable position found to place the crafting table.");
       return false;

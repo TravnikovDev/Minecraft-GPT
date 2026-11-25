@@ -45,7 +45,7 @@ import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
 import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
-import { rememberShelterDoor } from "./skills/shelter";
+import { rememberShelterDoor } from "./actions/building";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going

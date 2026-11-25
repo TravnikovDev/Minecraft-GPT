@@ -341,12 +341,18 @@ export async function digStraightTunnel(
  */
 export async function digRoom(
   roomStart: Vec3,
-  roomSize: { width: number; height: number; length: number }
+  roomSize: { width: number; height: number; length: number },
+  direction: DirectionType = "south"
 ) {
+  // Along the room and across it (south: along +z, across +x, as it always was)
+  const along = OFFSETS[direction];
+  const across = new Vec3(Math.abs(along.z), 0, Math.abs(along.x));
+  const at = (x: number, y: number, z: number): Vec3 =>
+    roomStart.offset(across.x * x + along.x * z, y, across.z * x + along.z * z);
   for (let z = 0; z < roomSize.length; z++) {
     for (let y = 0; y < roomSize.height; y++) {
       for (let x = -1; x < roomSize.width - 1; x++) {
-        const roomBlock = roomStart.offset(x, y, z);
+        const roomBlock = at(x, y, z);
         await breakBlockAt(roomBlock.x, roomBlock.y, roomBlock.z);
 
         // Ensure the floor foundation
@@ -356,9 +362,9 @@ export async function digRoom(
 
         // Ensure walls
         if (x === -1) {
-          await ensureBlock(roomBlock.offset(-1, 0, 0));
+          await ensureBlock(at(x - 1, y, z));
         } else if (x === roomSize.width - 2) {
-          await ensureBlock(roomBlock.offset(1, 0, 0));
+          await ensureBlock(at(x + 1, y, z));
         }
 
         // Ensure sides walls. Currently he blocks doorways
@@ -366,7 +372,7 @@ export async function digRoom(
           await ensureBlock(roomBlock.offset(0, 0, -1));
         } else */
         if (z === roomSize.length - 1) {
-          await ensureBlock(roomBlock.offset(0, 0, 1));
+          await ensureBlock(at(x, y, z + 1));
         }
 
         // Ensure ceiling block

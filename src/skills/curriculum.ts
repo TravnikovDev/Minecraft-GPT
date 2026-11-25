@@ -21,7 +21,7 @@ import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
 import { MILESTONES, nextMilestone, noteReached, tier1Reached, type Milestone } from "./milestones";
 import { hasBed, shelter } from "./capabilities";
-import { buildShelter, enterShelter, leaveShelter } from "./shelter";
+import { buildShelter, enterShelter, leaveShelter } from "../actions/building";
 import { clearDemotions } from "./acquire";
 
 const BLOCKED_FOR_MS = 10 * 60_000;

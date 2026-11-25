@@ -3,7 +3,7 @@
 // Each milestone has a done-check computed from what the bot has right now
 // (skills/capabilities: a lost pickaxe or a broken bed undoes it) and the
 // steps that get it there. Tier 1 is a player's first day: wooden tools, a
-// shelter, stone tools, food, a bed (spawn point set) and two chests with its
+// shelter, stone tools, food, a bed (spawn point set) and the shelter set up with its
 // stuff put away. Later tiers are listed for Phase 7 to plan toward.
 
 import { bot } from "../core/body";
@@ -13,13 +13,13 @@ import { acquire } from "./acquire";
 import { liveWorld } from "./world";
 import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
-import { bestWool, chestsNear, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, enterShelter, shelterSlots } from "./shelter";
+import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
+import { buildShelter, enterShelter, setupTheShelter, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
-import { placeBlockResult } from "../actions/worldInteraction";
+import { breakBlockAtResult, pickupNearbyItems, placeBlockResult } from "../actions/worldInteraction";
 
 export type Milestone = {
   id: string;
@@ -98,12 +98,23 @@ async function getBed(): Promise<ActionResult> {
   if (!catalog().isBed(knownBlock(slot)?.name ?? "")) {
     const bedItem = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
     if (!bedItem) return fail("missing_items", "no bed to put down");
-    // Placed facing on from the cell behind it, so the head goes along the wall
+    // Placed facing on from the cell behind it (the table's spot), so the
+    // head goes along the wall; a table already there is moved for a moment
+    let tableMoved = false;
     if (slots?.bedStand) {
+      if (knownBlock(slots.bedStand)?.name === "crafting_table") {
+        tableMoved = (await breakBlockAtResult(slots.bedStand.x, slots.bedStand.y, slots.bedStand.z)).ok;
+        if (tableMoved) await pickupNearbyItems(bot, 3);
+      }
       const there = await goTo(new pf.goals.GoalBlock(slots.bedStand.x, slots.bedStand.y, slots.bedStand.z));
       if (!there.ok) console.log(`Couldn't stand behind the bed's spot (${describeFailure(there)}); placing it from here.`);
     }
     const placed = await placeBlockResult(bedItem.name, slot.x, slot.y, slot.z);
+    if (tableMoved && slots?.bedStand) {
+      // Back in its spot (stepping out of it first)
+      await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
+      await placeBlockResult("crafting_table", slots.bedStand.x, slots.bedStand.y, slots.bedStand.z);
+    }
     if (!placed.ok) return placed;
   }
   const { execute: sleep } = await import("../commands/Sleep");
@@ -111,24 +122,24 @@ async function getBed(): Promise<ActionResult> {
   return hasBed() ? ok() : fail("refused", "the bed didn't take (the server said no)");
 }
 
-/** Two chests in their spots in the shelter, with the cheap stuff put away in them. */
-async function setUpChests(): Promise<ActionResult> {
-  const slots = shelterSlots();
-  if (!slots) return fail("not_found", "no shelter for the chests yet");
+/** The shelter furnished (the owner's setupTheShelter), with the cheap stuff put away. */
+async function furnishShelter(): Promise<ActionResult> {
+  const set = await setupTheShelter();
+  if (!set.ok) return set;
   const { lookInChest, storeItems } = await import("../actions/storage");
-  const inside = await enterShelter();
-  if (!inside.ok) return inside;
-  for (const slot of slots.chests) {
-    if (knownBlock(slot)?.name === "chest") continue;
-    const got = await acquire("chest", 1, liveWorld);
-    if (!got.ok) return got;
-    const placed = await placeBlockResult("chest", slot.x, slot.y, slot.z);
-    if (!placed.ok) return placed;
-    const block = knownBlock(slot);
-    if (block?.name === "chest") await lookInChest(block); // remembered from now on
-  }
+  const first = shelterSlots()?.chests[0];
+  const chest = first ? knownBlock(first) : null;
+  if (chest?.name === "chest") await lookInChest(chest); // remembered from now on
   await storeItems("lowValue");
-  return chestsNear(slots.stand) >= 2 ? ok() : fail("refused", "the chests didn't stay");
+  return furnished() ? ok() : fail("refused", "the chests, furnace or table didn't stay");
+}
+
+/** Every spot in the shelter has its chest, furnace and table. */
+function furnished(): boolean {
+  const slots = shelterSlots();
+  if (!slots) return false;
+  const has = (spot: { x: number; y: number; z: number } | null, name: string): boolean => !spot || knownBlock(spot)?.name === name || !knownBlock(spot);
+  return slots.chests.every((c) => has(c, "chest")) && has(slots.furnace, "furnace") && has(slots.table, "crafting_table");
 }
 
 /** Every milestone, in the order the bot goes for them. */
@@ -146,7 +157,7 @@ export const MILESTONES: Milestone[] = [
     title: "a shelter",
     tier: 1,
     done: () => shelter() !== null,
-    achieve: buildShelter,
+    achieve: () => buildShelter(),
   },
   {
     id: "stone_tools",
@@ -172,13 +183,10 @@ export const MILESTONES: Milestone[] = [
   },
   {
     id: "chests",
-    title: "two chests with my things",
+    title: "my shelter set up (chests, furnace, table)",
     tier: 1,
-    done: () => {
-      const room = shelter();
-      return room !== null && chestsNear(room) >= 2;
-    },
-    achieve: setUpChests,
+    done: () => shelter() !== null && furnished(),
+    achieve: furnishShelter,
   },
   // --- Tier 2: the mine under the shelter (owner's design) -----------------------
   {
