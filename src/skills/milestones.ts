@@ -30,6 +30,9 @@ export type Milestone = {
 };
 
 const FOOD_STOCK = 20; // food points carried: a couple of days' eating
+// Once stocked, eating doesn't undo it: only below half does it go hunting
+// again (it announced the stock, ate while cooking, and reported "only 17")
+const foodTarget = (): number => (reachedAt()["food"] ? FOOD_STOCK / 2 : FOOD_STOCK);
 
 /** Gets each item in turn with the planner; stops at the first it can't get. */
 async function getAll(items: string[]): Promise<ActionResult> {
@@ -58,7 +61,7 @@ async function stockFood(): Promise<ActionResult> {
   if (hasRaw) {
     if (!(await cookFood()) && (await acquire("furnace", 1, liveWorld)).ok) await cookFood();
   }
-  return foodPoints() >= FOOD_STOCK ? ok() : fail("missing_items", `only ${foodPoints()} food points; no more animals or berries around`);
+  return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points; no more animals or berries around`);
 }
 
 /** A bed: 3 wool of one colour (from sheep), crafted, put in its slot in the shelter, used (spawn point). */
@@ -143,7 +146,7 @@ export const MILESTONES: Milestone[] = [
     id: "food",
     title: "a food stock",
     tier: 1,
-    done: () => foodPoints() >= FOOD_STOCK,
+    done: () => foodPoints() >= foodTarget(),
     achieve: stockFood,
   },
   {

@@ -220,3 +220,14 @@ test("diamonds take the whole tree: stone pickaxe for iron, a furnace for ingots
   expect(at("mine raw_iron")).toBeLessThan(at("smelt iron_ingot"));
   expect(at("craft iron_pickaxe")).toBeLessThan(at("mine diamond"));
 });
+
+test("a craft that claims success but makes nothing: it goes to the source instead of looping", async () => {
+  // A planner that thinks the last wool can be crafted, and a craft that "works" without making any
+  const fooled = { ...world, plan: (item: string, count: number) => (item === "white_wool" ? { missing: [], needsTable: false } : world.plan(item, count)), craft: async () => true };
+  inv = { white_wool: 2 };
+  sheep = 1;
+  const result = await acquire("white_wool", 3, fooled);
+  expect(result.ok).toBe(true);
+  expect(inv.white_wool).toBe(3);
+  expect(log).toContain("hunt 1");
+});

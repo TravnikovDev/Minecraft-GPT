@@ -142,8 +142,11 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
   }
   // The pathfinder's last word on this walk (a path, no path, a timeout)
   let lastPath = "no path computed yet";
-  const onPath = (r: { status: string; path: unknown[] }): void => {
-    lastPath = `${r.status}, ${r.path.length} moves`;
+  const onPath = (r: { status: string; path: Array<{ x: number; y: number; z: number; toBreak?: unknown[]; toPlace?: unknown[] }> }): void => {
+    // The next step too: where a stalled walk was trying to go first
+    const next = r.path[0];
+    const how = next ? ` (next ${Math.floor(next.x)}, ${Math.floor(next.y)}, ${Math.floor(next.z)}${next.toBreak?.length ? `, breaking ${next.toBreak.length}` : ""}${next.toPlace?.length ? `, placing ${next.toPlace.length}` : ""})` : "";
+    lastPath = `${r.status}, ${r.path.length} moves${how}`;
   };
   bot.on?.("path_update" as never, onPath as never);
   const block = (dy: number): string => bot.blockAt(bot.entity.position.floored().offset(0, dy, 0))?.name ?? "?";

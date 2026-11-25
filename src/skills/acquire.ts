@@ -68,11 +68,17 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
     // its source, not through some recipe for it (wool from string, coal
     // from a coal block) unless that recipe can be made right now
     const direct = world.sources.find((s) => s.gets(item) && !demoted(s, item));
-    const raw = direct && plan.missing.length > 0 ? [{ name: item, count: want }] : plan.missing;
+    let raw = direct && plan.missing.length > 0 ? [{ name: item, count: want }] : plan.missing;
+    console.log(`Getting ${want} ${item} (round ${round + 1}): ${raw.length ? `missing ${raw.map((m) => `${m.count} ${m.name}`).join(", ")}` : "crafting it"}.`);
 
     if (raw.length === 0) {
-      if (!(await world.craft(item, want))) console.log(`Crafting ${item} didn't work this round; planning again.`);
-      continue;
+      // A craft only counts if the item really came out (a planner that thinks
+      // the third wool can be crafted from two burned every round silently)
+      const crafted = await world.craft(item, want);
+      if (crafted && world.have(item) > have) continue;
+      console.log(`Crafting ${item} didn't work${direct ? `; getting it by ${direct.name} instead` : "; planning again"}.`);
+      if (!direct) continue;
+      raw = [{ name: item, count: want }];
     }
 
     for (const m of raw) {
