@@ -21,7 +21,6 @@ import { digDiagonalTunnel, digStraightTunnel, tunnelStopReason, type DirectionT
 import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
 import { TIER, toolTier } from "./capabilities";
-import { catalog } from "../core/catalog";
 
 export const MINE_DEPTH = 10;
 const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
@@ -283,11 +282,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
-    // What the new tunnel uncovered (ores only: stone comes from the digging itself)
-    for (const want of still().filter((w) => isOre(w.item))) {
-      const got = await collectBlock(want.item, want.enough - carried(want.counts), ORE_REACH);
-      if (got > 0) chatter(`Found ${want.item.replace(/_/g, " ")}: ${carried(want.counts)} of ${want.enough}.`, "mining");
-    }
+    await mineOresInSight(wants);
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
 }
@@ -319,10 +314,25 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   return ok();
 }
 
-/** An item ores drop (coal, raw iron), as opposed to plain stone. */
-function isOre(item: string): boolean {
-  return item !== "cobblestone" && catalog().oresFor(item).length > 0;
+// What ores drop, best first: strip mining takes every one it sees
+const STRIP_ORES = ["diamond", "emerald", "raw_gold", "raw_iron", "redstone", "lapis_lazuli", "raw_copper", "coal"];
+
+/**
+ * Strip mining (owner): every ore it can see from the fresh tunnel, not only
+ * what this trip is for (it walked past coal on the wall because it had
+ * "enough"). Best first; then the wanted count is said when it moved.
+ */
+async function mineOresInSight(wants: OreWant[]): Promise<void> {
+  const before = new Map(wants.map((w) => [w.item, carried(w.counts)]));
+  for (const item of STRIP_ORES) {
+    if (isCommandCancelled()) return;
+    await collectBlock(item, 16, ORE_REACH, { seenOnly: true });
+  }
+  for (const w of wants) {
+    if (carried(w.counts) > (before.get(w.item) ?? 0)) chatter(`Found ${w.item.replace(/_/g, " ")}: ${carried(w.counts)} of ${w.enough}.`, "mining");
+  }
 }
+
 
 // Cobblestone the first stone tools take: 2 pickaxes, an axe, a shovel, a sword
 export const FIRST_STONE = 11;
