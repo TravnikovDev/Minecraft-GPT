@@ -109,6 +109,8 @@ function milestoneTask(m: Milestone): TaskSpec {
 let nightOf = -1; // the day number of the night already handled
 
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
+const NIGHT_TRIES = 4;
+
 function nightTask(): TaskSpec {
   return {
     name: NIGHT_NAME,
@@ -126,9 +128,18 @@ function nightTask(): TaskSpec {
           return;
         }
       }
-      const inside = await enterShelter();
+      // Getting in: a few tries (a walk can fail once; giving up left it
+      // standing outside all night, fresh-world test)
+      let inside = await enterShelter();
+      for (let tries = 1; !inside.ok && tries < NIGHT_TRIES && isNight() && !isCommandCancelled(); tries++) {
+        console.log(`Night: couldn't get into my shelter (${describeFailure(inside)}); trying again.`);
+        await sleep(3_000);
+        inside = await enterShelter();
+      }
       if (!inside.ok) {
         report(`I couldn't get into my shelter: ${describeFailure(inside)}.`);
+        // Let the routine be proposed again in a while, not only next night
+        nightOf = -1;
         return;
       }
       // Shut in: the reflexes leave what's outside alone until morning
