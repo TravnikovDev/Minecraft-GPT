@@ -6,6 +6,7 @@
 
 import type { Entity } from "prismarine-entity";
 import { bestMeleeWeapon } from "./combat";
+import { catalog } from "../core/catalog";
 import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
 import { equipItem, hitEntity, lookAt, lookToward, setControl } from "../core/primitives";
@@ -18,10 +19,15 @@ const NIGHT_RADIUS = 16;
 const HIT_RANGE = 3.1;
 const SAFE_DISTANCE = 9;
 const HIT_COOLDOWN_MS = 650;
+// Another mob hitting it while the creeper is still this far: that mob first
+const CREEPER_FIRST_WITHIN = 5;
+const BRAWL_RANGE = 4;
+const GIVE_WAY_MS = 4_000;
 
 let active = false;
 let busy = false;
 let lastHitAt = 0;
+let givingWayUntil = 0;
 
 /** True while the bot is dealing with a creeper (other code should wait). */
 export function isCreeperReflexActive(): boolean {
@@ -56,13 +62,20 @@ async function faceAwayFrom(creeper: Entity): Promise<void> {
   await lookToward(Math.atan2(-dx, -dz), 0);
 }
 
-function finish(): void {
+function finish(reason = "clear"): void {
   if (!active) return;
   active = false;
   setOnly({});
   setReflexActive("creeper", false);
   pathing.resumeAfterReflex();
-  console.log("Creeper reflex: clear.");
+  console.log(`Creeper reflex: ${reason}.`);
+}
+
+/** Another hostile mob at arm's length (a zombie hitting it while it watched a creeper). */
+function brawler(): Entity | null {
+  return bot.nearestEntity(
+    (e) => e.name !== "creeper" && !!e.name && catalog().isHostile(e.name) && e.position.distanceTo(bot.entity.position) <= BRAWL_RANGE
+  );
 }
 
 async function tick(): Promise<void> {
@@ -79,10 +92,19 @@ async function tick(): Promise<void> {
     finish();
     return;
   }
+  const distance = creeper.position.distanceTo(bot.entity.position);
+  // A mob already hitting it comes first, unless the creeper is close or hissing:
+  // the combat reflex fights it (first game test: a zombie killed the bot while
+  // this reflex walked toward a creeper 9 blocks away and ignored it)
+  const closeCall = distance <= CREEPER_FIRST_WITHIN || isFusing(creeper);
+  if (!closeCall && (Date.now() < givingWayUntil || brawler())) {
+    if (Date.now() >= givingWayUntil) givingWayUntil = Date.now() + GIVE_WAY_MS;
+    finish("giving way: another mob is attacking");
+    return;
+  }
 
   busy = true;
   try {
-    const distance = creeper.position.distanceTo(bot.entity.position);
     if (!active) {
       active = true;
       console.log(`Creeper reflex: creeper ${distance.toFixed(1)} blocks away${isNight() ? " (night)" : ""}.`);
@@ -128,6 +150,7 @@ export function registerCreeperReflex(): void {
   active = false;
   busy = false;
   lastHitAt = 0;
+  givingWayUntil = 0;
   // Its moves run as the creeper reflex: they never wait for the task it paused
   const timer = setInterval(() => void asReflex("creeper", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
