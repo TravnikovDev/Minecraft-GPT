@@ -141,8 +141,10 @@ onBotCreated((currentBot) => {
     if (id) void useWorld(id);
     else console.error("Memory: the server sent no world seed; memory stays as it is.");
   };
-  listen(currentBot._client, "login", loadWorld);
-  listen(currentBot._client, "respawn", loadWorld);
+  // Ahead of mineflayer's own handlers: everything that runs at login and
+  // spawn (the restart recovery check, place checks) must see this world's memory
+  currentBot._client.prependListener("login", loadWorld);
+  currentBot._client.prependListener("respawn", loadWorld);
   // Chat and whispers go through the gateway: owner only, fast path first
   listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message, "chat"));
   listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message, "whisper"));

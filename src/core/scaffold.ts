@@ -7,6 +7,7 @@
 // Placements the bot makes on purpose (a chest, a torch, a tunnel floor)
 // run inside placingOnPurpose and are never counted as scaffolding.
 
+import { Vec3 } from "vec3";
 import { bot } from "./body";
 import { on } from "./events";
 import { forbiddenAt } from "./forbidden";
@@ -45,7 +46,7 @@ export function isOwnScaffold(p: { x: number; y: number; z: number }, nameNow?: 
   const entry = placed.get(key(p));
   if (!entry) return false;
   if (entry.name === null) return true; // placed before names were kept
-  const now = nameNow ?? bot.blockAt?.(p as never)?.name;
+  const now = nameNow ?? bot.blockAt?.(new Vec3(p.x, p.y, p.z))?.name;
   if (now === undefined) return true; // not loaded: unknown, keep it
   if (now === entry.name) return true;
   placed.delete(key(p));
@@ -77,7 +78,7 @@ export function isOwnBlock(p: { x: number; y: number; z: number }, nameNow?: str
   if (isOwnScaffold(p, nameNow)) return true;
   const door = doors.get(key(p));
   if (!door) return false;
-  const now = nameNow ?? bot.blockAt?.(p as never)?.name;
+  const now = nameNow ?? bot.blockAt?.(new Vec3(p.x, p.y, p.z))?.name;
   return door.name === null || now === undefined || now === door.name;
 }
 

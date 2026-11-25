@@ -63,8 +63,8 @@ export async function useWorld(id: string): Promise<void> {
   dbPath = join(worldsDir, `${id}.json`);
   const known = existsSync(dbPath);
   db = freshDb(dbPath);
-  await loadDb();
   console.log(`Memory: world ${id} (${known ? "remembered" : "new"}, ${dbPath}).`);
+  await loadDb(); // the memory is in place before this first await returns
 }
 
 /**
