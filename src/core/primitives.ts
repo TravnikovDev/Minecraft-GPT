@@ -159,7 +159,46 @@ export function lastWalkGoal(): Pos | null {
   return lastGoal;
 }
 
-export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise<ActionResult> {
+// Leaves and trunks: what it stands on when it spawned on top of a tree
+const TREE_BLOCK = /_leaves$|_log$|_wood$|_stem$/;
+
+/**
+ * On top of a tree (it spawned on a spruce, fresh-world test: every walk
+ * found "no path" since a drop of more than 3 hurts): breaks its way straight
+ * down through the leaves and the trunk, a block at a time, as a player
+ * does, never into a drop of more than 3. True if it got any lower.
+ */
+async function getDownFromTree(): Promise<boolean> {
+  let lower = false;
+  for (let i = 0; i < 40 && bot.entity; i++) {
+    const feet = bot.entity.position.floored();
+    const below = bot.blockAt(feet.offset(0, -1, 0));
+    if (!below || !TREE_BLOCK.test(below.name)) break;
+    let drop = 0;
+    while (drop < 5 && bot.blockAt(feet.offset(0, -2 - drop, 0))?.boundingBox === "empty") drop++;
+    if (drop > 3) break;
+    const broken = await breakBlock(below.position, { allowWithoutHarvest: true });
+    if (!broken.ok) break;
+    lower = true;
+    await sleep(400 + drop * 150); // falling onto the next block
+  }
+  if (lower) console.log(`Climbed down the tree I was standing on, to ${bot.entity?.position.floored()}.`);
+  return lower;
+}
+
+/** True when it stands on a tree's leaves or trunk. */
+const onTree = (): boolean => TREE_BLOCK.test(bot.blockAt?.(bot.entity.position.floored().offset(0, -1, 0))?.name ?? "");
+
+export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean } = {}): Promise<ActionResult> {
+  const result = await walkTo(goal, options);
+  // No way from up a tree: down the trunk, then once more
+  if (!result.ok && result.reason === "unreachable" && !options.climbedDown && bot.entity && onTree() && (await getDownFromTree())) {
+    return goTo(goal, { ...options, climbedDown: true });
+  }
+  return result;
+}
+
+async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise<ActionResult> {
   const g = goal as unknown as Partial<Pos>;
   const spot = typeof g.x === "number" && typeof g.y === "number" && typeof g.z === "number" ? { x: g.x, y: g.y, z: g.z } : null;
   if (spot) {
