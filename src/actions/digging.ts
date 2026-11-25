@@ -11,7 +11,7 @@ import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
-import { isNatural } from "../core/movements";
+import { isNatural, isWoodenDoor } from "../core/movements";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
@@ -250,6 +250,9 @@ export async function digDiagonalTunnel(
 
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
+        // Its own door in the way (the mine starts in the shelter's back
+        // doorway): a passage, walked through, never dug out
+        if (isWoodenDoor(bot.blockAt(digPosition)?.name ?? "")) continue;
         if (stopTunnelAt(digPosition)) return false;
         await breakBlockAt(
           digPosition.x,

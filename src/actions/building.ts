@@ -351,6 +351,8 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   protectShelter();
   console.log(`Shelter dug: stairs from ${start} going ${dir}, room from ${plan.roomStart}, exit at ${plan.exit}.`);
   await putInDoor(plan.entrance);
+  // And one in the back doorway, to the mine: what comes up the mine stays out
+  await putInDoor(plan.exit);
   await pickupNearbyItems(bot);
   return ok();
 }
@@ -511,15 +513,23 @@ export async function enterShelter(): Promise<ActionResult> {
   }
   const walked = await goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
   if (!walked.ok) return walked;
+  // The mine's doorway: a door there too, when it carries one (a shelter
+  // built before it had one; crafting makes doors in threes)
+  const exitAt = cellsOf(room, "exit")[0];
+  if (exitAt && knownBlock(exitAt)?.boundingBox === "empty" && bot.inventory.items().some((i) => isWoodenDoor(i.name))) {
+    await putInDoor(new Vec3(exitAt.x, exitAt.y, exitAt.z));
+  }
+  // Both doors shut for the night
+  for (const at of [exitAt, cellsOf(room, "door")[0]]) {
+    const d = at ? knownBlock(at) : null;
+    if (d && isWoodenDoor(d.name) && d.getProperties()["open"] === true) {
+      const closed = await useBlock(d);
+      if (!closed.ok) console.log(`Couldn't close my shelter door at ${at}: ${describeFailure(closed)}`);
+    }
+  }
   const doorAt = cellsOf(room, "door")[0];
   const door = doorAt ? knownBlock(doorAt) : null;
-  if (door && isWoodenDoor(door.name)) {
-    if (door.getProperties()["open"] === true) {
-      const closed = await useBlock(door);
-      if (!closed.ok) console.log(`Couldn't close my shelter door: ${describeFailure(closed)}`);
-    }
-    return ok();
-  }
+  if (door && isWoodenDoor(door.name)) return ok();
   for (const p of cellsOf(room, "seal")) {
     const here = knownBlock(p);
     if (!here) continue;
