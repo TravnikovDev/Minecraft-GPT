@@ -9,7 +9,6 @@ import { fail, ok, type ActionResult } from "../core/result";
 import { craftNow, planCraft } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
 import { collectBlock } from "../actions/collectBlock";
-import { execute as hunt } from "../commands/Hunting";
 import type { AcquireWorld, Source } from "./acquire";
 import { carried, hasTableAccess, TIER, toolTier } from "./capabilities";
 
@@ -52,6 +51,8 @@ export const SOURCES: Source[] = [
     run: async (m, count) => {
       const before = carried(m);
       // An explicit count: a general hunt leaves two of each kind to breed
+      // Loaded when used: the command modules reach back to the registry, which reaches here
+      const { execute: hunt } = await import("../commands/Hunting");
       await hunt({ maxDistance: 60, mobType: "sheep", count: Math.max(1, count) });
       const wool = bot.inventory.items().filter((i) => /_wool$/.test(i.name)).reduce((n, i) => n + i.count, 0);
       return wool > 0 || carried(m) > before ? ok() : fail("missing_items", "found no sheep");

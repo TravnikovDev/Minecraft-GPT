@@ -21,6 +21,8 @@ const INSTANT_COMMANDS = new Set<string>([
   BotCommands.WhereIs,
   BotCommands.KeepOut,
   BotCommands.AllowHere,
+  BotCommands.Autonomy,
+  BotCommands.Progress,
   BotCommands.ListInventory,
   BotCommands.CheckForItem,
   BotCommands.DescribeSurroundings,

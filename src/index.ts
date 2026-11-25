@@ -34,6 +34,7 @@ import { registerDrowningReflex } from "./actions/drowningReflex";
 import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
+import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going
@@ -87,6 +88,8 @@ onConnectionReady((currentBot) => {
   clearScaffolds(); // scaffolding from before may have been changed since
   resetStuckWatch(); // stuck counters from an old connection don't apply
   everyWhileConnected(currentBot, 5_000, checkProgress); // nudge, replan, give up (managers/stuckWatch)
+  resetCurriculum(); // milestones set aside on the old connection get another chance
+  everyWhileConnected(currentBot, 15_000, considerNextStep); // its own life, when the owner turned it on (skills/curriculum)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 
@@ -159,8 +162,9 @@ onBotCreated((currentBot) => {
 async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const steps: Array<{ command: BotCommands; args: object }> = [
     { command: BotCommands.RecoverItems, args: {} },
-    { command: BotCommands.StarterKit, args: {} },
   ];
+  // Living its own life, its milestones get the gear back; otherwise a starter kit
+  if (!autonomyOn()) steps.push({ command: BotCommands.StarterKit, args: {} });
   const ownerOnline = Object.keys(currentBot.players).some(
     (name) => name.toLowerCase() === OWNER_USERNAME.toLowerCase()
   );

@@ -1,8 +1,6 @@
 {
   "src/actions/digging.ts": 6,
-  "src/actions/ensure.ts": 7,
   "src/actions/ensureLocation.ts": 2,
-  "src/actions/ensureTools.ts": 1,
   "src/actions/gatherWood.ts": 3,
   "src/commands/AttackNearest.ts": 5,
   "src/commands/AvoidEnemies.ts": 4,
@@ -38,7 +36,6 @@
   "src/commands/UseNearbyObject.ts": 2,
   "src/commands/WearArmor.ts": 4,
   "src/managers/actionManager.ts": 2,
-  "src/managers/botProgress.ts": 1,
   "src/managers/stuckWatch.ts": 1,
   "src/utils/utility.ts": 1
 }

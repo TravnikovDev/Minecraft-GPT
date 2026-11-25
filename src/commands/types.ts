@@ -39,6 +39,8 @@ enum BotCommands {
   WhereIs = "whereIs",
   KeepOut = "keepOut",
   AllowHere = "allowHere",
+  Autonomy = "autonomy",
+  Progress = "progress",
   DescribeSurroundings = "describeSurroundings",
   RecoverItems = "recoverItems",
   StarterKit = "starterKit",

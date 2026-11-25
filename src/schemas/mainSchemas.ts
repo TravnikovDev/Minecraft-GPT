@@ -113,6 +113,10 @@ export const MemorySchema = z.object({
   deaths: z
     .array(z.object({ x: z.number(), y: z.number(), z: z.number(), dimension: z.string(), at: z.number() }))
     .optional(),
+  // Milestones (Phase 6): when each was first reached
+  milestones: z.record(z.string(), z.number()).optional(),
+  // The bot lives its own life (goes for milestones, sleeps in its shelter) when on
+  autonomy: z.object({ on: z.boolean(), since: z.number() }).optional(),
   // Points of interest (schema v2): the base, crafting tables, furnaces, mines, farms
   places: z.array(PlaceSchema).optional(),
   // Areas it must not dig or build in: marked by the owner, or protected by the server
