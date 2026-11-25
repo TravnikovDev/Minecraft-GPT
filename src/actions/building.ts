@@ -12,7 +12,6 @@ import { isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
 import { collectBlock } from "./collectBlock";
-import { TABLE_RANGE, tableNear } from "./crafting";
 import {
   addPlace,
   forgetPlaces,
@@ -542,10 +541,6 @@ export function rememberShelterDoor(): void {
   }
 }
 
-/** True with a crafting table within `range` blocks. */
-export function tableWithin(range: number): boolean {
-  return tableNear(range) !== null;
-}
 
 const FACE_NAMES: Array<[Vec3, string]> = [[new Vec3(1, 0, 0), "east"], [new Vec3(-1, 0, 0), "west"], [new Vec3(0, 0, 1), "south"], [new Vec3(0, 0, -1), "north"]];
 const faceName = (v: Vec3): string | null => FACE_NAMES.find(([d]) => d.equals(v))?.[1] ?? null;
@@ -597,11 +592,14 @@ async function carry(item: string, n: number): Promise<ActionResult> {
 }
 
 /**
- * Furnishes the shelter the owner's way: first gets everything (the chests,
- * the furnace, a table only with none within 50 blocks), then goes in and
- * puts each piece from the middle of its row, so the chests pair up into
- * three double chests. A chest facing the wrong way (from an older layout)
- * is taken out and put back right.
+ * Furnishes the shelter exactly as the owner's original setupTheShelter did:
+ * first everything it needs (6 chests for 3 double chests, a furnace, a
+ * crafting table), then, in this order, standing in the middle of each row:
+ * row 0 the chests either side, row 1 the chests either side (they join the
+ * first two), row 2 the furnace and the crafting table, rows 3 and 4 the last
+ * double chest. The shelter always gets its own table, even with another one
+ * outside (owner: one outside and one inside is fine). A chest facing the
+ * wrong way (from an older layout) is taken out and put back right.
  */
 export async function setupTheShelter(): Promise<ActionResult> {
   const slots = shelterSlots();
@@ -609,43 +607,45 @@ export async function setupTheShelter(): Promise<ActionResult> {
     console.error("Basement location is undefined.");
     return fail("not_found", "no shelter to set up");
   }
-  const { stand, direction: dir } = slots;
-  const needChests = slots.chests.filter((c) => !rightChest(c, stand, dir));
-  const needFurnace = slots.furnace && knownBlock(slots.furnace)?.name !== "furnace" ? slots.furnace : null;
-  const needTable = slots.table && !tableWithin(TABLE_RANGE) ? slots.table : null;
+  const { stand, direction: dir, chests } = slots;
+  // The original order: (1,0) (-1,0) | (1,1) (-1,1) | furnace (1,2), table (-1,2) | (1,3) | (1,4)
+  const steps: Array<{ item: string; spot: Pos | null | undefined }> = [
+    { item: "chest", spot: chests[0] },
+    { item: "chest", spot: chests[2] },
+    { item: "chest", spot: chests[1] },
+    { item: "chest", spot: chests[3] },
+    { item: "furnace", spot: slots.furnace },
+    { item: "crafting_table", spot: slots.table },
+    { item: "chest", spot: chests[4] },
+    { item: "chest", spot: chests[5] },
+  ];
+  const done = (step: { item: string; spot: Pos | null | undefined }): boolean =>
+    !step.spot || (step.item === "chest" ? rightChest(step.spot, stand, dir) : knownBlock(step.spot)?.name === step.item);
+  const todo = steps.filter((step) => !done(step));
 
-  // Everything first: each trip to the table is a trip out of the shelter
-  const chestsToMake = needChests.filter((c) => knownBlock(c)?.name !== "chest").length;
-  for (const [item, n] of [["chest", chestsToMake], ["furnace", needFurnace ? 1 : 0], ["crafting_table", needTable ? 1 : 0]] as const) {
+  // Prepare resources first: each trip to a table is a trip out of the shelter
+  for (const item of ["chest", "furnace", "crafting_table"]) {
+    const n = todo.filter((t) => t.item === item && knownBlock(t.spot!)?.name !== item).length;
     if (n === 0) continue;
     const got = await carry(item, n);
     if (!got.ok) return got;
   }
 
-  for (const spot of needChests) {
-    // Wrong way round: out, and back in facing the middle
-    if (knownBlock(spot)?.name === "chest") {
-      const from = rowStand(spot, stand, dir);
+  for (const { item, spot } of todo) {
+    // A chest the wrong way round: out, and back in facing the middle
+    if (item === "chest" && knownBlock(spot!)?.name === "chest") {
+      const from = rowStand(spot!, stand, dir);
       const there = await goTo(new pf.goals.GoalBlock(from.x, from.y, from.z));
       if (!there.ok) return there;
-      const out = await breakBlockAtResult(spot.x, spot.y, spot.z);
+      const out = await breakBlockAtResult(spot!.x, spot!.y, spot!.z);
       if (!out.ok) return out;
       await pickupNearbyItems(bot);
     }
-    const placed = await placeFromRow("chest", spot, stand, dir);
+    const placed = await placeFromRow(item, spot!, stand, dir);
     if (!placed.ok) return placed;
-    await saveChestLocation(spot);
-  }
-  if (needFurnace) {
-    const placed = await placeFromRow("furnace", needFurnace, stand, dir);
-    if (!placed.ok) return placed;
-    await saveFurnaceLocation(needFurnace);
-  }
-  // A table only if there's none within 50 blocks (owner's rule: never a second one close by)
-  if (needTable) {
-    const placed = await placeFromRow("crafting_table", needTable, stand, dir);
-    if (!placed.ok) return placed;
-    await saveCraftingTableLocation(needTable);
+    if (item === "chest") await saveChestLocation(spot!);
+    else if (item === "furnace") await saveFurnaceLocation(spot!);
+    else await saveCraftingTableLocation(spot!);
   }
   await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
   return ok();
