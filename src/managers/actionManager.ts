@@ -10,12 +10,16 @@ import { CommandSchema } from "../schemas/mainSchemas";
 import type { CommandType } from "../schemas/types";
 import { BotCommands } from "../commands/types";
 import { executeTool } from "./toolManager";
-import { Bucket, cancelRunning, currentTask, propose, resetArbiter, stopAll, type TaskSpec } from "../core/arbiter";
+import { Bucket, cancelRunning, currentTask, onTaskEnd, propose, resetArbiter, stopAll, type TaskSpec } from "../core/arbiter";
 import { currentSignal, getCurrentCommandName, isCommandCancelled, progressOf } from "../core/commandContext";
 import { stopReflexes } from "../core/reflexes";
 import { resetChores, stopChores } from "../core/chores";
 import { resetLeases } from "../core/leases";
 import { bot } from "../core/body";
+import { dropForStop, dropFromTask } from "../core/narrator";
+
+// A task's commentary still waiting when it ends is old news
+onTaskEnd((task) => dropFromTask(task.signal));
 
 // Re-exported for managers that already import them from here
 export { getCurrentCommandName, isCommandCancelled };
@@ -166,6 +170,7 @@ export async function cancelCurrentCommand(reason: string): Promise<void> {
  */
 export async function stopEverything(): Promise<void> {
   waiting.clear();
+  dropForStop(); // no late "failed" or commentary after "stop"
   stopReflexes(STOP_MUTES_REFLEXES_MS);
   await stopChores("Stopped by player", STOP_MUTES_REFLEXES_MS);
   await stopAll("Stopped by player");

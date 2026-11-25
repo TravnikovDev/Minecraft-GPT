@@ -12,6 +12,8 @@ import { executeTool } from "./toolManager";
 import { Bucket, pendingTasks } from "../core/arbiter";
 import { answerPending, hasPendingQuestion, ownerDistance, rememberOwnerPosition } from "./ownerDialog";
 import { recordTurn } from "../core/session";
+import { setOwnerChannel } from "../core/narrator";
+import { reply } from "../core/narrator";
 import { pathing } from "../core/plugins";
 
 // Owner commands handled without the LLM. Each pattern matches the whole
@@ -81,7 +83,7 @@ async function tryFastPath(message: string): Promise<boolean> {
       retryCount: 0,
       args: { x, y, z },
     });
-    bot.chat(`On my way to ${x}, ${y}, ${z}!`);
+    reply(`On my way to ${x}, ${y}, ${z}!`);
     return true;
   }
 
@@ -105,7 +107,7 @@ async function tryFastPath(message: string): Promise<boolean> {
     const already = follow ? BotCommands.FollowPlayer : BotCommands.GoToPlayer;
     if (getCurrentCommandName() === already) {
       const dist = ownerDistance();
-      bot.chat(follow ? "I'm following you!" : `On my way${dist === null ? "" : `, ${Math.round(dist)} blocks to go`}!`);
+      reply(follow ? "I\'m following you!" : `On my way${dist === null ? "" : `, ${Math.round(dist)} blocks to go`}!`);
       return true;
     }
     // The owner calling outranks whatever the bot is doing right now (it carries on afterwards)
@@ -118,13 +120,13 @@ async function tryFastPath(message: string): Promise<boolean> {
         ? { player_name: OWNER_USERNAME, distance: 3 }
         : { player_name: OWNER_USERNAME, closeness: 2 },
     });
-    bot.chat(follow ? "Following you!" : "Coming!");
+    reply(follow ? "Following you!" : "Coming!");
     return true;
   }
 
   if (STATUS.test(message)) {
     console.log("Fast path: status");
-    bot.chat(await statusMessage());
+    reply(await statusMessage());
     return true;
   }
 
@@ -136,7 +138,7 @@ async function tryFastPath(message: string): Promise<boolean> {
  * ignored; the owner's simple commands use the fast path, everything else
  * goes to the LLM router.
  */
-export async function handleChat(username: string, message: string): Promise<void> {
+export async function handleChat(username: string, message: string, channel: "chat" | "whisper" = "chat"): Promise<void> {
   if (username === bot.username) return;
   if (!isOwner(username)) {
     console.log(`Ignoring chat from ${username} (only ${OWNER_USERNAME} can command the bot)`);
@@ -144,7 +146,8 @@ export async function handleChat(username: string, message: string): Promise<voi
   }
 
   const text = stripBotName(message);
-  console.log(`Owner says: ${text}`);
+  console.log(`Owner says${channel === "whisper" ? " (whisper)" : ""}: ${text}`);
+  setOwnerChannel(channel); // replies go back the way the owner asked
   recordTurn("owner", text);
   try {
     if (await tryFastPath(text)) return;

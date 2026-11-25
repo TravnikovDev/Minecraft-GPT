@@ -1,8 +1,8 @@
 // Path: src/core/leases.ts
 // Who may use the bot's body right now (Phase 4). The body has a few shared
 // resources: movement (walking, the pathfinder, movement keys), hands (the
-// held item, digging, placing, using, eating), the open window (chests,
-// furnaces, crafting) and the chat outbox. Code that uses one runs under a
+// held item, digging, placing, using, eating) and the open window (chests,
+// furnaces, crafting). Code that uses one runs under a
 // holder with a priority bucket (core/arbiter: survival 0 ... idle 6):
 //
 // - The running task holds everything at its bucket by default.
@@ -18,8 +18,9 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export type Resource = "movement" | "hands" | "window" | "chat";
-export const RESOURCES: Resource[] = ["movement", "hands", "window", "chat"];
+// (Chat isn't one: the Narrator's queue orders it, and a task must never wait to speak)
+export type Resource = "movement" | "hands" | "window";
+export const RESOURCES: Resource[] = ["movement", "hands", "window"];
 
 /** Someone using the body: a task, a reflex, or a polite borrower. */
 export type Holder = { name: string; bucket: number };

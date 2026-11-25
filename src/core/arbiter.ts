@@ -71,7 +71,7 @@ let scheduling = false;
 let epoch = 0;
 let again = false;
 const startHooks: Array<(task: { name: string; bucket: number }) => void> = [];
-const endHooks: Array<(task: { name: string; bucket: number }, outcome: Outcome) => void> = [];
+const endHooks: Array<(task: { name: string; bucket: number; signal: AbortSignal }, outcome: Outcome) => void> = [];
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 // Buckets 2-5 are "what the bot is doing" (shown in status, blocks idle chores); idle chores aren't
@@ -106,7 +106,7 @@ export function pendingTasks(): { name: string; bucket: number }[] {
 export function onTaskStart(hook: (task: { name: string; bucket: number }) => void): void {
   startHooks.push(hook);
 }
-export function onTaskEnd(hook: (task: { name: string; bucket: number }, outcome: Outcome) => void): void {
+export function onTaskEnd(hook: (task: { name: string; bucket: number; signal: AbortSignal }, outcome: Outcome) => void): void {
   endHooks.push(hook);
 }
 
@@ -198,7 +198,7 @@ function finish(id: number, outcome: Outcome): void {
   running = null;
   setTaskHolder(null);
   setCurrentCommandName(null);
-  const task = { name: ended.spec.name, bucket: ended.spec.bucket };
+  const task = { name: ended.spec.name, bucket: ended.spec.bucket, signal: ended.abort.signal };
   safely(() => ended.spec.onEnd?.(outcome));
   for (const hook of endHooks) safely(() => hook(task, outcome));
   console.log(`Task ended: ${ended.spec.name} (${outcome}).`);

@@ -11,6 +11,7 @@
 import type { Entity } from "prismarine-entity";
 import pf from "mineflayer-pathfinder";
 import { bot, onConnectionEnd } from "../core/body";
+import { report } from "../core/narrator";
 import { equipItem } from "../core/primitives";
 import { on } from "../core/events";
 import { fighting, pathing, takeOverBody } from "../core/plugins";
@@ -113,7 +114,7 @@ function retreat(threat: Entity): void {
     console.log(`Combat reflex: health ${Math.round(bot.health)}, backing off from ${threat.name}.`);
     if (Date.now() - lastRetreatNotice > RETREAT_NOTICE_MS) {
       lastRetreatNotice = Date.now();
-      bot.chat("I'm badly hurt, backing off!");
+      report("I\'m badly hurt, backing off!");
     }
   }
   fleeing = threat;

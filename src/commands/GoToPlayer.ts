@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
+import { chatter, reply, report } from "../core/narrator";
 import { lookAt } from "../core/primitives";
 import { goToPosition, goToPlayer, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { isCommandCancelled } from "../core/commandContext";
@@ -28,7 +29,7 @@ export const parameters = z.object({
 export async function execute(args: any = {}) {
   // Riding in the owner's boat: getting out would leave the bot in the water
   if (ridingWithOwner()) {
-    bot.chat("I'm right here in the boat with you.");
+    report("I'm right here in the boat with you.");
     return;
   }
   // Validate arguments
@@ -50,7 +51,7 @@ export async function execute(args: any = {}) {
         tellOwner(`I can't see you yet; heading to where you last were (${x}, ${z}), ${far} blocks away.`);
         const arrived = await travelTo(() => ({ x: known.x, y: known.y, z: known.z }), {
           range: closeness,
-          onProgress: (percent) => tellOwner(`Coming: ${percent}% of the way.`),
+          onProgress: (percent) => chatter(`Coming: ${percent}% of the way.`, "trip"),
         });
         if (isCommandCancelled()) return;
         tellOwner(arrived ? "I'm here! Where are you?" : "I got stuck on the way.");
@@ -62,39 +63,39 @@ export async function execute(args: any = {}) {
           `I can't see you from here. Tell me your coordinates (press F3), like: come to 100 64 -200`
         );
       } else {
-        bot.chat(`Could not find player ${player_name}. They might be offline.`);
+        report(`Could not find player ${player_name}. They might be offline.`);
       }
       return;
     }
   } else {
     const players = getNearbyPlayerNames(1000);
     if (players.length === 0) {
-      bot.chat("No players found nearby.");
+      report("No players found nearby.");
       return;
     }
     targetPlayer = bot.players[players[0]]?.entity;
     if (!targetPlayer) {
-      bot.chat(`Could not locate the nearest player entity.`);
+      report(`Could not locate the nearest player entity.`);
       return;
     }
   }
 
   const targetName = targetPlayer.username || targetPlayer.name;
   if (!targetName) {
-    bot.chat(`Could not determine the target player's name.`);
+    report(`Could not determine the target player's name.`);
     return;
   }
 
   // Far away but visible: travel in legs toward wherever the player is now
   const distance = targetPlayer.position.distanceTo(bot.entity.position);
   if (distance > LONG_TRIP_BLOCKS) {
-    tellOwner(`Coming! You're about ${Math.round(distance)} blocks away.`);
+    reply(`Coming! You\'re about ${Math.round(distance)} blocks away.`);
     const arrived = await travelTo(
       () => {
         const p = bot.players[targetName]?.entity;
         return p ? { x: p.position.x, y: p.position.y, z: p.position.z } : null;
       },
-      { range: closeness, onProgress: (percent) => tellOwner(`Coming: ${percent}% of the way.`) }
+      { range: closeness, onProgress: (percent) => chatter(`Coming: ${percent}% of the way.`, "trip") }
     );
     if (isCommandCancelled()) return;
     if (arrived) {
@@ -104,7 +105,7 @@ export async function execute(args: any = {}) {
     // Fall through to the short-range methods below
   }
 
-  bot.chat(`Heading towards ${targetName}.`);
+  chatter(`Heading towards ${targetName}.`, "trip");
   
   // Try to use the dedicated goToPlayer function first which uses GoalFollow
   try {
@@ -133,10 +134,10 @@ export async function execute(args: any = {}) {
       await lookAt(targetPlayer.position.offset(0, 1.6, 0));
     } else {
       // If still failed, try unstuck procedure
-      bot.chat("Had trouble reaching the player. Trying to get unstuck...");
+      report("Had trouble reaching the player. Trying to get unstuck...");
       await nudge();
     }
   } catch (error) {
-    bot.chat(`Failed to reach the player: ${error}`);
+    report(`Failed to reach the player: ${error}`);
   }
 }

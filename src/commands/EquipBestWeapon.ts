@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { catalog } from "../core/catalog";
 import { bot } from "../core/body";
+import { chatter, report } from "../core/narrator";
 import { equipItem } from "../core/primitives";
 import { equipBestMeleeWeapon, chooseWeaponForTarget } from "../actions/combat";
 import { getPriorityTargets } from "../actions/combat";
@@ -46,13 +47,13 @@ export async function execute(args: any) {
         
         if (bows.length > 0) {
           await equipItem(bows[0].name, "hand");
-          bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
+          report(`Equipped ${bows[0].displayName} for ranged combat.`);
           
           // Check if we have arrows
           const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
           
           if (arrows.length === 0) {
-            bot.chat("Warning: No arrows found in inventory!");
+            report("Warning: No arrows found in inventory!");
           }
           
         } else {
@@ -61,16 +62,16 @@ export async function execute(args: any) {
           
           if (crossbows.length > 0) {
             await equipItem(crossbows[0].name, "hand");
-            bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
+            report(`Equipped ${crossbows[0].displayName} for ranged combat.`);
             
             // Check if we have arrows
             const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
             
             if (arrows.length === 0) {
-              bot.chat("Warning: No arrows found in inventory!");
+              report("Warning: No arrows found in inventory!");
             }
           } else {
-            bot.chat("No bow or crossbow found in inventory. Equipping best melee weapon instead.");
+            report("No bow or crossbow found in inventory. Equipping best melee weapon instead.");
             await equipBestMeleeWeapon();
           }
         }
@@ -84,7 +85,7 @@ export async function execute(args: any) {
           swords.sort((a, b) => catalog().toolTier(b.name) - catalog().toolTier(a.name));
           
           await equipItem(swords[0].name, "hand");
-          bot.chat(`Equipped ${swords[0].displayName} for combat.`);
+          report(`Equipped ${swords[0].displayName} for combat.`);
           
           // Equip shield in offhand if available and requested
           if (offhand) {
@@ -92,11 +93,11 @@ export async function execute(args: any) {
             
             if (shields.length > 0) {
               await equipItem(shields[0].name, "off-hand");
-              bot.chat(`Also equipped shield in off-hand for defense.`);
+              report(`Also equipped shield in off-hand for defense.`);
             }
           }
         } else {
-          bot.chat("No sword found in inventory. Equipping best melee weapon instead.");
+          report("No sword found in inventory. Equipping best melee weapon instead.");
           await equipBestMeleeWeapon();
         }
       }
@@ -106,12 +107,12 @@ export async function execute(args: any) {
         
         if (shields.length > 0) {
           await equipItem(shields[0].name, "off-hand");
-          bot.chat(`Equipped shield in off-hand for defense.`);
+          report(`Equipped shield in off-hand for defense.`);
           
           // Equip best melee weapon in main hand
           await equipBestMeleeWeapon();
         } else {
-          bot.chat("No shield found in inventory. Equipping best melee weapon only.");
+          report("No shield found in inventory. Equipping best melee weapon only.");
           await equipBestMeleeWeapon();
         }
       }
@@ -127,16 +128,16 @@ export async function execute(args: any) {
       if (nearbyHostiles.length > 0) {
         // Choose weapon based on nearest threat
         const nearestThreat = nearbyHostiles[0];
-        bot.chat(`Choosing best weapon to fight ${nearestThreat.name}.`);
+        chatter(`Choosing best weapon to fight ${nearestThreat.name}.`, "weapon");
         await chooseWeaponForTarget(nearestThreat);
       } else {
         // No threats nearby, just equip best melee weapon
-        bot.chat("No specific threats detected. Equipping best general-purpose weapon.");
+        report("No specific threats detected. Equipping best general-purpose weapon.");
         await equipBestMeleeWeapon();
       }
     }
   } catch (error) {
     console.error("Failed to equip the weapon:", error);
-    bot.chat("Failed to equip the requested weapon.");
+    report("Failed to equip the requested weapon.");
   }
 }

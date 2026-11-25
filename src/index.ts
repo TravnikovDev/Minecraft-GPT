@@ -11,15 +11,16 @@ import { autoWearArmor } from "./actions/armor";
 import { tidyUpWhileIdle } from "./actions/pickup";
 import { replantWhenIdle } from "./actions/forestry";
 import { cleanUpScaffoldingWhenIdle } from "./actions/scaffolding";
+import "./core/narrator"; // the one chat outbox installs itself on every connection
 import { bot, connect, everyWhileConnected, listen, onBotCreated, onChatSent, onConnectionEnd, onConnectionReady } from "./core/body";
 import { syncRidingPosition, trackOwnerPosition } from "./managers/ownerDialog";
-import { recordTurn, saveBed } from "./core/session";
+import { saveBed } from "./core/session";
 import { on } from "./core/events";
 import { loadDb, removeAllCommands } from "./managers/persistenceManager";
 import { queueCommand } from "./managers/actionManager";
 import { abortForDisconnect, handleBotRejoin } from "./managers/actionManager";
 import { OWNER_USERNAME } from "./config/env";
-import { handleChat, isOwner } from "./managers/chatGateway";
+import { handleChat } from "./managers/chatGateway";
 import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
 import { pathing } from "./core/plugins";
@@ -121,8 +122,8 @@ on("bot:died", ({ position }) => {
 /** Event handlers for every new Bot instance. */
 onBotCreated((currentBot) => {
   // Chat and whispers go through the gateway: owner only, fast path first
-  listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message));
-  listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message));
+  listen(currentBot, "chat", (username: string, message: string) => handleChat(username, message, "chat"));
+  listen(currentBot, "whisper", (username: string, message: string) => handleChat(username, message, "whisper"));
   // "You have no home bed": the bot's bed was broken; forget it
   listen(currentBot, "message", (msg: { translate?: string }) => {
     if (msg.translate === "block.minecraft.spawn.not_valid") {
@@ -165,10 +166,9 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
 
 // --- Command loop ----------------------------------------------------------
 
-// Conversation memory: what the bot says publicly or whispers to the owner
+// Every line the bot says (the Narrator records replies and reports in the conversation)
 onChatSent((text, whisperTo) => {
   console.log(`Bot says${whisperTo ? ` (to ${whisperTo})` : ""}: ${text}`);
-  if (whisperTo === null || isOwner(whisperTo)) recordTurn("bot", text);
 });
 
 // No command loop: the arbiter (core/arbiter) runs tasks as they're proposed

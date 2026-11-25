@@ -6,10 +6,8 @@ import type { Entity } from "prismarine-entity";
 import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { loadOwnerPosition, saveOwnerPosition } from "../core/session";
+import { say } from "../core/narrator";
 
-const DUPLICATE_WINDOW_MS = 3000;
-let lastMessage = "";
-let lastMessageAt = 0;
 
 /** The owner's name as the server spells it, if they are online. */
 function ownerName(): string | null {
@@ -89,19 +87,8 @@ export function directionFromOwner(): string | null {
  * clutter everyone's chat. Falls back to the log when the owner is offline.
  */
 export function tellOwner(message: string): void {
-  const now = Date.now();
-  if (message === lastMessage && now - lastMessageAt < DUPLICATE_WINDOW_MS) return;
-  lastMessage = message;
-  lastMessageAt = now;
-
-  const name = ownerName();
   console.log(`[to owner] ${message}`);
-  if (!name) return;
-  try {
-    bot.whisper(name, message);
-  } catch (error) {
-    console.error("Failed to whisper to owner:", error);
-  }
+  say(message, { kind: "report", to: "owner" });
 }
 
 // --- Yes/no questions ---------------------------------------------------
@@ -123,7 +110,9 @@ export function askOwner(
   ttlMs = 2 * 60 * 1000
 ): void {
   pending = { question, onYes, ...(onNo ? { onNo } : {}), expiresAt: Date.now() + ttlMs };
-  tellOwner(`${question} (yes/no)`);
+  // A question to the owner is never dropped or delayed behind chatter
+  console.log(`[to owner] ${question} (yes/no)`);
+  say(`${question} (yes/no)`, { kind: "reply", to: "owner" });
 }
 
 /** True while a question is waiting for the owner's answer. */

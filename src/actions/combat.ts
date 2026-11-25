@@ -1,6 +1,7 @@
 // Path: src/actions/combat.ts
 
 import { bot } from "../core/body";
+import { chatter } from "../core/narrator";
 import { equipItem, lookAt } from "../core/primitives";
 import { stopUsingItem, useHeldItem } from "../core/primitives";
 import type { Item } from "prismarine-item";
@@ -85,7 +86,7 @@ export async function attackEntity(targetEntity: Entity, announce = true): Promi
     
     // Attack
     await fighting.attack(targetEntity);
-    if (announce) bot.chat(`Attacking ${targetEntity.name}!`);
+    if (announce) chatter(`Attacking ${targetEntity.name}!`, "combat");
     return true;
   } catch (error) {
     console.error("Error while attacking entity:", error);
@@ -112,7 +113,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
         const arrows = bot.inventory.items().filter(item => catalog().isArrow(item.name));
         
         if (arrows.length > 0) {
-          bot.chat(`Equipped ${bows[0].displayName} for ranged combat.`);
+          chatter(`Equipped ${bows[0].displayName} for ranged combat.`, "weapon");
           return true;
         }
       }
@@ -122,7 +123,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       
       if (crossbows.length > 0 && bot.inventory.items().some(item => catalog().isArrow(item.name))) {
         await equipItem(crossbows[0].name, "hand");
-        bot.chat(`Equipped ${crossbows[0].displayName} for ranged combat.`);
+        chatter(`Equipped ${crossbows[0].displayName} for ranged combat.`, "weapon");
         return true;
       }
     } 
@@ -131,7 +132,7 @@ export async function chooseWeaponForTarget(target: Entity): Promise<boolean> {
       const shields = bot.inventory.items().filter(item => item.name === "shield");
       if (shields.length > 0) {
         await equipItem(shields[0].name, "off-hand");
-        bot.chat(`Equipped shield for defense.`);
+        chatter(`Equipped shield for defense.`, "weapon");
       }
       // Also equip best melee weapon
       return await equipBestMeleeWeapon();
@@ -161,13 +162,13 @@ export async function equipBestMeleeWeapon(): Promise<boolean> {
   try {
     const best = bestMeleeWeapon(bot.inventory.items(), true);
     if (!best) {
-      bot.chat("No weapon available to equip.");
+      chatter("No weapon available to equip.", "weapon");
       return false;
     }
     const weapons = [best];
     const bestWeapon = weapons[0];
     await equipItem(bestWeapon.name, "hand");
-    bot.chat(`Equipped ${bestWeapon.displayName} for combat.`);
+    chatter(`Equipped ${bestWeapon.displayName} for combat.`, "weapon");
     return true;
   } catch (error) {
     console.error("Error while equipping best weapon:", error);
@@ -193,7 +194,7 @@ export async function useTacticsForTarget(target: Entity): Promise<void> {
     if (targetName === "creeper") {
       // For creepers: maintain distance, never get too close
       await maintainDistance(target, Math.max(preferredDistance, 4));
-      bot.chat("Keeping distance from creeper!");
+      chatter("Keeping distance from creeper!", "creeper");
     } 
     else if (targetName === "skeleton" || targetName === "stray") {
       // For skeletons: strafe to avoid arrows and use shield

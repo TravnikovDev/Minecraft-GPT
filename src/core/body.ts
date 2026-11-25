@@ -125,60 +125,21 @@ export function everyWhileConnected(currentBot: Bot, ms: number, fn: () => unkno
   onConnectionEnd(currentBot, () => clearInterval(timer));
 }
 
-// --- Chat pacing ----------------------------------------------------------
+// --- Chat ---------------------------------------------------------------------
 
-// Servers kick players who chat faster than about one message per second
-// (vanilla "disconnect.spam"; whispers count too). Every chat line and whisper
-// goes through one paced queue; exact repeats within 10 s are dropped.
-const CHAT_SPACING_MS = 1200;
-const CHAT_REPEAT_WINDOW_MS = 10000;
-const CHAT_QUEUE_LIMIT = 20;
+// bot.chat and bot.whisper exist only once mineflayer's plugins load (after
+// login). The Narrator (core/narrator.ts) installs itself here: it paces every
+// line, so servers never kick the bot for spam.
+const loginHooks: BotHook[] = [];
 
-function throttleChat(currentBot: Bot): void {
-  const sendChat = currentBot.chat.bind(currentBot);
-  const sendWhisper = currentBot.whisper.bind(currentBot);
-  const queue: Array<() => void> = [];
-  const recent = new Map<string, number>();
-  let timer: ReturnType<typeof setTimeout> | null = null;
+/** Runs for every new connection once it has logged in (chat is usable from then on). */
+export function onLogin(hook: BotHook): void {
+  loginHooks.push(hook);
+}
 
-  const pump = (): void => {
-    const next = queue.shift();
-    if (!next) {
-      timer = null;
-      return;
-    }
-    try {
-      next();
-    } catch (error) {
-      console.error("Failed to send chat:", error);
-    }
-    timer = setTimeout(pump, CHAT_SPACING_MS);
-  };
-
-  const enqueue = (key: string, send: () => void): void => {
-    const now = Date.now();
-    const last = recent.get(key);
-    if (last !== undefined && now - last < CHAT_REPEAT_WINDOW_MS) return; // exact repeat
-    recent.set(key, now);
-    if (queue.length >= CHAT_QUEUE_LIMIT) queue.shift(); // keep the newest messages
-    queue.push(send);
-    if (!timer) pump();
-  };
-
-  currentBot.chat = (message: string): void =>
-    enqueue(`chat:${message}`, () => {
-      sendChat(message);
-      notifyChatSent(message, null);
-    });
-  currentBot.whisper = (username: string, message: string): void =>
-    enqueue(`whisper:${username}:${message}`, () => {
-      sendWhisper(username, message);
-      notifyChatSent(message, username);
-    });
-  currentBot.once("end", () => {
-    if (timer) clearTimeout(timer);
-    queue.length = 0;
-  });
+/** Tells the chat hooks a line went out (the Narrator calls this). */
+export function chatSent(text: string, whisperTo: string | null): void {
+  notifyChatSent(text, whisperTo);
 }
 
 // --- Connection lifecycle -------------------------------------------------
@@ -207,7 +168,15 @@ function createBot(): Bot {
   const newBot = mineflayer.createBot(connectionOptions);
 
   // bot.chat/whisper exist only once mineflayer's plugins load (after login)
-  newBot.once("login", () => throttleChat(newBot));
+  newBot.once("login", () => {
+    for (const hook of loginHooks) {
+      try {
+        hook(newBot);
+      } catch (error) {
+        console.error("Login hook failed:", error);
+      }
+    }
+  });
 
   listen(newBot, "spawn", () => {
     reconnectAttempts = 0;

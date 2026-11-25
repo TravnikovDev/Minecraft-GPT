@@ -9,6 +9,8 @@ const g = globalThis as { __testBot?: any; __testEndHooks?: Array<() => void> };
 export function useFakeBot(fake: any): void {
   g.__testBot = fake;
   g.__testEndHooks = [];
+  narrator.resetNarrator();
+  narrator.setSender(fakeSender, 0);
 }
 
 /** Runs the cleanup registered with onConnectionEnd (as if the connection ended). */
@@ -36,7 +38,19 @@ const botProxy = new Proxy(
 mock.module(`${ROOT}/src/core/body.ts`, () => ({
   bot: botProxy,
   onConnectionEnd: (_bot: unknown, fn: () => void) => g.__testEndHooks?.push(fn),
+  onLogin: () => {},
+  chatSent: () => {},
 }));
+
+// What the bot says goes straight to the fake bot's chat/whisper (no pacing),
+// with the owner always online
+const narrator = await import(`${ROOT}/src/core/narrator.ts`);
+const fakeSender = {
+  chat: (m: string) => g.__testBot?.chat?.(m),
+  whisper: (to: string, m: string) => (g.__testBot?.whisper ? g.__testBot.whisper(to, m) : g.__testBot?.chat?.(m)),
+  ownerName: () => "Travnikov",
+};
+narrator.setSender(fakeSender, 0);
 
 /**
  * Moves the fake bot to a spot that satisfies a pathfinder goal near its

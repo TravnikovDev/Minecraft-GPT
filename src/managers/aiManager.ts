@@ -3,6 +3,7 @@
 import OpenAI from "openai";
 import { OPENAI_API_KEY } from "../config/env";
 import { bot } from "../core/body";
+import { reply } from "../core/narrator";
 import { BotCommands, isBotAction } from "../commands/types";
 import { executeTool, tools } from "./toolManager";
 import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
@@ -210,13 +211,13 @@ export async function initiateActionFromAI(
         const question = checkNames(toolAction.action, toolAction.arguments ?? {});
         if (question) {
           console.log(`Name check failed for ${toolAction.action}: ${question}`);
-          bot.chat(question);
+          reply(question);
           return; // the rest of the request waits for the answer
         }
 
         if (INSTANT_COMMANDS.has(toolAction.action)) {
           // Answer right away, without interrupting the running task
-          if (response && !answered) bot.chat(response);
+          if (response && !answered) reply(response);
           answered = true;
           try {
             await executeTool(toolAction.action, toolAction.arguments);
@@ -232,7 +233,7 @@ export async function initiateActionFromAI(
         const busyWith = getCurrentCommandName();
         const interrupts = INTERRUPTING_COMMANDS.has(toolAction.action);
         if (busyWith && !interrupts && !response) {
-          bot.chat(`Okay, I'll do that after I finish ${busyWith}.`);
+          reply(`Okay, I\'ll do that after I finish ${busyWith}.`);
         }
         // Log for debugging
         console.log(
@@ -257,6 +258,6 @@ export async function initiateActionFromAI(
   }
 
   if (response && !answered) {
-    bot.chat(response); // Send response to the game
+    reply(response); // the answer, on the channel the owner used
   }
 }
