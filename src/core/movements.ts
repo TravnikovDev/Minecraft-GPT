@@ -51,20 +51,23 @@ export function clearSolidDoors(): void {
 /** Wooden doors (iron doors need redstone, so they stay walls). */
 export const isWoodenDoor = (name: string): boolean => name.endsWith("_door") && name !== "iron_door";
 
-// Its shelter's walls, roof and floor: never dug through by a walk or a
-// collect ("stone in sight" carved into them; a walk from the grass above
-// dug a hole to the sky over the exit). Set by actions/building.
-const protectedCells = new Set<string>();
+// Its shelter's walls, roof and floor, and its mine stairs' floors and side
+// walls: never dug through by a walk or a collect ("stone in sight" carved
+// into them; a walk from the grass above dug a hole to the sky over the
+// exit; a walk stuck on a step dug around it and broke the stairs, owner:
+// "unacceptable"). Set by actions/building and skills/mine, one set each.
+const protectedCells = new Map<string, Set<string>>();
 
-/** The cells no walk or collect may break (replaces the previous set). */
-export function protectCells(cells: Array<{ x: number; y: number; z: number }>): void {
-  protectedCells.clear();
-  for (const c of cells) protectedCells.add(`${c.x},${c.y},${c.z}`);
+/** The cells no walk or collect may break, for one owner of them ("shelter", "mine"); replaces that owner's previous set. */
+export function protectCells(cells: Array<{ x: number; y: number; z: number }>, owner = "shelter"): void {
+  protectedCells.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
 }
 
-/** True for a protected cell (its shelter's shell). */
+/** True for a protected cell (its shelter's shell, its mine stairs). */
 export function isProtected(p: { x: number; y: number; z: number }): boolean {
-  return protectedCells.size > 0 && protectedCells.has(`${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`);
+  const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+  for (const cells of protectedCells.values()) if (cells.has(key)) return true;
+  return false;
 }
 
 // Steps a walk got stuck on (jumping at a ledge it never got up, fresh-world
@@ -75,19 +78,22 @@ const AVOID_STEP_MS = 60_000;
 // A cost, not a ban: the pathfinder drops any move over 100, and one stall in
 // the 1-wide shelter stairs must not block the only way in (architect review)
 const STUCK_STEP_COST = 15;
-// Its own shelter's stairs, doorways and room: never avoided
-const ownPassages = new Set<string>();
+// Its own shelter's stairs, doorways and room, and its mine stairs: never avoided
+const ownPassages = new Map<string, Set<string>>();
+const isOwnPassage = (key: string): boolean => {
+  for (const cells of ownPassages.values()) if (cells.has(key)) return true;
+  return false;
+};
 
-/** The cells of its own shelter (stairs, doorways, room): stalls there are never held against them. */
-export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>): void {
-  ownPassages.clear();
-  for (const c of cells) ownPassages.add(`${c.x},${c.y},${c.z}`);
+/** The cells of its own passages (shelter, mine stairs): stalls there are never held against them. */
+export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>, owner = "shelter"): void {
+  ownPassages.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
 }
 
 /** A step (the cell it was trying to move into) to route around for a while. */
 export function avoidStep(p: { x: number; y: number; z: number }): void {
   const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
-  if (ownPassages.has(key)) return;
+  if (isOwnPassage(key)) return;
   avoidedSteps.set(key, Date.now() + AVOID_STEP_MS);
 }
 
@@ -208,7 +214,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)
   const ownSpace = (block: { position?: { x: number; y: number; z: number } }): number =>
-    block.position && ownPassages.has(`${block.position.x},${block.position.y},${block.position.z}`) ? 10_000 : 0;
+    block.position && isOwnPassage(`${block.position.x},${block.position.y},${block.position.z}`) ? 10_000 : 0;
   const placeRules = (block: { position?: { x: number; y: number; z: number } }): number => keepOut(block) + ownSpace(block);
   moves.exclusionAreasPlace = [placeRules] as typeof moves.exclusionAreasPlace;
   moves.canOpenDoors = true; // fence gates

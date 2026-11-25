@@ -296,6 +296,67 @@ async function headroomForStep(next: Vec3): Promise<void> {
   }
 }
 
+/** Nothing to bump into: air, a torch, flowers, grass (no collision box). */
+const passable = (b: Block | null): boolean => Boolean(b) && b!.boundingBox === "empty" && !/water|lava/.test(b!.name);
+
+/**
+ * Stuck right next to a step that is open (it pushed against an open stair
+ * step of its own mine for minutes, though the pathfinder's own physics
+ * climbs it: owner, "THERE ARE WALKABLE PATH"). A player just walks onto it:
+ * face the step's middle, walk, and jump if it's one up. Takes over the keys
+ * for a moment; true when it ends up on the step.
+ */
+async function stepByHand(next: Vec3): Promise<boolean> {
+  if (!bot.entity || !bot.blockAt) return false;
+  const feet = bot.entity.position.floored();
+  const dy = next.y - feet.y;
+  const near = Math.abs(next.x - feet.x) <= 1 && Math.abs(next.z - feet.z) <= 1 && (next.x !== feet.x || next.z !== feet.z);
+  if (!near || dy < 0 || dy > 1) return false;
+  const floor = bot.blockAt(next.offset(0, -1, 0));
+  if (!floor || floor.boundingBox !== "block" || !passable(bot.blockAt(next)) || !passable(bot.blockAt(next.offset(0, 1, 0)))) return false;
+  // Room to jump: the cell over its head here (a climb pokes into it)
+  if (dy === 1 && !passable(bot.blockAt(feet.offset(0, 2, 0)))) return false;
+  const middle = next.offset(0.5, 0, 0.5);
+  const keys = (on: boolean): void => {
+    bot.setControlState("forward", on);
+    bot.setControlState("jump", on && dy === 1);
+    bot.setControlState("sprint", false);
+    bot.setControlState("sneak", false);
+  };
+  const onStep = (): boolean => {
+    const p = bot.entity.position;
+    return Math.abs(p.x - middle.x) <= 0.35 && Math.abs(p.z - middle.z) <= 0.35 && p.y >= next.y - 0.01;
+  };
+  try {
+    // (the walk already stopped; a reflex owns the keys while it's on)
+    for (let tick = 0; tick < 30 && !onStep() && !isAnyReflexActive(); tick++) {
+      const p = bot.entity.position;
+      await bot.look(Math.atan2(-(middle.x - p.x), -(middle.z - p.z)), 0, true);
+      keys(true);
+      await sleep(50);
+    }
+  } catch (error) {
+    console.log(`Couldn't step onto ${next} by hand: ${(error as Error).message}`);
+  } finally {
+    keys(false);
+  }
+  const done = onStep();
+  const p = bot.entity.position;
+  console.log(`Stepped onto ${next} by hand: ${done ? "made it" : `no, still at ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`}.`);
+  return done;
+}
+
+/** What the bot's keys and body were doing when a walk stalled (to explain it from the log). */
+function controlsNow(next: { x: number; z: number } | null): string {
+  const c = (bot.controlState ?? {}) as unknown as Record<string, boolean>;
+  const held = (["forward", "back", "left", "right", "jump", "sprint", "sneak"] as const).filter((k) => c[k]);
+  const deg = (r: number): number => Math.round((r * 180) / Math.PI);
+  const p = bot.entity.position;
+  const want = next ? `, path wants ${deg(Math.atan2(-(Math.floor(next.x) + 0.5 - p.x), -(Math.floor(next.z) + 0.5 - p.z)))}` : "";
+  const effects = Object.keys(bot.entity.effects ?? {}).length;
+  return `keys ${held.join("+") || "none"}, facing ${deg(bot.entity.yaw)}${want}${effects ? `, ${effects} effects` : ""}`;
+}
+
 /** The block it stands on: under its middle, or (on an edge) under a corner of its body. */
 function blockUnderMe(): Block | null {
   if (!bot.entity || !bot.blockAt) return null;
@@ -333,7 +394,7 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDow
   return result;
 }
 
-async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise<ActionResult> {
+async function walkTo(goal: Goal, options: { timeoutMs?: number; steppedByHand?: boolean } = {}): Promise<ActionResult> {
   const g = goal as unknown as Partial<Pos>;
   const spot = typeof g.x === "number" && typeof g.y === "number" && typeof g.z === "number" ? { x: g.x, y: g.y, z: g.z } : null;
   if (spot) {
@@ -353,6 +414,13 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
     lastPath = `${r.status}, ${r.path.length} moves${how}`;
   };
   bot.on?.("path_update" as never, onPath as never);
+  // Times the server put it back where it was (it refused a move): a stall
+  // against an open step may be the server saying no
+  let movedBack = 0;
+  const onForced = (): void => {
+    movedBack++;
+  };
+  bot.on?.("forcedMove" as never, onForced as never);
   const block = (dy: number): string => bot.blockAt(bot.entity.position.floored().offset(0, dy, 0))?.name ?? "?";
   const watchdog = walkWatchdog(
     () =>
@@ -366,7 +434,8 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
             const at = (dy: number): string => bot.blockAt(new Vec3(Math.floor(n.x), Math.floor(n.y) + dy, Math.floor(n.z)))?.name ?? "?";
             return `; next step: floor ${at(-1)}, feet ${at(0)}, head ${at(1)}, over head ${at(2)}`;
           })()
-        : "")
+        : "") +
+      `; ${controlsNow(nextStep)}, server moved me back ${movedBack} times`
   );
   try {
     const walked = await guarded("walking", (signal) => pathing.goto(goal, signal), {
@@ -380,16 +449,22 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
       // (set by the path listener; TypeScript can't see that)
       const stuckOn = nextStep as { x: number; y: number; z: number } | null;
       if (walked.reason === "timeout" && stuckOn) {
-        avoidStep(stuckOn);
         const next = new Vec3(Math.floor(stuckOn.x), Math.floor(stuckOn.y), Math.floor(stuckOn.z));
         await resyncStep(next);
         await headroomForStep(next);
+        // Open step right there: walk onto it by hand and carry on the walk
+        if (!options.steppedByHand && (await stepByHand(next))) {
+          watchdog.stop();
+          return walkTo(goal, { ...options, steppedByHand: true });
+        }
+        avoidStep(stuckOn);
       }
       return walked;
     }
   } finally {
     watchdog.stop();
     bot.removeListener?.("path_update" as never, onPath as never);
+    bot.removeListener?.("forcedMove" as never, onForced as never);
     // Only a walk in progress can be blamed for being stuck (not one that ended, at a chest or a table)
     if (spot && lastGoal === spot) lastGoal = null;
   }

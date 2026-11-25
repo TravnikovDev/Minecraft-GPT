@@ -11,6 +11,7 @@
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
+import { protectCells, setOwnPassages } from "../core/movements";
 import { goTo } from "../core/primitives";
 import { fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
@@ -93,6 +94,42 @@ function mineRecord(): MineRecord | null {
   };
 }
 
+/**
+ * Its mine stairs off limits to walks and collecting: each step's floor, and
+ * its side walls except at the hubs (their tunnels start there). A walk stuck
+ * on a step dug around it and broke the stairs (owner: "unacceptable"). The
+ * steps themselves are its own passage: a stall there never sends it round
+ * through the caves. The doorway (step 0) is the shelter's.
+ */
+export function protectMine(): void {
+  const rec = mineRecord();
+  if (!rec) {
+    protectCells([], "mine");
+    setOwnPassages([], "mine");
+    return;
+  }
+  const { keep, walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level);
+  protectCells(keep, "mine");
+  setOwnPassages(walk, "mine");
+}
+
+/** The stairs' protected cells (floors, side walls but the hubs') and walking cells (each step's feet, head and the cell above). Pure. */
+export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number): { keep: Vec3[]; walk: Vec3[] } {
+  const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
+  const sides = [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]];
+  const keep: Vec3[] = [];
+  const walk: Vec3[] = [];
+  for (let i = 0; i < stairs; i++) {
+    const s = stepAt(start, dir, i);
+    walk.push(s, s.offset(0, 1, 0), s.offset(0, 2, 0));
+    if (i === 0) continue;
+    keep.push(s.offset(0, -1, 0));
+    if (hubs.has(i)) continue;
+    for (const side of sides) for (let dy = -1; dy <= 2; dy++) keep.push(s.plus(side).offset(0, dy, 0));
+  }
+  return { keep, walk };
+}
+
 async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
   const keep = levels ?? (() => {
@@ -106,6 +143,7 @@ async function saveMine(start: Pos, direction: DirectionType, stairs: number, br
     ...start,
     details: { direction, depth: MINE_DEPTH, stairs, done: bottom !== null, endsAt: { x: endsAt.x, y: endsAt.y, z: endsAt.z }, branches, ...keep },
   });
+  protectMine();
 }
 
 /** Its mine under the shelter, once the stairs are dug: the bottom, the direction and branches done. */

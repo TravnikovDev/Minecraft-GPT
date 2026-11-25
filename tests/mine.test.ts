@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { mineBottom, MINE_DEPTH, nextArm, armDirection, hubStep, ARM_LENGTH, LEVEL_STEP, stepsToPave } = await import(`${ROOT}/src/skills/mine.ts`);
+const { mineBottom, MINE_DEPTH, nextArm, armDirection, hubStep, ARM_LENGTH, LEVEL_STEP, stepsToPave, mineStairCells } = await import(`${ROOT}/src/skills/mine.ts`);
 
 test("the stairs end 10 down and 10 on from the exit", () => {
   const b = mineBottom({ x: 10, y: 65, z: -17 }, "north");
@@ -47,4 +47,23 @@ test("paving: every step below the doorway with a step below it, hubs left flat"
   expect(deep).not.toContain(10);
   expect(deep).not.toContain(30);
   expect(deep.length).toBe(28);
+});
+
+test("the stairs' floors and side walls are kept; hubs stay open to the sides; the doorway is the shelter's", () => {
+  // Stairs south from (0, 64, 0): step i stands at (0, 64 - i, i)
+  const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", 12, 0);
+  const has = (cells: Array<{ x: number; y: number; z: number }>, x: number, y: number, z: number): boolean => cells.some((c) => c.x === x && c.y === y && c.z === z);
+  // Step 5: floor under it, walls east and west from floor to above the head
+  expect(has(keep, 0, 58, 5)).toBe(true);
+  for (const dy of [-1, 0, 1, 2]) {
+    expect(has(keep, 1, 59 + dy, 5)).toBe(true);
+    expect(has(keep, -1, 59 + dy, 5)).toBe(true);
+  }
+  // Never the step's own cells (it walks there) nor the doorway
+  expect(has(keep, 0, 59, 5)).toBe(false);
+  expect(has(keep, 0, 63, 0)).toBe(false);
+  // The hub (step 10): floor kept, sides open for the right and left tunnels
+  expect(has(keep, 0, 53, 10)).toBe(true);
+  expect(has(keep, 1, 54, 10)).toBe(false);
+  expect(has(walk, 0, 59, 5)).toBe(true);
 });

@@ -5,7 +5,9 @@
 // (nothing holds the jump key once the pathfinder gives up).
 
 import { bot, onConnectionEnd } from "../core/body";
+import { Vec3 } from "vec3";
 import { lookToward, setControl } from "../core/primitives";
+import { avoidStep } from "../core/movements";
 import { pathing, takeOverBody } from "../core/plugins";
 import { asReflex, setReflexActive } from "../core/reflexes";
 
@@ -46,6 +48,22 @@ function isWaterAt(dy: number): boolean {
 
 const headUnderwater = (): boolean => isWaterAt(1.62);
 
+/**
+ * True when pushing forward could carry it off a drop: the spot ahead has no
+ * floor or water within a few blocks below. At the top of a waterfall it swam
+ * out into the open and fell ten blocks, three times, and died (owner's game).
+ */
+function dropAhead(): boolean {
+  const p = bot.entity.position;
+  const ahead = new Vec3(p.x - Math.sin(bot.entity.yaw) * 0.8, p.y, p.z - Math.cos(bot.entity.yaw) * 0.8).floored();
+  for (let dy = 0; dy >= -3; dy--) {
+    const b = bot.blockAt(ahead.offset(0, dy, 0));
+    if (!b) return true;
+    if (b.boundingBox === "block" || WATER_BLOCKS.has(b.name)) return false;
+  }
+  return true;
+}
+
 function finish(): void {
   if (!active) return;
   active = false;
@@ -81,6 +99,12 @@ function tick(): void {
         `(at ${bot.entity.position.toString()}, feet ${at(0.2)}, head ${at(1.62)}, above ${at(2.6)}, ` +
         `jump ${bot.getControlState("jump")}, pathing ${pathing.isMoving()}, vy ${bot.entity.velocity.y.toFixed(2)}).`
     );
+    // Out of air on a walk: the way went through water too deep to breathe
+    // in (up a waterfall); the next walks go another way for a while
+    if (pathing.isMoving()) {
+      const feet = bot.entity.position.floored();
+      for (let dy = -3; dy <= 1; dy++) if (isWaterAt(dy + 0.2)) avoidStep(feet.offset(0, dy, 0));
+    }
     setReflexActive("drowning", true);
     takeOverBody(); // take over movement from whatever task is running
   }
@@ -91,9 +115,10 @@ function tick(): void {
   }
   // Swim up: jump is "swim up" in water; looking up and pushing forward
   // slides the bot out from under overhangs and onto the shore
+  // (never off a drop: only up, there)
   void lookToward(bot.entity.yaw, Math.PI / 4);
   setControl("jump", true);
-  setControl("forward", true);
+  setControl("forward", !dropAhead());
 }
 
 /** Starts the reflex for the current bot instance. */

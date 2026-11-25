@@ -108,6 +108,7 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
   protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
+  void import("./skills/mine").then((m) => m.protectMine()); // and its mine stairs (lazy: skills load commands)
   everyWhileConnected(currentBot, 5_000, considerOpportunities); // ores in sight go on the task list at their priority (skills/opportunities)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
