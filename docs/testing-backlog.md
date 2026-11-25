@@ -4,6 +4,32 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Past the first day: mine, iron, and the hang at open steps (2026-11-25 to 26, see Log Entry 15)
+
+**Seen working in the owner's game**
+- [x] First day 6 of 6 in a new world, then on into the mine by itself
+- [x] Coal, 10 raw iron, smelted at home, an iron pickaxe, iron tools
+- [x] Hub mine: forward 50, right blocked, left 50, then "digging the stairs 20 steps deeper", and the next level's forward tunnel
+- [x] Water next to a tunnel is plugged and it digs on; scaffolding comes down after a trip; it works on in the mine at night
+- [x] Up a tree at spawn → onto the trunk and chops it from the top down
+- [x] Shelter checked after a restart and mended (holes over the doorway, the door to the mine)
+- [x] After the face fix (`4e219f0`): long walks, hunting 55–80 blocks out and the mine stairs with no "Walk stalled" lines; "server moved me back" stays near 0
+- [x] After a death with a shelter and a bed: "Home. Putting things away, cooking and checking my tools." then "Done at home."
+- [x] No pickaxe, cobblestone in its chests → takes it from the chest and makes stone tools (no "I don't know how to get cobblestone")
+
+**Not yet seen**
+- [ ] Stairs deeper over water or a cave two blocks from anything solid → "Filled the hole … (2 support blocks from … first)" and the stairs go on
+- [ ] Start of a mining trip with coal → holes in the stairs' floor or side walls filled, a torch every 6 dark steps (log: "Mine: looked after my stairs: N holes filled, M torches put up.")
+- [ ] Stuck on a step in its own stairs → never digs into the stairs' floor or side walls; never wanders off through the caves
+- [ ] Out of air in water on a walk → swims up but never forward off a drop; the next walk goes another way
+- [ ] Hunting far from home with raw meat → walks home and cooks in the shelter's furnace, with coal or wood from its chests; no new table or furnace out there
+- [ ] Owner beside it when it dies → no "Got …, thanks!" for its own things; a real toss still thanked
+- [ ] Monsters near its bed all night → "There are monsters nearby, so I can't sleep." once, not every 30 s
+- [ ] 200 cobblestone in its chests → the stairs made a block higher and paved with cobblestone stairs
+- [ ] Iron armour, 3 diamonds, a diamond pickaxe (Tier 3 milestones)
+- [ ] Berry bushes → walks around them at one block, never through
+- [ ] The owner's commands by their names after the one command list (`ed9151d`): "set base here" (now `setBase`), "go home and tidy up" (`homeChores`)
+
 ## Fixes from the 2026-11-25 hillside game test (not yet re-tested)
 
 The shelter was built into a hill under a tree and its mine came out into a ravine. Re-check in a world with hills and caves:
@@ -22,7 +48,7 @@ The bot can now live its own life when the owner lets it: it works through a pla
 Best in a **fresh world**: open it to LAN, start the bot, and say "go live your life".
 
 **The plan's checks**
-- [ ] (5 of 6 in the first run: no sheep for the bed within 150 blocks) Fresh world, "go live your life" → within a game day: "Milestone: wooden tools (1 of 6 …)", then a shelter, stone tools, food, a bed, chests, and finally "I've got everything for my first day …"
+- [x] (5 of 6 in the first run; 6 of 6 in the hillside world, Log Entry 15) Fresh world, "go live your life" → within a game day: "Milestone: wooden tools (1 of 6 …)", then a shelter, stone tools, food, a bed, chests, and finally "I've got everything for my first day …"
 - [ ] Give it an order halfway ("come here") → it comes; a few seconds after, it goes back to the milestone it was on
 - [ ] "stop" while it works on a milestone → it stops, and doesn't start the next one for a minute
 
@@ -35,7 +61,7 @@ Best in a **fresh world**: open it to LAN, start the bot, and say "go live your 
 **The planner (acquire)**
 - [ ] Empty inventory, "make a stone pickaxe" → chops a tree, makes a table, a wooden pickaxe, mines stone, then the stone pickaxe; no back-and-forth loop
 - [ ] No trees within reach (a desert or the ocean) → gives up within a minute or two with "couldn't get … logs", not forever
-- [ ] Its pickaxe breaks while mining → it makes a new one from what it carries (no trip to gather)
+- [x] Its pickaxe breaks while mining → it makes a new one (stone, from its chests' cobblestone; never wood once it has had stone)
 
 **The progression tree**
 - [ ] Fresh world, no coal in sight, "make 4 torches" → wood, a table, a wooden pickaxe, cobblestone, a furnace put down, charcoal from logs, then torches

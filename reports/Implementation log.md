@@ -666,3 +666,64 @@ The architect was consulted on the design before building and reviewed the resul
   - "craft one more please" picked the stone-tools set command.
 - **In-game checks:** `docs/testing-backlog.md`, Phase 6, with a list of re-checks.
 - **Next:** finish the first day (sheep), then Phase 7, where the LLM decides what to do when it's idle or stuck.
+
+## Entry 15: Playing past the first day, and the hang at open steps (2026-11-25 to 26)
+
+**Planned.**
+- Finish the first day (Phase 6 deliverable) in the owner's game, then keep the bot playing like a player: shelter, mine, coal, iron.
+- Fix what the owner reports from the game, one screenshot at a time.
+
+**What happened**
+- **First day 6 of 6** in a new hillside world ("Bubu without Dudu"), then on by itself into the mine: coal, 10 raw iron, 11 ingots smelted at home, an iron pickaxe and iron tools.
+- **Owner's direction, in order** (each one implemented):
+  - the shelter is the owner's original design: its walls, roof and floor built or mended, never logs or leaves; its furniture set up in the original order (fetch everything, then place from each row so chests pair up); every building has its own crafting table;
+  - a door to the mine; after a restart it checks the shelter against its plan and mends it (creeper holes);
+  - replanting waits until the first day is done; gathering from the world takes a 10–30% margin (20%), never crafting;
+  - up a tree, it stands on the trunk and chops it from the top down;
+  - the walking rules stay at the pathfinder's defaults ("less limits, less bugs"), apart from the owner's own rules;
+  - at night: cook raw meat in the furnace, and keep mining under ground (home first); keep torches, coal, sticks and wood;
+  - mining: scaffolding comes down, iron is smelted once there are 10, worn-out tools are replaced with stone or iron, never wood;
+  - the hub mine plan: from the end of the stairs dig forward, right and left 50 blocks each (a blocker ends that one), then the same diagonal stairs 20 steps further down, and repeat;
+  - strip mining takes every ore in sight; after 200 cobblestone the stairs are made a block higher and paved with cobblestone stairs;
+  - berry bushes are walked around, by one block only;
+  - after a death, with a shelter and a bed, it goes home to its chores, not back to the owner.
+- **The hang at open steps.** For a day it hung at steps it could plainly climb: its own mine stairs, ledges, grass (owner: "THERE ARE WALKABLE PATH"). Simulating the pathfinder on the real blocks read from the world save, it climbed fine. The stall log was extended step by step (keys, facing, the blocks touching its body, server teleports) until it showed the cause: the server put it back **20–30 times a second**, always to a position like x = -32.3. There its body's side is exactly on a block face, and in floating point -32.3 + 0.3 is -31.999999999999996, a hair inside the block. mineflayer's physics only stops a body at blocks it isn't already in, so it walked 0.02 into the block, the server refused the move and put it back, forever.
+- **Side effects of the hang:**
+  - a walk stuck on a step dug around it and broke the stairs (owner: "unacceptable"), then wandered through the caves;
+  - swimming up a waterfall to get home, it ran out of air at the top; the drowning reflex pushed it forward off the top and it fell, three times, and died.
+- **Other problems seen:**
+  - it lost its pickaxes and "didn't know how to get cobblestone" with a pile of it in its chests;
+  - its deeper stairs stopped over water two blocks from anything solid, and the mine was marked as deep as it goes, so coal and iron stopped for good;
+  - a skeleton in its dark mine stairs shot it at its own door, twice;
+  - 80 blocks from home it made a spare crafting table and a furnace, then had no fuel;
+  - it thanked the owner for its own death drops; it said "can't sleep" every 30 seconds.
+- **A question left with the owner:** the side tunnels every few blocks along the main tunnel were dropped when the hub plan replaced them, without asking first. Whether to bring them back is the owner's call.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Shelter, the owner's design | Shell built and mended, tree blocks replaced (`8947753`, `9b6ee38`); furniture in the original order (`1726fef`, `4d65bda`); a door to the mine and a check against the plan after restarts (`8cf2801`, `a653183`) |
+| First-day order | Replanting last (`549076e`); a 20% margin for gathering only (`cb3a59c`, `0cd6341`); down a tree from the top (`5f5ba41`, `f56e881`) |
+| Walking | Defaults restored (`02dc1ba`); home in legs, around berry bushes (`9c477d1`, `87ff5b1`); longer think for hard paths (`e79cc66`) |
+| Mining and iron | Night mining (`77d15a1`, `1353b7c`); scaffolding down, worn pickaxe sends it home (`477cc3c`); iron at 10 (`8a6f95b`); no wooden tools after stone (`aabed8e`); water and lava plugged (`6f8154b`, `b707e9d`); hub plan (`c1454bf`, `cfc2f63`); strip mining (`ae03761`); paving (`cb3b6fd`); Tier 3 milestones (`a2cc30e`) |
+| **The hang at open steps** | After every server teleport and physics tick, the bot is pushed a millionth of a block off any face it overlaps by less than 0.0001 (`core/faces.ts`, `4e219f0`). Fuller stall log and a hand step as a fallback (`50d1ee3`, `5a5afe9`, `2b987cc`) |
+| Stairs broken by a walk | Each step's floor and side walls are protected like the shelter's shell, and the steps are its own passage (`2b987cc`) |
+| Waterfall deaths | The drowning reflex never pushes forward over a drop; water that ran it out of air is avoided for a minute (`2b987cc`) |
+| No cobblestone with a chest full | The planner takes raw materials from its own chests within 96 blocks first (`e8910bd`) |
+| Stairs stopped over water | Up to three support blocks bridge to a floor with nothing solid beside it (`583cd0f`); the "as deep as it goes" mark was cleared in the world file |
+| Dark stairs, spare table and furnace, gifts, can't-sleep | Holes in the stairs mended and a torch every 6 dark steps at the start of each mining trip; the shelter's table counts from 256 blocks; meat cooked at the shelter's furnace with fuel from its chests; no gift within 5 s of its own death or nearer its own hands; the same can't-sleep said once in 10 minutes (`8d4b237`) |
+| After a death | Home chores: store, cook, smelt, make missing tools (`d99c50b`) |
+| Phase 6 cleanup | One command list (`src/commands/all.ts`) and one `isHostile` (`ed9151d`) |
+
+**Outcome and what follows**
+- **Tests:** 215 pass.
+- **Seen working in the game:**
+  - the first day, 6 of 6; coal, iron, smelting, an iron pickaxe and iron tools;
+  - the hub plan through one level: forward 50, right blocked, left 50, then the stairs 20 steps deeper, and the next level's forward tunnel;
+  - water plugged, scaffolding taken down, night mining, the climb down a tree, the shelter mended;
+  - after the face fix: long walks, hunting trips and the mine stairs with no stall at all (the server put it back twice in half an hour instead of 20–30 times a second);
+  - home chores after a death, and stone tools from the cobblestone in its chests.
+- **Not yet seen:** bridging over water, the stairs looked after (holes and torches), cooking at home after a far hunt, the gift and can't-sleep fixes, paving, iron armour and diamonds.
+- **Phase 6 left to close:** the split of `worldInteraction.ts`; the 2–3 seed run the plan asks for (forest, plains, cherry).
+- **Next:** Phase 7, the diary and the LLM day planner.
