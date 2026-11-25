@@ -606,3 +606,63 @@ The architect was consulted on the design before building and reviewed the resul
   - the Sleep and Hunting commands still talk through old `bot.chat` lines.
 - **In-game checks:** `docs/testing-backlog.md`, Phase 6.
 - **Next:** test the first day in a fresh world; then Phase 7.
+
+## Entry 14: First game test of Phase 6, a fresh world (2026-11-25)
+
+**Planned.**
+- Run the first day in a fresh 1.20.4 LAN world: "go live your life", then watch.
+- Fix what shows up.
+
+**What happened**
+- **Result: 5 of 6 milestones** by itself: wooden tools, a shelter, stone tools, two chests, a food stock.
+- **Bed:** no sheep within about 150 blocks in that savanna; it keeps retrying in new directions.
+- **Owner requests mid-test:**
+  - memory kept separately per world;
+  - the bot must decide for itself when it lives its own life ("I won't reply to his questions; he must decide on his own or ask ChatGPT").
+- **Problems seen, in order:**
+  - "make an iron pickaxe" said "I don't know how to get iron ingot": the craft command didn't use the new planner.
+  - "gather cobblestone" never worked: it looked for cobblestone blocks.
+  - The scaffold cleanup timer threw every 5 s (`blockAt` given a plain object).
+  - "come here" stood 20 s and then got "stuck" (4 of 5 times): a `GoalFollow` loses its path whenever the owner moves 2 blocks.
+  - The owner reported heavy lag between actions: fixed pauses from before Phase 3 (1.2 s per log, 2.5 s per tree, 1 s per tunnel block) on top of the per-dig server check.
+  - The furnace for food never went down: grass taken for ground, and the bot's own cell offered as a spot.
+  - "Keep hunting? (yes/no)" asked on its own errands.
+  - **It sealed itself out of its shelter**, owner's screenshot. The "standing in the spot" check measured from the block's corner, so the neighbouring cell counted; it walked back up the stairs and sealed from outside. That night a spider and a zombie killed it.
+  - Every deposit into its chests was reported refused: the check counted `bot.inventory`, which mineflayer updates only when the chest window closes.
+  - With 0 food and nothing near, it stood idle: no fallback.
+  - Two process slips of mine:
+    - a commit went in with 6 failing tests, because my command chain didn't stop on the failed check; repaired one commit later;
+    - the world memory looked like it loaded after spawn, which was only the log line printing late.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Memory per world | `worlds/<id>.json`, keyed by the hashed seed in the login and respawn packets, loaded before mineflayer handles the login; nothing is saved before a world is known. The old `db.json` is left alone and unused (`d11a43b`, `18a27cb`) |
+| Crafting and the tree | `CraftItem` says what the tree needs ("iron ingot: smelted from raw iron in a furnace; raw iron needs a stone pickaxe"), asks once, then runs the planner. "Cobblestone" is mined from stone (`d11a43b`) |
+| Walking | "come here" walks fixed legs re-aimed at the owner (`bc39d7f`). A walk that makes no progress now logs where it stands, the goal, the pathfinder's last path and the blocks at its feet (`650ff41`) |
+| Pace | The fixed pauses in wood gathering and tunnels are gone; every log line has a timestamp (`00961dc`) |
+| Placement | Solid ground only, never the bot's cell (`650ff41`); it steps aside only when its 0.6 x 1.8 body really overlaps the cell (`821aad5`) |
+| Chests | Transfers count from the open chest window (`525d05a`) |
+| Its own decisions | `askOwner` on its own errands (bucket 3 and up) takes the bot's own answer and logs it. `skills/explore` walks legs of about 48 blocks in an untried direction until animals or sheep are in sight; the food stock and the sheep source use it (`a4e32f9`) |
+| Arbiter | A task is recorded as running before its code starts, so code before its first pause sees itself running (`a4e32f9`) |
+
+**Outcome and what follows**
+- **Tests:** 179 pass.
+- **Seen working after the fixes:**
+  - sealed in from inside;
+  - a whole night without "stuck";
+  - out again in the morning;
+  - explored south-east for food, hunted 4 pigs and cooked them;
+  - 5 of 6 milestones.
+- **Not yet seen:**
+  - the bed (sheep);
+  - storing in the chests after the fix;
+  - "come here" at night through the seal;
+  - the craft command's tree path;
+  - a second world.
+- **Still open:**
+  - its first death has no known cause (health was already low before the restarts);
+  - "craft one more please" picked the stone-tools set command.
+- **In-game checks:** `docs/testing-backlog.md`, Phase 6, with a list of re-checks.
+- **Next:** finish the first day (sheep), then Phase 7, where the LLM decides what to do when it's idle or stuck.
