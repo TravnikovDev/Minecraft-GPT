@@ -8,9 +8,8 @@ import { catalog } from "../core/catalog";
 import { fail, ok, type ActionResult } from "../core/result";
 import { craftNow, planCraft } from "../actions/craftPlanner";
 import { gatherWood } from "../actions/gatherWood";
-import { collectBlock } from "../actions/collectBlock";
 import type { AcquireWorld, Source } from "./acquire";
-import { carried, hasTableAccess, shelter, TIER, toolTier } from "./capabilities";
+import { carried, hasTableAccess, TIER, toolTier } from "./capabilities";
 import { pickaxeFor, smeltedFrom, STANDS_IN_FOR } from "./techTree";
 
 /** True when every recipe for the item needs a crafting table (3x3). */
@@ -41,11 +40,10 @@ export const SOURCES: Source[] = [
     needs: () => (toolTier("pickaxe") >= TIER.wooden ? [] : [{ item: "wooden_pickaxe", count: 1 }]),
     run: async (_m, count) => {
       const before = carried("cobblestone");
-      // Like a player: from its mine under the shelter, not a hole wherever it stands
-      if (shelter()) {
-        const { mineFor } = await import("./mine");
-        await mineFor("cobblestone", count);
-      } else await collectBlock("stone", count, 32);
+      // The owner's rules (skills/mine mineFor): in sight, the first mine
+      // stairs, or the mine; never a hole wherever it stands
+      const { mineFor } = await import("./mine");
+      await mineFor("cobblestone", count);
       return got(before, carried("cobblestone"), "stone");
     },
   },
@@ -77,12 +75,9 @@ export const SOURCES: Source[] = [
     },
     run: async (m, count) => {
       const before = carried(m);
-      // Down its mine, carrying on with the tunnel (ores near the surface
-      // are only for before it has a shelter)
-      if (shelter()) {
-        const { mineFor } = await import("./mine");
-        await mineFor(m, count);
-      } else await collectBlock(m, count, 48);
+      // In sight, or down its mine with a stone pickaxe (skills/mine mineFor)
+      const { mineFor } = await import("./mine");
+      await mineFor(m, count);
       return got(before, carried(m), m.replace(/_/g, " "));
     },
   },

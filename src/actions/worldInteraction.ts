@@ -2,6 +2,7 @@
 
 import { collectDrops } from "./pickup";
 import { bot } from "../core/body";
+import { getMemory } from "../managers/persistenceManager";
 import { catalog } from "../core/catalog";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
@@ -115,7 +116,10 @@ export async function replaceBrokenTool(block: Block): Promise<boolean> {
     // Only from what it carries (never going off for wood or stone: if it
     // can't, the "no_tool" failure goes up and the planner sorts it out)
     const { craftNow, planCraft } = await import("./craftPlanner");
-    const best = ["netherite", "diamond", "iron", "stone", "wooden"]
+    // Never back down to wood once it has had stone tools (a stone pickaxe
+    // breaking in the mine must not turn into a wooden one; owner's rule)
+    const hadStone = Boolean(getMemory().milestones?.["stone_tools"]);
+    const best = ["netherite", "diamond", "iron", "stone", ...(hadStone ? [] : ["wooden"])]
       .map((tier) => `${tier}_${kind}`)
       .find((item) => bot.registry.itemsByName[item] && planCraft(item, 1).missing.length === 0);
     if (!best) return false;

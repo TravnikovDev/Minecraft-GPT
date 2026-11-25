@@ -127,15 +127,17 @@ test("less valuable means junk, bulk and ordinary materials; gems, ingots and ge
   expect(itemValue("coal")).toBe(2);
   expect(itemValue("diamond")).toBe(3);
   expect(itemValue("iron_ingot")).toBe(3);
+  // A single cobblestone stays now (up to 32 is kept for building); leather goes
   const stacks = ["cobblestone", "leather", "diamond", "iron_ingot", "iron_pickaxe", "bread", "torch"].map((n) => item(n, 1));
-  expect(chooseToStore(stacks, "lowValue").map((d: any) => d.stack.name)).toEqual(["cobblestone", "leather"]);
+  expect(chooseToStore(stacks, "lowValue").map((d: any) => d.stack.name)).toEqual(["leather"]);
 });
 
-test("a working supply of coal, sticks and logs stays, and so does what the job is collecting", () => {
+test("a working supply of coal, sticks, logs and building stone stays, and so does what the job is collecting", () => {
   const stacks = [item("coal", 64), item("coal", 12), item("oak_log", 5), item("stick", 3), item("raw_iron", 17), item("cobblestone", 64)];
   const plan = chooseToStore(stacks, "lowValue", [], ["iron_ore", "raw_iron"]).map((d: any) => [d.stack.name, d.count]);
-  // 16 coal kept (out of 76): 48 from the first stack, all 12 of the second
-  expect(plan).toEqual([["coal", 48], ["coal", 12], ["cobblestone", 64]]);
+  // 16 coal kept (out of 76): 48 from the first stack, all 12 of the second;
+  // 32 cobblestone kept for building and patching
+  expect(plan).toEqual([["coal", 48], ["coal", 12], ["cobblestone", 32]]);
 });
 
 test("full with no chest: it makes one, places it and fills it with the cheap stuff", async () => {

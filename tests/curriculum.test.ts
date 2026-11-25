@@ -222,7 +222,7 @@ test("a blocked first-day milestone holds the mine back until the day is done", 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
-  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests", "mine", "coal", "iron"]);
+  expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "iron"]);
   expect(REAL.find((m) => m.id === "chests")?.title).toContain("chests, furnace, table");
 });
 
@@ -247,3 +247,37 @@ test("a milestone given up as stuck is set aside; it goes on to the next", async
   for (let i = 0; i < 60 && !done.has("food"); i++) await sleep(50);
   expect(runs).toEqual(["tools", "food"]);
 }, 10_000);
+
+test("the owner's order holds even when a milestone is set aside: no stone tools before the shelter", () => {
+  const list = [fakeMilestone("shelter"), { ...fakeMilestone("stone_tools"), requires: ["shelter"] }, { ...fakeMilestone("mine"), tier: 2, requires: ["stone_tools"] }];
+  // The shelter set aside: stone tools must not jump ahead
+  expect(M.nextMilestone(list, (id: string) => id === "shelter")).toBeNull();
+  done.add("shelter");
+  expect(M.nextMilestone(list)?.id).toBe("stone_tools");
+  done.add("stone_tools");
+  expect(M.nextMilestone(list)?.id).toBe("mine");
+  // The real list: furniture after stone tools, the mine after furniture
+  const real = Object.fromEntries(REAL.map((m) => [m.id, m.requires ?? []]));
+  expect(real["stone_tools"]).toContain("shelter");
+  expect(real["chests"]).toEqual(["shelter", "stone_tools"]);
+  expect(real["mine"]).toEqual(["stone_tools", "chests"]);
+});
+
+test("a shelter only where the room is really underground: solid walls and roof, no sand overhead", () => {
+  const { shelterPlan, shellIsSolid } = realShelter;
+  const plan = shelterPlan({ x: 0, y: 70, z: 0 }, "south");
+  const roof = plan.roomStart.y + 3;
+  const solid = () => ({ name: "dirt", boundingBox: "block" });
+  expect(shellIsSolid(plan.shell, roof, solid)).toBe(true);
+  // A hillside: the roof's far end is open air
+  const hillside = (p: any) => (p.y >= roof && p.z >= 9 ? { name: "air", boundingBox: "empty" } : solid());
+  expect(shellIsSolid(plan.shell, roof, hillside)).toBe(false);
+  // A beach: sand over the room falls in
+  const beach = (p: any) => (p.y >= roof ? { name: "sand", boundingBox: "block" } : solid());
+  expect(shellIsSolid(plan.shell, roof, beach)).toBe(false);
+  // The doorways are left open: not part of the shell
+  const key = (p: any) => `${p.x},${p.y},${p.z}`;
+  const shell = new Set(plan.shell.map(key));
+  expect(shell.has(key(plan.entrance))).toBe(false);
+  expect(shell.has(key(plan.exit))).toBe(false);
+});

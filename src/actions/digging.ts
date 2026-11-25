@@ -396,16 +396,15 @@ export async function ensureBlock(position: Vec3): Promise<void> {
   const isHole = blockToCheck?.boundingBox === "empty" || blockToCheck?.name === "water" || blockToCheck?.name === "lava";
   if (!isHole) return;
 
-  // What a miner carries: the stone it dug out, then dirt, then planks
-  const filler = ["cobblestone", "cobbled_deepslate", "dirt", "netherrack", "planks"].find((name) => getItemCount(name) > 0);
+  // Dirt first, then stone; never planks (stone and wood are for tools; the
+  // shelter burned its cobblestone on floors and couldn't make stone tools)
+  const filler = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((name) => getItemCount(name) > 0);
   if (!filler) {
     console.log("I have nothing to fill a hole in the floor with; leaving it.");
     return;
   }
-  const stubName = filler ?? "planks";
-  const placeName = stubName === "planks" ? (bot.inventory.items().find((i) => i.name.endsWith("_planks"))?.name ?? "oak_planks") : stubName;
-  await placeBlock(placeName, position.x, position.y, position.z);
-  console.log(`Placed ${placeName} at ${position} to fix a hole.`);
+  await placeBlock(filler, position.x, position.y, position.z);
+  console.log(`Placed ${filler} at ${position} to fix a hole.`);
 }
 
 /**

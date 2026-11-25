@@ -17,8 +17,8 @@ import { addPlace, getPlaces } from "../managers/persistenceManager";
 import { currentDimension } from "../actions/perception";
 import { digDiagonalTunnel, digStraightTunnel, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
-import { ensurePickaxe } from "../actions/ensureTools";
 import { shelterSlots } from "../actions/building";
+import { TIER, toolTier } from "./capabilities";
 import { catalog } from "../core/catalog";
 
 export const MINE_DEPTH = 10;
@@ -44,29 +44,70 @@ export function branchAt(bottom: Pos, dir: DirectionType, k: number): { main: Ve
   return { main: new Vec3(bottom.x, bottom.y, bottom.z).plus(STEP[dir].scaled(BRANCH_EVERY * k)), left: LEFT[dir], right: RIGHT[dir] };
 }
 
-/** Its mine under the shelter, if dug: the bottom of the stairs, the direction and branches done. */
-export function myMine(): { bottom: Vec3; direction: DirectionType; branches: number; start: Pos } | null {
+/** The mine record (stairs maybe not finished): stairs dug so far, branches done. */
+function mineRecord(): { start: Pos; direction: DirectionType; stairs: number; branches: number } | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
   if (!mine) return null;
-  const d = (mine.details ?? {}) as { direction?: DirectionType; endsAt?: Pos; branches?: number };
-  if (!d.direction || !d.endsAt) return null;
-  return { bottom: new Vec3(d.endsAt.x, d.endsAt.y, d.endsAt.z), direction: d.direction, branches: d.branches ?? 0, start: { x: mine.x, y: mine.y, z: mine.z } };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number };
+  if (!d.direction) return null;
+  // Older records (one dig, saved when done) had their full depth
+  return { start: { x: mine.x, y: mine.y, z: mine.z }, direction: d.direction, stairs: d.stairs ?? d.depth ?? 0, branches: d.branches ?? 0 };
 }
 
-/** Digs the stairs down from the shelter's exit (once). */
-export async function digMine(): Promise<ActionResult> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number): Promise<void> {
+  const bottom = mineBottom(start, direction);
+  await addPlace({
+    kind: "mine",
+    name: MINE_NAME,
+    dimension: currentDimension(),
+    ...start,
+    details: { direction, depth: MINE_DEPTH, stairs, endsAt: { x: bottom.x, y: bottom.y, z: bottom.z }, branches },
+  });
+}
+
+/** Its mine under the shelter, once the stairs are all dug: the bottom, the direction and branches done. */
+export function myMine(): { bottom: Vec3; direction: DirectionType; branches: number; start: Pos } | null {
+  const rec = mineRecord();
+  if (!rec || rec.stairs < MINE_DEPTH) return null;
+  return { bottom: mineBottom(rec.start, rec.direction), direction: rec.direction, branches: rec.branches, start: rec.start };
+}
+
+/** True with a stone pickaxe or better: the mine is dug with one (owner's rule). */
+const hasStonePickaxe = (): boolean => toolTier("pickaxe") >= TIER.stone;
+
+/**
+ * Digs the stairs down from the shelter's exit, a step at a time, remembering
+ * how far it got. With a stone pickaxe, all the way; with only a wooden one,
+ * just until it carries `woodUntilCobblestone` cobblestone (the owner's
+ * allowance for the first stone tools), never further.
+ */
+export async function digMine(woodUntilCobblestone = 0): Promise<ActionResult> {
   if (myMine()) return ok();
   const slots = shelterSlots();
   if (!slots?.exit || !slots.direction) return fail("not_found", "no shelter with an exit to start a mine from");
-  if (!(await ensurePickaxe())) return fail("no_tool", "no pickaxe to dig a mine");
-  const exit = new Vec3(slots.exit.x, slots.exit.y, slots.exit.z);
-  const inside = await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
-  if (!inside.ok) return inside;
-  report(`Digging my mine: ${MINE_DEPTH} levels down from the back of my shelter.`);
-  // The diagonal tunnel saves itself as a mine (start, end, direction, depth)
-  if (!(await digDiagonalTunnel(slots.direction, MINE_DEPTH, { width: 1, height: 2 }, exit, MINE_NAME))) {
-    return fail("refused", "the mine's stairs hit lava, water or something built");
+  if (toolTier("pickaxe") < TIER.wooden) return fail("no_tool", "no pickaxe to dig a mine");
+  const stone = hasStonePickaxe();
+  if (!stone && woodUntilCobblestone <= 0) return fail("no_tool", "I dig my mine with a stone pickaxe, and I have none yet");
+  const rec = mineRecord();
+  const start = rec?.start ?? slots.exit;
+  const dir = rec?.direction ?? slots.direction;
+  const from = rec?.stairs ?? 0;
+  if (from === 0) report(`Digging my mine: ${MINE_DEPTH} levels down from the back of my shelter.`);
+  for (let i = from; i < MINE_DEPTH; i++) {
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    // The wooden pickaxe only for the cobblestone the stone tools need
+    if (!hasStonePickaxe() && carried(["cobblestone"]) >= woodUntilCobblestone) {
+      console.log(`Mine: ${i} of ${MINE_DEPTH} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
+      return ok();
+    }
+    const step = new Vec3(start.x, start.y, start.z).plus(STEP[dir].scaled(i)).offset(0, -i, 0);
+    // One stair at a time (the "basementEntrance" name keeps the tunnel from saving itself)
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, step, "basementEntrance"))) {
+      await saveMine(start, dir, i, 0);
+      return fail("refused", "the mine's stairs hit lava, water or something built");
+    }
+    await saveMine(start, dir, i + 1, 0);
   }
   return myMine() ? ok() : fail("error", "the mine wasn't remembered");
 }
@@ -87,7 +128,7 @@ export const IRON: OreWant = { item: "raw_iron", enough: 6, counts: ["raw_iron",
 export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promise<ActionResult> {
   const mine = myMine();
   if (!mine) return fail("not_found", "no mine yet");
-  if (!(await ensurePickaxe())) return fail("no_tool", "no pickaxe to mine with");
+  if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
   const still = (): OreWant[] => wants.filter((w) => carried(w.counts) < w.enough);
   if (still().length === 0) return ok();
 
@@ -110,13 +151,7 @@ export async function branchMine(wants: OreWant[], branchesThisTrip = 6): Promis
       await goTo(new pf.goals.GoalBlock(at.main.x, at.main.y, at.main.z));
     }
     mine.branches = k;
-    await addPlace({
-      kind: "mine",
-      name: MINE_NAME,
-      dimension: currentDimension(),
-      ...mine.start,
-      details: { direction: mine.direction, depth: MINE_DEPTH, endsAt: { x: mine.bottom.x, y: mine.bottom.y, z: mine.bottom.z }, branches: k },
-    });
+    await saveMine(mine.start, mine.direction, MINE_DEPTH, k);
     // What the new tunnels uncovered (ores only: stone comes from the digging itself)
     for (const want of still().filter((w) => isOre(w.item))) {
       const got = await collectBlock(want.item, want.enough - carried(want.counts), ORE_REACH);
@@ -131,18 +166,44 @@ function isOre(item: string): boolean {
   return item !== "cobblestone" && catalog().oresFor(item).length > 0;
 }
 
+// Cobblestone the first stone tools take: 2 pickaxes, an axe, a shovel, a sword
+export const FIRST_STONE = 11;
+
 /**
  * Gets about `count` more of `item` (cobblestone, coal, raw iron...) the way
- * a player does: down its mine, carrying on with the tunnel. Digs the mine's
- * stairs first if it has none (those alone give plenty of cobblestone).
+ * a player does, with the owner's rules in one place:
+ * - no shelter yet: only what it can see from here (no tunnels at all);
+ * - a shelter, but no stone pickaxe: cobblestone from the first mine stairs
+ *   dug with the wooden pickaxe, just enough for the stone tools; ores only
+ *   when in sight;
+ * - a stone pickaxe: down its mine, carrying on with the tunnel.
  */
 export async function mineFor(item: string, count: number): Promise<ActionResult> {
   const counts = item === "coal" ? COAL.counts : item === "raw_iron" ? IRON.counts : [item];
   const target = carried(counts) + count;
+  const enough = (): boolean => carried(counts) >= target;
+  const visible = async (): Promise<void> => {
+    await collectBlock(item === "cobblestone" ? "stone" : item, target - carried(counts), 24, { seenOnly: true });
+  };
+
+  if (!shelterSlots()?.exit) {
+    await visible();
+    return enough() ? ok() : fail("not_found", `no ${item.replace(/_/g, " ")} in sight, and no shelter to start a mine from yet`);
+  }
+  if (!hasStonePickaxe()) {
+    if (item !== "cobblestone") {
+      await visible();
+      return enough() ? ok() : fail("no_tool", `I mine for ${item.replace(/_/g, " ")} with a stone pickaxe, and I have none yet`);
+    }
+    const dug = await digMine(Math.max(target, FIRST_STONE));
+    if (!dug.ok) return dug;
+    if (!enough()) await visible();
+    return enough() ? ok() : fail("missing_items", "the mine's first stairs gave too little stone");
+  }
   if (!myMine()) {
     const dug = await digMine();
     if (!dug.ok) return dug;
-    if (carried(counts) >= target) return ok();
+    if (enough()) return ok();
   }
   return branchMine([{ item, enough: target, counts }], 12);
 }

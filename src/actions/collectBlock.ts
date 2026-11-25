@@ -9,7 +9,7 @@ import { tellOwner } from "../managers/ownerDialog";
 import { pathing, tools } from "../core/plugins";
 import { goTo } from "../core/primitives";
 import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/result";
-import { canSee, type SightWorld } from "./sight";
+import { canSee, openFaces, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
 import { recordSighting } from "./perception";
@@ -29,14 +29,22 @@ const MAX_SIGHT_CHECKS = 200;
  * air, clear line from its eyes), and only when none is in sight the nearest
  * one overall, which it tunnels to. `blocks` is sorted nearest first.
  */
-function chooseTarget(blocks: Block[], blockType: string): { block: Block; seen: boolean } {
+function chooseTarget(blocks: Block[], blockType: string, seenOnly = false): { block: Block; seen: boolean } | null {
   // @ts-ignore - eyeHeight exists at runtime (mineflayer sets it) but is not in the Entity type
   const eyes = bot.entity.position.offset(0, bot.entity.eyeHeight ?? 1.62, 0);
   const world = bot.world as unknown as SightWorld;
-  const seen = blocks.slice(0, MAX_SIGHT_CHECKS).find((b) => canSee(world, eyes, b, SIGHT_RANGE));
+  // Only blocks with a face open to air can be seen at all: check those first
+  // (the nearest 200 stone blocks are all buried, so an exposed cliff a bit
+  // farther away was never even looked at)
+  const open = blocks.filter((b) => openFaces(world, b).length > 0);
+  const seen = open.slice(0, MAX_SIGHT_CHECKS).find((b) => canSee(world, eyes, b, SIGHT_RANGE));
   if (seen) {
     console.log(`Going for the ${seen.name} I can see at ${seen.position}.`);
     return { block: seen, seen: true };
+  }
+  if (seenOnly) {
+    console.log(`No ${blockType} in sight (and not tunnelling for it here).`);
+    return null;
   }
   console.log(`No ${blockType} in sight; tunnelling to the nearest one at ${blocks[0].position}.`);
   return { block: blocks[0], seen: false };
@@ -45,7 +53,8 @@ function chooseTarget(blocks: Block[], blockType: string): { block: Block; seen:
 export async function collectBlock(
   blockType: string,
   num = 1,
-  range = 16
+  range = 16,
+  options: { seenOnly?: boolean } = {}
 ): Promise<number> {
   if (num < 1) {
     console.log(`Invalid number of blocks to collect: ${num}.`);
@@ -93,7 +102,10 @@ export async function collectBlock(
       break;
     }
 
-    const { block, seen } = chooseTarget(blocks, blockType);
+    // seenOnly: blocks it can see from here, never a tunnel to a buried one
+    const target = chooseTarget(blocks, blockType, options.seenOnly);
+    if (!target) break;
+    const { block, seen } = target;
 
     try {
       // Equip appropriate tool

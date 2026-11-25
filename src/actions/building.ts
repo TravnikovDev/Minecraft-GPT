@@ -6,6 +6,7 @@ import { breakBlockAt, breakBlockAtResult, pickupNearbyItems, placeBlock, placeB
 import { goTo, knownBlock, useBlock } from "../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";
+import { isCommandCancelled } from "../core/commandContext";
 import { catalog } from "../core/catalog";
 import { isWoodenDoor } from "../core/movements";
 import { forgetDoor, markDoor } from "../core/scaffold";
@@ -141,7 +142,41 @@ export function shelterPlan(start: Pos, dir: DirectionType, room: RoomSize = DEF
     // Without a door: two blocks close the entrance doorway instead
     seal: [entrance, entrance.offset(0, 1, 0)],
     cells: [...stairs, ...doorways, ...roomCells],
+    // Around the room: its walls, roof and floor (the doorways left open).
+    // These must be solid ground, or it isn't really a shelter (a hillside
+    // left its roof open to the sky, fresh-world test)
+    shell: shellAround(roomCells, doorways),
   };
+}
+
+const cellKey = (p: Pos): string => `${p.x},${p.y},${p.z}`;
+const NEIGHBOURS = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+
+/** Every cell next to the room that isn't the room or a doorway. */
+function shellAround(room: Vec3[], doorways: Vec3[]): Vec3[] {
+  const inside = new Set([...room, ...doorways].map(cellKey));
+  const shell = new Map<string, Vec3>();
+  for (const c of room) for (const n of NEIGHBOURS) {
+    const p = c.plus(n);
+    if (!inside.has(cellKey(p))) shell.set(cellKey(p), p);
+  }
+  return [...shell.values()];
+}
+
+const FALLING = new Set(["sand", "red_sand", "gravel", "suspicious_sand", "suspicious_gravel"]);
+type BlockAt = (p: Vec3) => { name: string; boundingBox: string } | null;
+
+/**
+ * True when the shell is solid ground: every wall, roof and floor cell a full
+ * block, nothing that falls (sand, gravel) in the roof, no liquid (pure: tested
+ * with a made-up world). Unloaded cells count as unknown, so not good.
+ */
+export function shellIsSolid(shell: Vec3[], roofY: number, blockAt: BlockAt): boolean {
+  return shell.every((p) => {
+    const b = blockAt(p);
+    if (!b || b.boundingBox !== "block") return false;
+    return !(p.y >= roofY && FALLING.has(b.name));
+  });
 }
 
 /** True with blocks overhead within 12 (a roof: it's inside a house or a cave). */
@@ -156,7 +191,8 @@ function underRoof(p: Vec3): boolean {
 /** The first spot and direction where the whole shelter can be dug (natural ground, no water or lava). */
 function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3; dir: DirectionType } | null {
   const spots = [around];
-  for (const r of [6, 10]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
+  // More spots than before: a fully covered room needs ground that doesn't fall away
+  for (const r of [6, 10, 16, 24]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
   for (const spot of spots) {
     let start: Vec3 | null = null;
     for (let dy = 4; dy >= -4 && !start; dy--) {
@@ -166,7 +202,11 @@ function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3;
       if (here && below && here.boundingBox === "empty" && below.boundingBox === "block") start = p;
     }
     if (!start || underRoof(start)) continue;
-    const dir = DIRECTIONS.find((d) => shelterPlan(start!, d, room, depth).cells.every((c) => tunnelBlocked(c) === null));
+    const dir = DIRECTIONS.find((d) => {
+      const plan = shelterPlan(start!, d, room, depth);
+      // Natural ground to dig (no water, lava or buildings), and a room fully under ground
+      return plan.cells.every((c) => tunnelBlocked(c) === null) && shellIsSolid(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
+    });
     if (dir) return { start, dir };
   }
   return null;
@@ -257,10 +297,47 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   await digRoom(plan.roomStart, roomSize, dir);
   // Make a doorway on another side of the room: the mine starts there
   await digDoorway(plan.exit.minus(ALONG[dir]), dir);
+  // Pick up what it dug (the dirt and stone to patch with), then make the
+  // shell solid, and only then count the shelter as done; otherwise the next
+  // try carries on at the same spot
+  await pickupNearbyItems(bot);
+  const patched = await patchShell(plan.shell);
+  if (!patched.ok) return patched;
   await saveShelter(start, dir, roomSize, tunnelDepth, false);
   console.log(`Shelter dug: stairs from ${start} going ${dir}, room from ${plan.roomStart}, exit at ${plan.exit}.`);
   await putInDoor(plan.entrance);
   await pickupNearbyItems(bot);
+  return ok();
+}
+
+// What it patches walls with: dirt first (stone and wood are for tools)
+const PATCH_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "andesite", "diorite", "granite", "tuff", "netherrack"];
+
+/**
+ * Fills every gap in the shell, from the ones next to something solid
+ * outwards (a gap in the roof over open air has nothing to be placed
+ * against until its neighbour is filled). Fails, naming the gaps, if it runs
+ * out of filler or can't place.
+ */
+async function patchShell(shell: Vec3[]): Promise<ActionResult> {
+  const solid = (p: Vec3): boolean => knownBlock(p)?.boundingBox === "block";
+  for (let pass = 0; pass < 4; pass++) {
+    const gaps = shell.filter((p) => knownBlock(p) && !solid(p));
+    if (gaps.length === 0) return ok();
+    // This pass: gaps that have a solid neighbour to place against
+    const placeable = gaps.filter((p) => NEIGHBOURS.some((n) => solid(p.plus(n))));
+    if (placeable.length === 0) break;
+    for (const p of placeable) {
+      if (isCommandCancelled()) return fail("aborted", "stopped");
+      const filler = PATCH_FILLERS.find((n) => bot.inventory.items().some((i) => i.name === n));
+      if (!filler) return fail("missing_items", `nothing to fill ${gaps.length} gaps in my shelter's walls with`);
+      const placed = await placeBlockResult(filler, p.x, p.y, p.z, "side");
+      if (!placed.ok) console.log(`Couldn't fill the shelter wall at ${p}: ${describeFailure(placed)}`);
+    }
+  }
+  const left = shell.filter((p) => knownBlock(p) && !solid(p));
+  if (left.length > 0) return fail("refused", `my shelter's walls still have ${left.length} gaps (first at ${left[0]})`);
+  console.log("Shelter walls, roof and floor are solid.");
   return ok();
 }
 

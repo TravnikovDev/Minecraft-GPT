@@ -87,6 +87,16 @@ const WORKING_SUPPLY: Array<[(name: string) => boolean, number]> = [
 ];
 
 /**
+ * Also kept when putting things away (not when making room, where the pile
+ * of cobblestone is the first thing to go): building and patching stone,
+ * since storing it all left nothing to patch the shelter or mine with.
+ */
+const BUILDING_SUPPLY: Array<[(name: string) => boolean, number]> = [
+  [(n) => n === "cobblestone" || n === "cobbled_deepslate", 32],
+  [(n) => n === "dirt", 16],
+];
+
+/**
  * The cheapest whole stacks, enough to free `slots` slots (a part-stack frees
  * none). Kind by kind, cheapest first, and the kind with the most of it first
  * (a player puts away the pile of cobblestone, not one odd stack).
@@ -127,7 +137,8 @@ export function chooseToStore(stacks: Stack[], mode: StoreMode, wanted: Wanted[]
   // lowValue: like resources, but precious things (ingots, gems, redstone...) stay too
   // `keep`: what the current job needs (e.g. the ore it's mining) stays too
   if (mode === "lowValue" || mode === "room") {
-    const reserve = WORKING_SUPPLY.map(([matches, amount]) => ({ matches, left: amount }));
+    const supply = mode === "lowValue" ? [...WORKING_SUPPLY, ...BUILDING_SUPPLY] : WORKING_SUPPLY;
+    const reserve = supply.map(([matches, amount]) => ({ matches, left: amount }));
     const deposits: Deposit[] = [];
     for (const stack of stacks) {
       if (isKept(stack.name) || itemValue(stack.name) > 2 || keep.includes(stack.name)) continue;

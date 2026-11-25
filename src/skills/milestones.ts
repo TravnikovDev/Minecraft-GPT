@@ -27,6 +27,8 @@ export type Milestone = {
   /** For chat: "stone tools". */
   title: string;
   tier: number;
+  /** Milestones that must be done first (the owner's order: shelter, stone tools, furniture, then the mine). */
+  requires?: string[];
   done: () => boolean;
   /** Gets it done (bounded; a failure says why). */
   achieve: () => Promise<ActionResult>;
@@ -166,14 +168,24 @@ export const MILESTONES: Milestone[] = [
     id: "stone_tools",
     title: "stone tools",
     tier: 1,
+    requires: ["shelter"],
     // Two pickaxes: mining wears one out
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
     achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
   },
   {
+    id: "chests",
+    title: "my shelter set up (chests, furnace, table)",
+    tier: 1,
+    requires: ["shelter", "stone_tools"],
+    done: () => shelter() !== null && furnished(),
+    achieve: furnishShelter,
+  },
+  {
     id: "food",
     title: "a food stock",
     tier: 1,
+    requires: ["chests"],
     done: () => foodPoints() >= foodTarget(),
     achieve: stockFood,
   },
@@ -181,21 +193,16 @@ export const MILESTONES: Milestone[] = [
     id: "bed",
     title: "a bed",
     tier: 1,
+    requires: ["chests"],
     done: hasBed,
     achieve: getBed,
-  },
-  {
-    id: "chests",
-    title: "my shelter set up (chests, furnace, table)",
-    tier: 1,
-    done: () => shelter() !== null && furnished(),
-    achieve: furnishShelter,
   },
   // --- Tier 2: the mine under the shelter (owner's design) -----------------------
   {
     id: "mine",
     title: "a mine",
     tier: 2,
+    requires: ["stone_tools", "chests"],
     done: () => myMine() !== null,
     achieve: digMine,
   },
@@ -203,6 +210,7 @@ export const MILESTONES: Milestone[] = [
     id: "coal",
     title: "coal",
     tier: 2,
+    requires: ["mine"],
     // Torches and smelting use it up: once found, only below 4 does it go back for more
     done: () => carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough),
     achieve: () => branchMine([COAL, IRON]),
@@ -211,6 +219,7 @@ export const MILESTONES: Milestone[] = [
     id: "iron",
     title: "iron",
     tier: 2,
+    requires: ["mine"],
     // Made into tools later: found once is reached
     done: () => Boolean(reachedAt()["iron"]) || carriedOf(IRON.counts) >= IRON.enough,
     achieve: () => branchMine([IRON, COAL]),
@@ -221,12 +230,14 @@ const carriedOf = (names: string[]): number => bot.inventory.items().filter((i) 
 
 /** The next milestone not done (and not blocked), lowest tier first; null when all are reached. */
 export function nextMilestone(list: Milestone[], blocked: (id: string) => boolean = () => false): Milestone | null {
+  // Its prerequisites done (a set-aside shelter must not let stone tools or the mine jump ahead)
+  const ready = (m: Milestone): boolean => (m.requires ?? []).every((id) => list.find((x) => x.id === id)?.done() ?? true);
   const tiers = [...new Set(list.map((m) => m.tier))].sort((a, b) => a - b);
   for (const tier of tiers) {
     const open = list.filter((m) => m.tier === tier && !m.done());
     if (open.length === 0) continue;
     // A tier isn't skipped while any of it is left (a blocked one waits its turn)
-    return open.find((m) => !blocked(m.id)) ?? null;
+    return open.find((m) => !blocked(m.id) && ready(m)) ?? null;
   }
   return null;
 }
