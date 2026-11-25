@@ -294,7 +294,8 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   if (shelterPlace(false)) {
     const known = shelterPlace(false)!;
     const block = bot.blockAt(new Vec3(known.x, known.y, known.z));
-    if (!block || block.boundingBox !== "block") return ok(); // already have one (and it's still there)
+    // Already have one (and it's still there): mend it if it needs it
+    if (!block || block.boundingBox !== "block") return shelterIntact() ? ok() : repairShelter();
   }
   console.log(`Building a shelter to survive the night...`);
   if (!(await ensurePickaxe())) return fail("no_tool", "no pickaxe to dig a shelter");
@@ -355,6 +356,64 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   await putInDoor(plan.exit);
   await pickupNearbyItems(bot);
   return ok();
+}
+
+/** Its finished shelter's plan (null without one). */
+function myShelterPlan(): { room: NonNullable<ReturnType<typeof shelterPlace>>; plan: ReturnType<typeof shelterPlan> } | null {
+  const room = shelterPlace(false);
+  const start = room?.details?.["start"] as Pos | undefined;
+  const dir = room?.details?.["direction"] as DirectionType | undefined;
+  if (!room || !start || !dir) return null;
+  const plan = shelterPlan(start, dir, (room.details?.["room"] as RoomSize | undefined) ?? DEFAULT_ROOM, (room.details?.["depth"] as number | undefined) ?? DEFAULT_DEPTH);
+  return { room, plan };
+}
+
+/** A shell cell that needs building: open, or a tree's leaves or log (one holding up sand or gravel stays). */
+function shellHole(p: Vec3): boolean {
+  const b = knownBlock(p);
+  if (!b) return false; // not loaded: nothing to say
+  if (b.boundingBox !== "block") return true;
+  return isTreeBlock(b.name) && !FALLING.has(knownBlock(p.offset(0, 1, 0))?.name ?? "");
+}
+
+/**
+ * True when its shelter is as the plan says now: walls, roof and floor
+ * solid, a wooden door in both doorways (the entrance, and the back one to
+ * the mine). What it can't see (not loaded) counts as fine. Owner: after a
+ * creeper blows a wall out, or when a new version of the plan adds
+ * something (the mine door), it notices and fixes it.
+ */
+export function shelterIntact(): boolean {
+  const mine = myShelterPlan();
+  if (!mine) return true;
+  const { plan } = mine;
+  if (plan.shell.some(shellHole)) return false;
+  for (const at of [plan.entrance, plan.exit]) {
+    const b = knownBlock(at);
+    if (b && !isWoodenDoor(b.name)) return false;
+  }
+  return true;
+}
+
+/** Goes home and mends the shelter: fills holes in its walls, roof and floor, and puts in any missing door. */
+async function repairShelter(): Promise<ActionResult> {
+  const mine = myShelterPlan();
+  if (!mine) return ok();
+  const { room, plan } = mine;
+  const holes = plan.shell.filter(shellHole).length;
+  const doors = [plan.entrance, plan.exit].filter((at) => !isWoodenDoor(knownBlock(at)?.name ?? "")).length;
+  report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
+  const home = await walkHome(room);
+  if (!home.ok) return home;
+  if (holes > 0) {
+    const filler = bot.inventory.items().filter((i) => PATCH_FILLERS.includes(i.name) || catalog().isPlanks(i.name)).reduce((c, i) => c + i.count, 0);
+    if (holes > filler) await collectBlock("dirt", holes - filler + 4, 16, { seenOnly: true });
+    const patched = await patchShell(plan.shell);
+    if (!patched.ok) return patched;
+  }
+  for (const at of [plan.entrance, plan.exit]) await putInDoor(at);
+  protectShelter();
+  return shelterIntact() ? ok() : fail("refused", "my shelter still isn't whole");
 }
 
 // What it patches walls with: dirt first (stone and wood are for tools)
@@ -489,10 +548,8 @@ export function shelterSlots(): {
   };
 }
 
-/** Goes into the shelter (to the stand cell) and shuts the door, or closes the doorway with blocks. */
-export async function enterShelter(): Promise<ActionResult> {
-  const room = shelterPlace(false);
-  if (!room) return fail("not_found", "no shelter");
+/** Walks into its shelter's room, the way a player goes home (by the top of its stairs). */
+async function walkHome(room: { x: number; y: number; z: number; details?: Record<string, unknown> }): Promise<ActionResult> {
   // The way a player goes home: to the top of its stairs first (from far off
   // in legs), then down them and in. One path search straight into the
   // room "took too long to decide" from 15 blocks away (fresh-world test):
@@ -511,7 +568,14 @@ export async function enterShelter(): Promise<ActionResult> {
       if (!stairs.ok) console.log(`Couldn't get to the top of my shelter's stairs: ${describeFailure(stairs)}; going straight in.`);
     }
   }
-  const walked = await goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
+  return goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
+}
+
+/** Goes into the shelter (to the stand cell) and shuts the door, or closes the doorway with blocks. */
+export async function enterShelter(): Promise<ActionResult> {
+  const room = shelterPlace(false);
+  if (!room) return fail("not_found", "no shelter");
+  const walked = await walkHome(room);
   if (!walked.ok) return walked;
   // The mine's doorway: a door there too, when it carries one (a shelter
   // built before it had one; crafting makes doors in threes)

@@ -14,7 +14,7 @@ import { liveWorld } from "./world";
 import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, enterShelter, rightChest, setupTheShelter, shelterSlots } from "../actions/building";
+import { buildShelter, enterShelter, rightChest, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -162,7 +162,9 @@ export const MILESTONES: Milestone[] = [
     id: "shelter",
     title: "a shelter",
     tier: 1,
-    done: () => shelter() !== null,
+    // Whole as the plan says now (walls, roof, floor, both doors): a creeper's
+    // hole or a newer plan (the mine door) makes it not done, and it's mended
+    done: () => shelter() !== null && shelterIntact(),
     achieve: () => buildShelter(),
   },
   {

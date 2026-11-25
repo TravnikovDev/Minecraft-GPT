@@ -21,7 +21,7 @@ import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
 import { MILESTONES, nextMilestone, noteReached, tier1Reached, type Milestone } from "./milestones";
 import { hasBed, shelter } from "./capabilities";
-import { buildShelter, enterShelter, leaveShelter } from "../actions/building";
+import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
 
 // A milestone that failed waits a little (10 minutes left it idle in a field)
@@ -138,7 +138,8 @@ function nightTask(): TaskSpec {
     // The owner called it out at night: back in afterwards
     resume: () => (isNight() && autonomyOn() ? nightTask() : null),
     run: async () => {
-      if (!shelter()) {
+      // No shelter, or one with a hole or a missing door: dig or mend it first
+      if (!shelter() || !shelterIntact()) {
         const dug = await buildShelter();
         if (!dug.ok) {
           report(`I couldn't dig a shelter for the night: ${describeFailure(dug)}.`);
