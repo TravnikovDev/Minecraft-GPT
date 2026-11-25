@@ -17,6 +17,8 @@ import { isCommandCancelled } from "../core/commandContext";
 import { collectBlock } from "./collectBlock";
 import { craftNow } from "./craftPlanner";
 import { getItemCount } from "./inventory";
+import { getPlaces, saveCraftingTableLocation } from "../managers/persistenceManager";
+import { currentDimension } from "./perception";
 import {
   getInventoryCounts,
   getNearestBlock,
@@ -64,6 +66,16 @@ function nearbyTables(range: number): Block[] {
     .map((p) => bot.blockAt(p))
     .filter((b): b is Block => b !== null && (unreachableTables.get(tableKey(b)) ?? 0) < now)
     .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+}
+
+const HOME_RADIUS = 24;
+
+/** True within HOME_RADIUS of its shelter or base (in this dimension). */
+function nearHome(at: { x: number; y: number; z: number }): boolean {
+  const dim = currentDimension();
+  return getPlaces()
+    .filter((p) => (p.kind === "basement" || p.kind === "base") && p.dimension === dim)
+    .some((p) => Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z) <= HOME_RADIUS);
 }
 
 /** Breaks the crafting table the bot put down for a craft and picks it up again. */
@@ -194,7 +206,15 @@ export async function craftRecipe(
     try {
       return await moveToAndCraft(placed);
     } finally {
-      await pickUpOwnTable(placed.position);
+      // At home it stays, like a player's table (it found and used it again
+      // next time instead of placing and breaking one for every craft);
+      // away from home it goes back in the pocket
+      if (nearHome(placed.position)) {
+        await saveCraftingTableLocation({ x: placed.position.x, y: placed.position.y, z: placed.position.z });
+        console.log(`Leaving my crafting table at ${placed.position}: it's near home.`);
+      } else {
+        await pickUpOwnTable(placed.position);
+      }
     }
   }
 

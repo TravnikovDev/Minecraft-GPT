@@ -197,7 +197,7 @@ test("the shelter's shape: stairs 5 down, a corridor with a door, then a room wi
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
-  const names = ["wooden_pickaxe", "wooden_sword", "stone_pickaxe", "stone_sword", "stone_axe", "furnace", "white_wool", "white_bed", "chest", "crafting_table"];
+  const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual(["wooden_tools", "shelter", "stone_tools", "food", "bed", "chests"]);
 });

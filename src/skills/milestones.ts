@@ -121,8 +121,9 @@ export const MILESTONES: Milestone[] = [
     id: "wooden_tools",
     title: "wooden tools",
     tier: 1,
-    done: () => toolTier("pickaxe") >= TIER.wooden && toolTier("sword") >= TIER.wooden,
-    achieve: () => getAll(["wooden_pickaxe", "wooden_sword"]),
+    // A player's first set: dirt everywhere wants a shovel, trees an axe
+    done: () => (["pickaxe", "axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.wooden),
+    achieve: () => getAll(["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword"]),
   },
   {
     id: "shelter",
@@ -135,8 +136,8 @@ export const MILESTONES: Milestone[] = [
     id: "stone_tools",
     title: "stone tools",
     tier: 1,
-    done: () => toolTier("pickaxe") >= TIER.stone && toolTier("axe") >= TIER.stone && toolTier("sword") >= TIER.stone,
-    achieve: () => getAll(["stone_pickaxe", "stone_sword", "stone_axe"]),
+    done: () => (["pickaxe", "axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone),
+    achieve: () => getAll(["stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
   },
   {
     id: "food",
