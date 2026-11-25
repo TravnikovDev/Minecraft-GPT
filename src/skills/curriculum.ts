@@ -19,8 +19,8 @@ import { setSheltered } from "../core/sheltered";
 import { describeFailure } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
-import { MILESTONES, nextMilestone, noteReached, tier1Reached, type Milestone } from "./milestones";
-import { hasBed, shelter } from "./capabilities";
+import { MILESTONES, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
+import { hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
 
@@ -110,6 +110,19 @@ let nightOf = -1; // the day number of the night already handled
 
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
 const NIGHT_TRIES = 4;
+const BED_RETRY_MS = 10_000;
+
+/** Shut in with raw iron, a furnace and fuel: smelts it and makes an iron pickaxe (once it has none). */
+async function smeltAtNight(): Promise<void> {
+  const raw = bot.inventory.items().filter((i) => i.name === "raw_iron").reduce((n, i) => n + i.count, 0);
+  if (raw === 0 || toolTier("pickaxe") >= TIER.iron) return;
+  try {
+    const made = await smeltIronAndMakePickaxe();
+    if (!made.ok) console.log(`Night: no iron pickaxe yet (${describeFailure(made)}).`);
+  } catch (error) {
+    console.log(`Night: smelting failed: ${(error as Error).message}`);
+  }
+}
 const NIGHT_RETRY_MS = 60_000;
 // A night routine that failed: proposed again from this time (0: no retry due)
 let nightRetryAt = 0;
@@ -181,18 +194,26 @@ function nightTask(): TaskSpec {
       setSheltered(true);
       try {
         await cookAtNight();
+        // Indoor work: raw iron smelted in the furnace and made into an iron
+        // pickaxe (owner: it stood at home all night doing nothing)
+        await smeltAtNight();
         // Mine work to do: on through the back door, mining all night (the
         // milestone is proposed as soon as this routine ends)
         if (mineWorkTonight()) {
           chatter("Night: carrying on in my mine.", "night");
           return;
         }
-        if (hasBed()) {
-          const { execute: sleepInBed } = await import("../commands/Sleep");
-          await sleepInBed({ newBed: false });
+        // Wait for the morning in bed: at dusk the bed says "not yet", so it
+        // tries again every few seconds until it sleeps
+        const { execute: sleepInBed } = await import("../commands/Sleep");
+        let lastTry = 0;
+        while (isNight() && !isCommandCancelled()) {
+          if (hasBed() && !bot.isSleeping && Date.now() - lastTry > BED_RETRY_MS) {
+            lastTry = Date.now();
+            await sleepInBed({ newBed: false });
+          }
+          await sleep(2_000);
         }
-        // Wait for the morning (or for something more urgent to cut in)
-        while (isNight() && !isCommandCancelled()) await sleep(2_000);
       } finally {
         setSheltered(false);
       }

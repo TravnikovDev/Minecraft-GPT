@@ -225,6 +225,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   if (still().length === 0) return ok();
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
+  let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     const rec = mineRecord()!;
@@ -269,8 +270,17 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const stop = dug ? null : tunnelStopReason();
     if (stop === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
     if (isCommandCancelled()) return fail("aborted", "stopped");
+    // Nothing to build a floor or a plug with: stone from the tunnel walls,
+    // then this tunnel again (not given up for want of a few blocks)
+    if (stop === "no_filler" && !refilled) {
+      refilled = true;
+      const got = await collectBlock("stone", 16, ORE_REACH, { seenOnly: true });
+      console.log(`Mine: out of blocks to build with; took ${got} stone from the walls.`);
+      if (got > 0) continue;
+    }
     arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug, blocked: true } };
-    if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${stop === "drop" ? "a drop" : stop === "no_filler" ? "water I had nothing to plug" : "a blocker"}; on with the next one.`, "mining");
+    const what = stop === "drop" ? "a drop I couldn't build a floor over" : stop === "no_filler" ? "a hole I had nothing to fill" : "water, lava or something it mustn't dig";
+    if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
     // What the new tunnel uncovered (ores only: stone comes from the digging itself)

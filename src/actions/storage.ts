@@ -87,6 +87,15 @@ const WORKING_SUPPLY: Array<[(name: string) => boolean, number]> = [
 ];
 
 /**
+ * Kept even when making room: a little stone for floors and plugs in its
+ * tunnels (it put all 383 away and had nothing to floor a drop with,
+ * fresh-world test). Putting things away keeps more (BUILDING_SUPPLY).
+ */
+const TUNNEL_SUPPLY: Array<[(name: string) => boolean, number]> = [
+  [(n) => n === "cobblestone" || n === "cobbled_deepslate", 16],
+];
+
+/**
  * Also kept when putting things away (not when making room, where the pile
  * of cobblestone is the first thing to go): building and patching stone,
  * since storing it all left nothing to patch the shelter or mine with.
@@ -137,7 +146,7 @@ export function chooseToStore(stacks: Stack[], mode: StoreMode, wanted: Wanted[]
   // lowValue: like resources, but precious things (ingots, gems, redstone...) stay too
   // `keep`: what the current job needs (e.g. the ore it's mining) stays too
   if (mode === "lowValue" || mode === "room") {
-    const supply = mode === "lowValue" ? [...WORKING_SUPPLY, ...BUILDING_SUPPLY] : WORKING_SUPPLY;
+    const supply = mode === "lowValue" ? [...WORKING_SUPPLY, ...BUILDING_SUPPLY] : [...WORKING_SUPPLY, ...TUNNEL_SUPPLY];
     const reserve = supply.map(([matches, amount]) => ({ matches, left: amount }));
     const deposits: Deposit[] = [];
     for (const stack of stacks) {

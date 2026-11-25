@@ -178,8 +178,9 @@ test("making room puts away only the cheapest few stacks, about a tenth of the i
     item("diamond", 5), item("bread", 6), item("iron_pickaxe", 1),
   ];
   const plan = chooseToStore(stacks, "room").map((d: any) => [d.stack.name, d.count]);
-  // The whole pile of cobblestone (3 stacks), then the next-cheapest bulk: 4 slots freed
-  expect(plan).toEqual([["cobblestone", 64], ["cobblestone", 64], ["cobblestone", 30], ["wheat_seeds", 30]]);
+  // The pile of cobblestone but 16 (kept for tunnel floors and plugs: one
+  // stack stays, partly), then the next-cheapest bulk: 4 slots freed
+  expect(plan).toEqual([["cobblestone", 64], ["cobblestone", 30], ["wheat_seeds", 30], ["dirt", 16]]);
   expect(plan.length).toBeGreaterThanOrEqual(ROOM_SLOTS);
   // Materials, the coal and logs it works with, gems, food and gear all stay
   expect(plan.some(([n]: any) => ["leather", "raw_copper", "coal", "oak_log", "diamond", "bread"].includes(n))).toBe(false);

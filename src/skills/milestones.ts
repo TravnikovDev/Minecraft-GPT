@@ -245,7 +245,7 @@ export const MILESTONES: Milestone[] = [
  * Owner: with its raw iron it goes home, smelts it in the shelter's furnace
  * and makes an iron pickaxe at the shelter's table.
  */
-async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
+export async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
   const home = await enterShelter(); // the furnace and the table are there
   if (!home.ok) console.log(`Couldn't get home to smelt (${describeFailure(home)}); smelting where I am.`);
   const raw = carriedOf(["raw_iron"]);
