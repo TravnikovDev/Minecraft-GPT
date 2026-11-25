@@ -5,6 +5,8 @@ import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
 import { goToPosition, moveAway } from "../actions/movement";
 import { __actionsDelay } from "../utils/utility";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
+import { forbiddenAt } from "../core/forbidden";
+import { recordSighting } from "./perception";
 import { findTrunk, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
 import { takeDownScaffolding } from "./scaffolding";
 
@@ -54,10 +56,12 @@ export async function gatherWood(
 
       const woodBlock = bot.findBlock({
         matching: (block) => catalog().isTreeLog(block.name), // nether stems too, never stripped logs in builds
-        useExtraInfo: (block) => !unreachable.has(block.position.toString()),
+        // Not one it couldn't reach, nor one in an area it must keep out of
+        useExtraInfo: (block) => !unreachable.has(block.position.toString()) && !forbiddenAt(block.position),
         maxDistance,
       });
 
+      if (woodBlock) recordSighting(woodBlock.name, woodBlock.position);
       if (!woodBlock) {
         console.log("No wood blocks found nearby.");
         failedAttempts++;

@@ -16,7 +16,9 @@ export type FailReason =
   | "unknown_block" // that part of the world isn't loaded, so it's unknown (not air)
   | "not_found" // nothing there to act on, or the item isn't carried
   | "no_tool" // nothing it carries can break or harvest it
-  | "refused" // the server said no or undid it (a protected area, a game rule)
+  | "refused" // the server said no (a game rule: bedrock, sleeping by day...)
+  | "reverted" // the server undid it: a dug block came back, a placed one didn't stay
+  | "forbidden" // inside an area it must keep out of (the owner said, or the server protects it)
   | "occupied" // the spot is taken
   | "no_support" // nothing to place it against
   | "full" // no room in the inventory or the container
@@ -52,7 +54,9 @@ const SAY: Record<FailReason, string> = {
   unknown_block: "I can't see that part of the world yet",
   not_found: "there's nothing there",
   no_tool: "I don't have the right tool",
-  refused: "the server didn't let me (a protected area?)",
+  refused: "the server didn't let me",
+  reverted: "the server put it back (a protected area?)",
+  forbidden: "that's a place I must keep out of",
   occupied: "something is in the way",
   no_support: "there's nothing to put it against",
   full: "there's no room",

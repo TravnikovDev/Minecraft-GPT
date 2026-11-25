@@ -18,6 +18,7 @@
 import type { Bot } from "mineflayer";
 import pf from "mineflayer-pathfinder";
 import { isOwnScaffold } from "./scaffold";
+import { forbiddenAt } from "./forbidden";
 
 // Natural blocks the bot may dig through when its path needs it
 const NATURAL = [
@@ -109,6 +110,8 @@ export function safeMovements(bot: Bot): pf.Movements {
     // looks built: nothing else it placed or anyone built is ever broken
     safeToBreak(...args: Parameters<pf.Movements["safeToBreak"]>): boolean {
       const [block] = args;
+      // Never in an area it must keep out of, its own scaffolding included
+      if (block?.position && forbiddenAt(block.position)) return false;
       if (block?.position && isOwnScaffold(block.position, block.name)) {
         // Only "built" is waived: next to water or lava, or under sand and
         // gravel, its own scaffolding stays too (same checks as for any block)
@@ -145,6 +148,11 @@ export function safeMovements(bot: Bot): pf.Movements {
     if (!isNatural(block.name)) moves.blocksCantBreak.add(block.id);
   }
   moves.canDig = true; // natural terrain only (see above)
+  // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
+  // and building there costs too much to choose (the primitives refuse it anyway)
+  const keepOut = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && forbiddenAt(block.position) ? 100 : 0);
+  moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
+  moves.exclusionAreasPlace = [keepOut] as typeof moves.exclusionAreasPlace;
   moves.canOpenDoors = true; // fence gates
   // No pillaring just to get somewhere (following, walking up to the owner):
   // a player walks around. Reaching a block up high turns it on for that walk

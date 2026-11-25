@@ -13,6 +13,11 @@ import { everyWhileConnected } from "./body";
 import { getCurrentCommandName } from "./commandContext";
 import { isSafeMovements, walkingRules } from "./movements";
 import { forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./scaffold";
+import { onForbiddenChange } from "./forbidden";
+import { pathing } from "./plugins";
+
+// An area marked or cleared: plan the current route again with it
+onForbiddenChange(() => pathing.replan());
 
 /** Loads the plugins and installs the walking rules and game-call hooks on a new connection. */
 export function installPlugins(currentBot: Bot): void {

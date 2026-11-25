@@ -11,6 +11,8 @@ import { goTo } from "../core/primitives";
 import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/result";
 import { canSee, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
+import { forbiddenAt } from "../core/forbidden";
+import { recordSighting } from "./perception";
 import { tunnelTo } from "./digging";
 import { makeRoom } from "./overflow";
 
@@ -80,7 +82,9 @@ export async function collectBlock(
       console.log(`Giving up on ${blockType} after ${failures} failed tries.`);
       break;
     }
-    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()));
+    // Not ones it gave up on, nor ones in an area it must keep out of
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position));
+    for (const b of blocks.slice(0, 8)) recordSighting(b.name, b.position); // hints for later
 
     if (blocks.length === 0) {
       if (collected === 0) console.log(`No ${blockType} nearby to collect.`);

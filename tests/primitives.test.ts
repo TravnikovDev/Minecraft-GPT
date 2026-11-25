@@ -79,11 +79,15 @@ beforeEach(() => {
   fake.heldItem = null;
   fake.entity.position = new Vec3(0.5, 64, 0.5);
   closedWindows = stoppedDigging = pathStops = 0;
+  F.clearReverts();
+  void updateMemory({ forbidden: [] });
 });
 const P = await import(`${ROOT}/src/core/primitives.ts`);
 const { guarded } = await import(`${ROOT}/src/core/guard.ts`);
 const { runWithSignal } = await import(`${ROOT}/src/core/commandContext.ts`);
 const { depositInto } = await import(`${ROOT}/src/core/containers.ts`);
+const F = await import(`${ROOT}/src/core/forbidden.ts`);
+const { updateMemory } = await import(`${ROOT}/src/managers/persistenceManager.ts`);
 const never = () => new Promise<never>(() => {});
 // A stop after `ms`, like the owner's (an AbortController: Bun cancels an
 // AbortSignal.timeout's timer once its last listener is removed)
@@ -123,7 +127,7 @@ test("breaking: success only once the block is gone", async () => {
   expect(r).toMatchObject({ ok: true, value: { name: "dirt", alreadyGone: false } });
 });
 
-test("breaking in a protected area: the server puts the block back, so it's refused", async () => {
+test("breaking in a protected area: the server puts the block back, so it's 'reverted'", async () => {
   world.set("1,64,0", "dirt");
   // Like mineflayer: the dig ends by writing air locally; the server's answer
   // (the block put back) arrives a round trip later
@@ -132,7 +136,7 @@ test("breaking in a protected area: the server puts the block back, so it's refu
     setTimeout(() => world.set(key(b.position), "dirt"), 100);
   };
   const r = await P.breakBlock({ x: 1, y: 64, z: 0 });
-  expect(r).toMatchObject({ ok: false, reason: "refused" });
+  expect(r).toMatchObject({ ok: false, reason: "reverted" });
 });
 
 test("breaking: unknown (not loaded), out of reach, and no tool are told apart", async () => {
@@ -160,12 +164,12 @@ test("placing: success only once the block is there", async () => {
   expect(await P.placeBlockAt("cobblestone", { x: 2, y: 64, z: 0 })).toMatchObject({ ok: true, value: { name: "cobblestone" } });
 });
 
-test("placing in a protected spot: nothing appears, so it's refused", async () => {
+test("placing in a protected spot: nothing appears, so it's 'reverted'", async () => {
   inv = [item("cobblestone", 5)];
   server.place = async () => {
     throw new Error("No block has been placed : the block is still air");
   };
-  expect(await P.placeBlockAt("cobblestone", { x: 2, y: 64, z: 0 })).toMatchObject({ ok: false, reason: "refused" });
+  expect(await P.placeBlockAt("cobblestone", { x: 2, y: 64, z: 0 })).toMatchObject({ ok: false, reason: "reverted" });
 });
 
 test("placing: a taken spot, nothing to place against, nothing to place, and where it stands", async () => {
@@ -266,4 +270,24 @@ test("arriving while standing on farmland (or a slab) counts, as the pathfinder 
     fake.entity.position = new Vec3(10.5, 63.9375, 0.5); // feet inside the farmland block's space
   };
   expect(await P.goTo(new pf.goals.GoalBlock(10, 64, 0))).toMatchObject({ ok: true });
+});
+
+test("two blocks put back close together: a protected area it then keeps out of", async () => {
+  world.set("1,64,0", "dirt");
+  world.set("1,64,1", "dirt");
+  server.dig = async (b) => {}; // the server keeps every block
+  expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ reason: "reverted" });
+  expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toBeNull(); // once is not a claim (falling sand, water...)
+  expect(await P.breakBlock({ x: 1, y: 64, z: 1 })).toMatchObject({ reason: "reverted" });
+  expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toMatchObject({ source: "server" });
+  inv = [item("cobblestone", 5)];
+  expect(await P.placeBlockAt("cobblestone", { x: 2, y: 64, z: 0 })).toMatchObject({ ok: false, reason: "forbidden" });
+});
+
+test("the owner's keep-out area: no digging there; cleared, it's fine again", async () => {
+  world.set("1,64,0", "dirt");
+  await F.markForbidden({ x: 0, y: 64, z: 0 }, 5, "the owner said to keep out");
+  expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ ok: false, reason: "forbidden" });
+  expect(await F.clearForbiddenAt({ x: 1, y: 64, z: 0 })).toBe(1);
+  expect(await P.breakBlock({ x: 1, y: 64, z: 0 })).toMatchObject({ ok: true });
 });

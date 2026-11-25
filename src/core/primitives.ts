@@ -18,6 +18,7 @@ import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
+import { forbiddenAt, noteRevert } from "./forbidden";
 import { beginUse, takeoverCount, waitTurn, type Resource } from "./leases";
 import { currentSignal } from "./commandContext";
 import { placingOnPurpose } from "./scaffold";
@@ -172,6 +173,8 @@ async function breakBlockNow(pos: Pos, options: BreakOptions = {}): Promise<Acti
   if (block.name === "air" || block.name === "cave_air" || block.name === "water" || block.name === "lava") {
     return ok({ name: block.name, alreadyGone: true });
   }
+  const keepOut = forbiddenAt(at);
+  if (keepOut) return fail("forbidden", keepOut.reason);
   if (!withinReach(at)) return fail("out_of_reach", `${block.name} at ${at}`);
   if (bot.game.gameMode !== "creative") {
     const tool = await guarded("taking a tool", () => tools.equipForBlock(block), { timeoutMs: CONFIRM_MS * 5 });
@@ -191,7 +194,10 @@ async function breakBlockNow(pos: Pos, options: BreakOptions = {}): Promise<Acti
   // the server's answer comes a round trip later, and a protected area puts
   // the block back then. Only the state after that counts.
   await sleep(settleMs());
-  if (knownBlock(at)?.stateId === before) return fail("refused", `${block.name} at ${at} came back`);
+  if (knownBlock(at)?.stateId === before) {
+    await noteRevert(at); // twice close together: a protected area
+    return fail("reverted", `${block.name} at ${at} came back`);
+  }
   return ok({ name: block.name, alreadyGone: false });
 }
 
@@ -231,6 +237,8 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   if (!item) return fail("missing_items", `no ${itemName} to place`);
   const target = knownBlock(at);
   if (!target) return fail("unknown_block", `${at} isn't loaded`);
+  const keepOut = forbiddenAt(at);
+  if (keepOut) return fail("forbidden", keepOut.reason);
   if (!isReplaceable(target)) return fail("occupied", `${target.name} at ${at}`);
   const support = supportFor(at, options.against);
   if (!support) return fail("no_support", `nothing solid next to ${at}`);
@@ -257,8 +265,9 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   if (changed()) await sleep(settleMs()); // the server may still take it back
   const now = changed();
   if (now) return ok({ name: knownBlock(at)!.name });
-  if (!placed.ok && placed.reason !== "error") return placed;
-  return fail("refused", `${itemName} at ${at} didn't stay`);
+  if (!placed.ok && placed.reason !== "error" && placed.reason !== "refused") return placed;
+  await noteRevert(at); // twice close together: a protected area
+  return fail("reverted", `${itemName} at ${at} didn't stay`);
 }
 
 // --- Hands and inventory ---------------------------------------------------------
