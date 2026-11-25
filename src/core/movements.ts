@@ -194,6 +194,11 @@ export function safeMovements(bot: Bot): pf.Movements {
     if (!isNatural(block.name)) moves.blocksCantBreak.add(block.id);
   }
   moves.canDig = true; // natural terrain only (see above)
+  // Never through a sweet berry bush (they hurt: 7 health on one walk, then
+  // a zombie finished it, fresh-world test); walking right next to one is
+  // fine (owner: avoid them, but only by the one block)
+  const berries = bot.registry.blocksByName["sweet_berry_bush"]?.id;
+  if (berries !== undefined) moves.blocksToAvoid.add(berries);
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
@@ -209,8 +214,8 @@ export function safeMovements(bot: Bot): pf.Movements {
   moves.canOpenDoors = true; // fence gates
   // Everything else is mineflayer-pathfinder's own defaults (drops, digging,
   // pillaring, parkour, sprinting): every tweak of them made the walking
-  // worse somewhere (owner: fewer limits, fewer bugs). The exceptions are
-  // both about placing blocks: a block costs 6, not 1, and no 1x1 pillars;
+  // worse somewhere (owner: fewer limits, fewer bugs). The exceptions (besides
+  // berry bushes above) are both about placing blocks: a block costs 6, not 1, and no 1x1 pillars;
   // otherwise the search weighs building everywhere, runs out of time
   // ("partial" paths) and digs shafts instead of stairs (tests/noShafts)
   moves.placeCost = 6;
