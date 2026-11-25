@@ -24,7 +24,8 @@ import { beginUse, takeoverCount, waitTurn, type Resource } from "./leases";
 import { currentSignal } from "./commandContext";
 import { placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
-import { fail, ok, type ActionResult } from "./result";
+import { describeFailure, fail, ok, type ActionResult } from "./result";
+import pf from "mineflayer-pathfinder";
 
 type Goal = goals.Goal;
 type Pos = { x: number; y: number; z: number };
@@ -163,36 +164,84 @@ export function lastWalkGoal(): Pos | null {
 const TREE_BLOCK = /_leaves$|_log$|_wood$|_stem$/;
 
 /**
- * On top of a tree (it spawned on a spruce, fresh-world test: every walk
- * found "no path" since a drop of more than 3 hurts): breaks its way straight
- * down through the leaves and the trunk, a block at a time, as a player
- * does, never into a drop of more than 3. True if it got any lower.
+ * The top of the trunk under or next to it: the nearest log column within 3
+ * blocks sideways and 12 below its feet (null when it isn't up a tree).
  */
-async function getDownFromTree(): Promise<boolean> {
-  let lower = false;
-  for (let i = 0; i < 40 && bot.entity; i++) {
-    const feet = bot.entity.position.floored();
-    const below = bot.blockAt(feet.offset(0, -1, 0));
-    if (!below || !TREE_BLOCK.test(below.name)) break;
-    let drop = 0;
-    while (drop < 5 && bot.blockAt(feet.offset(0, -2 - drop, 0))?.boundingBox === "empty") drop++;
-    if (drop > 3) break;
-    const broken = await breakBlock(below.position, { allowWithoutHarvest: true });
-    if (!broken.ok) break;
-    lower = true;
-    await sleep(400 + drop * 150); // falling onto the next block
+function trunkBelow(): Vec3 | null {
+  if (!bot.entity || !bot.blockAt) return null;
+  const feet = bot.entity.position.floored();
+  let best: { at: Vec3; d: number } | null = null;
+  for (let dx = -3; dx <= 3; dx++)
+    for (let dz = -3; dz <= 3; dz++)
+      for (let dy = 1; dy <= 12; dy++) {
+        const at = feet.offset(dx, -dy, dz);
+        if (!/_log$|_stem$/.test(bot.blockAt(at)?.name ?? "")) continue;
+        const d = dx * dx + dz * dz;
+        if (!best || d < best.d || (d === best.d && at.y > best.at.y)) best = { at, d };
+        break; // the highest log of this column
+      }
+  return best?.at ?? null;
+}
+
+/**
+ * Up a tree (it spawned on top of a spruce, fresh-world test): onto the top
+ * of the trunk under it, then chops straight down it, a block at a time,
+ * leaves and logs, until it stands on the ground; the logs come with it.
+ * True if it got any lower.
+ */
+export async function climbDownTree(): Promise<boolean> {
+  if (!onTree()) return false;
+  const start = bot.entity.position.floored();
+  const trunk = trunkBelow();
+  console.log(`Up a tree at ${start}: ${trunk ? `chopping down the trunk at ${trunk.x}, ${trunk.z}` : "no trunk under me; digging straight down"}.`);
+  // Onto the trunk's column: across the leaves at this height (breaking
+  // leaves in the way is fine; they're natural)
+  if (trunk && (start.x !== trunk.x || start.z !== trunk.z)) {
+    const over = await walkTo(new pf.goals.GoalBlock(trunk.x, start.y, trunk.z));
+    if (!over.ok) console.log(`Couldn't step over the trunk (${describeFailure(over)}); digging down from here.`);
   }
-  if (lower) console.log(`Climbed down the tree I was standing on, to ${bot.entity?.position.floored()}.`);
+  let lower = false;
+  for (let i = 0; i < 60 && bot.entity; i++) {
+    if (currentSignal()?.aborted) break;
+    const below = blockUnderMe();
+    if (!below || !TREE_BLOCK.test(below.name)) break; // on the ground
+    const p = below.position;
+    let drop = 0;
+    while (drop < 5 && bot.blockAt(p.offset(0, -1 - drop, 0))?.boundingBox === "empty") drop++;
+    if (drop > 3) {
+      console.log(`Breaking the ${below.name} under me would drop me ${drop}+ blocks; stopping here.`);
+      break;
+    }
+    const broken = await breakBlock(p, { allowWithoutHarvest: true });
+    if (!broken.ok) {
+      console.log(`Couldn't break the ${below.name} under me (${describeFailure(broken)}).`);
+      break;
+    }
+    lower = true;
+    await sleep(350 + drop * 150); // falling onto the next block
+  }
+  if (lower) console.log(`Climbed down the tree, to ${bot.entity?.position.floored()}.`);
   return lower;
 }
 
+/** The block it stands on: under its middle, or (on an edge) under a corner of its body. */
+function blockUnderMe(): Block | null {
+  if (!bot.entity || !bot.blockAt) return null;
+  const { x, y, z } = bot.entity.position;
+  for (const [dx, dz] of [[0, 0], [0.29, 0.29], [0.29, -0.29], [-0.29, 0.29], [-0.29, -0.29]] as const) {
+    const b = bot.blockAt(new Vec3(x + dx!, y - 0.5, z + dz!).floored());
+    if (b && b.boundingBox === "block") return b;
+  }
+  return null;
+}
+
 /** True when it stands on a tree's leaves or trunk. */
-const onTree = (): boolean => TREE_BLOCK.test(bot.blockAt?.(bot.entity.position.floored().offset(0, -1, 0))?.name ?? "");
+const onTree = (): boolean => TREE_BLOCK.test(blockUnderMe()?.name ?? "");
 
 export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean } = {}): Promise<ActionResult> {
   const result = await walkTo(goal, options);
   // No way from up a tree: down the trunk, then once more
-  if (!result.ok && result.reason === "unreachable" && !options.climbedDown && bot.entity && onTree() && (await getDownFromTree())) {
+  if (!result.ok && result.reason === "unreachable" && !options.climbedDown && bot.entity && onTree() && (await climbDownTree())) {
     return goTo(goal, { ...options, climbedDown: true });
   }
   return result;

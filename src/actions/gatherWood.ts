@@ -2,6 +2,7 @@ import { bot } from "../core/body";
 import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
 import { breakBlockAt, pickupNearbyItems } from "../actions/worldInteraction";
+import { climbDownTree } from "../core/primitives";
 import { goToPosition, moveAway } from "../actions/movement";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
@@ -24,10 +25,13 @@ export async function gatherWood(
 ): Promise<boolean> {
   console.log(`Gathering wood... I need to collect ${num} logs.`);
   bot.chat(`Gathering wood... I need to collect ${num} logs.`);
+  // Up a tree (spawned on top of one): chop down the trunk under it first,
+  // top to bottom, like a player would (owner)
+  const startingLogs = getLogsCount(); // the trunk's logs count toward `num`
+  await climbDownTree();
 
   try {
     let logsCount = getLogsCount();
-    const startingLogs = logsCount;
     const targetLogs = startingLogs + num; // Collect `num` new logs
     let failedAttempts = 0;
     // Logs it couldn't walk to (up a jungle trunk, behind leaves); without
