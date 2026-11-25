@@ -14,7 +14,8 @@ import { liveWorld } from "./world";
 import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, enterShelter, setupTheShelter, shelterSlots } from "../actions/building";
+import { buildShelter, enterShelter, setupTheShelter, shelterSlots, tableWithin } from "../actions/building";
+import { TABLE_RANGE } from "../actions/crafting";
 import { branchMine, COAL, digMine, IRON, myMine } from "./mine";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -139,7 +140,9 @@ function furnished(): boolean {
   const slots = shelterSlots();
   if (!slots) return false;
   const has = (spot: { x: number; y: number; z: number } | null, name: string): boolean => !spot || knownBlock(spot)?.name === name || !knownBlock(spot);
-  return slots.chests.every((c) => has(c, "chest")) && has(slots.furnace, "furnace") && has(slots.table, "crafting_table");
+  // The table: its spot, or any table within 50 blocks (it never places a second one close by)
+  const table = has(slots.table, "crafting_table") || tableWithin(TABLE_RANGE);
+  return slots.chests.every((c) => has(c, "chest")) && has(slots.furnace, "furnace") && table;
 }
 
 /** Every milestone, in the order the bot goes for them. */

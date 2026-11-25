@@ -10,6 +10,7 @@ import { catalog } from "../core/catalog";
 import { isWoodenDoor } from "../core/movements";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
+import { TABLE_RANGE } from "./crafting";
 import {
   addPlace,
   forgetPlaces,
@@ -380,6 +381,12 @@ export function rememberShelterDoor(): void {
   }
 }
 
+/** True with a crafting table within `range` blocks. */
+export function tableWithin(range: number): boolean {
+  const id = bot.registry.blocksByName["crafting_table"]?.id;
+  return id !== undefined && bot.findBlock({ matching: id, maxDistance: range }) !== null;
+}
+
 /** Puts `item` at `spot` (getting one first), unless it's already there. */
 async function putAt(item: string, spot: Pos | null): Promise<ActionResult> {
   if (!spot) return ok();
@@ -414,9 +421,12 @@ export async function setupTheShelter(): Promise<ActionResult> {
   const furnace = await putAt("furnace", slots.furnace);
   if (!furnace.ok) return furnace;
   if (slots.furnace) await saveFurnaceLocation(slots.furnace);
-  const table = await putAt("crafting_table", slots.table);
-  if (!table.ok) return table;
-  if (slots.table) await saveCraftingTableLocation(slots.table);
+  // A table only if there's none within 50 blocks (owner's rule: never a second one close by)
+  if (!tableWithin(TABLE_RANGE)) {
+    const table = await putAt("crafting_table", slots.table);
+    if (!table.ok) return table;
+    if (slots.table) await saveCraftingTableLocation(slots.table);
+  }
   return ok();
 }
 

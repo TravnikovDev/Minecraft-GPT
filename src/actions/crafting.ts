@@ -7,10 +7,10 @@ import { Vec3 } from "vec3";
 import { Item } from "prismarine-item";
 import { Block } from "prismarine-block";
 import { Recipe } from "prismarine-recipe";
-import { breakBlock, craftWith, goTo, withinReach } from "../core/primitives";
+import { craftWith, goTo, withinReach } from "../core/primitives";
 import { closeWindow, openFurnaceAt, windowStep } from "../core/containers";
 import { describeFailure } from "../core/result";
-import { pickupNearbyItems, placeBlock } from "./worldInteraction";
+import { placeBlock } from "./worldInteraction";
 import pf from "mineflayer-pathfinder";
 import { goToPosition } from "./movement";
 import { bot } from "../core/body";
@@ -70,14 +70,9 @@ function nearbyTables(range: number): Block[] {
 }
 
 const HOME_RADIUS = 24;
+/** A crafting table this close is walked to; a new one is placed only with none this close. */
+export const TABLE_RANGE = 50;
 
-/** True within HOME_RADIUS of its shelter or base (in this dimension). */
-function nearHome(at: { x: number; y: number; z: number }): boolean {
-  const dim = currentDimension();
-  return getPlaces()
-    .filter((p) => (p.kind === "basement" || p.kind === "base") && p.dimension === dim)
-    .some((p) => Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z) <= HOME_RADIUS);
-}
 
 /** The shelter's table spot, when it's near and free (air) right now. */
 function homeTableSpot(): Vec3 | null {
@@ -88,19 +83,6 @@ function homeTableSpot(): Vec3 | null {
   return bot.blockAt(new Vec3(spot.x, spot.y, spot.z))?.name === "air" ? new Vec3(spot.x, spot.y, spot.z) : null;
 }
 
-/** Breaks the crafting table the bot put down for a craft and picks it up again. */
-async function pickUpOwnTable(position: Block["position"]): Promise<void> {
-  const table = bot.blockAt(position);
-  if (table?.name !== "crafting_table") return;
-  const broken = await breakBlock(position, { allowWithoutHarvest: true });
-  if (!broken.ok) {
-    console.log(`Couldn't pick my crafting table back up: ${describeFailure(broken)}`);
-    return;
-  }
-  await new Promise((r) => setTimeout(r, 250)); // the drop lands first
-  await pickupNearbyItems(bot, 4);
-  console.log(`Picked my crafting table back up from ${position}.`);
-}
 
 export async function craftRecipe(
   incomingItemName: string,
@@ -193,7 +175,8 @@ export async function craftRecipe(
         : `No crafting table nearby, using my own.`
     );
 
-    // Our own table: put it down, craft, and take it back with us. Made from
+    // Our own table, only with no table within TABLE_RANGE it can reach: put
+    // it down and leave it there. Made from
     // what it carries (planks or logs) if needed, but never by going to get
     // wood: that's the planner's job (skills/acquire), which asks for a table first
     if (getItemCount("crafting_table") === 0 && !(await craftNow("crafting_table", 1)).ok) {
@@ -217,15 +200,10 @@ export async function craftRecipe(
     try {
       return await moveToAndCraft(placed);
     } finally {
-      // At home it stays, like a player's table (it found and used it again
-      // next time instead of placing and breaking one for every craft);
-      // away from home it goes back in the pocket
-      if (nearHome(placed.position)) {
-        await saveCraftingTableLocation({ x: placed.position.x, y: placed.position.y, z: placed.position.z });
-        console.log(`Leaving my crafting table at ${placed.position}: it's near home.`);
-      } else {
-        await pickUpOwnTable(placed.position);
-      }
+      // It stays where it is, always, and is remembered (owner: never pick
+      // the crafting table back up; the next craft walks to it)
+      await saveCraftingTableLocation({ x: placed.position.x, y: placed.position.y, z: placed.position.z });
+      console.log(`Leaving my crafting table at ${placed.position}.`);
     }
   }
 
@@ -238,7 +216,8 @@ export async function craftRecipe(
 
   // Step 2: Find and use a crafting table
   console.log(`Step 2: Find and use a crafting table`);
-  const craftingTableRange = 32;
+  // Any table within 50 blocks is used (walked to) rather than placing another (owner's rule)
+  const craftingTableRange = TABLE_RANGE;
   if (await findAndUseCraftingTable(craftingTableRange)) {
     return true;
   }
