@@ -16,6 +16,7 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
+import { avoidStep } from "./movements";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
@@ -157,9 +158,11 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
   }
   // The pathfinder's last word on this walk (a path, no path, a timeout)
   let lastPath = "no path computed yet";
+  let nextStep: { x: number; y: number; z: number } | null = null;
   const onPath = (r: { status: string; path: Array<{ x: number; y: number; z: number; toBreak?: unknown[]; toPlace?: unknown[] }> }): void => {
     // The next step too: where a stalled walk was trying to go first
     const next = r.path[0];
+    nextStep = next ?? null;
     const how = next ? ` (next ${Math.floor(next.x)}, ${Math.floor(next.y)}, ${Math.floor(next.z)}${next.toBreak?.length ? `, breaking ${next.toBreak.length}` : ""}${next.toPlace?.length ? `, placing ${next.toPlace.length}` : ""})` : "";
     lastPath = `${r.status}, ${r.path.length} moves${how}`;
   };
@@ -177,7 +180,11 @@ export async function goTo(goal: Goal, options: { timeoutMs?: number } = {}): Pr
       watchdog: watchdog.signal,
       onStop: () => pathing.stopIf(goal), // never clear a reflex's goal or a paused follow
     });
-    if (!walked.ok) return walked;
+    if (!walked.ok) {
+      // Stuck on a step: the next walk routes around it
+      if (walked.reason === "timeout" && nextStep) avoidStep(nextStep);
+      return walked;
+    }
   } finally {
     watchdog.stop();
     bot.removeListener?.("path_update" as never, onPath as never);

@@ -5,7 +5,7 @@ const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
 const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
-const { safeMovements, clearSolidDoors } = await import(`${ROOT}/src/core/movements.ts`);
+const { safeMovements, clearSolidDoors, avoidStep } = await import(`${ROOT}/src/core/movements.ts`);
 beforeEach(() => clearSolidDoors());
 
 const world = new Map<string, any>();
@@ -54,4 +54,12 @@ test("doors are doorways to the path (walked through at the middle), but the pat
   expect(moves.openable.has(id("oak_fence_gate"))).toBe(true); // gates still opened by the pathfinder
   const b = moves.getBlock(new Vec3(0, 64, 0), 0, 0, 0); // the oak door placed above
   expect(b.openable).toBe(false);
+});
+
+test("a step a walk got stuck on is routed around for a while", () => {
+  const ledge = { position: new Vec3(48, 95, 31) };
+  expect(moves.exclusionStep(ledge)).toBe(0);
+  avoidStep({ x: 48.4, y: 95, z: 31.2 }); // the stall log's "next" step
+  expect(moves.exclusionStep(ledge)).toBeGreaterThanOrEqual(100);
+  expect(moves.exclusionStep({ position: new Vec3(48, 95, 30) })).toBe(0); // only that cell
 });
