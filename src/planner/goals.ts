@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
-import { fail, ok, type ActionResult } from "../core/result";
+import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { MILESTONES } from "../skills/milestones";
 import { shelter, TIER, toolTier } from "../skills/capabilities";
 
@@ -86,10 +86,11 @@ export const GOALS: Goal[] = [
     menu: () => (shelter() ? "possible (it has a shelter)" : "not yet: no shelter"),
     run: async () => {
       const { buildShelter, shelterIntact } = await import("../actions/building");
-      if (!shelterIntact()) await buildShelter();
-      const { execute } = await import("../commands/HomeChores");
-      await execute();
-      return ok();
+      const mended = shelterIntact() ? ok() : await buildShelter();
+      const { homeChores } = await import("../skills/homeChores");
+      const chores = await homeChores();
+      if (!mended.ok) return fail(mended.reason, `my shelter isn't mended (${describeFailure(mended)})${chores.ok ? "" : `; ${describeFailure(chores)}`}`);
+      return chores;
     },
     describe: () => "resting and tidying up at home",
   },

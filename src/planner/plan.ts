@@ -32,7 +32,27 @@ export const DayPlanSchema = z.object({
 export type DayPlan = z.infer<typeof DayPlanSchema>;
 
 export type PlanStep = { goal: string; args: Record<string, unknown>; why: string; status: "pending" | "running" | "done" | "failed" | "skipped"; reason?: string };
-export type StoredPlan = { madeAt: number; day: number; narrative: string; steps: PlanStep[] };
+export type StoredPlan = { id?: number; madeAt: number; day: number; narrative: string; steps: PlanStep[] };
+
+/** A plan's identity (older plans have none: their time made). */
+export const planIdOf = (plan: StoredPlan): number => plan.id ?? plan.madeAt;
+
+/** The id of the plan it's following now, or null. */
+export const currentPlanId = (): number | null => {
+  const plan = currentPlan();
+  return plan ? planIdOf(plan) : null;
+};
+
+/**
+ * A step's status once it ran: done, failed (an error, stuck, too long, a
+ * failed result), or pending again when something else cut it off (it goes
+ * on later). Pure.
+ */
+export function stepStatusAfter(r: { threw: boolean; cancelled: boolean; reason: string; ok: boolean }): "done" | "failed" | "pending" {
+  if (r.threw) return "failed";
+  if (r.cancelled) return r.reason === "stuck" || r.reason === "took too long" ? "failed" : "pending";
+  return r.ok ? "done" : "failed";
+}
 
 /** The goal's own arguments out of a flat step ({goal: "mineFor", item, count}). */
 function argsFor(step: RawStep): Record<string, unknown> {
@@ -108,18 +128,25 @@ export async function savePlan(plan: StoredPlan): Promise<void> {
   await updateMemory({ plan });
 }
 
-/** The next step still to do, with its index. */
-export function nextStep(plan: StoredPlan | null = currentPlan()): { index: number; step: PlanStep } | null {
+/** The next step to do, with its index ("running" is never next: one is running already). */
+export function nextStep(plan: StoredPlan | null = currentPlan()): { planId: number; index: number; step: PlanStep } | null {
   if (!plan) return null;
-  const index = plan.steps.findIndex((s) => s.status === "pending" || s.status === "running");
-  return index >= 0 ? { index, step: plan.steps[index]! } : null;
+  const index = plan.steps.findIndex((s) => s.status === "pending");
+  return index >= 0 ? { planId: planIdOf(plan), index, step: plan.steps[index]! } : null;
 }
 
-/** Marks a step (running, done, failed or skipped, with why). */
-export async function markStep(index: number, status: PlanStep["status"], reason?: string): Promise<void> {
+/** After a restart nothing is running: a step left "running" is to do again. */
+export async function resetRunningSteps(): Promise<void> {
+  const plan = currentPlan();
+  if (!plan || !plan.steps.some((s) => s.status === "running")) return;
+  await savePlan({ ...plan, steps: plan.steps.map((s) => (s.status === "running" ? { ...s, status: "pending" } : s)) });
+}
+
+/** Marks a step of plan `planId` (nothing when that plan was replaced meanwhile). */
+export async function markStep(planId: number, index: number, status: PlanStep["status"], reason?: string): Promise<void> {
   const plan = currentPlan();
   const step = plan?.steps[index];
-  if (!plan || !step) return;
+  if (!plan || !step || planIdOf(plan) !== planId) return;
   const steps = plan.steps.map((s, i) => (i === index ? { ...s, status, ...(reason ? { reason } : {}) } : s));
   await savePlan({ ...plan, steps });
 }

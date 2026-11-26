@@ -26,6 +26,11 @@ const STOP = new RegExp(`${PREFIX}(?:stop|halt|freeze|stand still)(?:\\s+(?:it|n
 const COME = new RegExp(`${PREFIX}(?:come(?:\\s+(?:here|to me|back))?)${SUFFIX}`, "i");
 const FOLLOW = new RegExp(`${PREFIX}(?:follow me)${SUFFIX}`, "i");
 const STATUS = new RegExp(`${PREFIX}(?:status|what are you doing|what're you doing|whats up|what's up)${SUFFIX}`, "i");
+// Questions about its day, its plan and its spending: answered in code, so
+// they still work when this month's model budget is spent
+const DIARY = new RegExp(`${PREFIX}(?:what (?:did|have) you (?:do|done)(?: today)?|how was your day|read (?:me )?your diary)${SUFFIX}`, "i");
+const PLAN = new RegExp(`${PREFIX}(?:what(?:'s| is) your plan(?: for today)?|what are you planning(?: today)?)${SUFFIX}`, "i");
+const SPENT = new RegExp(`${PREFIX}(?:how much (?:have you|did you) spen[dt](?: this month)?|what(?:'s| is) your budget)${SUFFIX}`, "i");
 const WHERE = new RegExp(`${PREFIX}(?:where are you|where r u|how far are you|how far away are you|your location|location)${SUFFIX}`, "i");
 const YES = new RegExp(`${PREFIX}(?:yes|yeah|yep|yup|sure|ok|okay|go|go ahead|do it|please do)${SUFFIX}`, "i");
 const NO = new RegExp(`${PREFIX}(?:no|nope|nah|don't|do not|cancel|never mind|nevermind)${SUFFIX}`, "i");
@@ -159,6 +164,13 @@ async function tryFastPath(message: string): Promise<boolean> {
   if (STATUS.test(message)) {
     console.log("Fast path: status");
     reply(statusMessage());
+    return true;
+  }
+
+  for (const [pattern, command] of [[DIARY, BotCommands.Diary], [PLAN, BotCommands.Plan], [SPENT, BotCommands.Spending]] as const) {
+    if (!pattern.test(message)) continue;
+    console.log(`Fast path: ${command}`);
+    await executeTool(command, command === BotCommands.Diary ? { yesterday: null } : command === BotCommands.Plan ? { request: null } : {});
     return true;
   }
 

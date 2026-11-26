@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { partOfDay, withLine, renderDay } = await import(`${ROOT}/src/planner/diary.ts`);
+const { partOfDay, withLine, renderDay, linesSince } = await import(`${ROOT}/src/planner/diary.ts`);
 const { taskLine } = await import(`${ROOT}/src/planner/diaryHooks.ts`);
 
 test("parts of the day from the game's time", () => {
@@ -31,4 +31,10 @@ test("task outcomes: owner's orders, failures and give-ups make lines; idle chor
   expect(taskLine({ name: "milestone: coal", bucket: 5 }, "done", "")).toBeNull(); // written when reached
   expect(taskLine({ name: "tidying up", bucket: 6 }, "done", "")).toBeNull();
   expect(taskLine({ name: "creeper", bucket: 1 }, "done", "")).toBeNull();
+});
+
+test("after a summary only the newer lines go to the planner; the day keeps all its lines", () => {
+  const day = { day: 5, lines: [{ at: 10, time: "morning", text: "a" }, { at: 20, time: "afternoon", text: "b" }] };
+  expect(linesSince(day, 15).lines.map((l: any) => l.text)).toEqual(["b"]);
+  expect(day.lines.length).toBe(2);
 });

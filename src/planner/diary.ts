@@ -69,26 +69,54 @@ function dayEntry(n: number): DiaryDay {
   return days().find((d) => d.day === n) ?? { day: n, lines: [] };
 }
 
+// Pickups counted in memory and written with the next line or within a
+// minute (a save per pickup parsed the whole memory on every block mined)
+const pendingGains = new Map<string, number>();
+const GAINS_FLUSH_MS = 60_000;
+let gainsTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The day with the pickups counted since the last save added. */
+function withGains(day: DiaryDay): DiaryDay {
+  if (pendingGains.size === 0) return day;
+  const gains = { ...(day.gains ?? {}) };
+  for (const [name, n] of pendingGains) gains[name] = (gains[name] ?? 0) + n;
+  pendingGains.clear();
+  return { ...day, gains };
+}
+
 /** Writes a line in today's diary ("Reached milestone: stone tools."). */
 export async function note(text: string): Promise<void> {
   if (!bot.entity) return;
   const line: DiaryLine = { at: Date.now(), time: partOfDay(bot.time?.timeOfDay ?? 0), text: text.trim() };
   console.log(`Diary: ${line.time}: ${line.text}`);
-  await saveDay(withLine(dayEntry(gameDay()), line));
+  await saveDay(withLine(withGains(dayEntry(gameDay())), line));
 }
 
 /** Counts what it picked up today (one line at the end of the day, not one per pickup). */
-export async function noteGain(name: string, count: number): Promise<void> {
-  if (!bot.entity) return;
-  const day = dayEntry(gameDay());
-  const gains = { ...(day.gains ?? {}) };
-  gains[name] = (gains[name] ?? 0) + count;
-  await saveDay({ ...day, gains });
+export function noteGain(name: string, count: number): void {
+  pendingGains.set(name, (pendingGains.get(name) ?? 0) + count);
+  gainsTimer ??= setTimeout(() => {
+    gainsTimer = null;
+    if (pendingGains.size > 0 && bot.entity) void saveDay(withGains(dayEntry(gameDay())));
+  }, GAINS_FLUSH_MS);
 }
 
 /** Today's diary as text ("" when nothing happened yet). */
 export function today(): string {
-  return renderDay(dayEntry(gameDay()));
+  return renderDay(withGainsPreview(dayEntry(gameDay())));
+}
+
+/** The day with the not-yet-saved pickups shown (without clearing them). */
+function withGainsPreview(day: DiaryDay): DiaryDay {
+  if (pendingGains.size === 0) return day;
+  const gains = { ...(day.gains ?? {}) };
+  for (const [name, n] of pendingGains) gains[name] = (gains[name] ?? 0) + n;
+  return { ...day, gains };
+}
+
+/** The lines of a day written after `since` (what the planner hasn't summarised yet). */
+export function linesSince(day: DiaryDay, since: number): DiaryDay {
+  return { ...day, lines: day.lines.filter((l) => l.at > since) };
 }
 
 /** The raw diary days it still has (oldest first), for the planner. */
@@ -96,18 +124,19 @@ export function rawDays(): DiaryDay[] {
   return days();
 }
 
-/** The last few day summaries, oldest first. */
-export function summaries(): { day: number; text: string }[] {
+/** The last few day summaries, oldest first (`at`: when it was written). */
+export function summaries(): { day: number; text: string; at?: number }[] {
   return getMemory().daySummaries ?? [];
 }
 
 /**
- * Keeps the planner's summary of a day and drops that day's raw lines: the
- * diary is compressed into memory, so requests stay the same size.
+ * Keeps the planner's summary of a day. The raw lines stay (the owner reads
+ * them; a poor summary must not replace the real record): only the planning
+ * request leaves out what a summary already covers, so it stays small.
  */
 export async function summarise(day: number, text: string): Promise<void> {
   const clean = text.trim();
   if (!clean) return;
-  const kept = [...summaries().filter((s) => s.day !== day), { day, text: clean }].sort((a, b) => a.day - b.day).slice(-SUMMARIES);
-  await updateMemory({ daySummaries: kept, diary: days().filter((d) => d.day !== day) });
+  const kept = [...summaries().filter((s) => s.day !== day), { day, text: clean, at: Date.now() }].sort((a, b) => a.day - b.day).slice(-SUMMARIES);
+  await updateMemory({ daySummaries: kept });
 }

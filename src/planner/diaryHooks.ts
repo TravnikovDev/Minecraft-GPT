@@ -58,7 +58,7 @@ export function registerDiary(): void {
   });
 
   on("item:collected", ({ name, count, from }) => {
-    void noteGain(name, count);
+    noteGain(name, count);
     if (from) void note(`${from} gave me ${count} ${name.replace(/_/g, " ")}.`);
   });
 }

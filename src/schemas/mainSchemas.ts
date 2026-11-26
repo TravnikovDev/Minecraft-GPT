@@ -138,10 +138,11 @@ export const MemorySchema = z.object({
       })
     )
     .optional(),
-  daySummaries: z.array(z.object({ day: z.number(), text: z.string() })).optional(),
+  daySummaries: z.array(z.object({ day: z.number(), text: z.string(), at: z.number().optional() })).optional(),
   // The day plan the model made (validated), and how far it got
   plan: z
     .object({
+      id: z.number().optional(),
       madeAt: z.number(),
       day: z.number(),
       narrative: z.string(),

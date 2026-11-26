@@ -34,6 +34,9 @@ export async function execute(args: { request?: string | null } = {}): Promise<v
     return;
   }
   reply(request ? "Okay, let me plan my day around that." : "Let me think about my day.");
-  // planDay reports the new plan itself
-  if (!(await planDay("owner asked", request))) reply("I couldn't make a plan just now; I'll follow my milestones.");
+  // In the background: the owner's command ends now (a slow answer never
+  // holds the bot up); planDay says the new plan itself
+  void planDay("owner asked", request).then((made) => {
+    if (!made) reply("I couldn't make a plan just now; I'll follow my milestones.");
+  });
 }

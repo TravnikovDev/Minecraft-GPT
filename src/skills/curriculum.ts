@@ -11,6 +11,7 @@
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
 import { noteMilestone, noteMilestoneFailed } from "../planner/diaryHooks";
+import { PLAN_PREFIX, setStepGate, stepAllowedNow } from "../planner/names";
 import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
@@ -35,7 +36,7 @@ const NIGHT_MAX_MS = 12 * 60_000;
 const MILESTONE_PREFIX = "milestone: ";
 const NIGHT_NAME = "night: going to my shelter";
 const isOwnLife = (task: { name: string; bucket: number }): boolean =>
-  (task.bucket === Bucket.Self && task.name.startsWith(MILESTONE_PREFIX)) || task.name === NIGHT_NAME;
+  (task.bucket === Bucket.Self && (task.name.startsWith(MILESTONE_PREFIX) || task.name.startsWith(PLAN_PREFIX))) || task.name === NIGHT_NAME;
 const blockedUntil = new Map<string, number>();
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -240,6 +241,9 @@ export async function considerNextStep(): Promise<void> {
   // Offline (the world closed): nothing to start until it's back
   if (!bot.entity || !isOnline() || !autonomyOn() || areChoresMuted()) return;
   await announce();
+  // Dusk: tomorrow is planned now, busy or not (the night routine starts at
+  // dusk and runs till dawn: checked after it, this never fired)
+  await planAtDusk();
   // Night comes first: it cuts in on a milestone (upkeep outranks "self"),
   // but waits for the owner's commands
   // The world's day (it moves on when someone sleeps; the age doesn't)
@@ -255,7 +259,7 @@ export async function considerNextStep(): Promise<void> {
   // Past its first day the day plan decides what's next (Phase 7); with no
   // plan step to do (not made yet, the model unavailable, the money spent)
   // the next milestone below is the fallback
-  if (await planStepProposed(day)) return;
+  if (await planStepProposed()) return;
   const next = nextMilestone(MILESTONES, isBlocked);
   // At night only work underground, and only once it's home (the night
   // routine ran: in through the shelter, doors shut): in the mine day and
@@ -273,13 +277,9 @@ const nightStep = (goal: string, args: Record<string, unknown>): boolean =>
  * day) and when it has no steps left, and proposes the next step. True when
  * it proposed one.
  */
-async function planStepProposed(day: number): Promise<boolean> {
-  const { planningOn, planDay, duskDue, markDuskPlanned } = await import("../planner/planner");
+async function planStepProposed(): Promise<boolean> {
+  const { planningOn, planDay } = await import("../planner/planner");
   if (!planningOn(autonomyOn())) return false;
-  if (duskDue()) {
-    markDuskPlanned();
-    void planDay("dusk");
-  }
   const { nextStep } = await import("../planner/plan");
   const { planStepTask } = await import("../planner/runner");
   const next = nextStep();
@@ -287,12 +287,24 @@ async function planStepProposed(day: number): Promise<boolean> {
     void planDay("idle");
     return false;
   }
-  if (isNight() && !(nightStep(next.step.goal, next.step.args) && nightOf === day)) return true; // the plan waits for the morning
-  const task = planStepTask(next.index, next.step);
+  if (!stepAllowedNow(next.step)) return isNight(); // at night the plan waits for the morning
+  const task = planStepTask(next.planId, next.index);
   if (!task) return false;
   propose(task);
   return true;
 }
+
+/** Dusk: plan tomorrow, once per game day, whatever it's doing. */
+async function planAtDusk(): Promise<void> {
+  const { planningOn, planDay, duskDue, markDuskPlanned } = await import("../planner/planner");
+  if (!planningOn(autonomyOn()) || !duskDue()) return;
+  markDuskPlanned();
+  void planDay("dusk");
+}
+
+// At night a plan step runs only under ground, and only once it's home (the
+// night routine ran), like its night milestones; resumed steps are checked too
+setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf === (bot.time?.day ?? 0)));
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
 const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe"]);

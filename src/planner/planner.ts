@@ -17,11 +17,16 @@ import { recentConversation } from "../core/session";
 import { MILESTONES, tier1Reached } from "../skills/milestones";
 import { foodPoints, hasBed, shelter, toolTier } from "../skills/capabilities";
 import { overBudget, recordCall } from "./cost";
-import { gameDay, note, rawDays, renderDay, summaries, summarise } from "./diary";
+import { gameDay, linesSince, note, rawDays, renderDay, summaries, summarise, type DiaryDay } from "./diary";
 import { goalMenu, goalNamed } from "./goals";
 import { currentPlan, DayPlanSchema, describePlan, MAX_STEPS, MIN_STEPS, savePlan, validateSteps, type DayPlan, type StoredPlan } from "./plan";
+import { PLAN_PREFIX } from "./names";
+import { cancelRunning, currentTask, dropPending } from "../core/arbiter";
 
 const PLAN_MODEL = "gpt-6-luna";
+// A plan answers in about 5 s; a stalled connection must not hold anything up
+// (the SDK's default is 10 minutes with retries)
+const CALL_TIMEOUT_MS = 20_000;
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 export type Trigger = "dusk" | "idle" | "blocked" | "death" | "owner joined" | "owner asked";
@@ -81,10 +86,17 @@ export async function planningContext(trigger: Trigger, ownerRequest: string | n
   const tiers = (["pickaxe", "axe", "sword"] as const).map((k) => `${k} ${["none", "wood", "gold", "stone", "iron", "diamond"][toolTier(k) + 1] ?? "?"}`).join(", ");
   const done = MILESTONES.filter((m) => m.done()).map((m) => m.id);
   const day = gameDay();
+  // Summarised days travel as their summary; only what came after it goes raw
+  const summaryOf = (d: number): { text: string; at?: number } | undefined => summaries().find((s) => s.day === d);
+  const unsummarised = (d: { day: number; lines: DiaryDay["lines"]; gains?: DiaryDay["gains"] }): DiaryDay => linesSince(d, summaryOf(d.day)?.at ?? 0);
   const todayEntry = rawDays().find((d) => d.day === day);
-  const earlierRaw = rawDays().filter((d) => d.day !== day).map((d) => `Day ${d.day} (not summarised):\n${renderDay(d)}`);
-  const memory = summaries().slice(-5).map((s) => `Day ${s.day}: ${s.text}`);
-  const todaySummary = summaries().find((s) => s.day === day);
+  const earlierRaw = rawDays()
+    .filter((d) => d.day !== day)
+    .map(unsummarised)
+    .filter((d) => d.lines.length > 0)
+    .map((d) => `Day ${d.day}, after its summary:\n${renderDay(d)}`);
+  const memory = summaries().filter((s) => s.day !== day).slice(-5).map((s) => `Day ${s.day}: ${s.text}`);
+  const todaySummary = summaryOf(day);
   const plan = currentPlan();
   const lastPlan = plan
     ? plan.steps.map((s) => `${s.goal} ${JSON.stringify(s.args)}: ${s.status}${s.reason ? ` (${s.reason})` : ""}`).join("\n")
@@ -103,7 +115,7 @@ export async function planningContext(trigger: Trigger, ownerRequest: string | n
     memory.length ? `Your memory (earlier days):\n${memory.join("\n")}` : "",
     earlierRaw.length ? earlierRaw.join("\n") : "",
     todaySummary ? `Today's earlier summary: ${todaySummary.text}` : "",
-    `Today's diary:\n${todayEntry ? renderDay(todayEntry) : "nothing yet"}`,
+    `Today's diary${todaySummary ? " since that summary" : ""}:\n${todayEntry ? renderDay(unsummarised(todayEntry)) || "nothing new" : "nothing yet"}`,
     `Goal menu (what's possible now):\n${goalMenu()}`,
   ]
     .filter(Boolean)
@@ -125,7 +137,7 @@ async function askModel(context: string): Promise<DayPlan | null> {
     input: context,
     tools: [planTool],
     tool_choice: { type: "function", name: "submitDayPlan" },
-  });
+  }, { timeout: CALL_TIMEOUT_MS, maxRetries: 0 });
   recordCall("plan", PLAN_MODEL, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   const call = response.output.find((o) => o.type === "function_call");
   if (!call || call.type !== "function_call") {
@@ -171,14 +183,30 @@ export async function planDay(trigger: Trigger, ownerRequest: string | null = nu
       lastFailureAt = Date.now();
       return false;
     }
-    const day = gameDay();
-    await summarise(day, plan.daySummary);
+    const today = gameDay();
+    await summarise(today, plan.daySummary);
     const { accepted, rejected } = validateSteps(plan.steps);
     for (const r of rejected) await note(`Left out of my plan: ${r.step} (${r.why}).`);
-    const stored: StoredPlan = { madeAt: Date.now(), day, narrative: plan.narrative.trim(), steps: accepted };
+    // Nothing it can do in it: a failed plan (back off), not an empty one to announce
+    if (accepted.length === 0) {
+      lastFailureAt = Date.now();
+      console.log("Planner: no step of the plan is possible now; following my milestones.");
+      return false;
+    }
+    const before = currentPlan();
+    const id = Date.now();
+    // Planned at dusk or at night: it's tomorrow's plan
+    const forDay = trigger === "dusk" || (bot.time?.timeOfDay ?? 0) >= 12000 ? today + 1 : today;
+    const stored: StoredPlan = { id, madeAt: id, day: forDay, narrative: plan.narrative.trim(), steps: accepted };
     await savePlan(stored);
+    // The old plan's step stops now (owner: "skip mining today" means now)
+    dropPending((t) => t.name.startsWith(PLAN_PREFIX));
+    const running = currentTask();
+    if (running?.name.startsWith(PLAN_PREFIX)) await cancelRunning("a new plan", false);
     await note(`Planned: ${accepted.map((s) => goalNamed(s.goal)?.describe(s.args) ?? s.goal).join(", ")}.`);
-    report(describePlan(stored));
+    // Said only when it changed (an idle re-plan of the same steps stays quiet)
+    const sig = (p: StoredPlan | null): string => JSON.stringify(p?.steps.filter((x) => x.status === "pending").map((x) => [x.goal, x.args]) ?? []);
+    if (trigger === "owner asked" || sig(before) !== sig(stored)) report(describePlan(stored));
     if (plan.ownerMessage) report(plan.ownerMessage);
     return true;
   } catch (error) {

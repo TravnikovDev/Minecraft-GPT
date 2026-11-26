@@ -6,7 +6,7 @@ import { zodResponsesFunction } from "openai/helpers/zod";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { validateSteps, DayPlanSchema, MAX_STEPS, describePlan } = await import(`${ROOT}/src/planner/plan.ts`);
+const { validateSteps, DayPlanSchema, MAX_STEPS, describePlan, stepStatusAfter, savePlan, markStep, nextStep, currentPlan, resetRunningSteps } = await import(`${ROOT}/src/planner/plan.ts`);
 
 const step = (goal: string, extra: Record<string, unknown> = {}) => ({ goal, milestone: null, item: null, count: null, lookFor: null, why: "because", ...extra });
 const always = () => ({ ok: true as const });
@@ -69,4 +69,26 @@ test("the plan in chat: what's next and how far it got", () => {
     ],
   };
   expect(describePlan(plan)).toBe("Iron day! Next: chopping 8 logs (1 of 2 done).");
+});
+
+test("a step's status once it ran: done, failed (error, stuck, too long, a failed result), or pending again after a cut-in", () => {
+  expect(stepStatusAfter({ threw: false, cancelled: false, reason: "", ok: true })).toBe("done");
+  expect(stepStatusAfter({ threw: false, cancelled: false, reason: "", ok: false })).toBe("failed");
+  expect(stepStatusAfter({ threw: true, cancelled: false, reason: "", ok: false })).toBe("failed");
+  expect(stepStatusAfter({ threw: false, cancelled: true, reason: "stuck", ok: false })).toBe("failed");
+  expect(stepStatusAfter({ threw: false, cancelled: true, reason: "took too long", ok: false })).toBe("failed");
+  expect(stepStatusAfter({ threw: false, cancelled: true, reason: "the owner wants me", ok: false })).toBe("pending");
+});
+
+test("a step of a replaced plan is never marked in the new one; running is never next; a restart makes it pending", async () => {
+  const steps = (n: number) => Array.from({ length: n }, () => ({ goal: "stockFood", args: {}, why: "", status: "pending" as const }));
+  await savePlan({ id: 1, madeAt: 1, day: 2, narrative: "old", steps: steps(2) });
+  await markStep(1, 0, "running");
+  expect(nextStep()?.index).toBe(1); // the running one isn't next
+  await savePlan({ id: 2, madeAt: 2, day: 2, narrative: "new", steps: steps(2) });
+  await markStep(1, 0, "done"); // the old plan's step finishing
+  expect(currentPlan()?.steps[0].status).toBe("pending");
+  await markStep(2, 0, "running");
+  await resetRunningSteps();
+  expect(currentPlan()?.steps[0].status).toBe("pending");
 });

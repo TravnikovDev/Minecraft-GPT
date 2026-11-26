@@ -113,8 +113,10 @@ onConnectionReady((currentBot) => {
   // The day planner (lazy: it loads the skills): fresh guards per connection,
   // and a new plan after a death or when the plan is blocked
   void import("./planner/planner")
-    .then(({ planDay, resetPlanner }) => {
+    .then(async ({ planDay, resetPlanner }) => {
       resetPlanner();
+      const { resetRunningSteps } = await import("./planner/plan");
+      await resetRunningSteps(); // nothing runs after a restart: a "running" step is to do again
       return import("./planner/runner").then(({ registerPlanRunner }) => registerPlanRunner(autonomyOn, (why) => void planDay(why)));
     })
     .catch((error: unknown) => console.error("Couldn't start the day planner:", error));
