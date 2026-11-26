@@ -22,11 +22,11 @@ import { chatter, report } from "../core/narrator";
 import { setSheltered } from "../core/sheltered";
 import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
-import { sky } from "../actions/perception";
 import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
 import { hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
+import { daylight } from "../core/daylight";
 
 // A milestone that failed waits a little (10 minutes left it idle in a field)
 const BLOCKED_FOR_MS = 2 * 60_000;
@@ -69,12 +69,9 @@ const busyWith = (bucket: number): boolean => {
   return (running !== null && running.bucket <= bucket) || pendingTasks().some((t) => t.bucket <= bucket);
 };
 const isNight = (): boolean => {
-  // The Nether and the End have no night (no night routine there: its
-  // shelter is in the overworld)
-  const dim = String((bot.game as { dimension?: string }).dimension ?? "overworld").replace(/^minecraft:/, "");
-  if (dim !== "overworld") return false;
-  const s = sky();
-  return s.known && (s.value.phase === "night" || s.value.phase === "dusk");
+  // From sunset to dawn, in the overworld only (the Nether and the End have
+  // no night: its shelter is in the overworld); one clock for all (review)
+  return !daylight();
 };
 
 /** Announces milestones reached for the first time. */
@@ -297,6 +294,10 @@ export async function considerNextStep(): Promise<void> {
   if (isNight()) {
     const tonight = nightOf === day ? nextNightMilestone() : null;
     if (tonight) propose(milestoneTask(tonight));
+    // Its mine work done (or blocked) and the night not over: back home to
+    // bed, not standing about in the mine or by the back door till morning
+    // (review). Not while a failed night routine waits for its retry.
+    else if (nightOf === day && nightRetryAt === 0 && !bot.isSleeping) propose(nightTask());
     return;
   }
   const next = nextMilestone(MILESTONES, isBlocked);

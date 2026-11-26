@@ -8,6 +8,7 @@
 // (bucket 6). The arbiter decides when each runs, as for every other task.
 
 import type { Block } from "prismarine-block";
+import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import pf from "mineflayer-pathfinder";
@@ -23,6 +24,9 @@ import { collectBlock } from "../actions/collectBlock";
 import { isCommandCancelled } from "../core/commandContext";
 import { fitForTheMine } from "./mine";
 import { foodPoints } from "./capabilities";
+import { daylight } from "../core/daylight";
+import { underRoof } from "../actions/placement";
+import { skyAbove } from "../actions/hunting";
 
 const LOOK_RANGE = 12;
 const FAILED_FOR_MS = 10 * 60_000;
@@ -35,6 +39,37 @@ const GOES_FIRST = ORE_RANK.indexOf("iron");
 const failed = new Map<string, number>();
 // Failures by area (about 4 blocks): an unreachable vein isn't retried block by block
 const keyOf = (b: Block): string => `${Math.floor(b.position.x / 4)},${Math.floor(b.position.y / 4)},${Math.floor(b.position.z / 4)}`;
+
+// It doesn't follow ore down: an ore this far below its feet is left for the
+// mine (review: ore chores drew it deep, at night, with nothing to heal with)
+const MAX_DROP = 6;
+
+/** Where an ore is, as the "may I go for it now?" rule sees it. */
+export type OreSpot = { day: boolean; botUnderRoof: boolean; oreUnderSky: boolean; botY: number; oreY: number };
+
+/**
+ * True when it may go for an ore now: never down past MAX_DROP below its
+ * feet; at night only under ground (in its mine or a cave it's in), and
+ * never for an ore out under the open sky. Pure (review).
+ */
+export function oreAllowedNow(s: OreSpot): boolean {
+  if (s.oreY < s.botY - MAX_DROP) return false;
+  if (s.day) return true;
+  return s.botUnderRoof && !s.oreUnderSky;
+}
+
+/** The live view of `oreAllowedNow` for an ore block. */
+function allowedNow(ore: Block): boolean {
+  const look = (x: number, y: number, z: number): Block | null => bot.blockAt(new Vec3(x, y, z));
+  const feet = bot.entity.position.floored();
+  return oreAllowedNow({
+    day: daylight(),
+    botUnderRoof: underRoof(feet, (p) => bot.blockAt(p)),
+    oreUnderSky: skyAbove(ore.position.offset(0, 1, 0), look, 64),
+    botY: feet.y,
+    oreY: ore.position.y,
+  });
+}
 
 /** The ore's kind ("deepslate_iron_ore" -> "iron"), or null for anything that isn't one. */
 export function oreKind(name: string): string | null {
@@ -71,7 +106,8 @@ export function bestOreInSight(): Block | null {
     .filter((b): b is Block => b !== null)
     .filter((b) => openFaces(world, b).length > 0 && canSee(world, eyes, b, LOOK_RANGE))
     .filter((b) => catalog().canHarvest(b.name, pickaxe))
-    .filter((b) => (failed.get(keyOf(b)) ?? 0) < now && !forbiddenAt(b.position) && tunnelBlocked(b.position) === null && mayWanderTo(b.position));
+    .filter((b) => (failed.get(keyOf(b)) ?? 0) < now && !forbiddenAt(b.position) && tunnelBlocked(b.position) === null && mayWanderTo(b.position))
+    .filter((b) => allowedNow(b));
   candidates.sort((a, b) => oreRank(oreKind(a.name)!) - oreRank(oreKind(b.name)!) || a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
   return candidates[0] ?? null;
 }
@@ -122,6 +158,8 @@ function oreTask(ore: Block, kind: string, first: boolean, valuable = first): Ta
     // Iron and better: worth stopping the milestone for (it carries on afterwards)
     interrupts: first,
     run: async () => {
+      // It may have waited till night, or the bot moved on: still all right?
+      if (!allowedNow(ore) || !fitForTheMine(bot.health, foodPoints()).ok) return;
       chatter(`There's ${kind} ore over there; mining it.`, "opportunity");
       // Where it saw it: the task may have waited, and the bot moved on
       const near = await goTo(new pf.goals.GoalNear(ore.position.x, ore.position.y, ore.position.z, 3));
@@ -131,8 +169,10 @@ function oreTask(ore: Block, kind: string, first: boolean, valuable = first): Ta
       const { takeDownScaffolding } = await import("../actions/scaffolding");
       if (!isCommandCancelled()) await takeDownScaffolding(true);
     },
-    // Cut off (by a milestone or an order): again later if the ore is still there
-    resume: () => (bot.blockAt(ore.position)?.name === ore.name ? oreTask(ore, kind, first, valuable) : null),
+    // Cut off (by a milestone or an order): again later if the ore is still
+    // there and it's still all right; coal and copper are let go (seen again
+    // they're proposed again, review)
+    resume: () => (valuable && bot.blockAt(ore.position)?.name === ore.name && allowedNow(ore) ? oreTask(ore, kind, false, valuable) : null),
   };
   return spec;
 }
