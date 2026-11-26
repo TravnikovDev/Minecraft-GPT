@@ -13,7 +13,7 @@ import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { isNatural, protectCells, setOwnPassages } from "../core/movements";
 import { goTo } from "../core/primitives";
-import { fail, ok, type ActionResult } from "../core/result";
+import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
 import { addPlace, getPlaces } from "../managers/persistenceManager";
@@ -137,13 +137,45 @@ export async function climbMineStairs(): Promise<boolean> {
   const step = standAt(stepAt(rec.start, rec.direction, i));
   console.log(`Home by my mine's stairs: from step ${i} up.`);
   if (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) return false;
-  // Up them a stretch at a time (each leg short, so it keeps to the stairs)
-  for (let j = Math.max(0, i - 8); ; j = Math.max(0, j - 8)) {
+  // Up them a stretch at a time (each leg short, so it keeps to the stairs);
+  // stuck on a leg, it gets itself up a block and tries again (owner)
+  let unsticks = 0;
+  for (let j = Math.max(0, i - 8); ; ) {
     if (isCommandCancelled()) return false;
     const s = standAt(stepAt(rec.start, rec.direction, j));
-    if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) return false;
+    if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
+      if (unsticks >= 3 || !(await unstickOnStairs())) return false;
+      unsticks++;
+      continue;
+    }
     if (j === 0) return true;
+    j = Math.max(0, j - 8);
   }
+}
+
+/** A block to put under itself: a stair block first (it's the floor there), else cobblestone or dirt. */
+const UNSTICK_BLOCKS = ["cobblestone_stairs", "cobblestone", "cobbled_deepslate", "dirt"];
+
+/**
+ * Stuck on its stairs, like a player: the block over its head dug out if
+ * it's natural, then a block put under its feet with a jump, a block up.
+ * True when it got up.
+ */
+export async function unstickOnStairs(): Promise<boolean> {
+  const feet = bot.entity.position.floored();
+  const over = feet.offset(0, 2, 0);
+  const b = bot.blockAt(over);
+  const { breakBlock, pillarUp } = await import("../core/primitives");
+  if (b && b.boundingBox === "block") {
+    const { isNatural, isProtected } = await import("../core/movements");
+    if (!isNatural(b.name) || isProtected(over)) return false;
+    if (!(await breakBlock(over)).ok) return false;
+  }
+  const block = UNSTICK_BLOCKS.find((n) => carried([n]) > 0);
+  if (!block) return false;
+  const up = await pillarUp(block);
+  console.log(up.ok ? `Stuck on my stairs at ${feet}: put ${block.replace(/_/g, " ")} under me and got up a block.` : `Stuck on my stairs at ${feet}: couldn't get up (${describeFailure(up)}).`);
+  return up.ok;
 }
 
 /**
@@ -473,6 +505,11 @@ export function stairsPaved(): boolean {
  * facing up the tunnel, so its high side is toward the shelter and walking
  * up is a slope, not a jump per step.
  */
+/** Stair blocks to make for `steps` bare steps: all of them and 10% spare (at least one). Pure. */
+export function stairsToMake(steps: number): number {
+  return steps <= 0 ? 0 : steps + Math.max(1, Math.ceil(steps * 0.1));
+}
+
 export async function paveMineStairs(): Promise<ActionResult> {
   return withScaffoldingTakenDown(paveSteps);
 }
@@ -482,18 +519,27 @@ async function paveSteps(): Promise<ActionResult> {
   if (!rec?.bottom) return fail("not_found", "no mine yet");
   const steps = unpavedSteps();
   if (steps.length === 0) return ok();
+  // Counted first: every bare step plus 10% spare (a stair placed wrong, a
+  // step that breaks), all made at home before it goes down (owner; game
+  // test: it tried crafting them down in the mine, where it couldn't reach a
+  // table, and paved nothing)
+  const want = stairsToMake(steps.length);
   const have = carried(["cobblestone_stairs"]);
-  if (have < steps.length) {
+  if (have < want) {
+    const { enterShelter } = await import("../actions/building");
+    const home = await enterShelter();
+    if (!home.ok) console.log(`Paving: couldn't get home to the table first (${describeFailure(home)}).`);
     // Cobblestone from its chests (6 make 4 stairs), crafted at the shelter's table
-    const cobble = Math.ceil((steps.length - have) / 4) * 6 - carried(["cobblestone"]);
+    const cobble = Math.ceil((want - have) / 4) * 6 - carried(["cobblestone"]);
     if (cobble > 0) {
       const { takeItems } = await import("../actions/storage");
       await takeItems([{ name: "cobblestone", count: cobble + 4 }], true);
     }
     const { acquire } = await import("./acquire");
     const { liveWorld } = await import("./world");
-    const made = await acquire("cobblestone_stairs", steps.length, liveWorld);
+    const made = await acquire("cobblestone_stairs", want, liveWorld);
     if (!made.ok && carried(["cobblestone_stairs"]) === 0) return made;
+    console.log(`Paving: ${carried(["cobblestone_stairs"])} cobblestone stairs for ${steps.length} steps.`);
   }
   report(`Paving my mine's stairs: ${steps.length} steps.`);
   const { breakBlock } = await import("../core/primitives");

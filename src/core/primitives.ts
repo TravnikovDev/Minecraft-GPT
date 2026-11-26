@@ -942,6 +942,43 @@ async function fishOnceNow(): Promise<ActionResult> {
   return guarded("fishing", () => bot.fish(), { timeoutMs: FISH_TIMEOUT_MS, onStop: () => bot.activateItem() });
 }
 
+/**
+ * Up one block where it stands, like a player stuck at a step: looks down,
+ * jumps and puts `itemName` under its feet at the top of the jump. Needs
+ * solid ground under it and room over its head (owner: stuck on its stairs,
+ * place a stair under you, jump and place).
+ */
+async function pillarUpNow(itemName: string): Promise<ActionResult> {
+  if (!bot.entity) return fail("disconnected", "no body");
+  const feet = bot.entity.position.floored();
+  const ground = knownBlock(feet.offset(0, -1, 0));
+  if (!ground || ground.boundingBox !== "block") return fail("no_support", "nothing solid under me to build up from");
+  const head = knownBlock(feet.offset(0, 2, 0));
+  if (head && head.boundingBox === "block") return fail("occupied", `${head.name} over my head: no room to jump`);
+  if (!bot.inventory.items().some((i) => i.name === itemName)) return fail("missing_items", `no ${itemName} to put under me`);
+  const keepOut = forbiddenAt(feet);
+  if (keepOut) return fail("forbidden", keepOut.reason);
+  const equipped = await equipItem(itemName, "hand");
+  if (!equipped.ok) return equipped;
+  await guarded("looking down", () => bot.look(bot.entity.yaw, -Math.PI / 2, true), { timeoutMs: 2_000 });
+  markSelfAction(feet);
+  bot.setControlState("jump", true);
+  try {
+    // At the top of the jump the cell it stood in is free for the block
+    await until(() => bot.entity.position.y >= feet.y + 1.0, 800);
+    await guarded(`putting ${itemName} under me`, () => placingOnPurpose(() => bot.placeBlock(ground, new Vec3(0, 1, 0))), { timeoutMs: PLACE_TIMEOUT_MS });
+  } finally {
+    bot.setControlState("jump", false);
+  }
+  await until(() => knownBlock(feet)?.boundingBox === "block", CONFIRM_MS);
+  return knownBlock(feet)?.boundingBox === "block" ? ok() : fail("refused", `the ${itemName} didn't go in under me`);
+}
+
+/** pillarUp, waiting its turn while a reflex or a borrower has the body (core/leases). */
+export function pillarUp(itemName: string): Promise<ActionResult> {
+  return using(["hands", "movement"], () => pillarUpNow(itemName));
+}
+
 /** fishOnce, waiting its turn while a reflex or a borrower has the body (core/leases). */
 export function fishOnce(): Promise<ActionResult> {
   return using(["hands", "movement"], fishOnceNow);

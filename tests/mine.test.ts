@@ -159,3 +159,11 @@ test("the way up from down in its mine starts at the nearest step of its stairs"
   // No stairs: none
   expect(nearestStairStep({ x: 0, y: 0, z: 0 }, { x: 0, y: 64, z: 0 }, "south", 0)).toBeNull();
 });
+
+test("paving: every bare step and 10% spare, at least one (owner)", async () => {
+  const { stairsToMake } = await import(`${import.meta.dir}/../src/skills/mine.ts`);
+  expect(stairsToMake(0)).toBe(0);
+  expect(stairsToMake(10)).toBe(11);
+  expect(stairsToMake(47)).toBe(52);
+  expect(stairsToMake(3)).toBe(4);
+});
