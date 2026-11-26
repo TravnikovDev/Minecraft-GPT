@@ -74,6 +74,23 @@ const SHALLOWEST_MINE = 3;
 
 type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean };
 
+/**
+ * The hub of its mine nearest `pos` in height (where the tunnels leave the
+ * stairs): the place for a table or a furnace in the mine, beside the
+ * tunnels, never in the stairs. Null without a mine.
+ */
+export function nearestMineHub(pos: Pos): Vec3 | null {
+  const rec = mineRecord();
+  if (!rec) return null;
+  let best: Vec3 | null = null;
+  for (let level = 0; level <= rec.level; level++) {
+    if (hubStep(level) >= rec.stairs + 1) break;
+    const hub = new Vec3(rec.start.x, rec.start.y, rec.start.z).plus(STEP[rec.direction].scaled(hubStep(level))).offset(0, -hubStep(level), 0);
+    if (!best || Math.abs(hub.y - pos.y) < Math.abs(best.y - pos.y)) best = hub;
+  }
+  return best;
+}
+
 /** The mine record (stairs maybe not finished): stairs dug so far, branches done, the bottom once finished. */
 function mineRecord(): MineRecord | null {
   const dim = currentDimension();

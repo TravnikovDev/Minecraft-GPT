@@ -61,7 +61,13 @@ async function walkTo(block: Block): Promise<boolean> {
 /** Puts a campfire or oven the bot carries on the ground. */
 async function placeCarried(names: string[]): Promise<Block | null> {
   const item = bot.inventory.items().find((i) => names.includes(i.name));
-  return item ? placeItemNear(item.name) : null;
+  if (!item) return null;
+  // A furnace or smoker out of the way (a niche underground), a campfire on open ground
+  if (/furnace|smoker/.test(item.name)) {
+    const { placeOutOfTheWay } = await import("./placement");
+    return placeOutOfTheWay(item.name);
+  }
+  return placeItemNear(item.name);
 }
 
 /** All lit campfires nearby, nearest first. */

@@ -13,7 +13,7 @@ import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { loadBed } from "../core/session";
 import { ownerEntity } from "../managers/ownerDialog";
-import { isNatural } from "../core/movements";
+import { isNatural, isProtected } from "../core/movements";
 
 /**
  * The inventory item to place for what the owner asked: an exact ID, or a
@@ -88,10 +88,11 @@ export function underRoof(feet: Vec3, blockAt: BlockAt, height = 32): boolean {
  * another wall opposite), so the chest never ends up in the way ahead.
  * Returns the chest spot, or null.
  */
-export function nicheSpot(feet: Vec3, blockAt: BlockAt): Vec3 | null {
+export function nicheSpot(feet: Vec3, blockAt: BlockAt, guarded: (p: Vec3) => boolean = isProtected): Vec3 | null {
+  // Natural ground, and not a wall it keeps (its mine stairs, its shelter)
   const solidNatural = (p: Vec3): boolean => {
     const b = blockAt(p);
-    return b !== null && b.boundingBox === "block" && isNatural(b.name);
+    return b !== null && b.boundingBox === "block" && isNatural(b.name) && !guarded(p);
   };
   const wet = (p: Vec3): boolean => [...HORIZONTAL, new Vec3(0, 1, 0)].some((d) => LIQUIDS.has(blockAt(p.plus(d))?.name ?? ""));
   const candidates = HORIZONTAL.filter((d) => {
@@ -110,20 +111,48 @@ export function nicheSpot(feet: Vec3, blockAt: BlockAt): Vec3 | null {
  * the bottom of it, like a miner; in the open, on free ground nearby.
  */
 export async function placeChestOutOfTheWay(itemName = "chest"): Promise<Block | null> {
-  const feet = bot.entity.position.floored();
+  const placed = await placeOutOfTheWay(itemName);
+  return placed ? markOwn(placed) : null;
+}
+
+/**
+ * Puts a chest, a crafting table or a furnace where it isn't in the way
+ * (owner: never in the middle of a tunnel, never down the stairs; aside,
+ * at a tunnel's level, near the main tunnel). Underground it digs a niche
+ * into a side wall; on its mine's stairs it goes to the nearest hub first
+ * (the stairs' walls are kept). A chest's niche is two high (a chest won't
+ * open under a block). In the open, free ground nearby.
+ */
+export async function placeOutOfTheWay(itemName: string): Promise<Block | null> {
   const blockAt = (p: Vec3): Block | null => bot.blockAt(p);
-  const niche = underRoof(feet, blockAt) ? nicheSpot(feet, blockAt) : null;
-  if (niche) {
+  const tall = itemName.endsWith("chest");
+  const tryNiche = async (): Promise<Block | null> => {
+    const feet = bot.entity.position.floored();
+    if (!underRoof(feet, blockAt)) return null;
+    const niche = nicheSpot(feet, blockAt);
+    if (!niche) return null;
     console.log(`Digging a niche in the wall at ${niche} for the ${itemName}.`);
-    const dug = (await breakBlockAt(niche.x, niche.y + 1, niche.z)) && (await breakBlockAt(niche.x, niche.y, niche.z));
+    const dug = (!tall || (await breakBlockAt(niche.x, niche.y + 1, niche.z))) && (await breakBlockAt(niche.x, niche.y, niche.z));
     if (dug && (await placeBlock(itemName, niche.x, niche.y, niche.z))) {
       const placed = bot.blockAt(niche);
-      if (placed?.name === itemName) return markOwn(placed);
+      if (placed?.name === itemName) return placed;
     }
-    console.log(`Placing the ${itemName} in the niche at ${niche} failed; trying free ground.`);
+    console.log(`Placing the ${itemName} in the niche at ${niche} failed.`);
+    return null;
+  };
+  const here = await tryNiche();
+  if (here) return here;
+  // In its mine with no wall to spare (the stairs): beside the nearest hub
+  if (underRoof(bot.entity.position.floored(), blockAt)) {
+    const { nearestMineHub } = await import("../skills/mine");
+    const hub = nearestMineHub(bot.entity.position);
+    if (hub && hub.distanceTo(bot.entity.position) < 48 && (await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z))).ok) {
+      const atHub = await tryNiche();
+      if (atHub) return atHub;
+    }
   }
-  const placed = await placeItemNear(itemName);
-  return placed ? markOwn(placed) : null;
+  console.log(`No wall to put the ${itemName} in here; free ground instead.`);
+  return placeItemNear(itemName);
 }
 
 /** A chest it just placed is its own (the planner takes only from its own chests). */

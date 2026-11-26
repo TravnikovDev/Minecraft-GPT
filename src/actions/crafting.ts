@@ -21,11 +21,7 @@ import { craftNow } from "./craftPlanner";
 import { getItemCount } from "./inventory";
 import { getPlaces, saveCraftingTableLocation } from "../managers/persistenceManager";
 import { currentDimension } from "./perception";
-import {
-  getInventoryCounts,
-  getNearestBlock,
-  getNearestFreeSpace,
-} from "./world";
+import { getInventoryCounts, getNearestBlock } from "./world";
 
 /*
 Possible Scenarios:
@@ -261,16 +257,19 @@ export async function craftRecipe(
       console.log(`No crafting table, and nothing to make one from, to craft ${itemName}.`);
       return false;
     }
-    // At home its table has a spot in the shelter (the owner's layout)
-    const pos = homeTableSpot() ?? getNearestFreeSpace(1, 10);
-    if (!pos) {
-      console.log("No suitable position found to place the crafting table.");
-      return false;
+    // At home its table has a spot in the shelter (the owner's layout);
+    // elsewhere out of the way (owner: it put one in the middle of a tunnel)
+    const home = homeTableSpot();
+    let placed: Block | null = null;
+    if (home) {
+      console.log(`Placing crafting table at position (${home.x}, ${home.y}, ${home.z}).`);
+      await placeBlock("crafting_table", home.x, home.y, home.z);
+      placed = bot.blockAt(home);
+    } else {
+      const { placeOutOfTheWay } = await import("./placement");
+      placed = await placeOutOfTheWay("crafting_table");
     }
-    console.log(`Placing crafting table at position (${pos.x}, ${pos.y}, ${pos.z}).`);
-    await placeBlock("crafting_table", pos.x, pos.y, pos.z);
     // Use the table we just placed, not whichever one is "nearest"
-    const placed = bot.blockAt(pos);
     if (placed?.name !== "crafting_table") {
       console.log("Placing the crafting table failed.");
       return false;
@@ -327,10 +326,9 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     // Try to place furnace
     const hasFurnace = getInventoryCounts()["furnace"] > 0;
     if (hasFurnace) {
-      const pos = getNearestFreeSpace(1, 32);
-      if (pos) {
-        await placeBlock("furnace", pos.x, pos.y, pos.z);
-      } else {
+      // Out of the way: a niche in a tunnel's side wall, never down the stairs (owner)
+      const { placeOutOfTheWay } = await import("./placement");
+      if (!(await placeOutOfTheWay("furnace"))) {
         console.log("No suitable position found to place the furnace.");
         return false;
       }
