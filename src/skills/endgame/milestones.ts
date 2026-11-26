@@ -37,30 +37,8 @@ const acquireOne = async (item: string): Promise<ActionResult> => {
 const owns = (name: string): boolean => bot.inventory.slots.some((i) => i?.name === name);
 
 export const ENDGAME_MILESTONES: Milestone[] = [
-  {
-    id: "shield",
-    title: "a shield",
-    tier: 4,
-    dimension: "any",
-    requires: ["iron_tools"],
-    done: () => owns("shield"),
-    achieve: async () => {
-      const made = await acquireOne("shield");
-      if (!made.ok) return made;
-      const { equipItem } = await import("../../core/primitives");
-      await equipItem("shield", "off-hand");
-      return ok();
-    },
-  },
-  {
-    id: "bucket",
-    title: "a bucket",
-    tier: 4,
-    dimension: "any",
-    requires: ["iron_tools"],
-    done: () => owns("bucket") || owns("water_bucket") || owns("lava_bucket"),
-    achieve: () => acquireOne("bucket"),
-  },
+  // (The shield and the water bucket come right after the iron pickaxe now,
+  // in skills/milestones.ts: a player makes them before going deep)
   {
     id: "flint_and_steel",
     title: "flint and steel",

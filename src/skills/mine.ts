@@ -21,7 +21,7 @@ import { currentDimension } from "../actions/perception";
 import { digDiagonalTunnel, digStraightTunnel, tunnelStopReason, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
-import { shelter, TIER, toolTier } from "./capabilities";
+import { foodPoints, shelter, TIER, toolTier } from "./capabilities";
 
 export const MINE_DEPTH = 10;
 const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
@@ -399,6 +399,21 @@ export const COAL: OreWant = { item: "coal", enough: 16, counts: ["coal", "charc
 // Owner: with 10 or more it takes them home to smelt
 export const IRON: OreWant = { item: "raw_iron", enough: 10, counts: ["raw_iron", "iron_ingot"] };
 
+// Before a trip down, like a player: not badly hurt, and food to eat down there
+const MIN_HEALTH_TO_GO_DOWN = 12;
+const MIN_FOOD_TO_GO_DOWN = 6;
+
+/**
+ * Whether it's fit for a mining trip: health and the food points it carries.
+ * Game test: it went down hurt and with little food, and died in the caves
+ * four times in one night. Pure.
+ */
+export function fitForTheMine(health: number, food: number): ActionResult {
+  if (health < MIN_HEALTH_TO_GO_DOWN) return fail("refused", `I'm hurt (health ${Math.round(health)} of 20); healing before I go down the mine`);
+  if (food < MIN_FOOD_TO_GO_DOWN) return fail("missing_items", "I have too little food to take down the mine");
+  return ok();
+}
+
 /**
  * Mining until it has enough of what it wants (or a trip's worth of digging,
  * CHUNK blocks at a time): the hub's forward, right and left tunnels in
@@ -414,6 +429,8 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
   const still = (): OreWant[] => wants.filter((w) => carried(w.counts) < w.enough);
   if (still().length === 0) return ok();
+  const fit = fitForTheMine(bot.health, foodPoints());
+  if (!fit.ok) return fit;
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
   await lookAfterStairs(); // holes mended and dark stretches lit on the way down

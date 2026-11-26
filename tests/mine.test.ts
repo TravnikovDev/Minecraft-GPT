@@ -83,3 +83,15 @@ test("the ground over its home is protected up to over the surface, its own open
   expect(cells.map((c: any) => c.y)).toEqual([61, 62, 63]);
   expect(cells.some((c: any) => c.y <= 59)).toBe(false);
 });
+
+test("not down the mine hurt or without food", async () => {
+  const { fitForTheMine } = await import(`${ROOT}/src/skills/mine.ts`);
+  expect(fitForTheMine(20, 20).ok).toBe(true);
+  expect(fitForTheMine(12, 6).ok).toBe(true);
+  const hurt = fitForTheMine(9, 20);
+  expect(hurt.ok).toBe(false);
+  expect(hurt.detail).toContain("hurt");
+  const hungry = fitForTheMine(20, 3);
+  expect(hungry.ok).toBe(false);
+  expect(hungry.reason).toBe("missing_items");
+});

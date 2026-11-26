@@ -33,7 +33,7 @@ export function portalStands(): boolean {
 }
 
 /** Fills its empty bucket from a water source in sight. */
-async function fillWater(): Promise<ActionResult> {
+export async function fillWater(): Promise<ActionResult> {
   if (count("water_bucket") > 0) return ok();
   if (count("bucket") === 0) return fail("missing_items", "I have no bucket");
   const id = bot.registry.blocksByName["water"]?.id;
@@ -164,7 +164,7 @@ export async function buildNetherPortal(): Promise<ActionResult> {
   for (const item of ["flint_and_steel", "cobblestone"]) {
     const n = item === "cobblestone" ? 4 : 1;
     if (count(item) < n) {
-      const got = await acquire(item, n - count(item), liveWorld);
+      const got = await acquire(item, n, liveWorld); // the total wanted, not the number missing
       if (!got.ok) return fail(got.reason, `no ${item.replace(/_/g, " ")} for the portal (${describeFailure(got)})`);
     }
   }

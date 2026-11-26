@@ -267,6 +267,16 @@ export const MILESTONES: Milestone[] = [
     achieve: () => branchMine([COAL, IRON]),
   },
   {
+    id: "torches",
+    title: "torches",
+    tier: 2,
+    requires: ["coal"],
+    // A player lights the way down before going deep (a skeleton in its dark
+    // stairs, mobs spawning in its tunnels): 16 made, and topped up below 8
+    done: () => carriedOf(["torch"]) >= (reachedAt()["torches"] ? TORCHES_LOW : TORCHES),
+    achieve: () => getAll([`${TORCHES} torch`]),
+  },
+  {
     id: "iron",
     title: "iron",
     tier: 2,
@@ -285,19 +295,49 @@ export const MILESTONES: Milestone[] = [
   },
 
   // --- Tier 3: iron and diamonds (a player's next steps) ----------------------
+  // First iron goes to safety, the way a player spends it: a shield (one
+  // ingot: arrows and creeper blasts), a water bucket (lava, fire, falls; the
+  // portal's obsidian later), armour; then the other tools. Game test: it
+  // went down to y=-53 in a leather chestplate with stone tools and died in
+  // lava and to a zombie.
   {
-    id: "iron_tools",
-    title: "iron tools",
+    id: "shield",
+    title: "a shield",
     tier: 3,
+    dimension: "any",
     requires: ["iron_pickaxe"],
-    done: () => (["sword", "axe", "shovel"] as const).every((k) => toolTier(k) >= TIER.iron),
-    achieve: () => makeFromIron([["iron_sword", 2], ["iron_axe", 3], ["iron_shovel", 1]]),
+    done: () => owns("shield"),
+    achieve: async () => {
+      const made = await makeFromIron([["shield", 1]]);
+      if (!made.ok) return made;
+      const { equipItem } = await import("../core/primitives");
+      await equipItem("shield", "off-hand");
+      return ok();
+    },
+  },
+  {
+    id: "bucket",
+    title: "a water bucket",
+    tier: 3,
+    dimension: "any",
+    requires: ["iron_pickaxe"],
+    // Any bucket counts (it pours the water out for obsidian and takes it back)
+    done: () => owns("bucket") || owns("water_bucket") || owns("lava_bucket"),
+    achieve: async () => {
+      const made = await makeFromIron([["bucket", 3]]);
+      if (!made.ok) return made;
+      // Filled where there's water in sight; an empty one is filled later
+      const { fillWater } = await import("./endgame/portal");
+      const filled = await fillWater();
+      if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
+      return ok();
+    },
   },
   {
     id: "iron_armor",
     title: "iron armor",
     tier: 3,
-    requires: ["iron_tools"],
+    requires: ["iron_pickaxe"],
     done: () => IRON_ARMOR.every(([piece]) => owns(piece)),
     achieve: async () => {
       const made = await makeFromIron(IRON_ARMOR.map(([piece, n]) => [piece, n]));
@@ -307,6 +347,14 @@ export const MILESTONES: Milestone[] = [
       for (const [piece, , slot] of IRON_ARMOR) if (carriedOf([piece]) > 0) await equipItem(piece, slot);
       return ok();
     },
+  },
+  {
+    id: "iron_tools",
+    title: "iron tools",
+    tier: 3,
+    requires: ["iron_pickaxe"],
+    done: () => (["sword", "axe", "shovel"] as const).every((k) => toolTier(k) >= TIER.iron),
+    achieve: () => makeFromIron([["iron_sword", 2], ["iron_axe", 3], ["iron_shovel", 1]]),
   },
   {
     id: "paved_stairs",
@@ -345,6 +393,8 @@ export const MILESTONES: Milestone[] = [
 ];
 
 const DIAMONDS = 3;
+const TORCHES = 16;
+const TORCHES_LOW = 8;
 const PAVE_AFTER = 200;
 
 /** Cobblestone it carries and has in its chests (as last seen). */
@@ -360,10 +410,9 @@ const IRON_ARMOR: Array<[string, number, "head" | "torso" | "legs" | "feet"]> = 
   ["iron_boots", 4, "feet"],
 ];
 
-/** Carried or worn. */
+/** Carried, worn or in the off-hand. */
 function owns(item: string): boolean {
-  if (carriedOf([item]) > 0) return true;
-  return [5, 6, 7, 8].some((slot) => bot.inventory.slots[slot]?.name === item);
+  return bot.inventory.slots.some((i) => i?.name === item);
 }
 
 /**

@@ -200,7 +200,7 @@ export function endPortalOpen(): boolean {
 export async function enterEnd(): Promise<ActionResult> {
   const { acquire } = await import("../acquire");
   const { liveWorld } = await import("../world");
-  if (count("cobblestone", "dirt", "cobbled_deepslate") < 64) await acquire("cobblestone", 64 - count("cobblestone"), liveWorld);
+  if (count("cobblestone", "dirt", "cobbled_deepslate") < 64) await acquire("cobblestone", 64, liveWorld); // the total wanted
   const { foodPoints } = await import("../capabilities");
   if (foodPoints() < 30) console.log("End: going in with little food.");
   const c = endgame().endPortal;

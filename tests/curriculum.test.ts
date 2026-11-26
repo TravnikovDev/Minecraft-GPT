@@ -223,11 +223,13 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "cobblestone_stairs"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual([
-    "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe",
+    "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "torches", "iron", "iron_pickaxe",
+    // First iron goes to safety: a shield, a water bucket, armour, then the other tools
+    "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe",
     // Phase 9: the Nether and the End
-    "shield", "bucket", "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
+    "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
   ]);
-  for (const n of ["shield", "bucket", "flint_and_steel", "obsidian", "blaze_rod", "blaze_powder", "ender_pearl", "ender_eye", "golden_helmet"]) expect(registry.itemsByName[n]).toBeDefined();
+  for (const n of ["torch", "water_bucket", "shield", "bucket", "flint_and_steel", "obsidian", "blaze_rod", "blaze_powder", "ender_pearl", "ender_eye", "golden_helmet"]) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.find((m) => m.id === "chests")?.title).toContain("chests, furnace, table");
 });
 
@@ -307,4 +309,17 @@ test("furniture goes in from the middle of its row, so the chests along a wall f
   const e = shelterPlan({ x: 0, y: 70, z: 0 }, "east");
   expect(chestFacing(e.chests[0]!, e.stand, "east")).toBe("north");
   expect(chestFacing(e.chests[2]!, e.stand, "east")).toBe("south");
+});
+
+test("the shield, the water bucket and iron armour come before the other iron tools and diamonds", () => {
+  const ids = REAL.map((m) => m.id);
+  for (const early of ["shield", "bucket", "iron_armor"]) {
+    expect(ids.indexOf(early)).toBeLessThan(ids.indexOf("iron_tools"));
+    expect(ids.indexOf(early)).toBeLessThan(ids.indexOf("diamonds"));
+    expect(REAL.find((m) => m.id === early)?.requires).toEqual(["iron_pickaxe"]);
+  }
+  expect(ids.indexOf("torches")).toBeLessThan(ids.indexOf("iron"));
+  // The late game still waits for them
+  expect(REAL.find((m) => m.id === "nether_portal")?.requires).toContain("bucket");
+  expect(REAL.find((m) => m.id === "nether")?.requires).toContain("shield");
 });
