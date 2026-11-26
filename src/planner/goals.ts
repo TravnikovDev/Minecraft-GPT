@@ -131,7 +131,7 @@ export const GOALS: Goal[] = [
   },
   {
     name: "mineFor",
-    about: "go down its mine for coal, raw iron, diamonds or cobblestone",
+    about: "go down its mine for coal, raw iron, diamonds or cobblestone until it carries `count` of it (what it carries already counts)",
     args: z.object({ item: z.enum(MINEABLE), count: z.number().int().min(1).max(64) }),
     defaults: { count: 10 },
     feasible: (a) => {
@@ -145,9 +145,14 @@ export const GOALS: Goal[] = [
       const can = MINEABLE.filter((i) => tier >= (PICKAXE_FOR[i] ?? TIER.stone));
       return can.length ? `possible for: ${can.join(", ")}` : "not yet: no pickaxe";
     },
+    // The plan's count is what it should carry, not that many more (game
+    // test: with 17 raw iron, "mining for 12 raw iron" went for 29)
     run: async (a) => {
-      const { mineFor } = await import("../skills/mine");
-      return mineFor(String(a["item"]), Number(a["count"]));
+      const { mineFor, carriedFor } = await import("../skills/mine");
+      const item = String(a["item"]);
+      const missing = Number(a["count"]) - carriedFor(item);
+      if (missing <= 0) return ok();
+      return mineFor(item, missing);
     },
     describe: (a) => `mining for ${String(a["count"])} ${words(String(a["item"]))}`,
   },

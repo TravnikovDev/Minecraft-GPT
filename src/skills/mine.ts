@@ -556,6 +556,11 @@ export const FIRST_STONE = 11;
  *   when in sight;
  * - a stone pickaxe: down its mine, carrying on with the tunnel.
  */
+/** What it carries that counts as `item` for mining (coal and charcoal, raw iron and ingots). */
+export function carriedFor(item: string): number {
+  return carried(item === "coal" ? COAL.counts : item === "raw_iron" ? IRON.counts : [item]);
+}
+
 export async function mineFor(item: string, count: number): Promise<ActionResult> {
   const counts = item === "coal" ? COAL.counts : item === "raw_iron" ? IRON.counts : [item];
   const target = carried(counts) + count;
