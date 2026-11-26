@@ -1077,6 +1077,23 @@ async function capTunnelFloor(hub: Vec3, way: DirectionType): Promise<{ ok: bool
 }
 
 /**
+ * Water or lava in a step's walking space or right against it (its sides,
+ * floor and roof), or null. Pure over `look`.
+ */
+export function liquidAtStep(s: Pos, look: (x: number, y: number, z: number) => string | null): string | null {
+  for (let dy = -1; dy <= STAIR_HEADROOM + 1; dy++) {
+    for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const name = look(s.x + dx, s.y + dy, s.z + dz);
+      if (name === "water" || name === "lava" || name === "bubble_column") return name === "bubble_column" ? "water" : name;
+    }
+  }
+  return null;
+}
+
+/** The live check. */
+const stepLiquid = (s: Vec3): string | null => liquidAtStep(s, (x, y, z) => bot.blockAt(new Vec3(x, y, z))?.name ?? null);
+
+/**
  * Digs the mine's stairs on down to step `to` (a step at a time, from where
  * they end now), remembering each one. A blocked step stops it.
  */
@@ -1089,6 +1106,11 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   if (!atTop.ok) return fail(atTop.reason === "aborted" ? "aborted" : "unreachable", atTop.detail);
   for (let i = from; i <= to; i++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
+    // Water or lava at this step: a blocker for its stairs, never plugged and
+    // dug past (owner: turn at water; plugged, its deepest stairs ran
+    // through a flooded cave and it kept ending up under water)
+    const liquid = stepLiquid(stepAt(start, dir, i, rec.turns));
+    if (liquid) return fail("refused", `${liquid} at the next step`);
     if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();

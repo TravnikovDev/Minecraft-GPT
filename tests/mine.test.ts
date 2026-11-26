@@ -251,3 +251,14 @@ test("the stairs are roofed all the way down, but never where a hub's tunnel run
   expect(near.offset(0, 4, 0).y).toBe(hub.y + 1);
   expect(has(near.offset(0, 4, 0))).toBe(false);
 });
+
+test("water or lava at the next step stops the stairs (they turn: owner)", async () => {
+  const { liquidAtStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  const s = { x: 0, y: 10, z: 0 };
+  const at = (wx: number, wy: number, wz: number, name: string) => (x: number, y: number, z: number) => (x === wx && y === wy && z === wz ? name : "stone");
+  expect(liquidAtStep(s, () => "stone")).toBeNull();
+  expect(liquidAtStep(s, at(1, 12, 0, "water"))).toBe("water"); // beside its walking space
+  expect(liquidAtStep(s, at(0, 14, 0, "lava"))).toBe("lava"); // over its roof cell
+  expect(liquidAtStep(s, at(0, 9, 0, "water"))).toBe("water"); // under its floor
+  expect(liquidAtStep(s, at(2, 10, 0, "water"))).toBeNull(); // two blocks off: fine
+});
