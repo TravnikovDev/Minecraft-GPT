@@ -24,6 +24,8 @@ const CROPS: Record<string, Crop> = {
   carrots: { ripeAge: 7, seed: "carrot" },
   potatoes: { ripeAge: 7, seed: "potato" },
   beetroots: { ripeAge: 3, seed: "beetroot_seeds" },
+  // Cocoa pods on jungle trees (owner): ripe at age 2; the beans go into cookies
+  cocoa: { ripeAge: 2, seed: null },
   melon: { ripeAge: null, seed: null },
   pumpkin: { ripeAge: null, seed: null },
 };

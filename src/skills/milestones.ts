@@ -128,6 +128,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   if (hungryNow()) {
     if (short() && myFarm() && farmRipe() > 0) await tendFarm();
     if (short()) await pickBerries();
+    if (short()) await cocoaAndCookies();
     if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
     // Starving with nothing near (game test: it starved twice, no animal
     // within 32): by day the walk may go further, to animals out under the
@@ -163,8 +164,9 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     const made = await makeFarm();
     if (!made.ok) console.log(`Food: no farm yet (${describeFailure(made)}).`);
   }
-  // Berries; fishing (a rod, or string for one, and open water near)
+  // Berries, cocoa (cookies with wheat); fishing (a rod, or string for one, and open water near)
   if (short()) await pickBerries();
+  if (short()) await cocoaAndCookies();
   if (short()) {
     const { goFishing } = await import("./fishing");
     if ((await goFishing()) > 0) await cookTheMeat(cookFood);
@@ -196,6 +198,24 @@ export function isHungry(bar: number, points: number): boolean {
   return bar <= HUNGRY_BAR || points < STARVING_FOOD;
 }
 const hungryNow = (): boolean => isHungry(bot.food ?? 20, foodPoints());
+
+/**
+ * Ripe cocoa pods off the jungle trees round about (owner), and cookies
+ * from them with its wheat: 2 wheat and a cocoa bean make 8.
+ */
+async function cocoaAndCookies(): Promise<void> {
+  const { harvestCrops } = await import("../actions/farming");
+  const picked = await harvestCrops({ only: ["cocoa"], maxDistance: 24 });
+  if (picked > 0) console.log(`Food: picked ${picked} cocoa pods.`);
+  const beans = carriedOf(["cocoa_beans"]);
+  const wheat = carriedOf(["wheat"]);
+  const batches = Math.min(beans, Math.floor(wheat / 2));
+  if (batches === 0) return;
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  const made = await acquire("cookie", carriedOf(["cookie"]) + batches * 8, liveWorld);
+  if (made.ok) console.log(`Food: baked ${batches * 8} cookies.`);
+}
 
 /** True when it carries raw meat or fish. */
 const hasRawFood = (): boolean => bot.inventory.items().some((i) => RAW_FOOD.has(i.name));
