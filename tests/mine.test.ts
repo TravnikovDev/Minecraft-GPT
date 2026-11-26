@@ -109,3 +109,18 @@ test("the stairs down to the shelter are part of its shell: floor, side walls an
   expect(has(0, 64, 1)).toBe(false); // at the surface: the open world, not a wall
   expect(has(1, 64, 0)).toBe(false); // a stair cell is never part of the shell
 });
+
+test("the shelter's shell keeps its doorways' floors but never closes the way through", async () => {
+  const { shelterPlan } = await import(`${ROOT}/src/actions/building.ts`);
+  const plan = shelterPlan({ x: 0, y: 64, z: 0 }, "south");
+  const key = (p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`;
+  const shell = new Set(plan.shell.map(key));
+  // Nothing it walks through is ever a wall to build
+  for (const c of plan.cells) expect(shell.has(key(c))).toBe(false);
+  // The doorways stand on kept floor
+  expect(shell.has(key(plan.entrance.offset(0, -1, 0)))).toBe(true);
+  expect(shell.has(key(plan.exit.offset(0, -1, 0)))).toBe(true);
+  // Beyond the exit is the mine's first step: open, not a wall
+  const along = plan.exit.minus(plan.exit.offset(0, 0, -1)); // south: +z
+  expect(shell.has(key(plan.exit.plus(along)))).toBe(false);
+});

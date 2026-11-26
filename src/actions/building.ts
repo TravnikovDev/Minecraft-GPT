@@ -152,7 +152,7 @@ export function shelterPlan(start: Pos, dir: DirectionType, room: RoomSize = DEF
     // left its roof open to the sky, fresh-world test). And the stairs down
     // to it: their floor, side walls and roof below the surface (owner: a
     // walk dug through the stairs' walls; they're kept and mended like the room)
-    shell: [...new Map([...shellAround(roomCells, doorways), ...stairsShell(stairs, [...doorways, ...roomCells], across, s.y)].map((p) => [cellKey(p), p])).values()],
+    shell: [...new Map([...shellAround(roomCells, doorways, across), ...stairsShell(stairs, [...doorways, ...roomCells], across, s.y)].map((p) => [cellKey(p), p])).values()],
     // The stairs' open cells (kept clear: a block fallen or put in them is dug out)
     stairs,
   };
@@ -182,9 +182,18 @@ export function stairsShell(stairs: Vec3[], others: Vec3[], across: Vec3, surfac
 }
 
 /** Every cell next to the room that isn't the room or a doorway. */
-function shellAround(room: Vec3[], doorways: Vec3[]): Vec3[] {
+function shellAround(room: Vec3[], doorways: Vec3[], across?: Vec3): Vec3[] {
   const inside = new Set([...room, ...doorways].map(cellKey));
   const shell = new Map<string, Vec3>();
+  // The doorways' floors, tops and sides too (a door stands on its floor; a
+  // walk dug round the entrance). Not along the way through: that's the
+  // stairs in front and the mine's first step behind, kept open
+  if (across) {
+    for (const c of doorways) for (const n of [new Vec3(0, -1, 0), new Vec3(0, 1, 0), across, across.scaled(-1)]) {
+      const p = c.plus(n);
+      if (!inside.has(cellKey(p))) shell.set(cellKey(p), p);
+    }
+  }
   for (const c of room) for (const n of NEIGHBOURS) {
     const p = c.plus(n);
     if (!inside.has(cellKey(p))) shell.set(cellKey(p), p);
@@ -583,6 +592,19 @@ async function putInDoor(at: Vec3): Promise<void> {
       console.log(`No door for the shelter (${describeFailure(made)}); I'll close it with blocks at night.`);
       return;
     }
+  }
+  // Both of the door's cells cleared first: the night seal is two blocks, and
+  // with its top block still there the server refused the door again and
+  // again ("still air", game test); and something solid under it to stand on
+  const top = at.offset(0, 1, 0);
+  for (const cell of [top, at]) {
+    const b = knownBlock(cell);
+    if (b && b.boundingBox === "block" && !isWoodenDoor(b.name)) await breakBlockAt(cell.x, cell.y, cell.z);
+  }
+  const floor = at.offset(0, -1, 0);
+  if (knownBlock(floor) && knownBlock(floor)!.boundingBox !== "block") {
+    const filler = fillerFor();
+    if (filler) await placeBlockResult(filler, floor.x, floor.y, floor.z);
   }
   // Out of the doorway first: its own body there makes the server refuse the
   // door (game test: refused again and again by the doorway)
