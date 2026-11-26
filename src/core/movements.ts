@@ -259,8 +259,11 @@ export function safeMovements(bot: Bot): pf.Movements {
   if (berries !== undefined) moves.blocksToAvoid.add(berries);
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
+  // (its fields' ground is kept from collecting and tunnels, not from its own
+  // walks: in a crater in its field it could neither dig nor pillar out, and
+  // stood there trapped, game test; a step dug in it is mended when tended)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
-    block.position && (forbiddenAt(block.position) || isProtected(block.position)) ? 10_000 : 0;
+    block.position && (forbiddenAt(block.position) || (isProtected(block.position) && protectedBy(block.position) !== "farm")) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
   // Never a block with water or lava behind it (owner: its own way dug
   // through a flooded dripstone cave let the water in, and it nearly drowned)

@@ -75,6 +75,14 @@ test("its shelter's walls are never dug through by a walk", () => {
   expect(moves.exclusionBreak(wall)).toBe(0);
 });
 
+test("its own walks may dig out of its field (a crater there trapped it); collecting still keeps off it", () => {
+  const ground = { position: new Vec3(-2, 73, -7) };
+  protectCells([{ x: -2, y: 73, z: -7 }], "farm");
+  expect(isProtected({ x: -2, y: 73, z: -7 })).toBe(true);
+  expect(moves.exclusionBreak(ground)).toBe(0);
+  protectCells([], "farm");
+});
+
 test("a stall inside its own shelter is never held against the stairs", () => {
   setOwnPassages([{ x: 0, y: 66, z: 3 }]);
   avoidStep({ x: 0, y: 66, z: 3 });
