@@ -51,3 +51,14 @@ test("fields: two to live on; snow on the plot is cleared like grass (owner)", a
   // A snow layer over the grass: the plot still fits (the snow counts as clear in the live view)
   expect(plotFits({ x: 0, y: 63, z: 0 }, flat(63))).toBe(true);
 });
+
+test("a smaller field where a 9 by 9 doesn't fit: 7 by 7, then 5 by 5 (game test: snowy hills)", async () => {
+  const { FIELD_HALVES, plotFits, sowOrder, torchSpots } = await import(`${ROOT}/src/skills/farm.ts`);
+  expect(FIELD_HALVES).toEqual([4, 3, 2]);
+  // Flat only 5 wide round the middle: no 9x9, a 5x5 fits
+  const narrow = (x: number, y: number, z: number): Cell => (Math.max(Math.abs(x), Math.abs(z)) <= 3 ? flat(63)(x, y) : flat(64)(x, y));
+  expect(plotFits({ x: 0, y: 63, z: 0 }, narrow, () => false, 4)).toBe(false);
+  expect(plotFits({ x: 0, y: 63, z: 0 }, narrow, () => false, 2)).toBe(true);
+  expect(sowOrder({ x: 0, y: 63, z: 0 }, 2).length).toBe(24);
+  expect(torchSpots({ x: 0, y: 63, z: 0 }, 2)[0]).toEqual({ x: 3, y: 64, z: 0 });
+});

@@ -26,7 +26,11 @@ type P3 = { x: number; y: number; z: number };
 export const FARM_HALF = 4;
 // How far from the top of its stairs the plot's middle may be
 const NEAR = 6;
-const FAR = 24;
+// (searched farther in hills and snow, game test: no flat 9 by 9 within 24)
+const FAR = 40;
+// Field sizes it tries, biggest first (half-widths: 9x9, 7x7, 5x5): a smaller
+// field where the ground's too uneven for a big one
+export const FIELD_HALVES = [4, 3, 2];
 // Seeds, best first: what it plants (the crop block and the item it plants)
 const SEEDS = ["carrot", "potato", "beetroot_seeds", "wheat_seeds"] as const;
 // Grass broken for wheat seeds before it gives up on more (1 in 8 drops one)
@@ -37,14 +41,14 @@ const SEEDS_WANTED = 40;
 export const FIELDS_WANTED = 2;
 
 /** Its fields (each plot's middle), first made first. */
-export function myFarms(): P3[] {
+export function myFarms(): Array<P3 & { half: number }> {
   return getPlaces("farm")
     .filter((p) => p.dimension === currentDimension() && (p.name ?? "").startsWith("my farm"))
-    .map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    .map((p) => ({ x: p.x, y: p.y, z: p.z, half: Number((p.details as { half?: number } | undefined)?.half ?? FARM_HALF) }));
 }
 
 /** Its first field (the plot's middle), or null. */
-export function myFarm(): P3 | null {
+export function myFarm(): (P3 & { half: number }) | null {
   return myFarms()[0] ?? null;
 }
 
@@ -66,9 +70,9 @@ export type PlotCell = { ground: boolean; clear: boolean; sky?: boolean; tree?: 
  * (`clear`), none of it kept (its shelter, its stairs) or off limits. Pure
  * over `look` and `kept`.
  */
-export function plotFits(middle: P3, look: (x: number, y: number, z: number) => PlotCell, kept: (p: P3) => boolean = () => false): boolean {
-  for (let dx = -FARM_HALF; dx <= FARM_HALF; dx++) {
-    for (let dz = -FARM_HALF; dz <= FARM_HALF; dz++) {
+export function plotFits(middle: P3, look: (x: number, y: number, z: number) => PlotCell, kept: (p: P3) => boolean = () => false, half = FARM_HALF): boolean {
+  for (let dx = -half; dx <= half; dx++) {
+    for (let dz = -half; dz <= half; dz++) {
       const g = { x: middle.x + dx, y: middle.y, z: middle.z + dz };
       const ground = look(g.x, g.y, g.z);
       const over = look(g.x, g.y + 1, g.z);
@@ -77,9 +81,9 @@ export function plotFits(middle: P3, look: (x: number, y: number, z: number) => 
   }
   // No tree right by it (game test: a plot squeezed between oaks, in their
   // shade, leaves and saplings dropping on it)
-  for (let dx = -FARM_HALF - 1; dx <= FARM_HALF + 1; dx++) {
-    for (let dz = -FARM_HALF - 1; dz <= FARM_HALF + 1; dz++) {
-      if (Math.max(Math.abs(dx), Math.abs(dz)) !== FARM_HALF + 1) continue;
+  for (let dx = -half - 1; dx <= half + 1; dx++) {
+    for (let dz = -half - 1; dz <= half + 1; dz++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== half + 1) continue;
       for (let dy = 0; dy <= 3; dy++) if (look(middle.x + dx, middle.y + dy, middle.z + dz)?.tree) return false;
     }
   }
@@ -92,9 +96,9 @@ export function plotFits(middle: P3, look: (x: number, y: number, z: number) => 
  * harvests give more (game test: 8 seeds made one strip along an edge).
  * The middle (the water) is left out. Pure.
  */
-export function sowOrder(middle: P3): P3[] {
+export function sowOrder(middle: P3, half = FARM_HALF): P3[] {
   const cells: P3[] = [];
-  for (let dx = -FARM_HALF; dx <= FARM_HALF; dx++) for (let dz = -FARM_HALF; dz <= FARM_HALF; dz++) if (dx !== 0 || dz !== 0) cells.push({ x: middle.x + dx, y: middle.y, z: middle.z + dz });
+  for (let dx = -half; dx <= half; dx++) for (let dz = -half; dz <= half; dz++) if (dx !== 0 || dz !== 0) cells.push({ x: middle.x + dx, y: middle.y, z: middle.z + dz });
   const ring = (p: P3): number => Math.max(Math.abs(p.x - middle.x), Math.abs(p.z - middle.z));
   const manhattan = (p: P3): number => Math.abs(p.x - middle.x) + Math.abs(p.z - middle.z);
   return cells.sort((a, b) => ring(a) - ring(b) || manhattan(a) - manhattan(b));
@@ -105,8 +109,8 @@ export function sowOrder(middle: P3): P3[] {
  * plot. Light 14 falls by one a block, so every cell gets 9 or more: crops
  * grow at night and nothing spawns on it. Pure.
  */
-export function torchSpots(middle: P3): P3[] {
-  const d = FARM_HALF + 1;
+export function torchSpots(middle: P3, half = FARM_HALF): P3[] {
+  const d = half + 1;
   // The corners too (owner: torches all round the crops; light keeps snow
   // and mobs off the paths round it)
   const out: P3[] = [];
@@ -134,20 +138,24 @@ function plotCellAt(x: number, y: number, z: number): PlotCell {
   return { ground, clear, sky, tree };
 }
 
-/** A plot near its home: the nearest that fits, round the top of its stairs. */
-function findPlot(home: P3): P3 | null {
+/** A plot near its home: the biggest size that fits, the nearest of that size, round the top of its stairs. */
+function findPlot(home: P3): { middle: P3; half: number } | null {
   // Never on another of its fields (or right against one: a path between)
   const fields = myFarms();
-  const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= FARM_HALF + 1);
-  const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onField(p);
-  for (let r = NEAR; r <= FAR; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dz = -r; dz <= r; dz++) {
-        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-        // The ground's height there: within a few blocks of the home's
-        for (let dy = 3; dy >= -3; dy--) {
-          const middle = { x: home.x + dx, y: home.y + dy - 1, z: home.z + dz };
-          if (plotFits(middle, plotCellAt, kept)) return middle;
+  for (const half of FIELD_HALVES) {
+    const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.half + 1);
+    const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onField(p);
+    for (let r = NEAR; r <= FAR; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          // The ground's height there: within a few blocks of the home's
+          for (let dy = 3; dy >= -3; dy--) {
+            const middle = { x: home.x + dx, y: home.y + dy - 1, z: home.z + dz };
+            // The ground's surface there first (cheap), then the whole plot
+            if (!plotCellAt(middle.x, middle.y, middle.z)?.ground || !plotCellAt(middle.x, middle.y + 1, middle.z)?.clear) continue;
+            if (plotFits(middle, plotCellAt, kept, half)) return { middle, half };
+          }
         }
       }
     }
@@ -166,7 +174,7 @@ async function getSeeds(): Promise<string | null> {
   const have = SEEDS.find((s) => count(s) >= 8);
   if (have) return have;
   const ids = ["short_grass", "grass", "tall_grass"].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
-  const grass = bot.findBlocks({ matching: ids, maxDistance: 24, count: GRASS_TRIES });
+  const grass = bot.findBlocks({ matching: ids, maxDistance: 48, count: GRASS_TRIES });
   const { breakBlock } = await import("../core/primitives");
   const { pickupNearbyItems } = await import("../actions/pickup");
   let broken = 0;
@@ -202,18 +210,19 @@ export async function makeFarm(): Promise<ActionResult> {
   }
   const seed = await getSeeds();
   if (!seed) return fail("missing_items", "no seeds: no carrots, potatoes or beetroot, and the grass round here gave none");
-  const middle = findPlot(home);
-  if (!middle) return fail("not_found", "no flat 9 by 9 patch of open ground near my shelter for a field");
+  const plot = findPlot(home);
+  if (!plot) return fail("not_found", "no flat patch of open ground near my shelter for a field, not even 5 by 5");
+  const { middle, half } = plot;
   const n = myFarms().length + 1;
-  report(`Making ${n === 1 ? "my first field" : `field ${n}`} at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
+  report(`Making ${n === 1 ? "my first field" : `field ${n}`} (${2 * half + 1} by ${2 * half + 1}) at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
   if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 2))).ok) return fail("unreachable", "I can't get to the field's spot");
   // Water now if it has it (owner: crops grow without it too, slower; the
   // middle gets it once it has a bucket)
   if (count("water_bucket") > 0) await waterField(middle);
-  await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed } });
-  const sown = await sowPlot(middle, seed);
-  await lightFarm(middle);
-  report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < 80 ? "; it grows as the harvests give more seeds" : ""}.`);
+  await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half } });
+  const sown = await sowPlot(middle, seed, half);
+  await lightFarm(middle, half);
+  report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < (2 * half + 1) ** 2 - 1 ? "; it grows as the harvests give more seeds" : ""}.`);
   return sown > 0 ? (myFarms().length >= FIELDS_WANTED ? ok() : fail("not_found", `${FIELDS_WANTED - myFarms().length} more field to make`)) : fail("refused", "I couldn't till or sow the field");
 }
 
@@ -236,12 +245,12 @@ async function waterField(middle: P3): Promise<boolean> {
 }
 
 /** Tills and sows every free cell of the plot (not the middle's water). How many it sowed. */
-async function sowPlot(middle: P3, seed: string): Promise<number> {
+async function sowPlot(middle: P3, seed: string, half = FARM_HALF): Promise<number> {
   const { tillAndSow } = await import("../actions/farming");
   let sown = 0;
   // No hoe: only farmland already tilled is sown (game test: 80 "can't till, no hoe")
   const hoe = bot.inventory.items().some((i) => i.name.endsWith("_hoe"));
-  for (const cell of sowOrder(middle)) {
+  for (const cell of sowOrder(middle, half)) {
     if (isCommandCancelled() || count(seed) === 0) return sown;
     const g = new Vec3(cell.x, cell.y, cell.z);
     if (!hoe && knownBlock(g)?.name !== "farmland") continue;
@@ -258,11 +267,11 @@ async function sowPlot(middle: P3, seed: string): Promise<number> {
 }
 
 /** Its torches round the plot, those it has (a missing one put back when tended). How many it placed. */
-async function lightFarm(middle: P3): Promise<number> {
+async function lightFarm(middle: P3, half = FARM_HALF): Promise<number> {
   if (count("torch") === 0) return 0;
   const { placeBlockResult } = await import("../actions/blockPlacing");
   let placed = 0;
-  for (const spot of torchSpots(middle)) {
+  for (const spot of torchSpots(middle, half)) {
     if (count("torch") === 0 || isCommandCancelled()) break;
     // On the ground there (it may be a block up or down from the plot)
     for (let dy = 1; dy >= -2; dy--) {
@@ -282,7 +291,7 @@ async function lightFarm(middle: P3): Promise<number> {
 
 /** Ripe crops on its farm now. */
 export function farmRipe(): number {
-  return myFarms().reduce((n, f) => n + findRipeCrops(FARM_HALF + 2, null, new Vec3(f.x, f.y + 1, f.z)).length, 0);
+  return myFarms().reduce((n, f) => n + findRipeCrops(f.half + 2, null, new Vec3(f.x, f.y + 1, f.z)).length, 0);
 }
 
 /**
@@ -296,11 +305,11 @@ export async function tendFarm(): Promise<number> {
     const field = new Vec3(farm.x, farm.y + 1, farm.z);
     if (!(await goTo(new pf.goals.GoalNear(field.x, field.y, field.z, 4))).ok) continue;
     const { harvestCrops } = await import("../actions/farming");
-    harvested += await harvestCrops({ maxDistance: FARM_HALF + 2, point: field });
+    harvested += await harvestCrops({ maxDistance: farm.half + 2, point: field });
     // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
     const seed = SEEDS.find((s) => count(s) > 0);
-    if (seed) await sowPlot(farm, seed);
-    await lightFarm(farm);
+    if (seed) await sowPlot(farm, seed, farm.half);
+    await lightFarm(farm, farm.half);
     // Its water, once it has a bucket of it (owner)
     await waterField(farm);
   }

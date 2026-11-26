@@ -971,7 +971,12 @@ async function capTunnelFloor(hub: Vec3, way: DirectionType): Promise<{ ok: bool
   const cells = [1, 2, 3, 4].map((k) => hub.plus(STEP[way].scaled(k)).offset(0, -1, 0));
   const solid = (c: Vec3): boolean => bot.blockAt(c)?.boundingBox === "block";
   const at = await goToStep(hub);
-  if (!at.ok) return { ok: false, cells, why: `can't get to the crossroad: ${describeFailure(at)}` };
+  if (!at.ok) {
+    // What's there, to see why (game test: "no path" to the crossroad twice)
+    const name = (p: Vec3): string => bot.blockAt(p)?.name ?? "?";
+    console.log(`Mine: crossroad ${hub}: feet ${name(hub)}, head ${name(hub.offset(0, 1, 0))}, floor ${name(hub.offset(0, -1, 0))}; I'm at ${bot.entity.position.floored()}.`);
+    return { ok: false, cells, why: `can't get to the crossroad: ${describeFailure(at)}` };
+  }
   if (bot.entity.position.y < hub.y - 0.5) return { ok: false, cells, why: "I'm below the crossroad" };
   const { placeBlockResult } = await import("../actions/blockPlacing");
   for (let k = 0; k < cells.length; k++) {
