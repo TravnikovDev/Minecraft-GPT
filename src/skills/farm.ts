@@ -33,15 +33,25 @@ const SEEDS = ["carrot", "potato", "beetroot_seeds", "wheat_seeds"] as const;
 const GRASS_TRIES = 80;
 const SEEDS_WANTED = 40;
 
-/** Its farm (the plot's middle), or null. */
+// Fields it keeps (owner: at least 2 to live on)
+export const FIELDS_WANTED = 2;
+
+/** Its fields (each plot's middle), first made first. */
+export function myFarms(): P3[] {
+  return getPlaces("farm")
+    .filter((p) => p.dimension === currentDimension() && (p.name ?? "").startsWith("my farm"))
+    .map((p) => ({ x: p.x, y: p.y, z: p.z }));
+}
+
+/** Its first field (the plot's middle), or null. */
 export function myFarm(): P3 | null {
-  const farm = getPlaces("farm").filter((p) => p.dimension === currentDimension() && p.name === "my farm").at(-1);
-  return farm ? { x: farm.x, y: farm.y, z: farm.z } : null;
+  return myFarms()[0] ?? null;
 }
 
 // Plants it clears off the plot (never anything else: an owner's fence,
 // lantern or table on it stays, review)
-const CLEARABLE = /^(short_grass|grass|tall_grass|fern|large_fern|dandelion|poppy|[a-z_]+_tulip|azure_bluet|oxeye_daisy|cornflower|allium|blue_orchid)$/;
+// (and thin snow: owner, in a snowy world the plot is under a snow layer)
+const CLEARABLE = /^(short_grass|grass|tall_grass|fern|large_fern|dandelion|poppy|[a-z_]+_tulip|azure_bluet|oxeye_daisy|cornflower|allium|blue_orchid|snow)$/;
 
 /**
  * A plot cell as the site search sees it (null: not loaded): grass or dirt
@@ -97,12 +107,11 @@ export function sowOrder(middle: P3): P3[] {
  */
 export function torchSpots(middle: P3): P3[] {
   const d = FARM_HALF + 1;
-  return [
-    { x: middle.x + d, y: middle.y + 1, z: middle.z },
-    { x: middle.x - d, y: middle.y + 1, z: middle.z },
-    { x: middle.x, y: middle.y + 1, z: middle.z + d },
-    { x: middle.x, y: middle.y + 1, z: middle.z - d },
-  ];
+  // The corners too (owner: torches all round the crops; light keeps snow
+  // and mobs off the paths round it)
+  const out: P3[] = [];
+  for (const [dx, dz] of [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [d, -d], [-d, d], [-d, -d]] as const) out.push({ x: middle.x + dx, y: middle.y + 1, z: middle.z + dz });
+  return out;
 }
 
 /** The live view for the plot search. */
@@ -127,7 +136,10 @@ function plotCellAt(x: number, y: number, z: number): PlotCell {
 
 /** A plot near its home: the nearest that fits, round the top of its stairs. */
 function findPlot(home: P3): P3 | null {
-  const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
+  // Never on another of its fields (or right against one: a path between)
+  const fields = myFarms();
+  const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= FARM_HALF + 1);
+  const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onField(p);
   for (let r = NEAR; r <= FAR; r++) {
     for (let dx = -r; dx <= r; dx++) {
       for (let dz = -r; dz <= r; dz++) {
@@ -174,45 +186,53 @@ async function getSeeds(): Promise<string | null> {
  * the rest tilled and sown, and remembered. Done once; `tendFarm` keeps it.
  */
 export async function makeFarm(): Promise<ActionResult> {
-  if (myFarm()) return ok();
+  if (myFarms().length >= FIELDS_WANTED) return ok();
   const { shelterLayout } = await import("../actions/building");
   const home = shelterLayout()?.start;
   if (!home) return fail("not_found", "no shelter to farm next to yet");
-  if (count("water_bucket") === 0) {
-    const { fillWater } = await import("./endgame/portal");
-    const filled = await fillWater();
-    if (!filled.ok) return fail(filled.reason, `no water for the farm (${describeFailure(filled)})`);
-  }
+  const { daylight } = await import("../core/daylight");
+  if (!daylight()) return fail("refused", "fields are made by day");
   const { acquire } = await import("./acquire");
   const { liveWorld } = await import("./world");
+  // A hoe: stone if it can, wooden on its first day
   if (!bot.inventory.items().some((i) => i.name.endsWith("_hoe"))) {
-    const hoe = await acquire("stone_hoe", 1, liveWorld);
+    let hoe = await acquire("stone_hoe", 1, liveWorld);
+    if (!hoe.ok) hoe = await acquire("wooden_hoe", 1, liveWorld);
     if (!hoe.ok) return fail(hoe.reason, `no hoe (${describeFailure(hoe)})`);
   }
   const seed = await getSeeds();
   if (!seed) return fail("missing_items", "no seeds: no carrots, potatoes or beetroot, and the grass round here gave none");
   const middle = findPlot(home);
-  if (!middle) return fail("not_found", "no flat 9 by 9 patch of grass near my shelter for a farm");
-  report(`Making my farm at ${middle.x}, ${middle.z}: water in the middle, ${seed.replace(/_/g, " ")} round it.`);
-  // The middle: dug out, its water poured in
-  const { breakBlock, equipItem, useHeldItemToward } = await import("../core/primitives");
-  const mid = new Vec3(middle.x, middle.y, middle.z);
-  if (!(await goTo(new pf.goals.GoalNear(mid.x, mid.y + 1, mid.z, 2))).ok) return fail("unreachable", "I can't get to the farm's spot");
-  if (knownBlock(mid)?.name !== "water") {
-    // The hole must hold the water: solid ground under it (a cave below would drain it)
-    if (knownBlock(mid.offset(0, -1, 0))?.boundingBox !== "block") return fail("refused", "the farm's middle has no solid ground under it");
-    const dug = await breakBlock(mid);
-    if (!dug.ok) return fail(dug.reason, `couldn't dig the farm's water hole (${describeFailure(dug)})`);
-    if (!(await equipItem("water_bucket")).ok) return fail("missing_items", "no water bucket");
-    await useHeldItemToward({ x: mid.x + 0.5, y: mid.y, z: mid.z + 0.5 }); // the hole's floor
-    await new Promise((r) => setTimeout(r, 500));
-    if (knownBlock(mid)?.name !== "water") return fail("refused", "the water didn't go in the farm's middle");
-  }
-  await addPlace({ kind: "farm", name: "my farm", x: middle.x, y: middle.y, z: middle.z, details: { seed } });
+  if (!middle) return fail("not_found", "no flat 9 by 9 patch of open ground near my shelter for a field");
+  const n = myFarms().length + 1;
+  report(`Making ${n === 1 ? "my first field" : `field ${n}`} at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
+  if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 2))).ok) return fail("unreachable", "I can't get to the field's spot");
+  // Water now if it has it (owner: crops grow without it too, slower; the
+  // middle gets it once it has a bucket)
+  if (count("water_bucket") > 0) await waterField(middle);
+  await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed } });
   const sown = await sowPlot(middle, seed);
   await lightFarm(middle);
-  report(`My farm is planted: ${sown} blocks of ${seed.replace(/_/g, " ")} round the water${sown < 80 ? "; it grows as the harvests give more seeds" : ""}.`);
-  return sown > 0 ? ok() : fail("refused", "I couldn't till or sow the farm");
+  report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < 80 ? "; it grows as the harvests give more seeds" : ""}.`);
+  return sown > 0 ? (myFarms().length >= FIELDS_WANTED ? ok() : fail("not_found", `${FIELDS_WANTED - myFarms().length} more field to make`)) : fail("refused", "I couldn't till or sow the field");
+}
+
+/** The field's middle dug out and its water poured in (from a water bucket it carries). True when there's water. */
+async function waterField(middle: P3): Promise<boolean> {
+  const mid = new Vec3(middle.x, middle.y, middle.z);
+  if (knownBlock(mid)?.name === "water") return true;
+  if (count("water_bucket") === 0) return false;
+  // The hole must hold the water: solid ground under it (a cave below would drain it)
+  if (knownBlock(mid.offset(0, -1, 0))?.boundingBox !== "block") return false;
+  const { breakBlock, equipItem, useHeldItemToward } = await import("../core/primitives");
+  if (!(await goTo(new pf.goals.GoalNear(mid.x, mid.y + 1, mid.z, 2))).ok) return false;
+  if (knownBlock(mid)?.name !== "air" && !(await breakBlock(mid, { allowWithoutHarvest: true })).ok) return false;
+  if (!(await equipItem("water_bucket")).ok) return false;
+  await useHeldItemToward({ x: mid.x + 0.5, y: mid.y, z: mid.z + 0.5 }); // the hole's floor
+  await new Promise((r) => setTimeout(r, 500));
+  const watered = knownBlock(mid)?.name === "water";
+  if (watered) console.log(`Farm: water in the middle of the field at ${mid}.`);
+  return watered;
 }
 
 /** Tills and sows every free cell of the plot (not the middle's water). How many it sowed. */
@@ -262,9 +282,7 @@ async function lightFarm(middle: P3): Promise<number> {
 
 /** Ripe crops on its farm now. */
 export function farmRipe(): number {
-  const farm = myFarm();
-  if (!farm) return 0;
-  return findRipeCrops(FARM_HALF + 2, null, new Vec3(farm.x, farm.y + 1, farm.z)).length;
+  return myFarms().reduce((n, f) => n + findRipeCrops(FARM_HALF + 2, null, new Vec3(f.x, f.y + 1, f.z)).length, 0);
 }
 
 /**
@@ -272,16 +290,20 @@ export function farmRipe(): number {
  * farmland, bakes the wheat into bread. How many crops it harvested.
  */
 export async function tendFarm(): Promise<number> {
-  const farm = myFarm();
-  if (!farm) return 0;
-  const field = new Vec3(farm.x, farm.y + 1, farm.z);
-  if (!(await goTo(new pf.goals.GoalNear(field.x, field.y, field.z, 4))).ok) return 0;
-  const { harvestCrops } = await import("../actions/farming");
-  const harvested = await harvestCrops({ maxDistance: FARM_HALF + 2, point: field });
-  // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
-  const seed = SEEDS.find((s) => count(s) > 0);
-  if (seed) await sowPlot(farm, seed);
-  await lightFarm(farm);
+  let harvested = 0;
+  for (const farm of myFarms()) {
+    if (isCommandCancelled()) break;
+    const field = new Vec3(farm.x, farm.y + 1, farm.z);
+    if (!(await goTo(new pf.goals.GoalNear(field.x, field.y, field.z, 4))).ok) continue;
+    const { harvestCrops } = await import("../actions/farming");
+    harvested += await harvestCrops({ maxDistance: FARM_HALF + 2, point: field });
+    // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
+    const seed = SEEDS.find((s) => count(s) > 0);
+    if (seed) await sowPlot(farm, seed);
+    await lightFarm(farm);
+    // Its water, once it has a bucket of it (owner)
+    await waterField(farm);
+  }
   // Wheat into bread (3 each)
   const wheat = count("wheat");
   if (wheat >= 3) {
@@ -291,6 +313,6 @@ export async function tendFarm(): Promise<number> {
     const baked = await acquire("bread", count("bread") + loaves, liveWorld);
     if (baked.ok) console.log(`Farm: baked ${loaves} bread.`);
   }
-  if (harvested > 0) report(`Harvested ${harvested} crops from my farm.`);
+  if (harvested > 0) report(`Harvested ${harvested} crops from my fields.`);
   return harvested;
 }

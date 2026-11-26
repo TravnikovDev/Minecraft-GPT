@@ -18,7 +18,7 @@ import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntac
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
-import { farmRipe, makeFarm, myFarm, tendFarm } from "./farm";
+import { farmRipe, FIELDS_WANTED, makeFarm, myFarm, myFarms, tendFarm } from "./farm";
 import { reinforceShelter, shelterWeakCells } from "./reinforce";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
@@ -154,8 +154,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   }
   // Fed: the lasting sources. Its farm tended, or made now (a bucket, by day)
   if (short() && myFarm()) await tendFarm();
-  const hasBucket = bot.inventory.items().some((i) => /^(water_)?bucket$/.test(i.name));
-  if (short() && !myFarm() && hasBucket && byDay() && !hungryNow()) {
+  if (short() && myFarms().length < FIELDS_WANTED && byDay() && !hungryNow()) {
     const made = await makeFarm();
     if (!made.ok) console.log(`Food: no farm yet (${describeFailure(made)}).`);
   }
@@ -334,6 +333,19 @@ export const MILESTONES: Milestone[] = [
     // hole or a newer plan (the mine door) makes it not done, and it's mended
     done: () => shelter() !== null && shelterIntact(),
     achieve: () => buildShelter(),
+  },
+  // Fields on its first day, right after the shelter (owner: wheat from the
+  // grass's seeds is a good source of food from the start; at least 2 fields
+  // to live on; no bucket needed, water goes in their middles once it has
+  // one; torches all round them). By day
+  {
+    id: "farm",
+    title: "my fields",
+    tier: 1,
+    optional: true,
+    requires: ["shelter"],
+    done: () => myFarms().length >= FIELDS_WANTED,
+    achieve: makeFarm,
   },
   {
     id: "stone_tools",
@@ -518,17 +530,6 @@ export const MILESTONES: Milestone[] = [
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
       return ok();
     },
-  },
-  {
-    id: "farm",
-    title: "a farm",
-    tier: 3,
-    optional: true,
-    requires: ["bucket"],
-    // Owner: hunting isn't a sustainable way to get food; a plot by the
-    // shelter with water in it (so the water bucket comes first). By day
-    done: () => myFarm() !== null,
-    achieve: makeFarm,
   },
   {
     id: "iron_armor",
