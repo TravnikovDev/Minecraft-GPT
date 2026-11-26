@@ -143,15 +143,21 @@ export async function climbMineStairs(): Promise<boolean> {
   if (stepAt(rec.start, rec.direction, i, rec.turns).distanceTo(here) > ARM_LENGTH + 8) return false;
   const step = standAt(stepAt(rec.start, rec.direction, i, rec.turns));
   console.log(`Home by my mine's stairs: from step ${i} up.`);
-  if (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) return false;
-  // Up them a stretch at a time (each leg short, so it keeps to the stairs);
-  // stuck on a leg, it gets itself up a block and tries again (owner)
+  // Stuck on the way (a step too high to jump: game test, a block it placed
+  // in its stairs left a 2-high step and every walk had no path), it puts a
+  // block under itself, jumps and tries again (owner)
   let unsticks = 0;
+  const MAX_UNSTICKS = 8;
+  while (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
+    if (isCommandCancelled() || unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
+    unsticks++;
+  }
+  // Up them a stretch at a time (each leg short, so it keeps to the stairs)
   for (let j = Math.max(0, i - 8); ; ) {
     if (isCommandCancelled()) return false;
     const s = standAt(stepAt(rec.start, rec.direction, j, rec.turns));
     if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
-      if (unsticks >= 3 || !(await unstickOnStairs())) return false;
+      if (unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
       unsticks++;
       continue;
     }

@@ -667,7 +667,10 @@ async function walkHome(room: { x: number; y: number; z: number; details?: Recor
   const inside = Math.hypot(here.x - room.x, here.z - room.z) <= 32 && here.y < (top?.y ?? Infinity) - 1;
   // Down in its mine: up its own stairs first (they lead to the back door),
   // not a new way dug up through the rock (game test)
-  if (inside && here.y < room.y - 2) {
+  // (anywhere below its home: its stairs may have turned far off across, game
+  // test: 54 blocks out it never tried them and a plain walk found no path;
+  // the climb itself checks it's near its stairs)
+  if (here.y < room.y - 2) {
     const { climbMineStairs } = await import("../skills/mine");
     await climbMineStairs();
   }
