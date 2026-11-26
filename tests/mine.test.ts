@@ -125,3 +125,13 @@ test("the shelter's shell keeps its doorways' floors but never closes the way th
   const along = plan.exit.minus(plan.exit.offset(0, 0, -1)); // south: +z
   expect(shell.has(key(plan.exit.plus(along)))).toBe(false);
 });
+
+test("stair care digs out fallen gravel, never its own paving or anything built", async () => {
+  const { fillsStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  expect(fillsStep({ name: "gravel", boundingBox: "block" })).toBe(true);
+  expect(fillsStep({ name: "stone", boundingBox: "block" })).toBe(true);
+  expect(fillsStep({ name: "cobblestone_stairs", boundingBox: "block" })).toBe(false); // its paving
+  expect(fillsStep({ name: "oak_planks", boundingBox: "block" })).toBe(false); // built
+  expect(fillsStep({ name: "air", boundingBox: "empty" })).toBe(false);
+  expect(fillsStep({ name: "torch", boundingBox: "empty" })).toBe(false);
+});

@@ -15,6 +15,8 @@ import { fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter } from "../core/narrator";
 import { shelterLayout } from "../actions/building";
+import { forbiddenAt } from "../core/forbidden";
+import { isNatural, isProtected } from "../core/movements";
 
 type P2 = { x: number; z: number };
 type P3 = { x: number; y: number; z: number };
@@ -81,7 +83,8 @@ function groundCellAt(x: number, y: number, z: number): GroundCell {
   const b = knownBlock(new Vec3(x, y, z));
   if (!b) return null;
   const open = b.name === "air" || b.name === "cave_air";
-  const ground = b.boundingBox === "block" && !/leaves|glass|ice$|^ice|slab|stairs|fence|wall|_door|trapdoor|chest|bed$|farmland|torch/.test(b.name);
+  // Natural ground only: never the owner's plank floor or roof, nor a field (review)
+  const ground = b.boundingBox === "block" && isNatural(b.name) && !/leaves|ice$|^ice|farmland/.test(b.name);
   return { open, ground };
 }
 
@@ -91,7 +94,15 @@ function torchesAround(center: Vec3, range: number): P3[] {
   return bot.findBlocks({ matching: ids, point: center, maxDistance: range, count: 256 }).map((p) => ({ x: p.x, y: p.y, z: p.z }));
 }
 
-type LightPlan = { inside: Array<{ cell: P3; side: string }>; outside: P3[] };
+type LightPlan = { inside: Array<{ cell: P3; side: string }>; outside: P3[]; unknown: number };
+
+// Spots it couldn't light (no way there, the server said no): left for a
+// while, and not counted against "lit" meanwhile (review: one unreachable
+// spot, across a ravine, kept the milestone open for ever)
+const FAILED_FOR_MS = 30 * 60_000;
+const failedSpots = new Map<string, number>();
+const spotKey = (p: P3): string => `${p.x},${p.y},${p.z}`;
+const failedLately = (p: P3): boolean => (failedSpots.get(spotKey(p)) ?? 0) > Date.now();
 
 const SIDE_NAMES: Array<[string, P3]> = [
   ["north", { x: 0, y: 0, z: -1 }],
@@ -105,7 +116,7 @@ const SIDE_NAMES: Array<[string, P3]> = [
  * each end: none within 4), and grid spots on the ground with no torch near.
  */
 function lightPlan(grade = 0): LightPlan {
-  const empty: LightPlan = { inside: [], outside: [] };
+  const empty: LightPlan = { inside: [], outside: [], unknown: 0 };
   const home = shelterLayout();
   const g = LIGHT_GRADES[grade];
   if (!home || !bot.entity || !g) return empty;
@@ -128,12 +139,21 @@ function lightPlan(grade = 0): LightPlan {
   }
   // Outside: the grid on the ground round the top of its stairs
   const outside: P3[] = [];
+  let unknown = 0;
   for (const p of torchGrid({ x: home.start.x, z: home.start.z }, g.radius, g.spacing)) {
+    // Not loaded: not known to be lit (only "lit" when every spot was seen)
+    if (!knownBlock(new Vec3(p.x, home.start.y, p.z))) {
+      unknown++;
+      continue;
+    }
     const spot = groundSpot(p.x, p.z, home.start.y, groundCellAt, g.search);
     if (!spot || shell.has(`${spot.x},${spot.y},${spot.z}`)) continue;
+    // Never where it must keep out or keeps (its shelter, its stairs), nor a spot it just failed at
+    const v = new Vec3(spot.x, spot.y, spot.z);
+    if (forbiddenAt(v) || isProtected(spot) || isProtected({ ...spot, y: spot.y - 1 }) || failedLately(spot)) continue;
     if (!torchNear(spot, torches)) outside.push(spot);
   }
-  return { inside, outside };
+  return { inside, outside, unknown };
 }
 
 // lit() is asked whenever the next milestone is looked for: kept a while (per grade)
@@ -148,6 +168,12 @@ export function homeLit(grade = 0): boolean {
   const lit = plan.inside.length === 0 && plan.outside.length === 0;
   litCache.set(grade, { at: Date.now(), lit });
   return lit;
+}
+
+/** True when every spot of this grade has been seen and is lit (for the announcement: never "lit" for land it hasn't seen). */
+export function homeLitSeen(grade = 0): boolean {
+  const plan = lightPlan(grade);
+  return plan.inside.length === 0 && plan.outside.length === 0 && plan.unknown === 0;
 }
 
 /** Torches it needs for what's dark now at this grade. */
@@ -188,11 +214,15 @@ export async function lightUpHome(byDay: boolean, grade = 0): Promise<ActionResu
       const there = await goTo(new pf.goals.GoalNear(spot.x, spot.y, spot.z, 3));
       if (!there.ok) {
         missed++;
+        failedSpots.set(spotKey(spot), Date.now() + FAILED_FOR_MS);
         continue;
       }
       const got = await placeBlockResult("torch", spot.x, spot.y, spot.z, "bottom");
       if (got.ok) placed++;
-      else missed++;
+      else {
+        missed++;
+        failedSpots.set(spotKey(spot), Date.now() + FAILED_FOR_MS);
+      }
     }
   }
   litCache.delete(grade);

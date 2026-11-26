@@ -11,7 +11,7 @@
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
-import { protectCells, setOwnPassages } from "../core/movements";
+import { isNatural, protectCells, setOwnPassages } from "../core/movements";
 import { goTo } from "../core/primitives";
 import { fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
@@ -73,6 +73,16 @@ const STAIRS = MINE_DEPTH + 1;
 const SHALLOWEST_MINE = 3;
 
 type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean };
+
+/**
+ * True for a block that has fallen into (or grown into) a step's walking
+ * space and must be dug out: solid, natural (gravel, sand, stone, dirt),
+ * never its own paving (a stair block sits in the step it paves: the review
+ * found every trip dug the paving out again) nor anything else built. Pure.
+ */
+export function fillsStep(b: { name: string; boundingBox: string } | null): boolean {
+  return b !== null && b.boundingBox === "block" && !b.name.endsWith("_stairs") && isNatural(b.name);
+}
 
 /**
  * The hub of its mine nearest `pos` in height (where the tunnels leave the
@@ -206,7 +216,7 @@ export async function lookAfterStairs(): Promise<void> {
     // Gravel or sand fallen into the step (or anything else filling it):
     // walks won't dig a block with gravel over it, so it stood on the step
     // above for five minutes (game test; the owner dug it out by hand)
-    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => bot.blockAt(c)?.boundingBox === "block");
+    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)));
     if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
@@ -361,8 +371,14 @@ export function unpavedSteps(): number[] {
   const rec = mineRecord();
   if (!rec?.bottom) return [];
   return stepsToPave(rec.stairs).filter((i) => {
-    const b = bot.blockAt(stepAt(rec.start, rec.direction, i));
-    return b !== null && !b.name.endsWith("_stairs");
+    const step = stepAt(rec.start, rec.direction, i);
+    const b = bot.blockAt(step);
+    if (b === null || b.name.endsWith("_stairs")) return false;
+    // The bottom step is paved from its forward tunnel: none dug yet (or
+    // blocked), nothing to stand on to pave it, so it isn't counted (review:
+    // it could never be done, and held the mine stage up)
+    if (i === rec.stairs - 1) return bot.blockAt(step.plus(STEP[rec.direction]))?.boundingBox === "empty";
+    return true;
   });
 }
 

@@ -334,3 +334,16 @@ test("every milestone between the mine and diamonds is worked on at night (in th
   for (const id of ids.slice(from, to + 1).filter((i: string) => !daytime.includes(i))) expect([id, worksAtNight(id)]).toEqual([id, true]);
   for (const id of daytime) expect(worksAtNight(id)).toBe(false);
 });
+
+test("an optional milestone that can't be done now never holds its tier up", () => {
+  // Review: a lighting grade with a spot it could never reach held the bot's whole day
+  done.clear();
+  const list = [{ ...fakeMilestone("lit"), tier: 2, optional: true }, { ...fakeMilestone("iron_x"), tier: 3 }];
+  // Its turn: tried first
+  expect(M.nextMilestone(list)?.id).toBe("lit");
+  // Set aside (it failed): the next tier goes on
+  expect(M.nextMilestone(list, (id: string) => id === "lit")?.id).toBe("iron_x");
+  // A required one set aside still holds its tier
+  const strict = [{ ...fakeMilestone("mine_x"), tier: 2 }, { ...fakeMilestone("iron_y"), tier: 3 }];
+  expect(M.nextMilestone(strict, (id: string) => id === "mine_x")).toBeNull();
+});

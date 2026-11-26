@@ -18,7 +18,7 @@ import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabil
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
-import { homeLit, lightUpHome } from "./lighting";
+import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
 import { makeFarm, myFarm, tendFarm } from "./farm";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
@@ -51,6 +51,13 @@ export type Milestone = {
    * it announced them on a new world's first minute). Defaults to `done()`.
    */
   reached?: () => boolean;
+  /**
+   * Worth doing in its turn, but never holding its tier up when it can't be
+   * done now (it failed and waits, or what it needs isn't there): the lit
+   * ground's grades and the farm. Review: a grade with a spot it could
+   * never reach held the bot's whole day.
+   */
+  optional?: boolean;
 };
 
 /** True when a milestone can be checked and worked on in the dimension it's in now. */
@@ -284,12 +291,14 @@ export const MILESTONES: Milestone[] = [
     id: "lit_home",
     title: "a lit home",
     tier: 2,
+    optional: true,
     requires: ["torches"],
     // Owner: mobs kept coming at the shelter because nothing round it was
     // lit. Torches on the room's walls and in a grid on the ground round it
     // (by day); put back when a creeper knocks them out
     done: () => shelter() === null || homeLit(),
     achieve: () => lightUpHome(bot.time?.isDay !== false),
+    reached: () => homeLitSeen(0),
   },
   {
     id: "paved_stairs",
@@ -369,6 +378,7 @@ export const MILESTONES: Milestone[] = [
     id: "farm",
     title: "a farm",
     tier: 3,
+    optional: true,
     requires: ["bucket"],
     // Owner: hunting isn't a sustainable way to get food; a plot by the
     // shelter with water in it (so the water bucket comes first). By day
@@ -396,9 +406,11 @@ export const MILESTONES: Milestone[] = [
     id: "lit_home_2",
     title: "my home lit twice as far",
     tier: 3,
+    optional: true,
     requires: ["lit_home"],
     done: () => shelter() === null || homeLit(1),
     achieve: () => lightUpHome(bot.time?.isDay !== false, 1),
+    reached: () => homeLitSeen(1),
   },
   {
     id: "iron_tools",
@@ -412,9 +424,11 @@ export const MILESTONES: Milestone[] = [
     id: "lit_home_3",
     title: "my home lit three times as far",
     tier: 3,
+    optional: true,
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
     achieve: () => lightUpHome(bot.time?.isDay !== false, 2),
+    reached: () => homeLitSeen(2),
   },
   {
     id: "diamonds",
@@ -518,8 +532,13 @@ export function nextMilestone(list: Milestone[], blocked: (id: string) => boolea
     // day's milestones wait: their shelter and food checks would mislead)
     const open = list.filter((m) => m.tier === tier && here(m) && !m.done());
     if (open.length === 0) continue;
-    // A tier isn't skipped while any of it is left (a blocked one waits its turn)
-    return open.find((m) => !blocked(m.id) && ready(m)) ?? null;
+    const now = open.find((m) => !blocked(m.id) && ready(m));
+    if (now) return now;
+    // A tier isn't skipped while any of it is left (a blocked one waits its
+    // turn), unless all that's left of it is optional: lighting further out
+    // or the farm, when they can't be done right now, never hold the day up
+    if (open.every((m) => m.optional)) continue;
+    return null;
   }
   return null;
 }
