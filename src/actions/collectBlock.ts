@@ -2,6 +2,7 @@ import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import pf from "mineflayer-pathfinder";
 import { Block } from "prismarine-block";
+import { Vec3 } from "vec3";
 import * as world from "./world.js";
 import { __actionsDelay } from "../utils/utility.js";
 import { breakBlockAtResult, replaceBrokenTool } from "./blockBreaking.js";
@@ -184,12 +185,23 @@ export async function collectBlock(
 
 /** Mines one block (checked) and picks up what it drops. */
 async function mineAndCollect(block: Block): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
-  const kept = isProtected(block.position);
+  // Ore in the floor of a way it walks (a tunnel, its stairs, a cave): the
+  // hole is filled back once the ore is out (owner: only paths; holes in
+  // side walls and ceilings don't need it)
+  const pathHole = catalog().isOre(block.name) && isWalkwayFloor(block.position);
   const broken = await breakBlockAtResult(block.position.x, block.position.y, block.position.z);
   if (broken.ok && !broken.value.alreadyGone) await pickupNearbyItems(bot, 5);
-  // Ore taken out of a wall or a step it keeps: the spot filled back
-  if (broken.ok && kept) await fillBack(block.position);
+  if (broken.ok && pathHole) await fillBack(block.position);
   return broken;
+}
+
+/** True when a block is the floor of a walkway: open, walkable space (two high) right over it. */
+function isWalkwayFloor(p: { x: number; y: number; z: number }): boolean {
+  const open = (dy: number): boolean => {
+    const b = bot.blockAt(new Vec3(p.x, p.y + dy, p.z));
+    return b !== null && b.boundingBox === "empty" && b.name !== "water" && b.name !== "lava";
+  };
+  return open(1) && open(2);
 }
 
 // What a mined-out spot in a kept wall or step is filled with
