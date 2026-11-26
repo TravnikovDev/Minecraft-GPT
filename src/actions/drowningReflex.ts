@@ -164,7 +164,7 @@ async function digUpForAir(feet: Vec3): Promise<void> {
   diggingUp = true;
   try {
     const { breakBlock } = await import("../core/primitives");
-    const broken = await asReflex("drowning", () => breakBlock(cell, { allowWithoutHarvest: true }));
+    const broken = await asReflex("drowning", () => breakBlock(cell, { allowWithoutHarvest: true, intoLiquid: true }));
     console.log(broken.ok ? `Drowning reflex: no way to air; dug the ${b.name} over my head at ${cell}.` : `Drowning reflex: couldn't dig the ${b.name} over my head (${broken.ok ? "" : broken.detail}).`);
   } finally {
     diggingUp = false;

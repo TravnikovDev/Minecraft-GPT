@@ -16,7 +16,7 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
-import { avoidStep, isNatural, isProtected } from "./movements";
+import { avoidStep, isNatural, isProtected, liquidBehind } from "./movements";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
@@ -454,6 +454,8 @@ async function walkTo(goal: Goal, options: { timeoutMs?: number } = {}): Promise
 export type BreakOptions = {
   /** Break it even if the drop is lost (leaves, or clearing the way). Default: a tool that harvests it is required. */
   allowWithoutHarvest?: boolean;
+  /** Break it even with water or lava behind it (the drowning reflex digging up for air). */
+  intoLiquid?: boolean;
 };
 
 /**
@@ -470,6 +472,8 @@ async function breakBlockNow(pos: Pos, options: BreakOptions = {}): Promise<Acti
   }
   const keepOut = forbiddenAt(at);
   if (keepOut) return fail("forbidden", keepOut.reason);
+  // Never a block with water or lava behind it (owner): it floods in
+  if (!options.intoLiquid && liquidBehind(at, (x, y, z) => knownBlock(new Vec3(x, y, z))?.name ?? null)) return fail("refused", `water or lava behind the ${block.name} at ${at}`);
   if (!withinReach(at)) return fail("out_of_reach", `${block.name} at ${at}`);
   if (bot.game.gameMode !== "creative") {
     const tool = await guarded("taking a tool", () => tools.equipForBlock(block), { timeoutMs: CONFIRM_MS * 5 });

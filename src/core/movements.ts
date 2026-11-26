@@ -113,6 +113,19 @@ const SUBMERGED_COST = 6;
 const isWet = (b: { name: string; getProperties: () => Record<string, unknown> } | null): boolean =>
   b !== null && (b.name === "water" || b.name === "bubble_column" || b.getProperties()["waterlogged"] === true);
 
+// The sides and top of a block: water or lava there floods in when it's broken
+const OPEN_TO = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]] as const;
+const LIQUID = /^(water|lava|bubble_column)$/;
+
+/**
+ * True when breaking the block at `p` would let water or lava in (some at
+ * its sides or on top: owner, never dig a block with water behind it).
+ * Pure over `look`.
+ */
+export function liquidBehind(p: { x: number; y: number; z: number }, look: (x: number, y: number, z: number) => string | null): boolean {
+  return OPEN_TO.some(([dx, dy, dz]) => LIQUID.test(look(p.x + dx, p.y + dy, p.z + dz) ?? ""));
+}
+
 /** The step cost for cells under water head and feet, for this bot's world. */
 const submergedStep = (bot: Bot) => (block: { position?: { x: number; y: number; z: number } }): number => {
   const p = block.position;
@@ -234,7 +247,11 @@ export function safeMovements(bot: Bot): pf.Movements {
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
     block.position && (forbiddenAt(block.position) || isProtected(block.position)) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
-  moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
+  // Never a block with water or lava behind it (owner: its own way dug
+  // through a flooded dripstone cave let the water in, and it nearly drowned)
+  const look = (x: number, y: number, z: number): string | null => bot.blockAt(new Vec3(x, y, z))?.name ?? null;
+  const floods = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && liquidBehind(block.position, look) ? 10_000 : 0);
+  moves.exclusionAreasBreak = [keepOut, floods] as unknown as typeof moves.exclusionAreasBreak;
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)
   const ownSpace = (block: { position?: { x: number; y: number; z: number } }): number =>
