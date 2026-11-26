@@ -40,6 +40,9 @@ const KEEP_SEEN_MS = 2_000;
 // home
 const STALL_MS = 20_000;
 const IGNORE_STALLED_MS = 60_000;
+// A creeper left be is never left be once it's this close or hissing (it
+// came round the wall after all)
+const IGNORED_UNTIL_WITHIN = 3;
 
 let active = false;
 let busy = false;
@@ -156,8 +159,8 @@ async function tick(): Promise<void> {
   const shutIn = isSheltered() || inShelterRoom(bot.entity.position);
   const seen = bot.nearestEntity((e) => {
     if (e.name !== "creeper") return false;
-    if ((ignoredUntil.get(e.id) ?? 0) > now) return false;
     const d = e.position.distanceTo(bot.entity.position);
+    if ((ignoredUntil.get(e.id) ?? 0) > now && d > IGNORED_UNTIL_WITHIN && !isFusing(e)) return false;
     if (d > range) return false;
     const visible = canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
     return creeperCounts(d, visible, shutIn);
