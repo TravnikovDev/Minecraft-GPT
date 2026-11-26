@@ -18,7 +18,7 @@ import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntac
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
-import { makeFarm, myFarm, tendFarm } from "./farm";
+import { farmRipe, makeFarm, myFarm, tendFarm } from "./farm";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -111,29 +111,53 @@ async function stockFood(): Promise<ActionResult> {
   // 1. cooked food in its own chests; raw meat and fish (carried or stored) cooked
   await foodFromChests();
   if (short() && hasRawFood()) await cookTheMeat(cookFood);
-  // 2. its farm: tended, or made now (it has a bucket, it's day)
+  // Hungry (its own hunger, or next to nothing to eat): food it can eat
+  // soon, nothing that only feeds it later (game test: starving, it broke
+  // grass for seeds for 6 minutes to make a farm, then 107 oak leaves for
+  // no apple, and starved to death without ever going for the animals near)
+  if (hungryNow()) {
+    if (short() && myFarm() && farmRipe() > 0) await tendFarm();
+    if (short()) await pickBerries();
+    if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
+    if (hasRawFood()) await cookTheMeat(cookFood);
+    if (short()) {
+      const { goFishing } = await import("./fishing");
+      if ((await goFishing()) > 0) await cookTheMeat(cookFood);
+    }
+    // Apples last: one oak leaf in 200 drops one
+    if (foodPoints() < STARVING_FOOD && byDay() && !isCommandCancelled()) {
+      const { applesFromLeaves } = await import("./apples");
+      await applesFromLeaves();
+    }
+  }
+  // Fed: the lasting sources. Its farm tended, or made now (a bucket, by day)
   if (short() && myFarm()) await tendFarm();
   const hasBucket = bot.inventory.items().some((i) => /^(water_)?bucket$/.test(i.name));
-  if (short() && !myFarm() && hasBucket && byDay()) {
+  if (short() && !myFarm() && hasBucket && byDay() && !hungryNow()) {
     const made = await makeFarm();
     if (!made.ok) console.log(`Food: no farm yet (${describeFailure(made)}).`);
   }
-  // 3. berries; fishing (a rod, or string for one, and open water near)
+  // Berries; fishing (a rod, or string for one, and open water near)
   if (short()) await pickBerries();
   if (short()) {
     const { goFishing } = await import("./fishing");
     if ((await goFishing()) > 0) await cookTheMeat(cookFood);
   }
-  // 4. starving: apples from oak leaves round about (owner; one leaf in 200)
-  if (foodPoints() < STARVING_FOOD && byDay() && !isCommandCancelled()) {
-    const { applesFromLeaves } = await import("./apples");
-    await applesFromLeaves();
-  }
-  // 5. last: animals close by only (no long walks, no exploring for them)
+  // Last: animals close by only (no long walks, no exploring for them)
   if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
   if (hasRawFood()) await cookTheMeat(cookFood);
   return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points ready to eat; nothing more near home today`);
 }
+
+// Its hunger bar this low (of 20) counts as hungry: it can't heal under 18,
+// can't sprint at 6
+const HUNGRY_BAR = 14;
+
+/** Hungry now: its hunger bar low, or next to nothing ready to eat on it. */
+export function isHungry(bar: number, points: number): boolean {
+  return bar <= HUNGRY_BAR || points < STARVING_FOOD;
+}
+const hungryNow = (): boolean => isHungry(bot.food ?? 20, foodPoints());
 
 /** True when it carries raw meat or fish. */
 const hasRawFood = (): boolean => bot.inventory.items().some((i) => RAW_FOOD.has(i.name));

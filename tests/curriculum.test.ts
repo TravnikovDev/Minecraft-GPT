@@ -405,3 +405,9 @@ test("iron armour piece by piece: what the iron affords now, best piece first (r
   expect(ids.indexOf("iron_sword")).toBeLessThan(ids.indexOf("shield"));
   expect(ids.indexOf("iron_sword")).toBeLessThan(ids.indexOf("iron_armor"));
 });
+
+test("hungry: its hunger bar low or next to nothing to eat on it (game test: starved making a farm)", () => {
+  expect(M.isHungry(20, 30)).toBe(false);
+  expect(M.isHungry(14, 30)).toBe(true);
+  expect(M.isHungry(20, 4)).toBe(true);
+});
