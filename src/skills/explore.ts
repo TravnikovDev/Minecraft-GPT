@@ -6,7 +6,7 @@
 
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
-import { catalog } from "../core/catalog";
+import { isGame, knownAnimals } from "../actions/hunting";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter } from "../core/narrator";
 import { travelToResult } from "../actions/movement";
@@ -27,8 +27,16 @@ export function inSight(test: (name: string) => boolean, radius = SIGHT): boolea
   return Object.values(bot.entities).some((e) => e !== bot.entity && !!e.name && test(e.name) && e.position.distanceTo(me) <= radius);
 }
 
-/** Animals worth hunting are in sight. */
-export const animalsInSight = (): boolean => inSight((n) => catalog().isHuntable(n));
+/**
+ * Animals it would really take are about: the hunt's own test (grown, not
+ * named, a food animal), as far as the server tells it. Game test: a baby or
+ * a squid somewhere counted as "animals here", so it never went looking,
+ * and the hunt found none to take: no food, down to 0 food points.
+ */
+export const animalsInSight = (): boolean => {
+  if (!bot.entity) return false;
+  return knownAnimals(SIGHT).some((p) => isGame(p, null));
+};
 
 /**
  * Walks off in legs until `found()` (animals in sight...), trying directions
