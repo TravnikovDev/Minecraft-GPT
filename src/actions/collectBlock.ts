@@ -9,7 +9,7 @@ import { breakBlockAtResult, replaceBrokenTool } from "./blockBreaking.js";
 import { pickupNearbyItems } from "./pickup.js";
 import { tellOwner } from "../managers/ownerDialog";
 import { pathing, tools } from "../core/plugins";
-import { goTo } from "../core/primitives";
+import { goTo, withinReach } from "../core/primitives";
 import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/result";
 import { canSee, openFaces, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
@@ -51,6 +51,15 @@ function chooseTarget(blocks: Block[], blockType: string, seenOnly = false): { b
   }
   console.log(`No ${blockType} in sight; tunnelling to the nearest one at ${blocks[0].position}.`);
   return { block: blocks[0], seen: false };
+}
+
+/** True when it can mine `block` from where it stands: within reach, a face open, its eyes on it. */
+function reachableFromHere(block: Block): boolean {
+  if (!withinReach(block.position)) return false;
+  // @ts-ignore - eyeHeight exists at runtime (mineflayer sets it) but is not in the Entity type
+  const eyes = bot.entity.position.offset(0, bot.entity.eyeHeight ?? 1.62, 0);
+  const w = bot.world as unknown as SightWorld;
+  return openFaces(w, block).length > 0 && canSee(w, eyes, block, 6);
 }
 
 export async function collectBlock(
@@ -153,7 +162,12 @@ export async function collectBlock(
         // Mining digs cheaply, so the path search finds stairs down to an
         // ore instead of timing out (the walking rules forbid shafts). Not
         // for what it can see: it walks there like anyone, no digging its way
-        expectOk(options.seenOnly ? await goTo(goal) : await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
+        // Already within reach and in plain sight: mined from where it stands
+        // (owner; game test: on a paved stair, 2 blocks from a copper ore,
+        // the walk to it found no move and it gave up after 5 tries)
+        if (!reachableFromHere(veinBlock)) {
+          expectOk(options.seenOnly ? await goTo(goal) : await pathing.withRules({ digCost: MINING_DIG_COST }, () => goTo(goal)));
+        }
 
         // Break the block and collect drops; only a block really broken counts
         const mined = await mineAndCollect(veinBlock);
