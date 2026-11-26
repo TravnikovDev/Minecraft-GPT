@@ -84,9 +84,9 @@ test("levelling a plot by home: bumps, stone and dips cost a block each; a tree 
   // A one-deep dip: the ground cell filled
   const dip = (x: number, y: number, z: number): L => (x === 0 && z === 2 && y === 63 ? { name: "air", solid: false } : ground(63)(x, y));
   expect(levelCost({ x: 0, y: 63, z: 0 }, 2, dip)).toBe(1);
-  // A tree on it, or a 3-high hill: not here
+  // A tree trunk on it, or a 5-high hill: not here
   const tree = (x: number, y: number, z: number): L => (x === -1 && z === 0 && y === 64 ? { name: "oak_log", solid: true } : ground(63)(x, y));
   expect(levelCost({ x: 0, y: 63, z: 0 }, 2, tree)).toBeNull();
-  const hill = (x: number, y: number, z: number): L => (x === 2 && z === -2 && y <= 66 ? { name: "stone", solid: true } : ground(63)(x, y));
+  const hill = (x: number, y: number, z: number): L => (x === 2 && z === -2 && y <= 68 ? { name: "stone", solid: true } : ground(63)(x, y));
   expect(levelCost({ x: 0, y: 63, z: 0 }, 2, hill)).toBeNull();
 });

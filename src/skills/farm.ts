@@ -34,7 +34,11 @@ export const FIELD_HALVES = [4, 3, 2];
 const NEAR_HOME = 16;
 export const FIELD_RANGE = 24;
 // Blocks it may move to level a field, per size (beyond: a smaller field)
-const LEVEL_BUDGET: Record<number, number> = { 4: 60, 3: 40, 2: 25 };
+// (game test, snowy hills: nothing within 16 blocks fit the first, tight limits)
+const LEVEL_BUDGET: Record<number, number> = { 4: 120, 3: 80, 2: 50 };
+// Bumps dug out up to this high, dips filled this deep
+const MAX_BUMP = 4;
+const MAX_DIP = 3;
 
 // A field starts 5x5 and grows a ring at a time, to 7x7 and 9x9, in the
 // ground kept for it (owner: start small, the space reserved)
@@ -150,7 +154,6 @@ export function torchSpots(middle: P3, half = FARM_HALF): P3[] {
 
 /** A cell as the levelling sees it (null: not loaded). */
 export type LevelCell = { name: string; solid: boolean } | null;
-const TREE = /_(log|leaves)$/;
 const DIRT = /^(grass_block|dirt)$/;
 
 /**
@@ -168,29 +171,36 @@ export function levelCost(middle: P3, half: number, look: (x: number, y: number,
       const z = middle.z + dz;
       const y = middle.y;
       if (kept({ x, y, z }) || kept({ x, y: y + 1, z })) return null;
-      // Above the ground: a bump of up to 2 dug out; 3 high is a hill
-      for (let dy = 1; dy <= 3; dy++) {
+      // Above the ground: a bump dug out (leaves too); higher is a hill; a trunk stays
+      for (let dy = 1; dy <= MAX_BUMP + 1; dy++) {
         const c = look(x, y + dy, z);
         if (!c) return null;
-        if (TREE.test(c.name)) return null;
+        if (/_log$/.test(c.name)) return null;
         if (c.solid) {
-          if (dy === 3) return null;
+          if (dy > MAX_BUMP) return null;
           cost++;
         }
       }
-      // Open sky over it (crops need the light)
-      for (let dy = 4; dy <= 10; dy++) if (look(x, y + dy, z)?.solid) return null;
+      // Open sky over it (crops need the light): no stone overhead; leaves are cleared
+      for (let dy = MAX_BUMP + 2; dy <= 10; dy++) {
+        const c = look(x, y + dy, z);
+        if (c?.solid && !/_leaves$/.test(c.name)) return null;
+      }
       // The ground: dirt as it is; stone or snow swapped; a dip filled
       const g = look(x, y, z);
       if (!g) return null;
       if (DIRT.test(g.name)) continue;
       cost++;
       if (!g.solid) {
-        const b1 = look(x, y - 1, z);
-        if (!b1?.solid) {
+        let filled = false;
+        for (let d = 1; d <= MAX_DIP; d++) {
+          if (look(x, y - d, z)?.solid) {
+            filled = true;
+            break;
+          }
           cost++;
-          if (!look(x, y - 2, z)?.solid) return null;
         }
+        if (!filled) return null;
       }
     }
   }
@@ -218,6 +228,8 @@ function groundAt(x: number, z: number, y: number): number | null {
 function findPlot(home: P3): { middle: P3; half: number } | null {
   // Never on another of its fields (or right against one: a path between)
   const fields = myFarms();
+  let checked = 0;
+  let cheapest: number | null = null;
   for (const half of FIELD_HALVES) {
     const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + half + 1);
     const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
@@ -233,13 +245,18 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
           if (y === null) continue;
           const middle = { x, y, z };
           const cost = levelCost(middle, half, levelCellAt, kept);
-          if (cost === null || cost > LEVEL_BUDGET[half]!) continue;
+          checked++;
+          if (cost === null) continue;
+          if (cheapest === null || cost < cheapest) cheapest = cost;
+          if (cost > LEVEL_BUDGET[half]!) continue;
           if (!best || cost < best.cost) best = { middle, cost, r };
         }
       }
     }
     if (best) return { middle: best.middle, half };
   }
+  // Why not, for the log
+  console.log(`Farm: no spot by home: ${checked} checked, ${cheapest === null ? "none levellable (hills, trunks, a roof or kept ground)" : `the cheapest needs ${cheapest} blocks moved`}.`);
   return null;
 }
 
@@ -265,7 +282,7 @@ async function levelPlot(middle: P3, half: number): Promise<boolean> {
     if (isCommandCancelled()) return false;
     if (!(await goTo(new pf.goals.GoalNear(c.x, c.y + 1, c.z, 3))).ok) continue;
     // Bumps over the ground
-    for (const dy of [2, 1]) {
+    for (let dy = MAX_BUMP; dy >= 1; dy--) {
       const above = levelCellAt(c.x, c.y + dy, c.z);
       if (above?.solid && (await breakBlock(new Vec3(c.x, c.y + dy, c.z), { allowWithoutHarvest: true })).ok) moved++;
     }
@@ -274,7 +291,13 @@ async function levelPlot(middle: P3, half: number): Promise<boolean> {
     // Stone, snow or the like in the ground: out, dirt in
     if (g.solid && !(await breakBlock(new Vec3(c.x, c.y, c.z), { allowWithoutHarvest: true })).ok) continue;
     // A dip: filled from the bottom up
-    for (const dy of [-1, 0]) {
+    // (from just over the first solid block below, up to the ground)
+    let from = 0;
+    for (let d = 1; d <= MAX_DIP; d++) {
+      if (levelCellAt(c.x, c.y - d, c.z)?.solid) break;
+      from = -d;
+    }
+    for (let dy = from; dy <= 0; dy++) {
       const cell = levelCellAt(c.x, c.y + dy, c.z);
       if (cell?.solid || count("dirt") === 0) continue;
       if ((await placeBlockResult("dirt", c.x, c.y + dy, c.z, "bottom")).ok) moved++;
