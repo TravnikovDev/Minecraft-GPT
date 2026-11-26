@@ -196,8 +196,11 @@ export async function climbMineStairs(): Promise<boolean> {
   }
 }
 
-/** A block to put under itself: a stair block first (it's the floor there), else cobblestone or dirt. */
-const UNSTICK_BLOCKS = ["cobblestone_stairs", "cobblestone", "cobbled_deepslate", "dirt"];
+/**
+ * Blocks to put under itself, in the order tried: full blocks first (game
+ * test: a stair block "didn't go in" under it mid-jump), a stair block last.
+ */
+const UNSTICK_BLOCKS = ["cobblestone", "cobbled_deepslate", "dirt", "stone", "cobblestone_stairs"];
 
 /**
  * Stuck on its stairs, like a player: the block over its head dug out if
@@ -223,11 +226,16 @@ export async function unstickOnStairs(): Promise<boolean> {
     if (!isNatural(b.name) || isProtected(over)) return false;
     if (!(await breakBlock(over)).ok) return false;
   }
-  const block = UNSTICK_BLOCKS.find((n) => carried([n]) > 0);
-  if (!block) return false;
-  const up = await pillarUp(block);
-  console.log(up.ok ? `Stuck on my stairs at ${feet}: put ${block.replace(/_/g, " ")} under me and got up a block.` : `Stuck on my stairs at ${feet}: couldn't get up (${describeFailure(up)}).`);
-  return up.ok;
+  // Each kind it carries in turn until one goes in
+  for (const block of UNSTICK_BLOCKS.filter((n) => carried([n]) > 0)) {
+    const up = await pillarUp(block);
+    if (up.ok) {
+      console.log(`Stuck on my stairs at ${feet}: put ${block.replace(/_/g, " ")} under me and got up a block.`);
+      return true;
+    }
+    console.log(`Stuck on my stairs at ${feet}: ${block.replace(/_/g, " ")} didn't go under me (${describeFailure(up)}).`);
+  }
+  return false;
 }
 
 /**
