@@ -53,9 +53,9 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
   // Stairs south from (0, 64, 0): step i stands at (0, 64 - i, i)
   const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", 12, 0);
   const has = (cells: Array<{ x: number; y: number; z: number }>, x: number, y: number, z: number): boolean => cells.some((c) => c.x === x && c.y === y && c.z === z);
-  // Step 5: floor under it, walls east and west from floor to above the head
+  // Step 5: floor under it, walls east and west from floor to the top of its 4-high space
   expect(has(keep, 0, 58, 5)).toBe(true);
-  for (const dy of [-1, 0, 1, 2]) {
+  for (const dy of [-1, 0, 1, 2, 3]) {
     expect(has(keep, 1, 59 + dy, 5)).toBe(true);
     expect(has(keep, -1, 59 + dy, 5)).toBe(true);
   }
@@ -66,4 +66,5 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
   expect(has(keep, 0, 53, 10)).toBe(true);
   expect(has(keep, 1, 54, 10)).toBe(false);
   expect(has(walk, 0, 59, 5)).toBe(true);
+  expect(has(walk, 0, 62, 5)).toBe(true); // 4 high (owner: 3 was too low)
 });

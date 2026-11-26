@@ -16,7 +16,7 @@ import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
-import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, unpavedSteps } from "./mine";
+import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
@@ -43,6 +43,12 @@ export type Milestone = {
    * isn't even checked (its shelter's blocks aren't there).
    */
   dimension?: "overworld" | "any";
+  /**
+   * Really achieved, for the announcement and the record, when `done()`
+   * also means "nothing to do yet" (paved stairs with under 200 cobblestone:
+   * it announced them on a new world's first minute). Defaults to `done()`.
+   */
+  reached?: () => boolean;
 };
 
 /** True when a milestone can be checked and worked on in the dimension it's in now. */
@@ -311,6 +317,7 @@ export const MILESTONES: Milestone[] = [
     // cobblestone stair blocks (and a block more headroom); until then (or
     // with every step paved) there's nothing to do
     done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
+    reached: () => stairsPaved(),
     achieve: paveMineStairs,
   },
   {
@@ -435,7 +442,8 @@ export function reachedAt(): Record<string, number> {
 /** Notes milestones done for the first time; returns them (to announce). */
 export async function noteReached(list: Milestone[] = MILESTONES): Promise<Milestone[]> {
   const known = reachedAt();
-  const fresh = list.filter((m) => !known[m.id] && m.done());
+  // Only what can be checked here, and only what's really achieved
+  const fresh = list.filter((m) => !known[m.id] && milestoneHere(m) && (m.reached ?? m.done)());
   if (fresh.length === 0) return [];
   const next = { ...known };
   for (const m of fresh) next[m.id] = Date.now();

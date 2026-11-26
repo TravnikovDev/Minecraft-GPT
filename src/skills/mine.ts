@@ -63,6 +63,10 @@ export function armDirection(arm: ArmName, dir: DirectionType): DirectionType {
 /** The stair step a hub sits on: the first at the bottom of the stairs, each next one LEVEL_STEP deeper. Pure. */
 export const hubStep = (level: number): number => MINE_DEPTH + level * LEVEL_STEP;
 
+// The stairs' open cells above each step: the step and 3 more, 4 high (owner:
+// 3 was too low, a player hit their head on the way up)
+export const STAIR_HEADROOM = 3;
+
 // Stairs are steps 0..MINE_DEPTH: the exit cell, then one down per step
 const STAIRS = MINE_DEPTH + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
@@ -119,7 +123,7 @@ export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, l
   const walk: Vec3[] = [];
   for (let i = 0; i < stairs; i++) {
     const s = stepAt(start, dir, i);
-    walk.push(s, s.offset(0, 1, 0), s.offset(0, 2, 0));
+    for (let dy = 0; dy <= STAIR_HEADROOM; dy++) walk.push(s.offset(0, dy, 0));
     keep.push(...stepShell(start, dir, i, level));
   }
   return { keep, walk };
@@ -133,7 +137,7 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number): Ve
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
   if (hubs.has(i)) return cells;
   for (const side of [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]]) {
-    for (let dy = -1; dy <= 2; dy++) cells.push(s.plus(side).offset(0, dy, 0));
+    for (let dy = -1; dy <= STAIR_HEADROOM; dy++) cells.push(s.plus(side).offset(0, dy, 0));
   }
   return cells;
 }
@@ -159,26 +163,34 @@ export async function lookAfterStairs(): Promise<void> {
   const darkAt = (s: Vec3): boolean => bot.findBlocks({ matching: torchIds, point: s, maxDistance: 5, count: 1 }).length === 0;
   let filled = 0;
   let lit = 0;
+  let raised = 0;
   let noTorch = "";
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return;
     const s = stepAt(rec.start, rec.direction, i);
     const holes = stepShell(rec.start, rec.direction, i, rec.level).filter((c) => isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
-    if (holes.length === 0 && !torch) continue;
+    // Stairs dug before they were made a block higher: the top cell dug out now
+    const low = bot.blockAt(s.offset(0, STAIR_HEADROOM, 0));
+    const raise = low !== null && low.boundingBox === "block" && !low.name.includes("torch");
+    if (holes.length === 0 && !torch && !raise) continue;
     // A hole in this step's own floor can't be stood on: fill it from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
     const stand = floorHole ? stepAt(rec.start, rec.direction, i - 1) : s;
     const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
     if (!there.ok) continue;
     for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
+    if (raise) {
+      const { breakBlock } = await import("../core/primitives");
+      if ((await breakBlock(s.offset(0, STAIR_HEADROOM, 0))).ok) raised++;
+    }
     if (torch) {
       const placed = await lightSpot(s.offset(0, 1, 0), rec.direction);
       if (placed === true) lit++;
       else noTorch = placed; // no torches or coal: not again this trip
     }
   }
-  if (filled + lit > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up.`);
+  if (filled + lit + raised > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up, ${raised} steps made a block higher.`);
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
@@ -243,7 +255,7 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
       console.log(`Mine: ${i} of ${STAIRS} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
       return ok();
     }
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
       // Stopped (the owner, something more urgent): carry on from this step next time
       if (isCommandCancelled() || why === null) {
@@ -295,6 +307,12 @@ export function unpavedSteps(): number[] {
     const b = bot.blockAt(stepAt(rec.start, rec.direction, i));
     return b !== null && !b.name.endsWith("_stairs");
   });
+}
+
+/** True when its mine has stairs to pave and every one of them is paved. */
+export function stairsPaved(): boolean {
+  const rec = mineRecord();
+  return Boolean(rec?.bottom) && stepsToPave(rec!.stairs, rec!.level).length > 0 && unpavedSteps().length === 0;
 }
 
 /**
@@ -463,7 +481,7 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   if (!atTop.ok) return fail(atTop.reason === "aborted" ? "aborted" : "unreachable", atTop.detail);
   for (let i = from; i <= to; i++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: 2 }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();
       if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");
