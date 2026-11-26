@@ -382,7 +382,7 @@ export async function makeFarm(): Promise<ActionResult> {
   await levelPlot(middle, half);
   await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half, reserve } });
   const sown = await sowPlot(middle, seed, half);
-  await lightFarm(middle, reserve);
+  await fenceField(middle, reserve);
   report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < (2 * half + 1) ** 2 - 1 ? "; it grows as the harvests give more seeds" : ""}.`);
   return sown > 0 ? (myFarms().length >= FIELDS_WANTED ? ok() : fail("not_found", `${FIELDS_WANTED - myFarms().length} more field to make`)) : fail("refused", "I couldn't till or sow the field");
 }
@@ -428,23 +428,101 @@ async function sowPlot(middle: P3, seed: string, half = FARM_HALF): Promise<numb
 }
 
 /** Its torches round the plot, those it has (a missing one put back when tended). How many it placed. */
+/**
+ * The fence round a field (owner: fences round it, torches on top): every
+ * cell of the ring just outside the ground kept for it, and the gate, the
+ * middle of the side facing home. Columns only (x, z). Pure.
+ */
+export function fenceRing(middle: P3, reserve: number, home: { x: number; z: number }): { posts: Array<{ x: number; z: number }>; gate: { x: number; z: number } } {
+  const d = reserve + 1;
+  const posts: Array<{ x: number; z: number }> = [];
+  for (let dx = -d; dx <= d; dx++) for (let dz = -d; dz <= d; dz++) if (Math.max(Math.abs(dx), Math.abs(dz)) === d) posts.push({ x: middle.x + dx, z: middle.z + dz });
+  // The side facing home: the axis home is farther along
+  const ax = home.x - middle.x;
+  const az = home.z - middle.z;
+  const gate = Math.abs(ax) >= Math.abs(az) ? { x: middle.x + Math.sign(ax || 1) * d, z: middle.z } : { x: middle.x, z: middle.z + Math.sign(az) * d };
+  return { posts: posts.filter((p) => p.x !== gate.x || p.z !== gate.z), gate };
+}
+
+/** The wood it builds fences from: the planks it carries most of ("spruce"), or null. */
+function fenceWood(): string | null {
+  const planks = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
+  return planks ? planks.name.replace(/_planks$/, "") : null;
+}
+
+/** The cell over the ground in a column near `y`, where a post stands (null: none, or something in the way). */
+function postCell(x: number, z: number, y: number): Vec3 | null {
+  for (let yy = y + 2; yy >= y - 2; yy--) {
+    const at = new Vec3(x, yy, z);
+    const here = knownBlock(at);
+    const below = knownBlock(at.offset(0, -1, 0));
+    if (!here || !below) continue;
+    const open = here.name === "air" || CLEARABLE.test(here.name) || /_fence(_gate)?$/.test(here.name) || here.name === "torch";
+    if (open && below.boundingBox === "block" && !/_fence(_gate)?$/.test(below.name)) return at;
+  }
+  return null;
+}
+
+/**
+ * Fences its field in (owner: mobs walked on it; fences round it and torches
+ * on top of them): posts all round the ground kept for it, a gate on the
+ * side facing home, torches on the corner and middle posts. What's missing
+ * is put up when it tends the field. How many blocks it placed.
+ */
+async function fenceField(middle: P3, reserve: number): Promise<number> {
+  const home = shelter();
+  const wood = fenceWood();
+  if (!home || !wood) return lightFarm(middle, reserve);
+  const fence = `${wood}_fence`;
+  const gateName = `${wood}_fence_gate`;
+  const { posts, gate } = fenceRing(middle, reserve, home);
+  const cells = posts.map((p) => postCell(p.x, p.z, middle.y + 1)).filter((c): c is Vec3 => c !== null);
+  const missing = cells.filter((c) => !/_fence$/.test(knownBlock(c)?.name ?? ""));
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  if (missing.length > 0 && count(fence) < missing.length) await acquire(fence, missing.length, liveWorld);
+  const gateCell = postCell(gate.x, gate.z, middle.y + 1);
+  if (gateCell && !/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "") && count(gateName) === 0) await acquire(gateName, 1, liveWorld);
+  const { placeBlockResult } = await import("../actions/blockPlacing");
+  const { breakBlock } = await import("../core/primitives");
+  let placed = 0;
+  const put = async (name: string, at: Vec3): Promise<void> => {
+    if (count(name) === 0 || isCommandCancelled()) return;
+    if (!(await goTo(new pf.goals.GoalNear(at.x, at.y, at.z, 3))).ok) return;
+    const there = knownBlock(at);
+    if (there && CLEARABLE.test(there.name)) await breakBlock(at, { allowWithoutHarvest: true });
+    if ((await placeBlockResult(name, at.x, at.y, at.z, "bottom")).ok) placed++;
+  };
+  for (const c of missing) await put(fence, c);
+  if (gateCell && !/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "")) await put(gateName, gateCell);
+  if (placed > 0) console.log(`Farm: ${placed} fence posts and gate round the field at ${middle.x}, ${middle.z}.`);
+  return placed + (await lightFarm(middle, reserve));
+}
+
+/**
+ * Its torches round the plot, on top of the fence posts there (owner), or
+ * on the ground where there's no post; a missing one is put back when it's
+ * tended. How many it placed.
+ */
 async function lightFarm(middle: P3, half = FARM_HALF): Promise<number> {
   if (count("torch") === 0) return 0;
   const { placeBlockResult } = await import("../actions/blockPlacing");
   let placed = 0;
   for (const spot of torchSpots(middle, half)) {
     if (count("torch") === 0 || isCommandCancelled()) break;
-    // On the ground there (it may be a block up or down from the plot)
-    for (let dy = 1; dy >= -2; dy--) {
-      const at = new Vec3(spot.x, spot.y + dy, spot.z);
-      const here = knownBlock(at);
-      const below = knownBlock(at.offset(0, -1, 0));
-      if (here?.name === "torch") break;
-      if (here?.name !== "air" || below?.boundingBox !== "block" || below.name === "farmland") continue;
-      if (!(await goTo(new pf.goals.GoalNear(at.x, at.y, at.z, 3))).ok) break;
-      if ((await placeBlockResult("torch", at.x, at.y, at.z, "bottom")).ok) placed++;
-      break;
+    const post = postCell(spot.x, spot.z, spot.y);
+    if (!post) continue;
+    // On top of the post, or on the ground where there's none
+    const at = /_fence$/.test(knownBlock(post)?.name ?? "") ? post.offset(0, 1, 0) : post;
+    const here = knownBlock(at);
+    if (here?.name === "torch") continue;
+    if (here && here.name !== "air" && !CLEARABLE.test(here.name)) continue;
+    if (!(await goTo(new pf.goals.GoalNear(at.x, at.y, at.z, 3))).ok) continue;
+    if (here && CLEARABLE.test(here.name)) {
+      const { breakBlock } = await import("../core/primitives");
+      await breakBlock(at, { allowWithoutHarvest: true });
     }
+    if ((await placeBlockResult("torch", at.x, at.y, at.z, "bottom")).ok) placed++;
   }
   if (placed > 0) console.log(`Farm: ${placed} torches round the plot.`);
   return placed;
@@ -487,7 +565,7 @@ export async function tendFarm(): Promise<number> {
       const more = SEEDS.find((s2) => count(s2) > 0);
       if (more) await sowPlot(farm, more, grown);
     }
-    await lightFarm(farm, farm.reserve);
+    await fenceField(farm, farm.reserve);
     // Its water, once it has a bucket of it (owner)
     await waterField(farm);
   }

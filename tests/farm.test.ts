@@ -90,3 +90,13 @@ test("levelling a plot by home: bumps, stone and dips cost a block each; a tree 
   const hill = (x: number, y: number, z: number): L => (x === 2 && z === -2 && y <= 68 ? { name: "stone", solid: true } : ground(63)(x, y));
   expect(levelCost({ x: 0, y: 63, z: 0 }, 2, hill)).toBeNull();
 });
+
+test("a fence all round the field's ground, a gate on the side facing home (owner)", async () => {
+  const { fenceRing } = await import(`${ROOT}/src/skills/farm.ts`);
+  const { posts, gate } = fenceRing({ x: 0, y: 63, z: 0 }, 3, { x: 20, z: 2 });
+  // Ring 4 out: 8 * 4 cells, less the gate
+  expect(posts.length).toBe(8 * 4 - 1);
+  expect(gate).toEqual({ x: 4, z: 0 }); // home is east
+  expect(posts.every((p: { x: number; z: number }) => Math.max(Math.abs(p.x), Math.abs(p.z)) === 4)).toBe(true);
+  expect(fenceRing({ x: 0, y: 63, z: 0 }, 2, { x: 1, z: -30 }).gate).toEqual({ x: 0, z: -3 }); // home is north
+});

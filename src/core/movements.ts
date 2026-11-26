@@ -50,7 +50,8 @@ export function clearSolidDoors(): void {
 }
 
 /** Wooden doors (iron doors need redstone, so they stay walls). */
-export const isWoodenDoor = (name: string): boolean => name.endsWith("_door") && name !== "iron_door";
+// (and wooden fence gates: its fields' gates open and close the same way, owner's fences)
+export const isWoodenDoor = (name: string): boolean => (name.endsWith("_door") && name !== "iron_door") || name.endsWith("_fence_gate");
 
 // Its shelter's walls, roof and floor, and its mine stairs' floors and side
 // walls: never dug through by a walk or a collect ("stone in sight" carved
