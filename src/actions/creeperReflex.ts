@@ -42,7 +42,8 @@ const STALL_MS = 20_000;
 const IGNORE_STALLED_MS = 60_000;
 // A creeper left be is never left be once it's this close or hissing (it
 // came round the wall after all)
-const IGNORED_UNTIL_WITHIN = 3;
+// (6: the fuse starts at 3, so noticing at 3 was too late: review)
+const IGNORED_UNTIL_WITHIN = 6;
 
 let active = false;
 let busy = false;
@@ -54,6 +55,8 @@ let trackedSeenAt = 0;
 let progressAt = 0;
 let closest = Infinity;
 const ignoredUntil = new Map<number, number>();
+// How far it was when it was left be: one that comes nearer in sight is noticed again
+const ignoredAtDistance = new Map<number, number>();
 // Each time the same creeper stalls it, it's left be twice as long (up to 16 min)
 const stalledTimes = new Map<number, number>();
 
@@ -160,9 +163,15 @@ async function tick(): Promise<void> {
   const seen = bot.nearestEntity((e) => {
     if (e.name !== "creeper") return false;
     const d = e.position.distanceTo(bot.entity.position);
-    if ((ignoredUntil.get(e.id) ?? 0) > now && d > IGNORED_UNTIL_WITHIN && !isFusing(e)) return false;
     if (d > range) return false;
     const visible = canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
+    // Left be: unless it's hissing, or in sight and either near or nearer
+    // than when it was left (it came round the wall). Behind a wall, however
+    // near, it stays left be: noticing it again started the 20 s stall over
+    // and over (the shelter wall, game test)
+    const ignored = (ignoredUntil.get(e.id) ?? 0) > now;
+    const cameCloser = visible && (d <= IGNORED_UNTIL_WITHIN || d < (ignoredAtDistance.get(e.id) ?? Infinity) - 1);
+    if (ignored && !isFusing(e) && !cameCloser) return false;
     return creeperCounts(d, visible, shutIn);
   });
   if (seen) {
@@ -205,19 +214,21 @@ async function tick(): Promise<void> {
       closest = distance;
       progressAt = Date.now();
     }
+    const weapon = bestWeapon();
+    const mustRun = !weapon || (isFusing(creeper) && distance < 4);
     // (a hissing one isn't left: it's about to go off; one close by but out
-    // of reach, behind a wall, is)
-    if (!isFusing(creeper) && engagementStalled(progressAt, Date.now())) {
+    // of reach, behind a wall, is. Running from it isn't stalling: the
+    // distance grows on purpose, and one still chasing it isn't left: review)
+    if (!mustRun && !isFusing(creeper) && engagementStalled(progressAt, Date.now())) {
       const times = (stalledTimes.get(creeper.id) ?? 0) + 1;
       stalledTimes.set(creeper.id, times);
       const forMs = IGNORE_STALLED_MS * 2 ** Math.min(times - 1, 4);
       ignoredUntil.set(creeper.id, Date.now() + forMs);
+      ignoredAtDistance.set(creeper.id, distance);
       finish(`can't get at the creeper ${distance.toFixed(1)} blocks away; leaving it be for ${Math.round(forMs / 60_000)} min`);
       return;
     }
-
-    const weapon = bestWeapon();
-    const mustRun = !weapon || (isFusing(creeper) && distance < 4);
+    if (mustRun) progressAt = Date.now();
     if (mustRun) {
       // Run straight away until safe
       await faceAwayFrom(creeper);
@@ -258,6 +269,7 @@ export function registerCreeperReflex(): void {
   trackedId = null;
   trackedSeenAt = 0;
   ignoredUntil.clear();
+  ignoredAtDistance.clear();
   stalledTimes.clear();
   // Its moves run as the creeper reflex: they never wait for the task it paused
   const timer = setInterval(() => void asReflex("creeper", tick), CHECK_MS);

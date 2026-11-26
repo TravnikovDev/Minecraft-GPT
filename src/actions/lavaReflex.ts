@@ -259,6 +259,9 @@ function tick(): void {
     setReflexActive("lava", true);
     takeOverBody(); // take over movement from whatever task is running
   }
+  // Pouring its bucket: no steering meanwhile (it turned the look away from
+  // the water it was scooping back up, review)
+  if (pouring) return;
   if (Date.now() - activeSince > MAX_ACTIVE_MS) {
     restUntil = Date.now() + REST_AFTER_CAP_MS;
     finish(`gave up after ${MAX_ACTIVE_MS / 1000} s`);

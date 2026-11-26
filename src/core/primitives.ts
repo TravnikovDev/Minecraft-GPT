@@ -752,6 +752,9 @@ function inventoryGridBusy(): boolean {
  * from what it counted, three times in one session.
  */
 async function settleInventory(why: string | null): Promise<void> {
+  // A chest or furnace open: closing "the inventory" would close that on
+  // the server only, and the bot's view would go stale (review)
+  if (bot.currentWindow) return;
   if (why) console.log(`Inventory: ${why}; putting the grid back and resyncing.`);
   try {
     bot._client.write("close_window", { windowId: 0 });

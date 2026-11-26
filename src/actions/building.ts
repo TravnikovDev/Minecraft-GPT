@@ -10,7 +10,8 @@ import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
 import { catalog } from "../core/catalog";
-import { isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
+import { isNatural, isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
+import { forbiddenAt } from "../core/forbidden";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
 import { collectBlock } from "./collectBlock";
@@ -454,7 +455,8 @@ export function shelterIntact(): boolean {
   if (!mine) return true;
   const { plan } = mine;
   if (plan.shell.some(shellHole)) return false;
-  if (plan.stairs.some(stairBlocked)) return false;
+  // (the stairs' first cell is the top step, at the surface)
+  if (plan.stairs.some((c) => stairBlocked(c, plan.stairs[0]!.y))) return false;
   for (const at of [plan.entrance, plan.exit]) {
     const b = knownBlock(at);
     if (b && !isWoodenDoor(b.name)) return false;
@@ -462,10 +464,16 @@ export function shelterIntact(): boolean {
   return true;
 }
 
-/** A stairs cell filled with something (a block put or fallen there): not a torch, a door or a plant. */
-function stairBlocked(p: Vec3): boolean {
+/**
+ * A stairs cell below the surface filled with fallen or natural ground
+ * (gravel, dirt, stone). Never anything built (the owner's trapdoor, gate,
+ * lantern or chest on the stairs: review), nor the open air over the top
+ * steps, nor a keep-out area.
+ */
+function stairBlocked(p: Vec3, surfaceY: number): boolean {
+  if (p.y >= surfaceY || forbiddenAt(p)) return false;
   const b = knownBlock(p);
-  return b !== null && b.boundingBox === "block" && !isWoodenDoor(b.name);
+  return b !== null && b.boundingBox === "block" && isNatural(b.name) && !isWoodenDoor(b.name);
 }
 
 /** Goes home and mends the shelter: fills holes in its walls, roof and floor, and puts in any missing door. */
@@ -475,7 +483,7 @@ async function repairShelter(): Promise<ActionResult> {
   const { room, plan } = mine;
   const holes = plan.shell.filter(shellHole).length;
   const doors = [plan.entrance, plan.exit].filter((at) => !isWoodenDoor(knownBlock(at)?.name ?? "")).length;
-  const blocked = plan.stairs.filter(stairBlocked);
+  const blocked = plan.stairs.filter((c) => stairBlocked(c, plan.stairs[0]!.y));
   report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", blocked.length ? `${blocked.length} blocks in my stairs` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
   // Blocks in the stairs dug out first, from the top down (the way home)
   for (const c of [...blocked].sort((a, b) => b.y - a.y)) {

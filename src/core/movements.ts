@@ -63,6 +63,13 @@ export function protectCells(cells: Array<{ x: number; y: number; z: number }>, 
   protectedCells.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
 }
 
+/** Which of its places keeps this cell ("shelter", "mine"), or null. */
+export function protectedBy(p: { x: number; y: number; z: number }): string | null {
+  const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+  for (const [owner, cells] of protectedCells) if (cells.has(key)) return owner;
+  return null;
+}
+
 /** True for a protected cell (its shelter's shell, its mine stairs). */
 export function isProtected(p: { x: number; y: number; z: number }): boolean {
   const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;

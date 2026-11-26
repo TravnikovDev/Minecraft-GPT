@@ -11,6 +11,8 @@ import type { Block } from "prismarine-block";
 import { bot } from "../core/body";
 import { borrow, type Holder } from "../core/leases";
 import { underRoof } from "./placement";
+import { bodyAtRest } from "../core/plugins";
+import { currentDimension } from "./perception";
 
 // No torch within this many blocks: dark here
 const TORCH_NEAR = 7;
@@ -36,7 +38,12 @@ export function isCave(feet: { x: number; y: number; z: number }, open: (x: numb
 export async function lightTheWay(): Promise<void> {
   if (busy || !bot.entity || !(bot.health > 0) || bot.vehicle) return;
   if (!bot.inventory.items().some((i) => i.name === "torch")) return;
+  // The overworld's caves (the Nether is one big cavern: torches wasted)
+  if (currentDimension() !== "overworld") return;
   const feet = bot.entity.position.floored();
+  // Not in its own room (lit already, and open enough to look like a cave)
+  const { inShelterRoom } = await import("./building");
+  if (inShelterRoom(bot.entity.position)) return;
   const blockAt = (p: Vec3): Block | null => bot.blockAt(p);
   if (!underRoof(feet, blockAt)) return;
   const open = (x: number, y: number, z: number): boolean => {
@@ -51,12 +58,17 @@ export async function lightTheWay(): Promise<void> {
   if (!below || below.boundingBox !== "block" || !open(feet.x, feet.y, feet.z)) return;
   busy = true;
   try {
-    // Between the task's actions (the hands only: it can keep walking)
+    // Between the task's actions, with the body at rest: the pathfinder uses
+    // the hands on its own while walking (a pickaxe for a dig, a block for a
+    // bridge), and a torch swapped in there breaks the dig or bridges with a
+    // torch (review)
     await borrow(holder, ["hands"], async () => {
       const { placeBlockResult } = await import("./blockPlacing");
+      const here = bot.entity.position.floored();
+      if (!here.equals(feet)) return; // it moved on: the next check decides there
       const placed = await placeBlockResult("torch", feet.x, feet.y, feet.z, "bottom");
       if (placed.ok) console.log(`Lit the cave at ${feet}.`);
-    }, 5_000);
+    }, 5_000, bodyAtRest);
   } finally {
     busy = false;
   }

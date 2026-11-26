@@ -39,6 +39,10 @@ export function myFarm(): P3 | null {
   return farm ? { x: farm.x, y: farm.y, z: farm.z } : null;
 }
 
+// Plants it clears off the plot (never anything else: an owner's fence,
+// lantern or table on it stays, review)
+const CLEARABLE = /^(short_grass|grass|tall_grass|fern|large_fern|dandelion|poppy|[a-z_]+_tulip|azure_bluet|oxeye_daisy|cornflower|allium|blue_orchid)$/;
+
 /** A plot cell as the site search sees it (null: not loaded). */
 export type PlotCell = { ground: boolean; clear: boolean } | null;
 
@@ -64,9 +68,10 @@ export function plotFits(middle: P3, look: (x: number, y: number, z: number) => 
 function plotCellAt(x: number, y: number, z: number): PlotCell {
   const b = knownBlock(new Vec3(x, y, z));
   if (!b) return null;
-  const ground = b.name === "grass_block" || b.name === "dirt" || b.name === "farmland";
+  // Fresh grass or dirt only: farmland may be the owner's field (review)
+  const ground = b.name === "grass_block" || b.name === "dirt";
   // Air or a plant; a torch too (its lit home's grid: the torch stays, that cell isn't sown)
-  const clear = b.name === "air" || b.name === "torch" || /^(short_grass|grass|tall_grass|fern|large_fern|dandelion|poppy|[a-z_]+_tulip|azure_bluet|oxeye_daisy|cornflower|allium|blue_orchid)$/.test(b.name);
+  const clear = b.name === "air" || b.name === "torch" || CLEARABLE.test(b.name);
   return { ground, clear };
 }
 
@@ -144,6 +149,8 @@ export async function makeFarm(): Promise<ActionResult> {
   const mid = new Vec3(middle.x, middle.y, middle.z);
   if (!(await goTo(new pf.goals.GoalNear(mid.x, mid.y + 1, mid.z, 2))).ok) return fail("unreachable", "I can't get to the farm's spot");
   if (knownBlock(mid)?.name !== "water") {
+    // The hole must hold the water: solid ground under it (a cave below would drain it)
+    if (knownBlock(mid.offset(0, -1, 0))?.boundingBox !== "block") return fail("refused", "the farm's middle has no solid ground under it");
     const dug = await breakBlock(mid);
     if (!dug.ok) return fail(dug.reason, `couldn't dig the farm's water hole (${describeFailure(dug)})`);
     if (!(await equipItem("water_bucket")).ok) return fail("missing_items", "no water bucket");
@@ -168,8 +175,8 @@ async function sowPlot(middle: P3, seed: string): Promise<number> {
       const g = new Vec3(middle.x + dx, middle.y, middle.z + dz);
       const over = knownBlock(g.offset(0, 1, 0));
       if (over && over.name !== "air") {
-        // A crop already growing, or a torch lighting the farm: left
-        if (/^(wheat|carrots|potatoes|beetroots|torch)$/.test(over.name)) continue;
+        // Only a plant is cleared; a crop growing, a torch or anything else is left
+        if (!CLEARABLE.test(over.name)) continue;
         const { breakBlock } = await import("../core/primitives");
         await breakBlock(over.position, { allowWithoutHarvest: true });
       }

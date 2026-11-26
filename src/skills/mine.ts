@@ -94,11 +94,30 @@ export function nearestMineHub(pos: Pos): Vec3 | null {
   if (!rec) return null;
   let best: Vec3 | null = null;
   for (let level = 0; level <= rec.level; level++) {
-    if (hubStep(level) >= rec.stairs + 1) break;
+    if (hubStep(level) >= rec.stairs) break; // not dug down to yet (review: off by one)
     const hub = new Vec3(rec.start.x, rec.start.y, rec.start.z).plus(STEP[rec.direction].scaled(hubStep(level))).offset(0, -hubStep(level), 0);
     if (!best || Math.abs(hub.y - pos.y) < Math.abs(best.y - pos.y)) best = hub;
   }
   return best;
+}
+
+/**
+ * Where its tunnels leave each hub (forward, right and left, the first cell
+ * of each): never a niche for a table or a furnace (review: one dug there
+ * would later stop that tunnel as "something built").
+ */
+export function mineArmStarts(): Vec3[] {
+  const rec = mineRecord();
+  if (!rec) return [];
+  const out: Vec3[] = [];
+  for (let level = 0; level <= rec.level; level++) {
+    const hub = new Vec3(rec.start.x, rec.start.y, rec.start.z).plus(STEP[rec.direction].scaled(hubStep(level))).offset(0, -hubStep(level), 0);
+    for (const arm of ["forward", "right", "left"] as const) {
+      const cell = hub.plus(STEP[armDirection(arm, rec.direction)]);
+      out.push(cell, cell.offset(0, 1, 0));
+    }
+  }
+  return out;
 }
 
 /** The mine record (stairs maybe not finished): stairs dug so far, branches done, the bottom once finished. */

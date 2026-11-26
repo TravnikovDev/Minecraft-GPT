@@ -44,6 +44,12 @@ export const SOURCES: Source[] = [
     collects: true,
     gets: (m) => m === "logs" || catalog().isLog(m),
     run: async (_m, count) => {
+      // Trees are out in the open: not after sunset (night work, a torch or
+      // a shield made at home, mustn't walk it out to a forest: review)
+      const { currentDimension } = await import("../actions/perception");
+      if (currentDimension() === "overworld" && (bot.time?.timeOfDay ?? 0) >= 12_000 && (bot.time?.timeOfDay ?? 0) < 23_500) {
+        return fail("refused", "it's night; the trees wait for the morning");
+      }
       const before = carried("logs");
       await gatherWood(Math.max(count, 2), 64);
       return got(before, carried("logs"), "trees");

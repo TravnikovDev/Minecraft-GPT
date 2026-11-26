@@ -14,7 +14,7 @@ import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/re
 import { canSee, openFaces, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
-import { isProtected } from "../core/movements";
+import { isProtected, protectedBy } from "../core/movements";
 import { recordSighting } from "./perception";
 import { tunnelTo } from "./digging";
 import { makeRoom } from "./overflow";
@@ -98,7 +98,9 @@ export async function collectBlock(
     // Not ones it gave up on, nor ones in an area it must keep out of.
     // Never its shelter's or stairs' walls (protected), but ore in them is
     // fair game: mined, then the spot filled back (owner)
-    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && (!isProtected(b.position) || c.isOre(b.name)));
+    // Ore in the mine's kept walls and steps is fair game; never in its
+    // shelter's (a hole there and the shelter isn't whole: a repair, review)
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && (!isProtected(b.position) || (c.isOre(b.name) && protectedBy(b.position) === "mine")));
     for (const b of blocks.slice(0, 8)) recordSighting(b.name, b.position); // hints for later
 
     if (blocks.length === 0) {

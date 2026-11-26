@@ -126,10 +126,14 @@ export async function placeChestOutOfTheWay(itemName = "chest"): Promise<Block |
 export async function placeOutOfTheWay(itemName: string): Promise<Block | null> {
   const blockAt = (p: Vec3): Block | null => bot.blockAt(p);
   const tall = itemName.endsWith("chest");
+  // Never where its mine's tunnels will start (they'd stop at it later)
+  const { mineArmStarts } = await import("../skills/mine");
+  const armStarts = new Set(mineArmStarts().map((p) => p.toString()));
+  const guarded = (p: Vec3): boolean => isProtected(p) || armStarts.has(p.toString());
   const tryNiche = async (): Promise<Block | null> => {
     const feet = bot.entity.position.floored();
     if (!underRoof(feet, blockAt)) return null;
-    const niche = nicheSpot(feet, blockAt);
+    const niche = nicheSpot(feet, blockAt, guarded);
     if (!niche) return null;
     console.log(`Digging a niche in the wall at ${niche} for the ${itemName}.`);
     const dug = (!tall || (await breakBlockAt(niche.x, niche.y + 1, niche.z))) && (await breakBlockAt(niche.x, niche.y, niche.z));

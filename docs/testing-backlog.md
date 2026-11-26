@@ -4,6 +4,17 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Architect review fixes (2026-11-26, not yet run)
+
+- [ ] Pave the stairs, then send it mining: the paving is still there after the trip (stair care no longer digs it out)
+- [ ] A trapdoor or lantern of yours on its shelter's stairs: still there after a night and a shelter repair
+- [ ] A lighting spot it can't reach (across water): the grade finishes without it, and its day goes on
+- [ ] No weapon and a creeper chasing it: it keeps running (no "leaving it be"); a creeper left be that comes round the wall in sight is noticed again
+- [ ] At night with no planks or sticks, making torches: it never walks out to chop trees
+- [ ] A table or furnace placed in the mine: in a side wall niche, never where a hub's tunnel starts
+- [ ] Farm: a fence or lantern of yours on the plot is left; your farmland is never claimed
+- [ ] Out of lava and burning with a water bucket: water poured at its feet and scooped back up
+
 ## Reflexes and progression from the "Great Test" deaths (2026-11-26, not yet run)
 
 Each death in the game test that led to these is in the commit messages (9fabd7c, 65cbbca, 48b7af1 and after).

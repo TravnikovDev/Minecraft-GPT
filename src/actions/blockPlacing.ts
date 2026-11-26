@@ -5,7 +5,7 @@ import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import * as gameData from "../utils/minecraftData";
-import { giveCreativeItem, goTo, isReplaceable, knownBlock, placeBlockAt, withinReach } from "../core/primitives";
+import { bodyReaches, giveCreativeItem, goTo, isReplaceable, knownBlock, placeBlockAt, withinReach } from "../core/primitives";
 import { describeFailure, fail, wasStopped, type ActionResult } from "../core/result";
 import { breakBlockAtResult } from "./blockBreaking";
 
@@ -84,12 +84,7 @@ export async function placeBlockResult(blockType: string, x: number, y: number, 
   return done(first);
 }
 
-/** True when the bot's body (0.6 x 1.8) overlaps the block cell at `cell`. */
+/** True when the bot's body (0.6 x 1.8) overlaps the block cell at `cell` (one copy of the maths: core/primitives bodyReaches). */
 export function bodyOverlaps(cell: Vec3, at: Vec3 = bot.entity.position): boolean {
-  const half = 0.3;
-  return (
-    at.x + half > cell.x && at.x - half < cell.x + 1 &&
-    at.z + half > cell.z && at.z - half < cell.z + 1 &&
-    at.y + 1.8 > cell.y && at.y < cell.y + 1
-  );
+  return bodyReaches(at, [cell]);
 }
