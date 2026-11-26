@@ -132,6 +132,8 @@ test("stair care digs out fallen gravel, never its own paving or anything built"
   expect(fillsStep({ name: "stone", boundingBox: "block" })).toBe(true);
   expect(fillsStep({ name: "cobblestone_stairs", boundingBox: "block" })).toBe(false); // its paving
   expect(fillsStep({ name: "oak_planks", boundingBox: "block" })).toBe(false); // built
+  // Its own blocks left in a step (a plug, one put under its feet) make it 2 high: dug out (owner)
+  expect(fillsStep({ name: "cobbled_deepslate", boundingBox: "block" })).toBe(true);
   expect(fillsStep({ name: "air", boundingBox: "empty" })).toBe(false);
   expect(fillsStep({ name: "torch", boundingBox: "empty" })).toBe(false);
 });

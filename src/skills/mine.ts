@@ -84,8 +84,38 @@ type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branch
  * never its own paving (a stair block sits in the step it paves: the review
  * found every trip dug the paving out again) nor anything else built. Pure.
  */
+// Blocks it puts down itself (plugs, a block under its feet to get up a
+// step, floor patches): in a step's walking space they make a step 2 high,
+// which no one can walk up (owner's screenshot); dug out like fallen gravel
+const OWN_FILLERS = new Set(["cobblestone", "cobbled_deepslate", "dirt", "stone", "smooth_stone"]);
+
 export function fillsStep(b: { name: string; boundingBox: string } | null): boolean {
-  return b !== null && b.boundingBox === "block" && !b.name.endsWith("_stairs") && isNatural(b.name);
+  return b !== null && b.boundingBox === "block" && !b.name.endsWith("_stairs") && (isNatural(b.name) || OWN_FILLERS.has(b.name));
+}
+
+/** True when water or lava touches `p` (a block there is a plug: left in). */
+const holdsBackLiquid = (p: Vec3): boolean =>
+  [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([x, y, z]) => /^(water|lava)$/.test(bot.blockAt(p.offset(x!, y!, z!))?.name ?? ""));
+
+/**
+ * The walking space of the steps just above `feet` on its stairs that's
+ * filled (a block it put there, gravel fallen in), not holding back water:
+ * what makes a step too high to walk up.
+ */
+function blockedStepCells(feet: Vec3): Vec3[] {
+  const rec = mineRecord();
+  if (!rec) return [];
+  const i = nearestStairStep(feet, rec.start, rec.direction, rec.stairs, rec.turns);
+  if (i === null) return [];
+  const out: Vec3[] = [];
+  for (let j = Math.max(1, i - 2); j <= i; j++) {
+    const s = stepAt(rec.start, rec.direction, j, rec.turns);
+    for (let dy = 0; dy < STAIR_HEADROOM; dy++) {
+      const c = s.offset(0, dy, 0);
+      if (fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c)) out.push(c);
+    }
+  }
+  return out;
 }
 
 /**
@@ -176,9 +206,18 @@ const UNSTICK_BLOCKS = ["cobblestone_stairs", "cobblestone", "cobbled_deepslate"
  */
 export async function unstickOnStairs(): Promise<boolean> {
   const feet = bot.entity.position.floored();
+  const { breakBlock, pillarUp } = await import("../core/primitives");
+  // A block in the steps just above (one it put there, gravel): dug out,
+  // so the stairs are steps again, rather than built up more (owner)
+  const filled = blockedStepCells(feet);
+  if (filled.length > 0) {
+    let dug = 0;
+    for (const c of filled.reverse()) if ((await breakBlock(c, { allowWithoutHarvest: true })).ok) dug++;
+    console.log(`Stuck on my stairs at ${feet}: dug out ${dug} block${dug === 1 ? "" : "s"} filling the steps above.`);
+    if (dug > 0) return true;
+  }
   const over = feet.offset(0, 2, 0);
   const b = bot.blockAt(over);
-  const { breakBlock, pillarUp } = await import("../core/primitives");
   if (b && b.boundingBox === "block") {
     const { isNatural, isProtected } = await import("../core/movements");
     if (!isNatural(b.name) || isProtected(over)) return false;
@@ -333,7 +372,7 @@ export async function lookAfterStairs(): Promise<void> {
     // Gravel or sand fallen into the step (or anything else filling it):
     // walks won't dig a block with gravel over it, so it stood on the step
     // above for five minutes (game test; the owner dug it out by hand)
-    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)));
+    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c));
     if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
