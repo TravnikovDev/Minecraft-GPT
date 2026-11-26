@@ -30,7 +30,8 @@ export const LEVEL_STEP = 20; // stairs further down to the next hub
 const CHUNK = 5; // dug at a time, then the ores it uncovered
 // Down to just over bedrock (owner: dig down until the rock that can't be
 // mined): no hub deeper than this, and never more than this many levels
-const MIN_HUB_Y = -57;
+// (owner: -54; below that the caves are mostly lava)
+const MIN_HUB_Y = -54;
 const MAX_LEVELS = 10;
 const ORE_REACH = 6; // ores this close to a fresh tunnel get mined
 const MINE_NAME = "shelter mine";
@@ -75,7 +76,7 @@ const STAIRS = MINE_DEPTH + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
-type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean };
+type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean; sidesDone: number };
 
 /**
  * True for a block that has fallen into (or grown into) a step's walking
@@ -208,7 +209,7 @@ function mineRecord(): MineRecord | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
   if (!mine) return null;
-  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number };
   if (!d.direction) return null;
   // Older records (one dig of steps 0..10, saved when done) are finished
   const stairs = d.stairs ?? (d.depth === MINE_DEPTH ? STAIRS : 0);
@@ -228,6 +229,7 @@ function mineRecord(): MineRecord | null {
     tried: d.tried ?? {},
     seals: d.seals ?? [],
     exhausted: d.exhausted ?? false,
+    sidesDone: d.sidesDone ?? 0,
   };
 }
 
@@ -363,7 +365,7 @@ export async function lookAfterStairs(): Promise<void> {
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
-async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean }): Promise<void> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
   const rec0 = mineRecord();
   const keep = {
@@ -373,6 +375,7 @@ async function saveMine(start: Pos, direction: DirectionType, stairs: number, br
     tried: levels?.tried ?? rec0?.tried ?? {},
     seals: levels?.seals ?? rec0?.seals ?? [],
     exhausted: levels?.exhausted ?? rec0?.exhausted ?? false,
+    sidesDone: levels?.sidesDone ?? rec0?.sidesDone ?? 0,
   };
   await addPlace({
     kind: "mine",
@@ -738,11 +741,20 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     let arm = nextArm(arms);
     // All three tunnels at this hub done: 20 steps further down, a new hub
     if (!arm) {
-      if (level + 1 >= MAX_LEVELS || stepAt(start, dir, hubStep(level + 1), rec.turns).y < MIN_HUB_Y) return fail("not_found", `my mine is down to bedrock and I still have too little ${stillNames()}`);
+      // As deep as it goes (just over bedrock, or every way down blocked):
+      // side tunnels off its lowest level's tunnels instead (owner: every 3
+      // blocks a side route of 10)
+      if (rec.exhausted || level + 1 >= MAX_LEVELS || stepAt(start, dir, hubStep(level + 1), rec.turns).y < MIN_HUB_Y) {
+        const side = await digSideRoute(rec, level);
+        if (side === "all_done") return fail("not_found", `my mine's lowest level is dug out with side tunnels (no way deeper), and I still have too little ${stillNames()}`);
+        if (side === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+        if (isCommandCancelled()) return fail("aborted", "stopped");
+        await mineOresInSight(wants);
+        continue;
+      }
       // Its stairs were blocked going deeper: tried again after a while, not
       // never (game test: gravel fell in, "no path" to the next block, and
       // with one level of tunnels its mine was done for good: no iron, ever)
-      if (rec.exhausted) return fail("not_found", `every way down from every crossroad of my mine is blocked, and I still have too little ${stillNames()}`);
       if (rec.deepest && Date.now() < stairsBlockedUntil) return fail("not_found", `my mine's stairs were blocked going deeper; I'll dig on later (still too little ${stillNames()})`);
       // Blocked going down last time (a mine from before turns, or after a
       // restart): turned at once, never down the same flooded way again
@@ -751,8 +763,10 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
         if (await turnStairs(rec, level, blockedWay, "water, lava or something built last time")) continue;
         // Never back down the blocked way: every way tried (said for good), or the cap next trip
         if (!planTurn(rec, level, blockedWay)) {
+          // Every way down blocked: side tunnels at this level from now on
+          report("Every way down from my mine's crossroads is blocked; I'll dig side tunnels off my lowest level instead.");
           await saveMine(start, dir, rec.stairs, rec.branches, rec.bottom, { level, arms: rec.arms, deepest: true, exhausted: true });
-          return fail("not_found", `every way down from every crossroad of my mine is blocked, and I still have too little ${stillNames()}`);
+          continue;
         }
         stairsBlockedUntil = Date.now() + STAIRS_RETRY_MS;
         return fail("unreachable", `I couldn't cap my blocked mine stairs yet; I'll turn them next trip (still too little ${stillNames()})`);
@@ -775,7 +789,12 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
         stairsBlockedUntil = Date.now() + STAIRS_RETRY_MS;
         const left = nextTurn(now.direction, now.turns, now.tried, level - 1, dirAt(dir, now.stairs, now.turns)) !== null;
         await saveMine(start, dir, now.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true, exhausted: !left });
-        return fail("not_found", `my mine's stairs are blocked every way from every crossroad (${deeper.detail}) and I still have too little ${stillNames()}`);
+        // Every way down blocked: side tunnels at the lowest level from now on (owner)
+        if (!left) {
+          report("Every way down from my mine's crossroads is blocked; I'll dig side tunnels off my lowest level instead.");
+          continue;
+        }
+        return fail("not_found", `I couldn't cap my blocked mine stairs yet (${deeper.detail}); I'll turn them next trip (still too little ${stillNames()})`);
       }
       await saveMine(start, dir, hubStep(level) + 1, rec.branches, rec.bottom, { level, arms, deepest: false });
       arm = nextArm(arms)!;
@@ -816,13 +835,60 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       if (got > 0) continue;
     }
     arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug, blocked: true } };
+    // A tunnel stopped by water, lava or something built: new stairs never
+    // turn that way from this hub (owner: they'd dig into the same water)
+    let tried = rec.tried;
+    if (!dug && stop === "blocked") {
+      const h = String(hubStep(level));
+      tried = { ...rec.tried, [h]: [...new Set([...(rec.tried[h] ?? []), way])] };
+    }
     const what = stop === "drop" ? "a drop I couldn't build a floor over" : stop === "no_filler" ? "a hole I had nothing to fill" : "water, lava or something it mustn't dig";
     if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
-    await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
+    await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
     await mineOresInSight(wants);
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
+}
+
+// Side routes off the lowest level's tunnels (owner): every 3 blocks, 10 long
+const SIDE_EVERY = 3;
+const SIDE_LENGTH = 10;
+export type SideRoute = { arm: ArmName; at: number; side: "right" | "left" };
+
+/** The side routes off a hub's three tunnels, in the order they're dug. Pure. */
+export function sideRoutes(): SideRoute[] {
+  const out: SideRoute[] = [];
+  for (const arm of ARMS) for (let at = SIDE_EVERY; at <= ARM_LENGTH; at += SIDE_EVERY) for (const side of ["right", "left"] as const) out.push({ arm, at, side });
+  return out;
+}
+
+/**
+ * The next side route off its lowest hub's tunnels: walked to where it leaves
+ * the tunnel (a tunnel that ends sooner: skipped) and dug 10 blocks, mining
+ * what it uncovers. Remembered one by one.
+ */
+async function digSideRoute(rec: MineRecord, level: number): Promise<"dug" | "skipped" | "all_done" | "no_tool"> {
+  const routes = sideRoutes();
+  const i = rec.sidesDone;
+  if (i >= routes.length) return "all_done";
+  const r = routes[i]!;
+  const h = hubStep(level);
+  const way = armDirection(r.arm, dirAt(rec.direction, h, rec.turns));
+  const from = stepAt(rec.start, rec.direction, h, rec.turns).plus(STEP[way].scaled(r.at));
+  const save = (): Promise<void> => saveMine(rec.start, rec.direction, rec.stairs, rec.branches, rec.bottom, { level, arms: rec.arms, deepest: rec.deepest, sidesDone: i + 1 });
+  // The tunnel doesn't reach that far (or is blocked there): on with the next
+  if (bot.blockAt(from)?.boundingBox !== "empty" || !(await goToStep(from)).ok) {
+    if (!isCommandCancelled()) await save();
+    return "skipped";
+  }
+  const sideWay = armDirection(r.side, way);
+  if (i === 0) report(`Side tunnels off my mine's lowest level: one every ${SIDE_EVERY} blocks, ${SIDE_LENGTH} long.`);
+  const dug = await digStraightTunnel(sideWay, SIDE_LENGTH, from, 1);
+  if (!dug && tunnelStopReason() === "no_tool") return "no_tool";
+  if (isCommandCancelled()) return "skipped";
+  await save();
+  return "dug";
 }
 
 /**

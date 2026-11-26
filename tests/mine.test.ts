@@ -224,3 +224,11 @@ test("one turn: the steps after it have side walls along the way the stairs came
   // ... and not east or west of it (that's the way along the stairs)
   expect(has(s.x + 1, s.y + 1, s.z)).toBe(false);
 });
+
+test("no way deeper: side routes every 3 blocks off each tunnel, both sides (owner)", async () => {
+  const { sideRoutes, ARM_LENGTH } = await import(`${ROOT}/src/skills/mine.ts`);
+  const r = sideRoutes();
+  expect(r[0]).toEqual({ arm: "forward", at: 3, side: "right" });
+  expect(r[1]).toEqual({ arm: "forward", at: 3, side: "left" });
+  expect(r.length).toBe(3 * Math.floor(ARM_LENGTH / 3) * 2);
+});
