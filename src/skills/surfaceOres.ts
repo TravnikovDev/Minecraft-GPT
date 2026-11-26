@@ -51,7 +51,9 @@ function openToAir(b: Block): boolean {
  * its home: walked to and mined, up to `count` of it. How many it got.
  */
 export async function surfaceOresFirst(item: string, count: number): Promise<number> {
-  if (count <= 0 || bot.time?.isDay === false || !bot.entity) return 0;
+  // By day only: from sunset on (12000) it's dusk for this, though the game
+  // still calls it day till 13000 (game test: out for coal as the night began)
+  if (count <= 0 || !bot.entity || bot.time?.isDay === false || (bot.time?.timeOfDay ?? 0) >= 12_000) return 0;
   const { shelterLayout } = await import("../actions/building");
   const home = shelterLayout()?.start;
   if (!home) return 0;

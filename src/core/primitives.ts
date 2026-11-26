@@ -702,8 +702,11 @@ async function craftWithNow(recipe: Recipe, times: number, table: Block | null):
   const resultName = bot.registry.items[resultId]?.name ?? String(resultId);
   if (table && !withinReach(table.position)) return fail("out_of_reach", `crafting table at ${table.position}`);
   // Leftovers in the inventory's own grid or on the cursor make the recipe
-  // come out as something else (or nothing): put them back first
-  if (!table && inventoryGridBusy()) await settleInventory("leftovers in my crafting grid");
+  // come out as something else (or nothing): put back first, every time. The
+  // client can think the grid is empty while the server still has the last
+  // craft's leftovers in it: the grid crafts that failed ("no stick
+  // appeared") were exactly the ones not resynced first (game test)
+  if (!table) await settleInventory(inventoryGridBusy() ? "leftovers in my crafting grid" : null);
   const before = carried(resultName);
   // In batches: each recipe run is several window clicks, and servers kick
   // players who click too fast
@@ -748,8 +751,8 @@ function inventoryGridBusy(): boolean {
  * crafts said "missing ingredient" and 4 sticks it had just made were gone
  * from what it counted, three times in one session.
  */
-async function settleInventory(why: string): Promise<void> {
-  console.log(`Inventory: ${why}; putting the grid back and resyncing.`);
+async function settleInventory(why: string | null): Promise<void> {
+  if (why) console.log(`Inventory: ${why}; putting the grid back and resyncing.`);
   try {
     bot._client.write("close_window", { windowId: 0 });
   } catch (error) {
