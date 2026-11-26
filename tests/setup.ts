@@ -1,7 +1,14 @@
 // Runs before every test file (bunfig.toml): the bot's memory goes to a
-// throwaway file, never the real db.json the owner's bot uses.
+// throwaway file, never the real db.json the owner's bot uses, and no test
+// ever calls the model.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "minecraft-gpt-test-")), "db.json");
+const dir = mkdtempSync(join(tmpdir(), "minecraft-gpt-test-"));
+process.env.DB_PATH = join(dir, "db.json");
+// Never a real model call from a test: a cap of $0 stops every call (the
+// planner made real calls from the curriculum tests before), and spending is
+// counted in a throwaway file, never the owner's usage.json
+process.env.LLM_MONTHLY_CAP_USD = "0";
+process.env.USAGE_PATH = join(dir, "usage.json");

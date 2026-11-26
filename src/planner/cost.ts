@@ -19,7 +19,8 @@ const UNKNOWN_PRICE = { input: 2, output: 8 };
 export type Purpose = "chat" | "plan";
 export type MonthUsage = { month: string; calls: number; inputTokens: number; outputTokens: number; usd: number; byPurpose: Record<string, number> };
 
-const FILE = `${import.meta.dir}/../../usage.json`;
+// USAGE_PATH: the tests' throwaway file (tests/setup.ts)
+const FILE = process.env["USAGE_PATH"] ?? `${import.meta.dir}/../../usage.json`;
 
 /** The month a time falls in ("2026-11"). Pure. */
 export const monthOf = (at: number): string => new Date(at).toISOString().slice(0, 7);
