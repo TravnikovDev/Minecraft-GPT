@@ -105,6 +105,7 @@ export function bestWool(): [string, number] | null {
     const m = /^([a-z_]+)_wool$/.exec(i.name);
     if (m) counts.set(m[1]!, (counts.get(m[1]!) ?? 0) + i.count);
   }
-  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  // Most of one colour; white on a tie (most sheep are white: it gets to 3 sooner)
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] === "white" ? -1 : b[0] === "white" ? 1 : 0))[0];
   return best ?? null;
 }

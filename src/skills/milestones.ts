@@ -229,16 +229,20 @@ async function cookTheMeat(cookFood: () => Promise<number | null>): Promise<void
 async function getBed(): Promise<ActionResult> {
   if (!bot.inventory.items().some((i) => i.name.endsWith("_bed"))) {
     let wool = bestWool();
-    if (!wool || wool[1] < 3) {
-      // More of the colour it already has (most sheep are white)
+    // One more wool at a time, the colour chosen again each time: any colour
+    // reaching 3 makes the bed (game test: a tie of 1 brown and 1 white
+    // picked brown, and it hunted on for brown with 4 white in its pocket)
+    for (let tries = 0; (!wool || wool[1] < 3) && tries < 6 && !isCommandCancelled(); tries++) {
+      // More of the colour it has most of; white on a tie (most sheep are white)
       const colour = wool?.[0] ?? "white";
-      const got = await acquire(`${colour}_wool`, 3, liveWorld);
+      const got = await acquire(`${colour}_wool`, (wool?.[1] ?? 0) + 1, liveWorld);
       wool = bestWool();
       if (!got.ok && (!wool || wool[1] < 3)) {
-        console.log(`Bed: no 3 ${colour} wool (${describeFailure(got)}); best is ${wool ? `${wool[1]} ${wool[0]}` : "none"}.`);
+        console.log(`Bed: no more ${colour} wool (${describeFailure(got)}); best is ${wool ? `${wool[1]} ${wool[0]}` : "none"}.`);
         return fail("missing_items", `I need 3 wool of one colour for a bed (${describeFailure(got)})`);
       }
     }
+    if (!wool || wool[1] < 3) return fail("missing_items", "I need 3 wool of one colour for a bed");
     const made = await acquire(`${wool![0]}_bed`, 1, liveWorld);
     if (!made.ok) return made;
   }
