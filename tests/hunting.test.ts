@@ -49,3 +49,17 @@ test("the report reads naturally", () => {
   expect(countList(new Map([["beef", 5], ["leather", 2]]))).toBe("5 beef and 2 leather");
   expect(countList(new Map([["porkchop", 1]]))).toBe("1 porkchop");
 });
+
+test("an animal in a cave is no food to go for; one in the open or under a tree is", async () => {
+  // Game test: it dug a 147-block tunnel down to y 7 after a chicken in a cave
+  const { skyAbove } = await import(`${import.meta.dir}/../src/actions/hunting.ts`);
+  const STONE = { name: "stone", boundingBox: "block" };
+  const LEAVES = { name: "oak_leaves", boundingBox: "block" };
+  const AIR = { name: "air", boundingBox: "empty" };
+  // A chicken at y 8 with rock from y 20 up
+  expect(skyAbove({ x: 0, y: 8, z: 0 }, (_x: number, y: number) => (y >= 20 ? STONE : AIR))).toBe(false);
+  // Out in a field
+  expect(skyAbove({ x: 0, y: 64, z: 0 }, () => AIR)).toBe(true);
+  // Under a tree
+  expect(skyAbove({ x: 0, y: 64, z: 0 }, (_x: number, y: number) => (y === 70 ? LEAVES : AIR))).toBe(true);
+});

@@ -6,6 +6,7 @@
 // without a game; the scan reads the world.
 
 import type { Entity } from "prismarine-entity";
+import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { canSeePoint, type SightWorld } from "./sight";
@@ -100,11 +101,32 @@ export function lookForAnimals(): Prey[] {
   return found.sort((a, b) => a.distance - b.distance);
 }
 
-/** Every animal the server reports within `range` (in sight or not), nearest first. */
+/**
+ * True when nothing solid is over `pos` up to `height` blocks (leaves are
+ * fine: under a tree is still out in the open; unloaded counts as open).
+ * Pure over `look`.
+ */
+export function skyAbove(pos: { x: number; y: number; z: number }, look: (x: number, y: number, z: number) => { name: string; boundingBox: string } | null, height = 64): boolean {
+  const x = Math.floor(pos.x);
+  const z = Math.floor(pos.z);
+  for (let y = Math.floor(pos.y) + 1; y <= Math.floor(pos.y) + height; y++) {
+    const b = look(x, y, z);
+    if (b && b.boundingBox === "block" && !b.name.endsWith("_leaves")) return false;
+  }
+  return true;
+}
+
+/**
+ * Every animal the server reports within `range` (in sight or not), nearest
+ * first, out in the open only: one in a cave is no food to go for (game
+ * test: it dug a 147-block tunnel down to y 7 after a chicken in a cave).
+ */
 export function knownAnimals(range = KNOWN_RANGE): Prey[] {
   const me = bot.entity.position;
+  const look = (x: number, y: number, z: number) => bot.blockAt(new Vec3(x, y, z));
   return Object.values(bot.entities)
     .filter((e) => e !== bot.entity && !!e.name && catalog().isHuntable(e.name) && e.position.distanceTo(me) <= range)
+    .filter((e) => skyAbove(e.position, look))
     .map((e) => toPrey(e, e.position.distanceTo(me)))
     .sort((a, b) => a.distance - b.distance);
 }
