@@ -54,6 +54,7 @@ import { registerCreditsSkip } from "./core/primitives";
 import { registerDiary } from "./planner/diaryHooks";
 import { considerRole, resetRoleRest } from "./roles/runner";
 import { considerOpportunities, resetOpportunities } from "./skills/opportunities";
+import { considerFood, resetFoodWatch } from "./skills/foodWatch";
 
 // A long-running bot must not die on one stray async error (for example a
 // timer firing while disconnected); log it and keep going
@@ -117,6 +118,7 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 5_000, considerRole); // its job for the owner, a shift at a time (roles/runner)
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
+  resetFoodWatch();
   registerDiary(); // the diary code writes for the day planner (Phase 7)
   // The day planner (lazy: it loads the skills): fresh guards per connection,
   // and a new plan after a death or when the plan is blocked
@@ -136,6 +138,7 @@ onConnectionReady((currentBot) => {
     .then((m) => m.protectMine()) // and its mine stairs (lazy: skills load commands)
     .catch((error: unknown) => console.error("Couldn't protect my mine stairs:", error));
   everyWhileConnected(currentBot, 5_000, considerOpportunities); // ores in sight go on the task list at their priority (skills/opportunities)
+  everyWhileConnected(currentBot, 5_000, considerFood); // starving: food now; low: a restock by day (skills/foodWatch)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
 

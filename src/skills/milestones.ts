@@ -77,6 +77,8 @@ const FOOD_STOCK = 20; // food points carried: a couple of days' eating
 // Hunting for the stock: only animals this close (no long trips after them)
 const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
+// Starving with nothing near: how far it may walk for an animal (by day)
+const FAR_HUNT = 96;
 export const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
@@ -99,7 +101,7 @@ const pickaxesOfTier = (tier: number): number =>
   bot.inventory.items().filter((i) => catalog().toolKind(i.name) === "pickaxe" && catalog().toolTier(i.name) >= tier).length;
 
 /** Food: berries, then hunting, then cooking what it caught. */
-async function stockFood(): Promise<ActionResult> {
+export async function stockFood(options: { emergency?: boolean } = {}): Promise<ActionResult> {
   const { pickBerries } = await import("../commands/StarterKit");
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
@@ -119,6 +121,14 @@ async function stockFood(): Promise<ActionResult> {
     if (short() && myFarm() && farmRipe() > 0) await tendFarm();
     if (short()) await pickBerries();
     if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
+    // Starving with nothing near (game test: it starved twice, no animal
+    // within 32): by day the walk may go further, to animals out under the
+    // sky up to FAR_HUNT away; dying of hunger is the bigger risk
+    if (options.emergency && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
+      const { knownAnimals } = await import("../actions/hunting");
+      const near = knownAnimals().filter((p) => p.distance <= FAR_HUNT).sort((a, b) => a.distance - b.distance)[0];
+      if (near) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+    }
     if (hasRawFood()) await cookTheMeat(cookFood);
     if (short()) {
       const { goFishing } = await import("./fishing");

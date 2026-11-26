@@ -14,8 +14,9 @@ import { chatter } from "../core/narrator";
 
 const APPLE_LEAVES = ["oak_leaves", "dark_oak_leaves"];
 // At most this many leaves per try, and this long
-const MAX_LEAVES = 120;
-const MAX_MS = 3 * 60_000;
+// A short last try: one leaf in 200 drops an apple (game test: 207 leaves, none)
+const MAX_LEAVES = 30;
+const MAX_MS = 60_000;
 const ENOUGH_APPLES = 2;
 
 /** True for leaves that grew there (a player's placed leaves are "persistent" and left alone). Pure. */
