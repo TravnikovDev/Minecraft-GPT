@@ -35,3 +35,23 @@ test("the torch goes on the ground: the open cell over solid ground nearest the 
   // Not loaded: no spot
   expect(groundSpot(5, 5, 64, () => null)).toBeNull();
 });
+
+test("the lit ground in three grades: each wider, the third sparser, all centred on the home", async () => {
+  const { LIGHT_GRADES } = await import(`${ROOT}/src/skills/lighting.ts`);
+  const [one, two, three] = LIGHT_GRADES;
+  expect(two.radius).toBe(one.radius * 2);
+  expect(three.radius).toBe(one.radius * 3);
+  expect(three.spacing).toBeGreaterThan(one.spacing);
+  // The first grade's spots are all in the second's grid (no torches doubled up)
+  const g1 = torchGrid({ x: 0, z: 0 }, one.radius, one.spacing).map((p: { x: number; z: number }) => `${p.x},${p.z}`);
+  const g2 = new Set(torchGrid({ x: 0, z: 0 }, two.radius, two.spacing).map((p: { x: number; z: number }) => `${p.x},${p.z}`));
+  expect(g1.every((k: string) => g2.has(k))).toBe(true);
+  // The third grade still lights its whole square: every cell within the
+  // radius is at most 12 blocks' walk from a torch (light over 0 out to 13)
+  const g3 = torchGrid({ x: 0, z: 0 }, three.radius, three.spacing);
+  for (let x = -three.radius; x <= three.radius; x += 3)
+    for (let z = -three.radius; z <= three.radius; z += 3) {
+      const nearest = Math.min(...g3.map((p: { x: number; z: number }) => Math.abs(p.x - x) + Math.abs(p.z - z)));
+      expect(nearest).toBeLessThanOrEqual(13);
+    }
+});

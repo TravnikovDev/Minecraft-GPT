@@ -362,6 +362,16 @@ export const MILESTONES: Milestone[] = [
       return ok();
     },
   },
+  // The lit ground round its home, further out (owner: in grades, each once
+  // the one before is done; by day)
+  {
+    id: "lit_home_2",
+    title: "my home lit twice as far",
+    tier: 3,
+    requires: ["lit_home"],
+    done: () => shelter() === null || homeLit(1),
+    achieve: () => lightUpHome(bot.time?.isDay !== false, 1),
+  },
   {
     id: "iron_tools",
     title: "iron tools",
@@ -369,6 +379,14 @@ export const MILESTONES: Milestone[] = [
     requires: ["iron_pickaxe"],
     done: () => (["sword", "axe", "shovel"] as const).every((k) => toolTier(k) >= TIER.iron),
     achieve: () => makeFromIron([["iron_sword", 2], ["iron_axe", 3], ["iron_shovel", 1]]),
+  },
+  {
+    id: "lit_home_3",
+    title: "my home lit three times as far",
+    tier: 3,
+    requires: ["lit_home_2"],
+    done: () => shelter() === null || homeLit(2),
+    achieve: () => lightUpHome(bot.time?.isDay !== false, 2),
   },
   {
     id: "paved_stairs",

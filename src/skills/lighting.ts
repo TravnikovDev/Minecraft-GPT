@@ -19,9 +19,18 @@ import { shelterLayout } from "../actions/building";
 type P2 = { x: number; z: number };
 type P3 = { x: number; y: number; z: number };
 
-// The lit ground: this far round the top of its stairs, a torch every SPACING blocks
-export const LIGHT_RADIUS = 14;
-export const LIGHT_SPACING = 7;
+// The lit ground, in grades (owner: the first ring is too close to the
+// shelter; then twice as far; then three times as far, sparser). Each grade:
+// how far round the top of its stairs, a torch every `spacing` blocks, and
+// how far up or down it looks for the ground (further out, the land varies more)
+export type LightGrade = { radius: number; spacing: number; search: number };
+export const LIGHT_GRADES: LightGrade[] = [
+  { radius: 14, spacing: 7, search: 8 },
+  { radius: 28, spacing: 7, search: 12 },
+  { radius: 42, spacing: 12, search: 16 },
+];
+export const LIGHT_RADIUS = LIGHT_GRADES[0]!.radius;
+export const LIGHT_SPACING = LIGHT_GRADES[0]!.spacing;
 // A torch already this close (blocks) counts for a grid point
 const TORCH_NEAR = 4;
 // How far up and down from the stairs' top it looks for the ground at a grid point
@@ -32,9 +41,11 @@ const GROUND_SEARCH = 8;
  * square). Pure.
  */
 export function torchGrid(center: P2, radius = LIGHT_RADIUS, spacing = LIGHT_SPACING): P2[] {
+  // Centred on the home: the grades' grids line up where they overlap
   const points: P2[] = [];
-  for (let dx = -radius; dx <= radius; dx += spacing) {
-    for (let dz = -radius; dz <= radius; dz += spacing) points.push({ x: center.x + dx, z: center.z + dz });
+  const k = Math.floor(radius / spacing);
+  for (let i = -k; i <= k; i++) {
+    for (let j = -k; j <= k; j++) points.push({ x: center.x + i * spacing, z: center.z + j * spacing });
   }
   return points;
 }
@@ -93,17 +104,19 @@ const SIDE_NAMES: Array<[string, P3]> = [
  * What lighting its home still needs: wall torches in the room (one near
  * each end: none within 4), and grid spots on the ground with no torch near.
  */
-function lightPlan(): LightPlan {
+function lightPlan(grade = 0): LightPlan {
   const empty: LightPlan = { inside: [], outside: [] };
   const home = shelterLayout();
-  if (!home || !bot.entity) return empty;
+  const g = LIGHT_GRADES[grade];
+  if (!home || !bot.entity || !g) return empty;
   const top = new Vec3(home.start.x, home.start.y, home.start.z);
-  const torches = torchesAround(top, LIGHT_RADIUS + 8);
+  const torches = torchesAround(top, g.radius + 8);
   const shell = new Set(home.shell.map((c) => `${c.x},${c.y},${c.z}`));
   // Inside: the room's cells at head height, with a wall of the shell beside them
   const inside: LightPlan["inside"] = [];
   const headCells = home.room.filter((c) => c.y === Math.min(...home.room.map((r) => r.y)) + 1);
-  for (const cell of [headCells[0], headCells.at(-1)]) {
+  // (the room with the first grade only)
+  for (const cell of grade === 0 ? [headCells[0], headCells.at(-1)] : []) {
     if (!cell || torchNear(cell, torches.concat(inside.map((i) => i.cell)), 3)) continue;
     const open = knownBlock(cell);
     if (!open || (open.name !== "air" && open.name !== "cave_air")) continue;
@@ -115,30 +128,31 @@ function lightPlan(): LightPlan {
   }
   // Outside: the grid on the ground round the top of its stairs
   const outside: P3[] = [];
-  for (const g of torchGrid({ x: home.start.x, z: home.start.z })) {
-    const spot = groundSpot(g.x, g.z, home.start.y, groundCellAt);
+  for (const p of torchGrid({ x: home.start.x, z: home.start.z }, g.radius, g.spacing)) {
+    const spot = groundSpot(p.x, p.z, home.start.y, groundCellAt, g.search);
     if (!spot || shell.has(`${spot.x},${spot.y},${spot.z}`)) continue;
     if (!torchNear(spot, torches)) outside.push(spot);
   }
   return { inside, outside };
 }
 
-// lit() is asked whenever the next milestone is looked for: kept a while
-let litCache: { at: number; lit: boolean } | null = null;
+// lit() is asked whenever the next milestone is looked for: kept a while (per grade)
+const litCache = new Map<number, { at: number; lit: boolean }>();
 const LIT_CACHE_MS = 20_000;
 
-/** True when its home is lit, inside and round about (as far as it can see). */
-export function homeLit(): boolean {
-  if (litCache && Date.now() - litCache.at < LIT_CACHE_MS) return litCache.lit;
-  const plan = lightPlan();
+/** True when its home is lit to this grade, inside and round about (as far as it can see). */
+export function homeLit(grade = 0): boolean {
+  const cached = litCache.get(grade);
+  if (cached && Date.now() - cached.at < LIT_CACHE_MS) return cached.lit;
+  const plan = lightPlan(grade);
   const lit = plan.inside.length === 0 && plan.outside.length === 0;
-  litCache = { at: Date.now(), lit };
+  litCache.set(grade, { at: Date.now(), lit });
   return lit;
 }
 
-/** Torches it needs for what's dark now. */
-export function torchesNeeded(): number {
-  const plan = lightPlan();
+/** Torches it needs for what's dark now at this grade. */
+export function torchesNeeded(grade = 0): number {
+  const plan = lightPlan(grade);
   return plan.inside.length + plan.outside.length;
 }
 
@@ -148,10 +162,10 @@ export function torchesNeeded(): number {
  * spot it can't light (no way there, the server says no) is left; the rest
  * still get theirs.
  */
-export async function lightUpHome(byDay: boolean): Promise<ActionResult> {
+export async function lightUpHome(byDay: boolean, grade = 0): Promise<ActionResult> {
   const { torchReady } = await import("../actions/digging");
   const { placeBlockResult } = await import("../actions/blockPlacing");
-  const plan = lightPlan();
+  const plan = lightPlan(grade);
   let placed = 0;
   let missed = 0;
   const ready = async (): Promise<boolean> => {
@@ -181,12 +195,12 @@ export async function lightUpHome(byDay: boolean): Promise<ActionResult> {
       else missed++;
     }
   }
-  litCache = null;
-  if (placed > 0) chatter(`Put up ${placed} torch${placed === 1 ? "" : "es"} round my home, so nothing spawns by it.`, "lighting");
-  if (homeLit()) return ok();
+  litCache.delete(grade);
+  if (placed > 0) chatter(`Put up ${placed} torch${placed === 1 ? "" : "es"} round my home${grade > 0 ? `, out to ${LIGHT_GRADES[grade]!.radius} blocks` : ""}, so nothing spawns by it.`, "lighting");
+  if (homeLit(grade)) return ok();
   if (!byDay && plan.outside.length > 0) return fail("refused", "the ground round my home is lit by day");
   // Lighting some shows others (a spot it couldn't see from inside): said as what's left
-  const left = torchesNeeded();
+  const left = torchesNeeded(grade);
   if (missed === 0) return fail("not_found", `${left} more spot${left === 1 ? "" : "s"} round my home to light`);
   return fail("not_found", `${missed} spot${missed === 1 ? "" : "s"} round my home I couldn't light`);
 }
