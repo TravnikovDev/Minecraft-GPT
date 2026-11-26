@@ -20,7 +20,7 @@ import { areChoresMuted } from "../core/chores";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
 import { setSheltered } from "../core/sheltered";
-import { describeFailure } from "../core/result";
+import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
 import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
@@ -99,8 +99,11 @@ function milestoneTask(m: Milestone): TaskSpec {
     bucket: Bucket.Self,
     maxMs: MILESTONE_MAX_MS,
     run: async () => {
-      const result = await m.achieve();
+      let result = await m.achieve();
       await announce();
+      // "Done" without being done is a failure too (review: it was proposed
+      // again every second)
+      if (result.ok && !m.done() && !isCommandCancelled()) result = fail("refused", `${m.title} still isn't done`);
       if (!result.ok && !isCommandCancelled()) {
         blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
         const why = describeFailure(result);

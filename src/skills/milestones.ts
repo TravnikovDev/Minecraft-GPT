@@ -57,6 +57,14 @@ export type Milestone = {
    * never reach held the bot's whole day.
    */
   optional?: boolean;
+  /**
+   * A supply that gets used up (food, the stone tools, coal, torches, the
+   * bucket): restocked in its turn when it runs low, but once it has been
+   * reached, running low never holds its tier (and what comes after) up.
+   * Review: eating below the food mark reopened the first day, froze every
+   * tier above it and switched the day planner off.
+   */
+  supply?: boolean;
 };
 
 /** True when a milestone can be checked and worked on in the dimension it's in now. */
@@ -273,6 +281,7 @@ export const MILESTONES: Milestone[] = [
     id: "stone_tools",
     title: "stone tools",
     tier: 1,
+    supply: true,
     requires: ["shelter"],
     // Two pickaxes: mining wears one out
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
@@ -287,20 +296,21 @@ export const MILESTONES: Milestone[] = [
     achieve: furnishShelter,
   },
   {
-    id: "food",
-    title: "a food stock",
-    tier: 1,
-    requires: ["chests"],
-    done: () => foodPoints() >= foodTarget(),
-    achieve: stockFood,
-  },
-  {
     id: "bed",
     title: "a bed",
     tier: 1,
     requires: ["chests"],
     done: hasBed,
     achieve: getBed,
+  },
+  {
+    id: "food",
+    title: "a food stock",
+    tier: 1,
+    supply: true,
+    requires: ["chests"],
+    done: () => foodPoints() >= foodTarget(),
+    achieve: stockFood,
   },
   // --- Tier 2: the mine under the shelter (owner's design) -----------------------
   {
@@ -315,6 +325,7 @@ export const MILESTONES: Milestone[] = [
     id: "coal",
     title: "coal",
     tier: 2,
+    supply: true,
     requires: ["mine"],
     // Torches and smelting use it up: once found, only below 4 does it go back for more
     done: () => carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough),
@@ -324,6 +335,7 @@ export const MILESTONES: Milestone[] = [
     id: "torches",
     title: "torches",
     tier: 2,
+    supply: true,
     requires: ["coal"],
     // A player lights the way down before going deep (a skeleton in its dark
     // stairs, mobs spawning in its tunnels): 16 made, and topped up below 8
@@ -347,6 +359,7 @@ export const MILESTONES: Milestone[] = [
     id: "paved_stairs",
     title: "paved mine stairs",
     tier: 2,
+    optional: true,
     requires: ["mine"],
     // Owner: once 200 cobblestone have piled up, the mine's stairs get
     // cobblestone stair blocks (and a block more headroom); until then (or
@@ -401,6 +414,7 @@ export const MILESTONES: Milestone[] = [
     id: "bucket",
     title: "a water bucket",
     tier: 3,
+    supply: true,
     dimension: "any",
     requires: ["iron_pickaxe"],
     // Any bucket counts (it pours the water out for obsidian and takes it back)
@@ -580,14 +594,20 @@ export function nextMilestone(list: Milestone[], blocked: (id: string) => boolea
     // A tier isn't skipped while any of it is left (a blocked one waits its
     // turn), unless all that's left of it is optional: lighting further out
     // or the farm, when they can't be done right now, never hold the day up
-    if (open.every((m) => m.optional)) continue;
+    // ... nor a supply it has had before that's running low again
+    if (open.every((m) => m.optional || (m.supply && reachedAt()[m.id]))) continue;
     return null;
   }
   return null;
 }
 
-/** True when every Tier 1 milestone is done. */
+/**
+ * True when its first day is done: every Tier 1 milestone done now, or the
+ * first day reached once (then food or tools running low doesn't count:
+ * review, the day planner went off whenever food dropped).
+ */
 export function tier1Reached(list: Milestone[] = MILESTONES): boolean {
+  if (list === MILESTONES && reachedAt()["tier1"]) return true;
   return list.filter((m) => m.tier === 1).every((m) => m.done());
 }
 

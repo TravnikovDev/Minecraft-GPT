@@ -223,7 +223,7 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "cobblestone_stairs"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual([
-    "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "torches", "lit_home", "paved_stairs", "iron", "iron_pickaxe",
+    "wooden_tools", "shelter", "stone_tools", "chests", "bed", "food", "mine", "coal", "torches", "lit_home", "paved_stairs", "iron", "iron_pickaxe",
     // First iron goes to safety: a shield, a water bucket, armour, then the other tools
     "shield", "bucket", "farm", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "diamonds", "diamond_pickaxe",
     // Phase 9: the Nether and the End
@@ -346,4 +346,21 @@ test("an optional milestone that can't be done now never holds its tier up", () 
   // A required one set aside still holds its tier
   const strict = [{ ...fakeMilestone("mine_x"), tier: 2 }, { ...fakeMilestone("iron_y"), tier: 3 }];
   expect(M.nextMilestone(strict, (id: string) => id === "mine_x")).toBeNull();
+});
+
+test("a supply it has had before, running low again, never holds its tier up", () => {
+  // Review: eating below the food mark reopened the first day and froze every tier above it
+  done.clear();
+  const list = [{ ...fakeMilestone("food_x"), tier: 1, supply: true }, { ...fakeMilestone("mine_x"), tier: 2 }];
+  // Never reached: it holds its tier like any other while set aside
+  expect(M.nextMilestone(list, (id: string) => id === "food_x")).toBeNull();
+});
+
+test("once reached, a supply set aside lets the next tier go on", async () => {
+  const { updateMemory, getMemory } = await import(`${ROOT}/src/managers/persistenceManager.ts`);
+  await updateMemory({ milestones: { ...(getMemory().milestones ?? {}), food_y: Date.now() } });
+  done.clear();
+  const list = [{ ...fakeMilestone("food_y"), tier: 1, supply: true }, { ...fakeMilestone("mine_y"), tier: 2 }];
+  expect(M.nextMilestone(list)?.id).toBe("food_y"); // its turn: restocked first
+  expect(M.nextMilestone(list, (id: string) => id === "food_y")?.id).toBe("mine_y"); // failing: the day goes on
 });
