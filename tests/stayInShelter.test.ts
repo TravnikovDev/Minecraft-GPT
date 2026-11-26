@@ -34,7 +34,9 @@ fake.nearestEntity = (match: (e: any) => boolean) =>
 useFakeBot(fake);
 const { registerCombatReflex } = await import(`${ROOT}/src/actions/combatReflex.ts`);
 const { isAnyReflexActive, resetReflexes } = await import(`${ROOT}/src/core/reflexes.ts`);
-const { setSheltered } = await import(`${ROOT}/src/core/sheltered.ts`);
+const { setSheltered, setShelterRoomCheck } = await import(`${ROOT}/src/core/sheltered.ts`);
+// The bot stands in its room (no real shelter in this fake world)
+setShelterRoomCheck(() => true);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 registerCombatReflex();
 // The fight in the last test holds the body: let go of it and stop the timer,

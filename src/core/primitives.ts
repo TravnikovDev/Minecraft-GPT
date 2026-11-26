@@ -937,7 +937,9 @@ const FISH_TIMEOUT_MS = 45_000;
 /** Casts the fishing rod it holds and waits for a bite (mineflayer reels in when one bites). */
 async function fishOnceNow(): Promise<ActionResult> {
   if (bot.heldItem?.name !== "fishing_rod") return fail("missing_items", "no fishing rod in hand");
-  return guarded("fishing", () => bot.fish(), { timeoutMs: FISH_TIMEOUT_MS });
+  // No bite in time: the float is reeled in (left in the water, the next
+  // cast's use of the rod reels it in and cancels that cast, review)
+  return guarded("fishing", () => bot.fish(), { timeoutMs: FISH_TIMEOUT_MS, onStop: () => bot.activateItem() });
 }
 
 /** fishOnce, waiting its turn while a reflex or a borrower has the body (core/leases). */

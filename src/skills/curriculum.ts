@@ -22,8 +22,9 @@ import { chatter, report } from "../core/narrator";
 import { setSheltered } from "../core/sheltered";
 import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
-import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
-import { hasBed, shelter, TIER, toolTier } from "./capabilities";
+import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, tier1Reached, type Milestone } from "./milestones";
+import { foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
+import { fitForTheMine } from "./mine";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
 import { daylight } from "../core/daylight";
@@ -51,13 +52,33 @@ export function setAsideFor(n: number): number {
   return Math.min(BLOCKED_FOR_MS * 2 ** Math.max(0, n - 1), MAX_BLOCKED_MS);
 }
 
-/** Sets a milestone aside after a failure; how long, in ms. */
+// The day the counts are from: a new day, a fresh start for all of them
+let failuresDay = -1;
+
+/**
+ * Sets a milestone aside after a failure; how long, in ms. Hurt or hungry
+ * it's a gate, not a failure: the short wait, the count left alone (review:
+ * one fight sent every mining milestone to half an hour). Starving, food is
+ * never set aside long.
+ */
 function setAside(id: string): number {
-  const n = (failuresInRow.get(id) ?? 0) + 1;
+  const day = bot.time?.day ?? 0;
+  if (day !== failuresDay) {
+    failuresInRow.clear();
+    failuresDay = day;
+  }
+  const unfit = !fitForTheMine(bot.health ?? 20, foodPoints()).ok;
+  const n = (failuresInRow.get(id) ?? 0) + (unfit ? 0 : 1);
   failuresInRow.set(id, n);
-  const ms = setAsideFor(n);
+  let ms = setAsideFor(Math.max(1, n));
+  if (id === "food" && foodPoints() < STARVING_FOOD) ms = Math.min(ms, 4 * 60_000);
   blockedUntil.set(id, Date.now() + ms);
   return ms;
+}
+
+/** Milestones done since they failed start their count over (done some other way too). */
+function clearDoneFailures(): void {
+  for (const id of [...failuresInRow.keys()]) if (MILESTONES.find((m) => m.id === id)?.done()) failuresInRow.delete(id);
 }
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -141,6 +162,7 @@ function milestoneTask(m: Milestone): TaskSpec {
 }
 
 let nightOf = -1; // the day number of the night already handled
+let bedTonight = -1; // the night it came back from its mine for bed: it stays in
 
 /** The night routine: shelter, seal, sleep if there's a bed; open up in the morning. */
 const NIGHT_TRIES = 4;
@@ -234,6 +256,12 @@ function nightTask(): TaskSpec {
       // Shut in: the reflexes leave what's outside alone until morning
       setSheltered(true);
       try {
+        // Food from its chests first (cooked, or raw to cook now), review
+        try {
+          await (await import("./milestones")).foodFromChests();
+        } catch (error) {
+          console.log(`Night: food from my chests failed: ${(error as Error).message}`);
+        }
         await cookAtNight();
         // Leather from the day's hunts: armour for the slots it has nothing in
         // (best effort: the night goes on whatever happens)
@@ -259,7 +287,8 @@ function nightTask(): TaskSpec {
         }
         // Mine work to do: on through the back door, mining all night (the
         // milestone is proposed as soon as this routine ends)
-        if (mineWorkTonight()) {
+        // (not after it came back from the mine for bed: it stays, review)
+        if (mineWorkTonight() && bedTonight !== (bot.time?.day ?? 0)) {
           chatter("Night: carrying on in my mine.", "night");
           return;
         }
@@ -290,6 +319,7 @@ export async function considerNextStep(): Promise<void> {
   // Offline (the world closed): nothing to start until it's back
   if (!bot.entity || !isOnline() || !autonomyOn() || areChoresMuted()) return;
   await announce();
+  clearDoneFailures();
   // Dusk: tomorrow is planned now, busy or not (the night routine starts at
   // dusk and runs till dawn: checked after it, this never fired)
   await planAtDusk();
@@ -318,7 +348,10 @@ export async function considerNextStep(): Promise<void> {
     // Its mine work done (or blocked) and the night not over: back home to
     // bed, not standing about in the mine or by the back door till morning
     // (review). Not while a failed night routine waits for its retry.
-    else if (nightOf === day && nightRetryAt === 0 && !bot.isSleeping) propose(nightTask());
+    else if (nightOf === day && nightRetryAt === 0 && !bot.isSleeping) {
+      bedTonight = day;
+      propose(nightTask());
+    }
     return;
   }
   const next = nextMilestone(MILESTONES, isBlocked);

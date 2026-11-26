@@ -77,7 +77,7 @@ const FOOD_STOCK = 20; // food points carried: a couple of days' eating
 // Hunting for the stock: only animals this close (no long trips after them)
 const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
-const STARVING_FOOD = 6;
+export const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
 const foodTarget = (): number => (reachedAt()["food"] ? FOOD_STOCK / 2 : FOOD_STOCK);
@@ -142,7 +142,7 @@ const hasRawFood = (): boolean => bot.inventory.items().some((i) => RAW_FOOD.has
 const READY_FOOD = ["cooked_beef", "cooked_porkchop", "cooked_mutton", "golden_carrot", "cooked_salmon", "cooked_chicken", "baked_potato", "cooked_rabbit", "bread", "cooked_cod", "pumpkin_pie", "apple", "carrot", "melon_slice", "sweet_berries"];
 
 /** Ready food from its own chests near home, then raw food to cook, until the stock is full. */
-async function foodFromChests(): Promise<void> {
+export async function foodFromChests(): Promise<void> {
   const { storedNear, takeItems } = await import("../actions/storage");
   const foods = (bot.registry.foodsByName ?? {}) as Record<string, { foodPoints?: number }>;
   for (const name of [...READY_FOOD, ...RAW_FOOD]) {
@@ -330,7 +330,13 @@ export const MILESTONES: Milestone[] = [
     requires: ["mine"],
     // Torches and smelting use it up: once found, only below 4 does it go back for more
     done: () => carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough),
-    achieve: () => branchMine([COAL, IRON]),
+    // Coal put away at home first, the mine only if that's not enough (review)
+    achieve: async () => {
+      const short = (reachedAt()["coal"] ? 4 : COAL.enough) - carriedOf(COAL.counts);
+      const { storedNear, takeItems } = await import("../actions/storage");
+      if (short > 0 && storedNear("coal", 32) > 0) await takeItems([{ name: "coal", count: Math.max(short, COAL.enough - carriedOf(COAL.counts)) }], true);
+      return carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough) ? ok() : branchMine([COAL, IRON]);
+    },
   },
   {
     id: "torches",
@@ -596,6 +602,11 @@ async function makeFromIron(things: Array<[string, number]>): Promise<ActionResu
       if (short > 0 && storedNear(name, 32) > 0) await takeItems([{ name, count: short }], true);
     }
   }
+  // ... and in its home furnace (the workshop may be smelting it, review)
+  if (have() < ingots) {
+    const { takeFromHomeFurnace } = await import("./workshop");
+    await takeFromHomeFurnace(["iron_ingot", "raw_iron"]);
+  }
   if (have() < ingots) {
     const mined = await branchMine([{ item: "raw_iron", enough: ingots - carriedOf(["iron_ingot"]), counts: ["raw_iron"] }], 20);
     if (!mined.ok && have() < ingots) return mined;
@@ -667,13 +678,14 @@ export function heldBy(m: Milestone, list: Milestone[] = MILESTONES, here: (m: M
 }
 
 /**
- * True when its first day is done: every Tier 1 milestone done now, or the
- * first day reached once (then food or tools running low doesn't count:
- * review, the day planner went off whenever food dropped).
+ * True when its first day is done: every Tier 1 milestone done now, a
+ * supply it has had before counting as done (food or tools running low
+ * don't count: review, the day planner went off whenever food dropped).
  */
 export function tier1Reached(list: Milestone[] = MILESTONES): boolean {
-  if (list === MILESTONES && reachedAt()["tier1"]) return true;
-  return list.filter((m) => m.tier === 1).every((m) => m.done());
+  // A supply it has had counts; a broken shelter, a lost bed or chests don't
+  // (review: once reached, the day plan ran on with its home in pieces)
+  return list.filter((m) => m.tier === 1).every((m) => m.done() || (m.supply && reachedAt()[m.id]));
 }
 
 // --- First reached (for the announcement, and the diary later) -------------------

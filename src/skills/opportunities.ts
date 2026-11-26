@@ -65,7 +65,7 @@ function allowedNow(ore: Block): boolean {
   return oreAllowedNow({
     day: daylight(),
     botUnderRoof: underRoof(feet, (p) => bot.blockAt(p)),
-    oreUnderSky: skyAbove(ore.position.offset(0, 1, 0), look, 64),
+    oreUnderSky: skyAbove(ore.position, look, 64),
     botY: feet.y,
     oreY: ore.position.y,
   });

@@ -185,8 +185,11 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
     // raw iron "had no room", and it walked off at night to make a furnace
     // in the mine
     if (window.outputItem()) await windowStep("taking out what was done", () => window.takeOutput());
+    // (the workshop's batch, raw iron or sand, goes back in once the food is
+    // cooked: taken out for good, load-and-leave never finished, review)
     const stale = window.inputItem();
-    if (stale && !foods.includes(stale.name)) await windowStep(`taking out the ${stale.name.replace(/_/g, " ")} left in it`, () => window.takeInput());
+    const putBack = stale && !foods.includes(stale.name) ? { name: stale.name, count: stale.count } : null;
+    if (putBack) await windowStep(`taking out the ${putBack.name.replace(/_/g, " ")} left in it`, () => window.takeInput());
     for (const food of foods) {
       if (cooked >= limit || isCommandCancelled()) break;
       const n = Math.min(count(food), limit - cooked, 64);
@@ -229,6 +232,11 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
       }
       if (window.inputItem()) await windowStep("taking leftovers back", () => window.takeInput()); // leftovers back
       cooked += done;
+    }
+    // The batch it found in the furnace goes back to smelting
+    if (putBack && !window.inputItem()) {
+      const id = bot.registry.itemsByName[putBack.name]?.id;
+      if (id !== undefined && count(putBack.name) > 0) await windowStep(`putting the ${putBack.name.replace(/_/g, " ")} back in`, () => window.putInput(id, null, Math.min(count(putBack.name), putBack.count)));
     }
   } finally {
     closeWindow(window);

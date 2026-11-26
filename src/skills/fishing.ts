@@ -72,7 +72,7 @@ function fishingSpot(): { water: Block; stand: P3 } | null {
     const b = bot.blockAt(p);
     if (!b || Number(b.getProperties()["level"] ?? 0) !== 0) continue;
     // Open water (a pond, a river), not a cave's: the sky over it
-    if (!skyAbove(p.offset(0, 1, 0), (x, y, z) => bot.blockAt(new Vec3(x, y, z)), 32)) continue;
+    if (!skyAbove(p, (x, y, z) => bot.blockAt(new Vec3(x, y, z)), 32)) continue;
     // And water out from the shore for the float to land in
     if (bot.blockAt(p.offset(0, -1, 0))?.name !== "water") continue;
     const stand = shoreFor(p, look);
@@ -110,7 +110,9 @@ export async function goFishing(): Promise<number> {
     await lookAt(spot.water.position.offset(0.5, 1, 0.5));
     casts++;
     const caught = await fishOnce();
-    if (!caught.ok && caught.reason !== "timeout") {
+    // No bite in time, or the cast cancelled (the float reeled in, a reflex
+    // took the hands for a moment): cast again
+    if (!caught.ok && caught.reason !== "timeout" && !/cancel/i.test(caught.detail)) {
       console.log(`Fishing: ${caught.detail}.`);
       break;
     }

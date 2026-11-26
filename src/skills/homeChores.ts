@@ -38,6 +38,8 @@ export async function homeChores(): Promise<ActionResult> {
   const stored = await storeItems("lowValue");
   if (stored?.problem) problems.push(`couldn't put things away (${stored.problem})`);
   if (isCommandCancelled()) return fail("aborted", "stopped");
+  // Its food stock from its chests (cooked first; raw is cooked below), review
+  await (await import("../skills/milestones")).foodFromChests();
 
   // Raw meat in the furnace
   const { cookFood, rawFoodInInventory } = await import("../actions/cooking");

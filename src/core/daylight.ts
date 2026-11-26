@@ -30,7 +30,7 @@ export function daylight(): boolean {
   return t === undefined || !inOverworld() || isDaylight(t);
 }
 
-/** Hostile mobs are out in the open now. */
+/** Hostile mobs are out in the open now (always, in the Nether and the End). */
 export function mobsOut(): boolean {
-  return isMobTime(bot.time?.timeOfDay ?? 0);
+  return !inOverworld() || isMobTime(bot.time?.timeOfDay ?? 0);
 }

@@ -27,6 +27,7 @@ import {
 } from "../managers/persistenceManager";
 import { digDiagonalTunnel, digDoorway, digRoom, tunnelBlocked, type DirectionType } from "./digging";
 import { ensurePickaxe } from "./ensureTools";
+import { setShelterRoomCheck } from "../core/sheltered";
 
 // Helper function to place dirt if there's a hole
 async function fillHole(pos: Vec3) {
@@ -432,6 +433,8 @@ export function inShelterRoom(p: Pos): boolean {
   insideCache = { at: Date.now(), key, inside };
   return inside;
 }
+// The reflexes count it as shut in only while it stands in the room (review)
+setShelterRoomCheck(inShelterRoom);
 
 /** A shell cell that needs building: open, or a tree's leaves or log (one holding up sand or gravel stays). */
 function shellHole(p: Vec3): boolean {
