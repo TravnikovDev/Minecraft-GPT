@@ -19,6 +19,7 @@ import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntac
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, lightUpHome } from "./lighting";
+import { makeFarm, myFarm, tendFarm } from "./farm";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -83,6 +84,8 @@ async function stockFood(): Promise<ActionResult> {
   const { pickBerries } = await import("../commands/StarterKit");
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
+  // Its farm first (owner: hunting isn't sustainable), then berries, then hunting
+  if (foodPoints() < FOOD_STOCK && myFarm()) await tendFarm();
   if (foodPoints() < FOOD_STOCK) await pickBerries();
   if (foodPoints() < FOOD_STOCK) await hunt({ maxDistance: 60, mobType: null, count: 4 });
   // Hunted out around here: go farther and hunt there (a player doesn't wait hungry)
@@ -361,6 +364,16 @@ export const MILESTONES: Milestone[] = [
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
       return ok();
     },
+  },
+  {
+    id: "farm",
+    title: "a farm",
+    tier: 3,
+    requires: ["bucket"],
+    // Owner: hunting isn't a sustainable way to get food; a plot by the
+    // shelter with water in it (so the water bucket comes first). By day
+    done: () => myFarm() !== null,
+    achieve: makeFarm,
   },
   {
     id: "iron_armor",
