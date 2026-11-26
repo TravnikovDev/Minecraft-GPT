@@ -67,6 +67,10 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
   // Only rounds that got nothing count against it: a craft that makes 1 of 6
   // chests at a time is progress (it gave up on the 6th, fresh-world test)
   let lastHave = -1;
+  // Why the last source failed: said instead of a recipe it fell back to
+  // (game test: mining refused, it was hurt, and it said "I don't know how
+  // to get raw iron block")
+  let lastFailure: ActionResult | null = null;
   for (let round = 0, stalled = 0; stalled < MAX_ROUNDS && round < MAX_ROUNDS * 4; round++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     const have = world.have(item);
@@ -103,7 +107,7 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
 
     for (const m of raw) {
       const source = world.sources.find((s) => s.gets(m.name) && !demoted(s, m.name));
-      if (!source) return fail("missing_items", `I don't know how to get ${m.name.replace(/_/g, " ")}`);
+      if (!source) return lastFailure ?? fail("missing_items", `I don't know how to get ${m.name.replace(/_/g, " ")}`);
       for (const need of source.needs?.(m.name, m.count) ?? []) {
         if (world.have(need.item) >= need.count) continue;
         const got = await acquire(need.item, need.count, world, depth + 1);
@@ -116,6 +120,7 @@ export async function acquire(item: string, count: number, world: AcquireWorld, 
       if (result.ok) {
         failsInARow.delete(key);
       } else {
+        lastFailure = result;
         const fails = (failsInARow.get(key) ?? 0) + 1;
         failsInARow.set(key, fails);
         if (fails >= FAILS_BEFORE_DEMOTION) {

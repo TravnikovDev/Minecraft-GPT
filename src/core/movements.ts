@@ -17,6 +17,7 @@
 
 import type { Bot } from "mineflayer";
 import pf from "mineflayer-pathfinder";
+import { Vec3 } from "vec3";
 import { isOwnBlock } from "./scaffold";
 import { forbiddenAt } from "./forbidden";
 
@@ -103,6 +104,22 @@ export function avoidStep(p: { x: number; y: number; z: number }): void {
   if (isOwnPassage(key)) return;
   avoidedSteps.set(key, Date.now() + AVOID_STEP_MS);
 }
+
+// A cell where its head would be under water too: a cost, not a ban (a short
+// swim stays possible), so a dry way round or a dug way is preferred (game
+// test: called to its owner, the shortest way went through a flooded cave
+// under a stone ceiling; it ran out of air and lost 6 health)
+const SUBMERGED_COST = 6;
+const isWet = (b: { name: string; getProperties: () => Record<string, unknown> } | null): boolean =>
+  b !== null && (b.name === "water" || b.name === "bubble_column" || b.getProperties()["waterlogged"] === true);
+
+/** The step cost for cells under water head and feet, for this bot's world. */
+const submergedStep = (bot: Bot) => (block: { position?: { x: number; y: number; z: number } }): number => {
+  const p = block.position;
+  if (!p) return 0;
+  const at = (y: number) => bot.blockAt(new Vec3(p.x, y, p.z)) as { name: string; getProperties: () => Record<string, unknown> } | null;
+  return isWet(at(p.y)) && isWet(at(p.y + 1)) ? SUBMERGED_COST : 0;
+};
 
 function stuckStep(block: { position?: { x: number; y: number; z: number } }): number {
   if (!block.position || avoidedSteps.size === 0) return 0;
@@ -216,7 +233,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   // and building there costs too much to choose (the primitives refuse it anyway)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
     block.position && (forbiddenAt(block.position) || isProtected(block.position)) ? 10_000 : 0;
-  moves.exclusionAreasStep = [stuckStep] as typeof moves.exclusionAreasStep;
+  moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
   moves.exclusionAreasBreak = [keepOut] as typeof moves.exclusionAreasBreak;
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)

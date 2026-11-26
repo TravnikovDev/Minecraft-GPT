@@ -478,6 +478,12 @@ export function hubSteps(level: number): Set<number> {
 }
 
 /** The steps of its mine's stairs still without a stair block (as far as it can see). */
+/** True when the cell holds water (or a waterlogged block). */
+const wet = (p: Vec3): boolean => {
+  const b = bot.blockAt(p);
+  return b !== null && (b.name === "water" || b.name === "bubble_column" || (b.getProperties() as { waterlogged?: boolean }).waterlogged === true);
+};
+
 export function unpavedSteps(): number[] {
   const rec = mineRecord();
   if (!rec?.bottom) return [];
@@ -485,6 +491,9 @@ export function unpavedSteps(): number[] {
     const step = stepAt(rec.start, rec.direction, i);
     const b = bot.blockAt(step);
     if (b === null || b.name.endsWith("_stairs")) return false;
+    // Under water (its flooded bottom): left bare, never dived for (game
+    // test: it went down into the water to pave the last two steps and got stuck)
+    if (wet(step.offset(0, 1, 0)) || wet(step.offset(0, 2, 0))) return false;
     // The bottom step is paved from its forward tunnel: none dug yet (or
     // blocked), nothing to stand on to pave it, so it isn't counted (review:
     // it could never be done, and held the mine stage up)
