@@ -79,6 +79,8 @@ const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
 // Starving with nothing near: how far it may walk for an animal (by day)
 const FAR_HUNT = 96;
+// Out of food (not starving yet): how far it may walk for one it knows of (by day)
+const RESTOCK_HUNT = 64;
 export const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
@@ -162,8 +164,15 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     const { goFishing } = await import("./fishing");
     if ((await goFishing()) > 0) await cookTheMeat(cookFood);
   }
-  // Last: animals close by only (no long walks, no exploring for them)
+  // Last: animals close by (no exploring for them); by day, one it knows of
+  // out under the sky within RESTOCK_HUNT too (game test: pigs 47 blocks off,
+  // the restock hunted only within 32, and it sat with no food, refusing
+  // the mine)
   if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
+  if (short() && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
+    const { knownAnimals } = await import("../actions/hunting");
+    if (knownAnimals().some((p) => p.distance <= RESTOCK_HUNT)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: true });
+  }
   if (hasRawFood()) await cookTheMeat(cookFood);
   return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points ready to eat; nothing more near home today`);
 }
