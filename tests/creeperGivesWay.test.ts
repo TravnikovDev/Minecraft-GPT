@@ -43,3 +43,16 @@ test("a zombie at arm's length: the creeper 9 blocks away waits, the fight comes
 
 // The reflex timer must not outlive this file
 afterAll(() => endConnection());
+
+test("a creeper left be stays left be unless it really comes closer (game test: frozen 12 minutes)", async () => {
+  const { cameCloser } = await import(`${ROOT}/src/actions/creeperReflex.ts`);
+  // Left at 4.1, still 4.1 and in sight: left be
+  expect(cameCloser(4.1, true, 4.1)).toBe(false);
+  // A block nearer, or in fuse range: dealt with
+  expect(cameCloser(2.9, true, 4.1)).toBe(true);
+  expect(cameCloser(5, true, 9)).toBe(true);
+  // Left from farther than 6, now within 6: dealt with
+  expect(cameCloser(5.5, true, 6.4)).toBe(true);
+  // Behind a wall: never
+  expect(cameCloser(2, false, 4.1)).toBe(false);
+});

@@ -112,6 +112,24 @@ export function creeperCounts(distance: number, visible: boolean, sheltered: boo
   return !sheltered && distance <= closeBy;
 }
 
+// Within this, a creeper left be is dealt with whatever (its fuse range)
+const FUSE_RANGE = 3;
+
+/**
+ * True when a creeper it left be (at `leftAt` blocks) has come closer: in
+ * sight and nearer than where it was left by a block, or within 6 when it
+ * was left from farther, or within fuse range. Pure. Game test: a creeper
+ * 4 blocks off, in sight but out of reach, was left be and taken up again
+ * a moment later for 12 minutes ("within 6" was true from the start), and
+ * the bot stood frozen at the bottom of its mine all night.
+ */
+export function cameCloser(d: number, visible: boolean, leftAt: number): boolean {
+  if (!visible) return false;
+  if (d <= FUSE_RANGE) return true;
+  if (d < leftAt - 1) return true;
+  return d <= IGNORED_UNTIL_WITHIN && leftAt > IGNORED_UNTIL_WITHIN;
+}
+
 /** True when an engagement has gone nowhere for `stallMs` (no hit, no closer). Pure. */
 export function engagementStalled(progressAt: number, now: number, stallMs = STALL_MS): boolean {
   return now - progressAt > stallMs;
@@ -170,8 +188,7 @@ async function tick(): Promise<void> {
     // near, it stays left be: noticing it again started the 20 s stall over
     // and over (the shelter wall, game test)
     const ignored = (ignoredUntil.get(e.id) ?? 0) > now;
-    const cameCloser = visible && (d <= IGNORED_UNTIL_WITHIN || d < (ignoredAtDistance.get(e.id) ?? Infinity) - 1);
-    if (ignored && !isFusing(e) && !cameCloser) return false;
+    if (ignored && !isFusing(e) && !cameCloser(d, visible, ignoredAtDistance.get(e.id) ?? Infinity)) return false;
     return creeperCounts(d, visible, shutIn);
   });
   if (seen) {
