@@ -229,7 +229,6 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   if (again) {
     const { clearLastDeath } = await import("./actions/recovery");
     clearLastDeath();
-    reply("I died again going back for my things; I'll leave them and go home.");
   }
   // Living its own life, its milestones get the gear back; otherwise a starter kit
   if (!autonomyOn()) steps.push({ command: BotCommands.StarterKit, args: {} });
@@ -239,7 +238,11 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   // A shelter and a bed of its own: home to its chores, like a player, not
   // back to the owner (owner: put goods away, cook, make pickaxes)
   const { hasHome } = await import("./commands/HomeChores");
-  if (await hasHome()) {
+  const home = await hasHome();
+  // Said as it is: it may not have been going back for them, and with no bed
+  // of its own it goes to the owner, not home (game test)
+  if (again) reply(`I died again soon after the last time; I'll leave my things there and ${home ? "go home" : ownerOnline ? "come to you" : "stay safe"}.`);
+  if (home) {
     steps.push({ command: BotCommands.HomeChores, args: {} });
   } else if (ownerOnline) {
     steps.push({ command: BotCommands.GoToPlayer, args: { player_name: OWNER_USERNAME, closeness: 3 } });

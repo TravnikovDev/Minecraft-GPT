@@ -25,11 +25,18 @@ const HIT_COOLDOWN_MS = 650;
 const CREEPER_FIRST_WITHIN = 5;
 const BRAWL_RANGE = 4;
 const GIVE_WAY_MS = 4_000;
+// A creeper it was dealing with stays its target this long after it last saw
+// it: in water the bot bobs and its line of sight flickers every tick, and
+// each flicker handed the legs back and forth (game test: 700 on/off switches
+// in two minutes; every walk home failed with "the goal was changed")
+const KEEP_SEEN_MS = 2_000;
 
 let active = false;
 let busy = false;
 let lastHitAt = 0;
 let givingWayUntil = 0;
+let trackedId: number | null = null;
+let trackedSeenAt = 0;
 
 /** True while the bot is dealing with a creeper (other code should wait). */
 export function isCreeperReflexActive(): boolean {
@@ -64,7 +71,16 @@ async function faceAwayFrom(creeper: Entity): Promise<void> {
   await lookToward(Math.atan2(-dx, -dz), 0);
 }
 
+/**
+ * True when the creeper it was dealing with still counts though it's out of
+ * sight right now: seen under `keepMs` ago and still within `maxDistance`. Pure.
+ */
+export function stillTracked(seenAt: number, now: number, distance: number, maxDistance: number, keepMs = KEEP_SEEN_MS): boolean {
+  return now - seenAt < keepMs && distance <= maxDistance;
+}
+
 function finish(reason = "clear"): void {
+  trackedId = null;
   if (!active) return;
   active = false;
   setOnly({});
@@ -90,14 +106,23 @@ async function tick(): Promise<void> {
   // Only a creeper it can see (or one right by it): through ground it can't
   // reach the bot, and going for it digs the bot out of its shelter
   const eyes = bot.entity.position.offset(0, 1.62, 0);
-  const creeper = bot.nearestEntity((e) => {
+  const range = active ? SAFE_DISTANCE + 4 : radius;
+  const seen = bot.nearestEntity((e) => {
     if (e.name !== "creeper") return false;
     const d = e.position.distanceTo(bot.entity.position);
-    if (d > (active ? SAFE_DISTANCE + 4 : radius)) return false;
+    if (d > range) return false;
     if (d <= CREEPER_FIRST_WITHIN) return true;
     if (isSheltered()) return false;
     return canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
   });
+  if (seen) {
+    trackedId = seen.id;
+    trackedSeenAt = Date.now();
+  }
+  // Out of sight for a moment: the one it was dealing with still counts
+  const kept = !seen && active && trackedId !== null ? bot.entities[trackedId] : undefined;
+  const creeper =
+    seen ?? (kept && kept.isValid !== false && stillTracked(trackedSeenAt, Date.now(), kept.position.distanceTo(bot.entity.position), range) ? kept : null);
   if (!creeper) {
     finish();
     return;
@@ -161,6 +186,8 @@ export function registerCreeperReflex(): void {
   busy = false;
   lastHitAt = 0;
   givingWayUntil = 0;
+  trackedId = null;
+  trackedSeenAt = 0;
   // Its moves run as the creeper reflex: they never wait for the task it paused
   const timer = setInterval(() => void asReflex("creeper", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));

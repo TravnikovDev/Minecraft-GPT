@@ -27,6 +27,7 @@ const WATER_BLOCKS = new Set(["water", "bubble_column", "kelp", "kelp_plant", "s
 let active = false;
 let floating = false;
 let underwaterSince: number | null = null;
+let lastWayLogAt = 0;
 
 /** The bot's own air in ticks (300 when full or unknown). */
 function ownAir(): number {
@@ -66,6 +67,69 @@ export function isDropAhead(column: CellLook[]): boolean {
     if (WATER_BLOCKS.has(b.name) && (b.level ?? 0) === 0 && column.slice(i + 1).some((c) => c?.boundingBox === "block")) return false;
   }
   return true;
+}
+
+/** A cell as the way-to-air search sees it (null: not loaded). */
+export type WaterCell = { water: boolean; open: boolean; level: number } | null;
+type P = { x: number; y: number; z: number };
+
+/**
+ * The way to air: a search through still water from the bot's feet cell for
+ * the nearest spot where it can breathe (its body fits, the cell over its head
+ * is open air, and it's water or stands on something). Returns the path from
+ * the start (inclusive), or null when there's none within `maxCells`. The
+ * bot is two cells tall, so every cell on the way needs room above it too.
+ * Flowing water is left out: a waterfall carries it off (owner's game).
+ * Pure over `look`.
+ *
+ * Game test: under a dirt ceiling in a two-high pocket the reflex held
+ * "up" and pushed forward the way it happened to face, into a wall, for 19
+ * seconds, and drowned with air a few blocks to the side.
+ */
+export function wayToAir(start: P, look: (x: number, y: number, z: number) => WaterCell, maxCells = 600): P[] | null {
+  const key = (p: P): string => `${p.x},${p.y},${p.z}`;
+  const fits = (p: P): boolean => {
+    const feet = look(p.x, p.y, p.z);
+    const head = look(p.x, p.y + 1, p.z);
+    const still = (c: WaterCell): boolean => c !== null && (c.open || (c.water && c.level === 0));
+    return still(feet) && still(head);
+  };
+  const breathes = (p: P): boolean => {
+    const head = look(p.x, p.y + 1, p.z);
+    if (!head || !head.open) return false;
+    const feet = look(p.x, p.y, p.z);
+    if (feet?.water) return true;
+    const below = look(p.x, p.y - 1, p.z);
+    return below !== null && !below.open; // air: only standing on something (never over a drop)
+  };
+  const from = new Map<string, P | null>([[key(start), null]]);
+  const queue: P[] = [start];
+  for (let i = 0; i < queue.length && from.size <= maxCells; i++) {
+    const p = queue[i]!;
+    if (breathes(p)) {
+      const path: P[] = [];
+      for (let c: P | null = p; c; c = from.get(key(c)) ?? null) path.unshift(c);
+      return path;
+    }
+    // Up first: straight up is the usual way out
+    for (const [dx, dy, dz] of [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]] as const) {
+      const n = { x: p.x + dx, y: p.y + dy, z: p.z + dz };
+      if (from.has(key(n)) || !fits(n)) continue;
+      from.set(key(n), p);
+      queue.push(n);
+    }
+  }
+  return null;
+}
+
+/** The search's view of a cell in the live world. */
+function waterCellAt(x: number, y: number, z: number): WaterCell {
+  const b = bot.blockAt(new Vec3(x, y, z));
+  if (!b) return null;
+  const props = b.getProperties() as { level?: number | string; waterlogged?: boolean };
+  const water = WATER_BLOCKS.has(b.name) || props.waterlogged === true;
+  const level = b.name === "water" ? Number(props.level ?? 0) : 0;
+  return { water, open: !water && b.boundingBox === "empty" && b.name !== "lava", level };
 }
 
 /** The drop check at the spot 0.8 ahead of where it faces. */
@@ -130,12 +194,29 @@ function tick(): void {
     finish();
     return;
   }
-  // Swim up: jump is "swim up" in water; looking up and pushing forward
-  // slides the bot out from under overhangs and onto the shore
-  // (never off a drop: only up, there)
-  void lookToward(bot.entity.yaw, Math.PI / 4);
-  setControl("jump", true);
-  setControl("forward", !dropAhead());
+  // Swim the way to air: jump is "swim up" in water; facing the next cell to
+  // the side and pushing forward takes it out from under a ceiling. With no
+  // way found, up and forward as before (never off a drop)
+  const feet = bot.entity.position.floored();
+  const path = wayToAir({ x: feet.x, y: feet.y, z: feet.z }, waterCellAt);
+  const aside = path?.find((c) => c.x !== feet.x || c.z !== feet.z);
+  const next = path?.[1];
+  if (aside) {
+    const dx = aside.x + 0.5 - bot.entity.position.x;
+    const dz = aside.z + 0.5 - bot.entity.position.z;
+    void lookToward(Math.atan2(-dx, -dz), 0);
+    setControl("jump", !next || next.y >= feet.y);
+    setControl("forward", underwater || !dropAhead());
+  } else {
+    void lookToward(bot.entity.yaw, Math.PI / 4);
+    setControl("jump", true);
+    setControl("forward", !path && !dropAhead());
+  }
+  if (path && path.length > 1 && aside && Date.now() - lastWayLogAt > 3_000) {
+    lastWayLogAt = Date.now();
+    const end = path[path.length - 1]!;
+    console.log(`Drowning reflex: a ceiling over me; swimming to air at (${end.x}, ${end.y}, ${end.z}), ${path.length - 1} cells.`);
+  }
 }
 
 /** Starts the reflex for the current bot instance. */
