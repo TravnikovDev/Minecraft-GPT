@@ -364,3 +364,23 @@ test("once reached, a supply set aside lets the next tier go on", async () => {
   expect(M.nextMilestone(list)?.id).toBe("food_y"); // its turn: restocked first
   expect(M.nextMilestone(list, (id: string) => id === "food_y")?.id).toBe("mine_y"); // failing: the day goes on
 });
+
+test("the safety order holds for the day plan: what holds a milestone back (review)", () => {
+  done.clear();
+  const all = () => true;
+  const list = [
+    { ...fakeMilestone("shield_z"), tier: 3 },
+    { ...fakeMilestone("lit_z"), tier: 3, optional: true },
+    { ...fakeMilestone("deep_z"), tier: 3, requires: ["shield_z"] },
+    { ...fakeMilestone("nether_z"), tier: 4 },
+  ];
+  // Diamonds-like: its safety items first; the Nether-like: the whole tier before it
+  expect(M.heldBy(list[2], list, all)).toEqual(["shield_z"]);
+  expect(M.heldBy(list[3], list, all)).toEqual(["shield_z", "deep_z"]);
+  done.add("shield_z");
+  done.add("deep_z");
+  // An optional one never holds anything back
+  expect(M.heldBy(list[3], list, all)).toEqual([]);
+  // The real diamonds wait for the shield, the bucket and the armour
+  expect(REAL.find((m: { id: string }) => m.id === "diamonds")?.requires).toEqual(["iron_pickaxe", "shield", "bucket", "iron_armor"]);
+});

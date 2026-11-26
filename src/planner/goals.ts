@@ -10,7 +10,7 @@ import { z } from "zod";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
-import { MILESTONES, milestoneHere } from "../skills/milestones";
+import { MILESTONES, heldBy, milestoneHere } from "../skills/milestones";
 import { shelter, TIER, toolTier } from "../skills/capabilities";
 import { liveWorld } from "../skills/world";
 import { forbiddenAt } from "../core/forbidden";
@@ -47,7 +47,8 @@ export function openMilestones(): string[] {
   const here = MILESTONES.filter(milestoneHere);
   const done = new Set(here.filter((m) => m.done()).map((m) => m.id));
   const doneAnywhere = (id: string): boolean => done.has(id) || (MILESTONES.find((m) => m.id === id)?.dimension === "any" ? false : !here.some((m) => m.id === id));
-  return here.filter((m) => !done.has(m.id) && (m.requires ?? []).every(doneAnywhere)).map((m) => m.id);
+  // ... and its tier open: the safety order holds for the plan too (review)
+  return here.filter((m) => !done.has(m.id) && (m.requires ?? []).every(doneAnywhere) && heldBy(m).length === 0).map((m) => m.id);
 }
 
 /**
@@ -69,6 +70,17 @@ function craftable(item: string, count: number): Feasible {
 const MINEABLE = ["coal", "raw_iron", "diamond", "cobblestone"] as const;
 const PICKAXE_FOR: Record<string, number> = { coal: TIER.stone, raw_iron: TIER.stone, diamond: TIER.iron, cobblestone: TIER.wooden };
 
+/**
+ * What holds a trip down for `item` back: diamonds are deep (lava, more
+ * mobs), so the diamonds milestone's safety order holds for a plain trip
+ * down too (review). Empty for the rest.
+ */
+function heldFor(item: string): string[] {
+  if (item !== "diamond") return [];
+  const diamonds = MILESTONES.find((m) => m.id === "diamonds");
+  return diamonds ? heldBy(diamonds) : [];
+}
+
 export const GOALS: Goal[] = [
   {
     name: "reachMilestone",
@@ -79,7 +91,11 @@ export const GOALS: Goal[] = [
       if (!m) return no(`no milestone "${String(a["milestone"])}"`);
       if (m.done()) return no(`${m.title} is done already`);
       const missing = (m.requires ?? []).filter((r) => !MILESTONES.find((x) => x.id === r)?.done());
-      return missing.length ? no(`${m.title} needs ${missing.join(", ")} first`) : yes;
+      if (missing.length) return no(`${m.title} needs ${missing.join(", ")} first`);
+      // The safety order: an earlier tier's milestones first (a shield, a
+      // bucket and armour before diamonds or the Nether, review)
+      const held = heldBy(m);
+      return held.length ? no(`${m.title} waits for ${held.map(words).join(", ")} first`) : yes;
     },
     menu: () => `open milestones now: ${openMilestones().join(", ") || "none (all done)"}`,
     run: async (a) => {
@@ -139,11 +155,12 @@ export const GOALS: Goal[] = [
       const item = String(a["item"]);
       const need = PICKAXE_FOR[item] ?? TIER.stone;
       if (toolTier("pickaxe") < need) return no(`${words(item)} needs a ${need >= TIER.iron ? "iron" : need >= TIER.stone ? "stone" : "wooden"} pickaxe`);
-      return yes;
+      const held = heldFor(item);
+      return held.length ? no(`${words(item)} waits for ${held.map(words).join(", ")} first`) : yes;
     },
     menu: () => {
       const tier = toolTier("pickaxe");
-      const can = MINEABLE.filter((i) => tier >= (PICKAXE_FOR[i] ?? TIER.stone));
+      const can = MINEABLE.filter((i) => tier >= (PICKAXE_FOR[i] ?? TIER.stone) && heldFor(i).length === 0);
       return can.length ? `possible for: ${can.join(", ")}` : "not yet: no pickaxe";
     },
     // The plan's count is what it should carry, not that many more (game

@@ -492,7 +492,9 @@ export const MILESTONES: Milestone[] = [
     id: "diamonds",
     title: "diamonds",
     tier: 3,
-    requires: ["iron_pickaxe"],
+    // Deep down there's lava and more mobs: a shield, a water bucket and iron
+    // armour first (review: the plan could send it after diamonds without them)
+    requires: ["iron_pickaxe", "shield", "bucket", "iron_armor"],
     // Deep in the mine: its hubs go 20 steps deeper each time all three tunnels are done
     done: () => carriedOf(["diamond"]) >= DIAMONDS || toolTier("pickaxe") >= TIER.diamond,
     achieve: () => branchMine([{ item: "diamond", enough: DIAMONDS, counts: ["diamond"] }], 20),
@@ -608,6 +610,19 @@ export function nextMilestone(list: Milestone[], blocked: (id: string) => boolea
     return null;
   }
   return null;
+}
+
+/**
+ * What holds `m` back in the safety order: what it requires that isn't done,
+ * and the milestones of an earlier tier still to do here (not optional, not
+ * a supply it has had before), like the tier gate in `nextMilestone`. Empty when its tier is open. The day plan
+ * goes by it too (review: a plan step could send it after diamonds or to the
+ * Nether before its shield, bucket and armour).
+ */
+export function heldBy(m: Milestone, list: Milestone[] = MILESTONES, here: (m: Milestone) => boolean = milestoneHere): string[] {
+  const needs = (m.requires ?? []).filter((id) => list.find((x) => x.id === id)?.done() === false);
+  const earlier = list.filter((x) => x.tier < m.tier && here(x) && !x.done() && !x.optional && !(x.supply && reachedAt()[x.id])).map((x) => x.id);
+  return [...new Set([...needs, ...earlier])];
 }
 
 /**
