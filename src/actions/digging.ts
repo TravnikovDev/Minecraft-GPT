@@ -440,7 +440,8 @@ export async function digStraightTunnel(
   direction: "north" | "south" | "east" | "west",
   length: number,
   startPosition: Vec3,
-  width = 3
+  width = 3,
+  height = 2
 ): Promise<boolean> {
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
@@ -452,13 +453,13 @@ export async function digStraightTunnel(
   const keepClear = (p: Vec3): boolean => {
     const along = (p.x - startPosition.x) * offsetX + (p.z - startPosition.z) * offsetZ;
     const across = (p.x - startPosition.x) * side.x + (p.z - startPosition.z) * side.z;
-    return along >= 1 && along <= length && across >= -half && across <= width - 1 - half && p.y >= startPosition.y && p.y <= startPosition.y + 1;
+    return along >= 1 && along <= length && across >= -half && across <= width - 1 - half && p.y >= startPosition.y && p.y <= startPosition.y + height - 1;
   };
 
   for (let i = 1; i <= length; i++) {
     const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
-    // Dig out a 2-high tunnel, `width` wide
-    for (let y = 0; y < 2; y++) {
+    // Dig out a tunnel `height` high (2: a walkway; 3: a pokehole), `width` wide
+    for (let y = 0; y < height; y++) {
       for (let x = -half; x <= width - 1 - half; x++) {
         const blockPos = position.offset(side.x * x, y, side.z * x);
         await plugLiquids(blockPos);

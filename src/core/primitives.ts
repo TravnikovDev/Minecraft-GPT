@@ -978,6 +978,15 @@ async function pillarUpNow(itemName: string): Promise<ActionResult> {
   return knownBlock(feet)?.boundingBox === "block" ? ok() : fail("refused", `the ${itemName} didn't go in under me`);
 }
 
+/** Writes `text` on the sign at `pos` (lines split by newlines). */
+export async function writeSign(pos: Pos, text: string): Promise<ActionResult> {
+  const block = knownBlock(new Vec3(pos.x, pos.y, pos.z));
+  if (!block || !/_sign$/.test(block.name)) return fail("not_found", `no sign at ${floor(pos)}`);
+  return guarded("writing a sign", async () => {
+    bot.updateSign(block, text);
+  }, { timeoutMs: 3_000 });
+}
+
 /** pillarUp, waiting its turn while a reflex or a borrower has the body (core/leases). */
 export function pillarUp(itemName: string): Promise<ActionResult> {
   return using(["hands", "movement"], () => pillarUpNow(itemName));

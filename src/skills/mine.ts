@@ -26,13 +26,14 @@ import { foodPoints, shelter, TIER, toolTier } from "./capabilities";
 export const MINE_DEPTH = 10;
 const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
 export const ARM_LENGTH = 50; // each tunnel from a hub
-export const LEVEL_STEP = 20; // stairs further down to the next hub
+// Floors (owner: every 10 blocks down, not 20)
+export const LEVEL_STEP = 10; // stairs further down to the next floor
 const CHUNK = 5; // dug at a time, then the ores it uncovered
 // Down to just over bedrock (owner: dig down until the rock that can't be
 // mined): no hub deeper than this, and never more than this many levels
 // (owner: -54; below that the caves are mostly lava)
 const MIN_HUB_Y = -54;
-const MAX_LEVELS = 10;
+const MAX_LEVELS = 16;
 const ORE_REACH = 6; // ores this close to a fresh tunnel get mined
 const MINE_NAME = "shelter mine";
 
@@ -48,11 +49,12 @@ export function mineBottom(exit: Pos, dir: DirectionType): Vec3 {
 }
 
 /** The three tunnels from a hub, in the order they're dug. */
-export const ARMS = ["forward", "right", "left"] as const;
+// Four sleeves from each floor (owner): forward, right, left and back
+export const ARMS = ["forward", "right", "left", "back"] as const;
 export type ArmName = (typeof ARMS)[number];
 export type Arm = { dug: number; blocked: boolean };
 export type Arms = Record<ArmName, Arm>;
-const freshArms = (): Arms => ({ forward: { dug: 0, blocked: false }, right: { dug: 0, blocked: false }, left: { dug: 0, blocked: false } });
+const freshArms = (): Arms => ({ forward: { dug: 0, blocked: false }, right: { dug: 0, blocked: false }, left: { dug: 0, blocked: false }, back: { dug: 0, blocked: false } });
 
 /** The tunnel to dig next at this hub (forward, then right, then left), or null when all three are done. Pure. */
 export function nextArm(arms: Arms): ArmName | null {
@@ -61,7 +63,46 @@ export function nextArm(arms: Arms): ArmName | null {
 
 /** Which way an arm goes from the hub. Pure. */
 export function armDirection(arm: ArmName, dir: DirectionType): DirectionType {
-  return arm === "forward" ? dir : arm === "right" ? RIGHT[dir] : LEFT[dir];
+  return arm === "forward" ? dir : arm === "right" ? RIGHT[dir] : arm === "left" ? LEFT[dir] : RIGHT[RIGHT[dir]];
+}
+
+// Pokeholes off each sleeve (owner): every 4 blocks, 1 wide, 3 high, 5 long
+export const POKE_EVERY = 4;
+export const POKE_LENGTH = 5;
+export const POKE_HEIGHT = 3;
+// The floor's room: 3 by 3 round the stairs, 3 high
+export const ROOM_HEIGHT = 3;
+
+/**
+ * Where a sleeve leaves a floor's room, across the stairs' way: left and
+ * right from the middle; forward and back from the left column on odd
+ * floors (1st, 3rd...) and the right column on even ones, so the stairs'
+ * own column stays clear (owner). -1 left, 0 middle, 1 right. Pure.
+ */
+export function sleeveColumn(arm: ArmName, level: number): number {
+  if (arm === "left" || arm === "right") return 0;
+  return level % 2 === 0 ? -1 : 1;
+}
+
+/**
+ * The cells of a sleeve's pokeholes from its cell `k` (k a multiple of
+ * POKE_EVERY): both sides for left and right, only the outer side for
+ * forward and back (the inner side runs over the stairs). Columns as unit
+ * steps across the sleeve: +1 its right, -1 its left. Pure.
+ */
+export function pokeSides(arm: ArmName, level: number): Array<1 | -1> {
+  if (arm === "left" || arm === "right") return [1, -1];
+  const col = sleeveColumn(arm, level);
+  // Forward: its right is the stairs' right; back: its right is the stairs' left
+  const outer = arm === "forward" ? col : -col;
+  return [outer as 1 | -1];
+}
+
+/** "1st floor", "2nd floor"... for a level (0 is the 1st). Pure. */
+export function floorName(level: number): string {
+  const n = level + 1;
+  const tail = n % 100 >= 11 && n % 100 <= 13 ? "th" : n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th";
+  return `${n}${tail} floor`;
 }
 
 /** The stair step a hub sits on: the first at the bottom of the stairs, each next one LEVEL_STEP deeper. Pure. */
@@ -76,7 +117,7 @@ const STAIRS = MINE_DEPTH + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
-type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean; sidesDone: number };
+type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean; sidesDone: number; roomsDone: number };
 
 /**
  * True for a block that has fallen into (or grown into) a step's walking
@@ -296,8 +337,12 @@ export function mineArmStarts(): Vec3[] {
   const out: Vec3[] = [];
   for (let level = 0; level <= rec.level; level++) {
     const hub = stepAt(rec.start, rec.direction, hubStep(level), rec.turns);
-    for (const arm of ["forward", "right", "left"] as const) {
-      const cell = hub.plus(STEP[armDirection(arm, dirAt(rec.direction, hubStep(level), rec.turns))]);
+    const arrive = dirAt(rec.direction, hubStep(level), rec.turns);
+    const R = STEP[RIGHT[arrive]];
+    // The floor's room and where its four sleeves leave it
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const dy of [0, 1]) out.push(hub.plus(R.scaled(a)).plus(STEP[arrive].scaled(b)).offset(0, dy, 0));
+    for (const arm of ARMS) {
+      const cell = hub.plus(R.scaled(sleeveColumn(arm, level))).plus(STEP[armDirection(arm, arrive)].scaled(2));
       out.push(cell, cell.offset(0, 1, 0));
     }
   }
@@ -309,7 +354,7 @@ function mineRecord(): MineRecord | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
   if (!mine) return null;
-  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number };
   if (!d.direction) return null;
   // Older records (one dig of steps 0..10, saved when done) are finished
   const stairs = d.stairs ?? (d.depth === MINE_DEPTH ? STAIRS : 0);
@@ -323,13 +368,14 @@ function mineRecord(): MineRecord | null {
     level: d.level ?? 0,
     // An older mine (main tunnel with side branches): its main tunnel is the
     // start of the forward tunnel
-    arms: d.arms ?? { ...freshArms(), forward: { dug: Math.min(ARM_LENGTH, (d.branches ?? 0) * BRANCH_EVERY), blocked: false } },
+    arms: d.arms ? { ...freshArms(), ...d.arms } : { ...freshArms(), forward: { dug: Math.min(ARM_LENGTH, (d.branches ?? 0) * BRANCH_EVERY), blocked: false } },
     deepest: d.deepest ?? false,
     turns: d.turns ?? [],
     tried: d.tried ?? {},
     seals: d.seals ?? [],
     exhausted: d.exhausted ?? false,
     sidesDone: d.sidesDone ?? 0,
+    roomsDone: d.roomsDone ?? -1,
   };
 }
 
@@ -382,11 +428,32 @@ export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, l
   for (let l = 0; l <= level; l++) {
     const h = hubStep(l);
     if (h >= stairs) break;
-    const hub = stepAt(start, dir, h, turns);
-    const arrive = dirAt(dir, h, turns);
-    for (const arm of ARMS) {
-      const way = STEP[armDirection(arm, arrive)];
-      for (let k = 1; k <= ARM_LENGTH; k++) for (const dy of [0, 1]) out.add(hub.plus(way.scaled(k)).offset(0, dy, 0).toString());
+    for (const c of floorCells(stepAt(start, dir, h, turns), dirAt(dir, h, turns), l)) out.add(c.toString());
+  }
+  return out;
+}
+
+/**
+ * Every open cell of a floor (owner's layout): its 3 by 3 room, 3 high, its
+ * four sleeves (2 high, ARM_LENGTH long) and their pokeholes (1 wide,
+ * POKE_HEIGHT high, POKE_LENGTH long, every POKE_EVERY blocks). Pure.
+ */
+export function floorCells(hub: Vec3, arrive: DirectionType, level: number): Vec3[] {
+  const out: Vec3[] = [];
+  const R = STEP[RIGHT[arrive]];
+  const F = STEP[arrive];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let dy = 0; dy < ROOM_HEIGHT; dy++) out.push(hub.plus(R.scaled(a)).plus(F.scaled(b)).offset(0, dy, 0));
+  for (const arm of ARMS) {
+    const way = STEP[armDirection(arm, arrive)];
+    const across = STEP[RIGHT[armDirection(arm, arrive)]];
+    const base = hub.plus(R.scaled(sleeveColumn(arm, level)));
+    for (let k = 1; k <= ARM_LENGTH; k++) {
+      const cell = base.plus(way.scaled(k));
+      out.push(cell, cell.offset(0, 1, 0));
+      if (k % POKE_EVERY !== 0) continue;
+      for (const side of pokeSides(arm, level)) {
+        for (let p = 1; p <= POKE_LENGTH; p++) for (let dy = 0; dy < POKE_HEIGHT; dy++) out.push(cell.plus(across.scaled(side * p)).offset(0, dy, 0));
+      }
     }
   }
   return out;
@@ -486,7 +553,7 @@ export async function lookAfterStairs(): Promise<void> {
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
-async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number }): Promise<void> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
   const rec0 = mineRecord();
   const keep = {
@@ -497,6 +564,7 @@ async function saveMine(start: Pos, direction: DirectionType, stairs: number, br
     seals: levels?.seals ?? rec0?.seals ?? [],
     exhausted: levels?.exhausted ?? rec0?.exhausted ?? false,
     sidesDone: levels?.sidesDone ?? rec0?.sidesDone ?? 0,
+    roomsDone: levels?.roomsDone ?? rec0?.roomsDone ?? -1,
   };
   await addPlace({
     kind: "mine",
@@ -922,9 +990,19 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     }
     // Down to where this tunnel ends now, then on a few blocks
     const hub = stepAt(start, dir, hubStep(level), rec.turns);
-    // The hub's tunnels go by the way its stairs came in
-    const way = armDirection(arm, dirAt(dir, hubStep(level), rec.turns));
-    const end = hub.plus(STEP[way].scaled(arms[arm].dug));
+    const arrive = dirAt(dir, hubStep(level), rec.turns);
+    // The floor's room and its sign first (owner)
+    const recNow = mineRecord() ?? rec;
+    if (recNow.roomsDone < level) {
+      await digFloorRoom(hub, arrive, level);
+      if (isCommandCancelled()) return fail("aborted", "stopped");
+      await saveMine(start, dir, Math.max(recNow.stairs, hubStep(level) + 1), recNow.branches, recNow.bottom, { level, arms, deepest: recNow.deepest, roomsDone: level });
+    }
+    // The floor's sleeves go by the way its stairs came in; forward and back
+    // leave from a side column, alternating floor by floor (owner)
+    const way = armDirection(arm, arrive);
+    const base = hub.plus(STEP[RIGHT[arrive]].scaled(sleeveColumn(arm, level)));
+    const end = base.plus(STEP[way].scaled(arms[arm].dug));
     const there = await goToStep(end);
     if (!there.ok) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
@@ -945,6 +1023,19 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const length = Math.min(CHUNK, ARM_LENGTH - arms[arm].dug);
     const dug = await digStraightTunnel(way, length, end, 1);
     const stop = dug ? null : tunnelStopReason();
+    // Pokeholes off the stretch just dug: 1 wide, 3 high, 5 long, every 4 (owner)
+    if (dug) {
+      for (let k = arms[arm].dug + 1; k <= arms[arm].dug + length; k++) {
+        if (k % POKE_EVERY !== 0 || isCommandCancelled()) continue;
+        const cell = base.plus(STEP[way].scaled(k));
+        for (const side of pokeSides(arm, level)) {
+          const across = side === 1 ? RIGHT[way] : LEFT[way];
+          if (!(await goToStep(cell)).ok) break;
+          await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT);
+          if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+        }
+      }
+    }
     if (stop === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
     if (isCommandCancelled()) return fail("aborted", "stopped");
     // Nothing to build a floor or a plug with: stone from the tunnel walls,
@@ -970,6 +1061,54 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     await mineOresInSight(wants);
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
+}
+
+/**
+ * A floor's room (owner): 3 by 3 round its stairs, 3 high, a floor under it
+ * (the stairs going on down excepted), and a sign on its wall: "1st floor",
+ * "2nd floor"... Best effort: a block it can't dig or a sign it can't make
+ * doesn't stop the mining.
+ */
+async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
+  if (!(await goToStep(hub)).ok) return;
+  const R = STEP[RIGHT[arrive]];
+  const F = STEP[arrive];
+  const { breakBlock } = await import("../core/primitives");
+  const { ensureBlock } = await import("../actions/digging");
+  const room: Vec3[] = [];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) room.push(hub.plus(R.scaled(a)).plus(F.scaled(b)));
+  const inRoom = (p: Vec3): boolean => room.some((c) => c.x === p.x && c.z === p.z && p.y >= c.y && p.y < c.y + ROOM_HEIGHT);
+  let dug = 0;
+  for (const c of room) {
+    for (let dy = ROOM_HEIGHT - 1; dy >= 0; dy--) {
+      if (isCommandCancelled()) return;
+      const cell = c.offset(0, dy, 0);
+      const b = bot.blockAt(cell);
+      if (!b || b.boundingBox !== "block" || b.name.endsWith("_stairs")) continue;
+      if ((await breakBlock(cell)).ok) dug++;
+    }
+    // Its floor (the stairs on down, in front of the middle, stay open)
+    const isStairsDown = c.equals(hub.plus(F));
+    if (!isStairsDown) await ensureBlock(c.offset(0, -1, 0), inRoom);
+  }
+  console.log(`Mine: the ${floorName(level)}'s room dug (${dug} blocks).`);
+  // Its sign, on the wall left of the way in, at eye height
+  const planks = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
+  const sign = planks ? `${planks.name.replace(/_planks$/, "")}_sign` : "oak_sign";
+  if (!bot.inventory.items().some((i) => i.name.endsWith("_sign"))) {
+    const { acquire } = await import("./acquire");
+    const { liveWorld } = await import("./world");
+    await acquire(sign, 1, liveWorld);
+  }
+  const have = bot.inventory.items().find((i) => i.name.endsWith("_sign"))?.name;
+  if (!have) return;
+  const spot = hub.minus(R).minus(F).offset(0, 1, 0);
+  const { placeBlockResult } = await import("../actions/blockPlacing");
+  const placed = await placeBlockResult(have, spot.x, spot.y, spot.z, LEFT[arrive]);
+  if (!placed.ok) return;
+  const { writeSign } = await import("../core/primitives");
+  const wrote = await writeSign(spot, floorName(level));
+  if (wrote.ok) chatter(`The ${floorName(level)} of my mine has its room and its sign.`, "mining");
 }
 
 // Side routes off the lowest level's tunnels (owner): every 3 blocks, 10 long
@@ -1033,7 +1172,7 @@ export function nextTurn(dir: DirectionType, turns: Turn[], tried: Record<string
 }
 
 // Every tunnel at a hub counted done: the stairs go on down from it at once
-const doneArms = (): Arms => ({ forward: { dug: ARM_LENGTH, blocked: true }, right: { dug: ARM_LENGTH, blocked: true }, left: { dug: ARM_LENGTH, blocked: true } });
+const doneArms = (): Arms => ({ forward: { dug: ARM_LENGTH, blocked: true }, right: { dug: ARM_LENGTH, blocked: true }, left: { dug: ARM_LENGTH, blocked: true }, back: { dug: ARM_LENGTH, blocked: true } });
 
 /** What a turn changes in the mine record. */
 export type TurnPlan = { level: number; dir: DirectionType; out: DirectionType; hubAt: number; stairs: number; turns: Turn[]; tried: Record<string, DirectionType[]> };
@@ -1072,7 +1211,7 @@ async function turnStairs(rec: MineRecord, fromLevel: number, blocked: Direction
   const side = plan.dir === RIGHT[dirAt(rec.direction, plan.hubAt, rec.turns)] ? "right" : "left";
   report(`My mine's stairs hit ${why}; I capped them off and I'm starting new stairs to the ${side} from the crossroad ${plan.level + 1} level${plan.level === 0 ? "" : "s"} down.`);
   const seals = [...rec.seals, ...capped.cells.map((c) => ({ x: c.x, y: c.y, z: c.z }))];
-  await saveMine(rec.start, rec.direction, plan.stairs, rec.branches, rec.bottom, { level: plan.level, arms: doneArms(), deepest: false, turns: plan.turns, tried: plan.tried, seals, exhausted: false });
+  await saveMine(rec.start, rec.direction, plan.stairs, rec.branches, rec.bottom, { level: plan.level, arms: doneArms(), deepest: false, turns: plan.turns, tried: plan.tried, seals, exhausted: false, roomsDone: Math.min(rec.roomsDone, plan.level) });
   return true;
 }
 

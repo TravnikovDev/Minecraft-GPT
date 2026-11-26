@@ -14,27 +14,41 @@ test("the stairs end 10 down and 10 on from the exit", () => {
 
 const arm = (dug: number, blocked = false) => ({ dug, blocked });
 
-test("forward first, then right, then left, each up to 50 blocks", () => {
-  expect(nextArm({ forward: arm(0), right: arm(0), left: arm(0) })).toBe("forward");
-  expect(nextArm({ forward: arm(35), right: arm(0), left: arm(0) })).toBe("forward");
-  expect(nextArm({ forward: arm(ARM_LENGTH), right: arm(0), left: arm(0) })).toBe("right");
-  expect(nextArm({ forward: arm(ARM_LENGTH), right: arm(ARM_LENGTH), left: arm(20) })).toBe("left");
-  // All three done: time to go deeper
-  expect(nextArm({ forward: arm(ARM_LENGTH), right: arm(ARM_LENGTH), left: arm(ARM_LENGTH) })).toBeNull();
+const full = { dug: ARM_LENGTH, blocked: false };
+test("forward first, then right, then left, then back, each up to 50 blocks", () => {
+  expect(nextArm({ forward: arm(0), right: arm(0), left: arm(0), back: arm(0) })).toBe("forward");
+  expect(nextArm({ forward: arm(35), right: arm(0), left: arm(0), back: arm(0) })).toBe("forward");
+  expect(nextArm({ forward: full, right: arm(0), left: arm(0), back: arm(0) })).toBe("right");
+  expect(nextArm({ forward: full, right: full, left: arm(20), back: arm(0) })).toBe("left");
+  expect(nextArm({ forward: full, right: full, left: full, back: arm(0) })).toBe("back");
+  // All four done: time to go deeper
+  expect(nextArm({ forward: full, right: full, left: full, back: full })).toBeNull();
 });
 
 test("a blocker ends that tunnel; the next one is dug", () => {
-  expect(nextArm({ forward: arm(12, true), right: arm(0), left: arm(0) })).toBe("right");
-  expect(nextArm({ forward: arm(12, true), right: arm(3, true), left: arm(0) })).toBe("left");
-  expect(nextArm({ forward: arm(12, true), right: arm(3, true), left: arm(40, true) })).toBeNull();
+  expect(nextArm({ forward: arm(12, true), right: arm(0), left: arm(0), back: arm(0) })).toBe("right");
+  expect(nextArm({ forward: arm(12, true), right: arm(3, true), left: arm(40, true), back: arm(0) })).toBe("back");
+  expect(nextArm({ forward: arm(12, true), right: arm(3, true), left: arm(40, true), back: arm(1, true) })).toBeNull();
 });
 
-test("right and left are the stairs' right and left", () => {
-  expect(["forward", "right", "left"].map((a) => armDirection(a, "north"))).toEqual(["north", "east", "west"]);
-  expect(["forward", "right", "left"].map((a) => armDirection(a, "east"))).toEqual(["east", "south", "north"]);
+test("right and left are the stairs' right and left; back is behind", () => {
+  expect(["forward", "right", "left", "back"].map((a) => armDirection(a, "north"))).toEqual(["north", "east", "west", "south"]);
+  expect(["forward", "right", "left", "back"].map((a) => armDirection(a, "east"))).toEqual(["east", "south", "north", "west"]);
 });
 
-test("hubs: at the stairs' bottom, then every 20 steps deeper", () => {
+test("floors (owner): left and right sleeves from the middle; forward and back from the left column on odd floors, the right on even", async () => {
+  const { sleeveColumn, pokeSides, floorName } = await import(`${ROOT}/src/skills/mine.ts`);
+  expect([sleeveColumn("left", 0), sleeveColumn("right", 1)]).toEqual([0, 0]);
+  expect([sleeveColumn("forward", 0), sleeveColumn("back", 0)]).toEqual([-1, -1]); // 1st floor: left column
+  expect([sleeveColumn("forward", 1), sleeveColumn("back", 1)]).toEqual([1, 1]); // 2nd floor: right column
+  // Pokeholes both sides off left and right; only the outer side off forward and back (the stairs are inside)
+  expect(pokeSides("left", 0)).toEqual([1, -1]);
+  expect(pokeSides("forward", 0)).toEqual([-1]);
+  expect(pokeSides("back", 0)).toEqual([1]);
+  expect([0, 1, 2, 3, 10].map(floorName)).toEqual(["1st floor", "2nd floor", "3rd floor", "4th floor", "11th floor"]);
+});
+
+test("floors: at the stairs' bottom, then every 10 steps deeper (owner)", () => {
   expect([0, 1, 2].map(hubStep)).toEqual([MINE_DEPTH, MINE_DEPTH + LEVEL_STEP, MINE_DEPTH + 2 * LEVEL_STEP]);
 });
 
@@ -233,7 +247,7 @@ test("no way deeper: side routes every 3 blocks off each tunnel, both sides (own
   const r = sideRoutes();
   expect(r[0]).toEqual({ arm: "forward", at: 3, side: "right" });
   expect(r[1]).toEqual({ arm: "forward", at: 3, side: "left" });
-  expect(r.length).toBe(3 * Math.floor(ARM_LENGTH / 3) * 2);
+  expect(r.length).toBe(4 * Math.floor(ARM_LENGTH / 3) * 2);
 });
 
 test("the stairs are roofed all the way down, but never where a hub's tunnel runs over them (owner: seal them off from caves)", async () => {
@@ -245,11 +259,11 @@ test("the stairs are roofed all the way down, but never where a hub's tunnel run
   // Deep below the hub: roofed
   const deep = stepAt(start, "south", h + 10);
   expect(has(deep.offset(0, 4, 0))).toBe(true);
-  // Just past the hub the step's roof is the forward tunnel's walking space: left open
-  const near = stepAt(start, "south", h + 3);
+  // The floor's room (3 by 3, 3 high round the stairs) is never part of the shell
   const hub = stepAt(start, "south", h);
-  expect(near.offset(0, 4, 0).y).toBe(hub.y + 1);
-  expect(has(near.offset(0, 4, 0))).toBe(false);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [1, 1], [-1, -1]]) expect(has(hub.offset(dx, 1, dz))).toBe(false);
+  // The forward sleeve leaves from the left column (1st floor): its space isn't shell either
+  expect(has(hub.offset(1, 0, 3)) || has(hub.offset(1, 1, 3))).toBe(false); // south: left is east (+x)
 });
 
 test("water or lava at the next step stops the stairs (they turn: owner)", async () => {
