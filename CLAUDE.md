@@ -91,6 +91,8 @@ The day planner (Phase 7) is in `src/planner/`: the diary code writes (`diary.ts
 
 Companion roles (Phase 8) are in `src/roles/`: the role model in world memory (`role.ts`), the B3 runner that proposes a shift only when there's work, pauses on "stop" and backs off on failures (`runner.ts`), and one file per job (`guard.ts`, `farmer.ts`, `miner.ts`, `hauler.ts`, `builder.ts`). Set by the Role command; `SERVER_AUTOMATION` / `SERVER_CHAT_SPACING_MS` are the server's rules (`src/config/serverProfile.ts`).
 
+The late game (Phase 9) is in `src/skills/endgame/`: milestones after diamonds (`milestones.ts`, tiers 4 and 5, `dimension: "any"`), pure geometry (`geometry.ts`), late-game memory and travel between dimensions (`state.ts`), and one module per stage (`portal.ts`, `nether.ts`, `pearls.ts`, `stronghold.ts`, `dragon.ts`). Milestones are gated by dimension (`milestoneHere`); deliberate waits call `holdPosition` (`managers/stuckWatch.ts`). Tests never call the model (`tests/setup.ts` sets the cap to $0).
+
 Getting an item goes through one planner, `acquire(item, n)` (`src/skills/acquire.ts`, sources in `src/skills/world.ts`); the `ensure*` helpers are thin wrappers over it and must not call each other. What the bot has right now (tool tiers, food, shelter, bed) is computed in `src/skills/capabilities.ts`, never cached. Command modules load `skills/curriculum` and other commands lazily (`await import(...)`): a static import closes a cycle through `commands/registry.ts`.
 
 ## OpenAI Integration

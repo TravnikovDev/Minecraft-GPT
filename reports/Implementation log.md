@@ -806,3 +806,34 @@ The architect was consulted on the design before building and reviewed the resul
 - **Not yet seen in the game:** all of Phase 8. The plan's in-game check: one role per session for a full game day, with owner commands interrupting it.
 - **Not done:** breeding animals (optional in the plan); a test of the runner with a fake arbiter and clock.
 - **Next:** the Phase 7 and 8 game tests, then Phase 9 (Nether to the dragon).
+
+## Entry 18: Phase 9, the Nether and the End (2026-11-26)
+
+**Planned.** Phase 9 of the plan: "The bot can finish the game solo: get into the Nether, collect blaze rods and ender pearls, find the stronghold, and defeat the Ender Dragon." Written by code and reasoning only; no game run (the owner's request).
+
+**What happened**
+- The late game was added as milestones after diamonds: tier 4 the Nether (shield, bucket, flint and steel, the portal, the Nether, a fortress, blaze rods, ender pearls), tier 5 the End (eyes, the stronghold, the End portal, the End, the dragon, home again). Pure geometry for the portal frame, the eyes' crossing and safe End ground, with tests (`3865ee1`).
+- **Found on the way: tests were calling the model.** The curriculum tests reached the day planner, which used the real API key from `.env`: 8 calls, $0.0021 in all, since the planner landed. The test setup now caps spending at $0 and keeps a throwaway usage file (`edc26dd`).
+- **The architect's review** found the old assumptions breaking in new places:
+  - the combat reflex would attack zombified piglins, piglins and endermen (the game types them hostile), even the piglin it traded with;
+  - the first day's milestones ran in the Nether and the End at overworld coordinates (hunting there, mending a shelter that isn't there); nothing left the End after the dragon;
+  - the armour upkeep took the gold helmet off within 10 s;
+  - the stuck watcher would nudge and cancel the deliberate waits (the blaze spawner, the dragon);
+  - a broken eye of ender reopened the blaze rods milestone; the stronghold search could save a wrong spot and dig there for ever, and rejected far strongholds;
+  - the pathfinder won't step onto the End portal over the room's lava;
+  - a forced look reaches the server a tick late, so bucket use missed;
+  - the dragon hit was written for one protocol version; obsidian off a lava pool's top fell in; the way home through a ghast-blasted portal had no relight; mineflayer's credits answer has the wrong field name for 1.20.3+.
+- **The review's questions for the owner**, answered with defaults for now: the test world is 1.20.4 (the code works for 26.x too); it may use a portal it finds; it comes home after the dragon; bartering is only a top-up.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| The late game | `skills/endgame/`: `geometry` (pure), `state` (memory, dimensions, portals), `portal` (obsidian mined with a diamond pickaxe, or made from a lava pool's top; frame with cobblestone corners; lit), `nether` (fortress, blaze rods, bartering), `pearls` (endermen, eyes), `stronghold` (throws, crossing, digging down, the frame, into the End), `dragon` (crystals with a bow, the head hit, safe ground), `milestones`; flint from gravel; `hitEntityId` (`3865ee1`) |
+| Review fixes | Neutral mobs only fought back; milestones gated by dimension and a way home from the End with the credits answered; gold kept on in the Nether and a Nether kit; portal relight, stepping out, arrival record; `holdPosition`; eye and rod counts from what's known; saved throws, sure-only stronghold, 1 degree; into the End from a frame; `useHeldItemToward`; the attack through mineflayer; obsidian on solid ground (`f20b5ec`) |
+
+**Outcome and what follows**
+- **Tests:** 253 pass.
+- **Not yet seen in the game:** all of Phase 9. The review suggests one creative test world per milestone (for example `/locate` to check the stronghold) before a full run.
+- **Left out on purpose:** casting the portal from lava buckets (done wrong it floods the base); the bed strategy against the dragon; caged crystals; ghast avoidance; a blaze tactic beyond melee by the spawner (a bow, cover, fire resistance); the cost comparison between routes.
+- **Next:** the game tests of Phases 7, 8 and 9, then long runs in fresh worlds (Phase 9 action 9).

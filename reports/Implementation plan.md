@@ -414,7 +414,14 @@ It survives the first night, and it reports milestones in chat.
 8. **Death recovery** across all of these: go back to the death waypoint within 5 minutes, before the dropped items vanish.
 9. **Long runs.** Several full attempts in fresh worlds. Feed every failure reason back into the skills and the diary.
 
-**In-game check.** A recorded run from a fresh spawn to the credits.
+**Status (2026-11-26).** Code done, not yet tested in the game (Log Entry 18): the late game as milestones after diamonds, in `src/skills/endgame/`. From the architect's review:
+- **Action 0, dimension-aware state** (added): milestones say where they're worked on; in the Nether and the End the first day's milestones wait; portals are recorded however it went through; there's a way out of the End.
+- A Nether kit before going (flint and steel, gold, blocks); a portal that went out is relit.
+- Neutral mobs are fought only after they attack (a reflex deliverable).
+- Long skills keep their progress between tries (the stronghold's throws).
+- Left out: casting the portal from lava buckets, the bed strategy, caged crystals, ghast avoidance, a ranged blaze tactic, a cost choice between routes.
+
+**In-game check.** One creative test world per milestone first (for example `/locate` to check where the eyes lead), then a recorded run from a fresh spawn to the credits.
 
 ---
 

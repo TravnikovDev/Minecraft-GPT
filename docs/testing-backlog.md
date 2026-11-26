@@ -4,6 +4,23 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 9: the Nether and the End (2026-11-26, not yet run; see Log Entry 18)
+
+After diamonds, living its own life, it goes on to the Nether and the End. Best tried one milestone at a time in a creative test world first (give it what the milestone needs).
+
+- [ ] Shield (worn in the off hand), bucket, flint and steel (flint from gravel)
+- [ ] Portal: obsidian in sight mined (never off a lava pool's top), or a lava pool's top turned to obsidian with a bucket of water (the water taken back); a frame near home with cobblestone corners; "My Nether portal is lit at ..."
+- [ ] Into the Nether with flint and steel, a gold helmet on (it stays on there), blocks; the portal on the Nether side remembered; a portal blasted out is relit on the way home
+- [ ] Zombified piglins and piglins left alone unless they attack; endermen never first
+- [ ] A fortress found by walking out in legs; by the spawner it waits for blazes (no "I'm stuck" while it waits), backs off and eats when hurt; rods up to what the eyes need
+- [ ] Pearls from endermen at night (and a top-up from piglins with 32+ gold)
+- [ ] Eyes crafted at home; throws saved (worlds/<id>.json "endgame.throws"); a second throw from the side; "My eye of ender went down: the stronghold is under ..." (check with `/locate structure stronghold`)
+- [ ] Digging down, following stone bricks to the portal room; an eye in every empty frame; up onto a frame and into the End
+- [ ] In the End: onto the island, crystals shot if it has a bow, the dragon hit when it perches by the exit portal, never near the edge, away from dragon breath
+- [ ] The dragon dead → "I freed the End!", then into the exit portal; the credits don't hang it; "I'm home from the End!"
+- [ ] Dying in the Nether → back through its portal for its things; in the End → "my things there are out of reach"
+- [ ] `bun run test` never calls the model (no "LLM plan" lines; usage.json unchanged)
+
 ## Phase 8: companion roles (2026-11-26, not yet run; see Log Entry 17)
 
 Each role is a standing order ("be my guard", "be my farmer here, put the wheat in the chest next to me", "mine iron for me", "sort my chests", "build a hut here"); "what's your job?" and "you're off duty" are answered in code.
