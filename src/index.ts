@@ -137,6 +137,9 @@ onConnectionReady((currentBot) => {
   void import("./skills/mine")
     .then((m) => m.protectMine()) // and its mine stairs (lazy: skills load commands)
     .catch((error: unknown) => console.error("Couldn't protect my mine stairs:", error));
+  void import("./skills/farm")
+    .then((m) => m.protectFields()) // and its fields' ground
+    .catch((error: unknown) => console.error("Couldn't protect my fields:", error));
   everyWhileConnected(currentBot, 5_000, considerOpportunities); // ores in sight go on the task list at their priority (skills/opportunities)
   everyWhileConnected(currentBot, 5_000, considerFood); // starving: food now; low: a restock by day (skills/foodWatch)
 

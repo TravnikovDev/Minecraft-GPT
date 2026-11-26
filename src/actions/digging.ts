@@ -7,7 +7,7 @@ import { Vec3 } from "vec3";
 import { chatter } from "../core/narrator";
 import { getItemCount } from "./inventory";
 import pf from "mineflayer-pathfinder";
-import { isNatural, isProtected, isWoodenDoor } from "../core/movements";
+import { isNatural, isProtected, isWoodenDoor, protectedBy } from "../core/movements";
 import { isOwnBlock } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
@@ -118,6 +118,11 @@ export function tunnelBlocked(pos: Vec3): string | null {
     if (liquid === "lava" || liquid === "water") return `${liquid} next to ${pos}`;
   }
   const open = block.boundingBox === "empty";
+  // Its shelter's walls and roof, its fields, its mine's stairs: never dug
+  // through by a tunnel (game test: tunnelling to dirt from inside, it broke
+  // its shelter's roof). Ore in its mine's walls is still mined.
+  const keptBy = open ? null : protectedBy(pos);
+  if (keptBy && !(keptBy === "mine" && catalog().isOre(block.name))) return `my ${keptBy}'s ${keptBy === "farm" ? "ground" : "wall"} at ${pos}`;
   // Something built stops a tunnel, unless the bot put it there itself (its
   // scaffolding stopped its own iron tunnel, fresh-world test)
   if (!open && !isNatural(block.name) && !isOwnBlock(pos, block.name) && !isPlug(pos)) return `${block.name.replace(/_/g, " ")} at ${pos}, something built`;

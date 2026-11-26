@@ -1327,6 +1327,10 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
     }
     await saveMine(start, dir, i + 1, rec.branches, rec.bottom);
   }
+  // The new steps' walls and roof whole (game test: the second step ran
+  // through a tunnel it had dug up to the grass, and the mine stayed open
+  // to the surface)
+  await lookAfterStairs();
   return ok();
 }
 

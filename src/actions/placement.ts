@@ -13,7 +13,7 @@ import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { loadBed } from "../core/session";
 import { ownerEntity } from "../managers/ownerDialog";
-import { isNatural, isProtected } from "../core/movements";
+import { isNatural, isProtected, nearOwnPassage } from "../core/movements";
 
 /**
  * The inventory item to place for what the owner asked: an exact ID, or a
@@ -190,7 +190,7 @@ const isFloor = (b: Block | null): boolean => b !== null && b.boundingBox === "b
  */
 export function spotsNear(target: Vec3[], blockAt: BlockAt, size = 1, avoid: Vec3[] = []): Vec3[] {
   const center = target[0];
-  const taken = (p: Vec3): boolean => [...target, ...avoid].some((t) => t.x === p.x && t.z === p.z && Math.abs(t.y - p.y) <= 1);
+  const taken = (p: Vec3): boolean => [...target, ...avoid].some((t) => t.x === p.x && t.z === p.z && Math.abs(t.y - p.y) <= 1) || nearOwnPassage(p);
   const spots: { p: Vec3; d: number }[] = [];
   for (let dx = -NEAR_RADIUS; dx <= NEAR_RADIUS; dx++)
     for (let dz = -NEAR_RADIUS; dz <= NEAR_RADIUS; dz++)

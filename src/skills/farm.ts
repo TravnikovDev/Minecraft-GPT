@@ -13,8 +13,8 @@ import { bot } from "../core/body";
 import { goTo, knownBlock } from "../core/primitives";
 import { fail, ok, describeFailure, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
-import { report } from "../core/narrator";
-import { isProtected } from "../core/movements";
+import { chatter, report } from "../core/narrator";
+import { isProtected, nearOwnPassage, protectCells, protectedBy } from "../core/movements";
 import { forbiddenAt } from "../core/forbidden";
 import { addPlace, getPlaces } from "../managers/persistenceManager";
 import { currentDimension } from "../actions/perception";
@@ -33,9 +33,11 @@ export const FIELD_HALVES = [4, 3, 2];
 // owner, take a bunch of dirt and build it near the shelter)
 const NEAR_HOME = 16;
 export const FIELD_RANGE = 24;
-// Blocks it may move to level a field, per size (beyond: a smaller field)
+// Blocks it may move to level a field, per size (beyond: a smaller field):
+// the whole ground kept for it and the ring its fence stands on (owner: a
+// flat surface of dirt first, then the field and its fence on it)
 // (game test, snowy hills: nothing within 16 blocks fit the first, tight limits)
-const LEVEL_BUDGET: Record<number, number> = { 4: 120, 3: 80, 2: 50 };
+const LEVEL_BUDGET: Record<number, number> = { 4: 200, 3: 140, 2: 90 };
 // Bumps dug out up to this high, dips filled this deep
 const MAX_BUMP = 4;
 const MAX_DIP = 3;
@@ -78,6 +80,23 @@ export function myFarms(): Field[] {
  */
 export function nextHalf(half: number, reserve: number, bare: number): number {
   return bare <= 1 && half < reserve ? half + 1 : half;
+}
+
+/**
+ * Its fields' ground kept like its shelter's walls (the ground kept for
+ * each, its fence's ring, and the layer under them): walks never dig it,
+ * dirt is never collected from it, tunnels stop at it.
+ */
+export function protectFields(): void {
+  const cells: P3[] = [];
+  for (const f of myFarms()) {
+    const d = f.reserve + 1;
+    for (let dx = -d; dx <= d; dx++)
+      for (let dz = -d; dz <= d; dz++) {
+        cells.push({ x: f.x + dx, y: f.y, z: f.z + dz }, { x: f.x + dx, y: f.y - 1, z: f.z + dz });
+      }
+  }
+  protectCells(cells, "farm");
 }
 
 /** Its first field (the plot's middle), or null. */
@@ -154,54 +173,80 @@ export function torchSpots(middle: P3, half = FARM_HALF): P3[] {
 
 /** A cell as the levelling sees it (null: not loaded). */
 export type LevelCell = { name: string; solid: boolean } | null;
-const DIRT = /^(grass_block|dirt)$/;
+// Ground that's tilled or tills (farmland already tilled stays as it is:
+// game test, the levelling broke its fresh farmland and put dirt back)
+const DIRT = /^(grass_block|dirt|farmland|dirt_path|coarse_dirt|rooted_dirt)$/;
+// Its own things on the field: never "bumps" to dig out (the fence round it
+// and its gate, the torches on the posts)
+const ON_FIELD = /(_fence|_fence_gate|torch|_sign)$/;
+// Dips filled this deep when a field is mended (a creeper's crater)
+const REPAIR_DIP = 6;
+
+/** What one column of a field needs to be level: bumps dug out (heights over the ground), the ground swapped, dirt to fill. */
+export type ColumnWork = { x: number; z: number; bumps: number[]; swap: boolean; fill: number };
 
 /**
- * What it takes to level a plot round `middle` (its ground at middle.y): a
- * block for each bump dug out above the ground, each stone or snow block in
- * the ground swapped for dirt, each dip filled with dirt. Null when it can't
- * be (something kept, a tree, a bump over 2 high, a dip over 2 deep, a roof
- * over it). Pure over `look` and `kept`.
+ * What a column of the field at (x, z) needs to be level with its ground
+ * at middle.y. A planted cell (`planted`: ring at most that far from the
+ * middle) needs dirt or farmland at the top and open sky; the ring outside
+ * it (where the fence stands) any solid ground. The middle may hold its
+ * water. Null when it can't be (a trunk, a bump over MAX_BUMP high, a dip
+ * deeper than `maxDip`, a roof over a planted cell). Pure over `look`.
  */
-export function levelCost(middle: P3, half: number, look: (x: number, y: number, z: number) => LevelCell, kept: (p: P3) => boolean = () => false): number | null {
+export function columnWork(middle: P3, x: number, z: number, planted: number, look: (x: number, y: number, z: number) => LevelCell, maxDip = MAX_DIP): ColumnWork | null {
+  const y = middle.y;
+  const ring = Math.max(Math.abs(x - middle.x), Math.abs(z - middle.z));
+  const bumps: number[] = [];
+  // Above the ground: a bump dug out (leaves too); higher is a hill; a trunk stays
+  for (let dy = 1; dy <= MAX_BUMP + 1; dy++) {
+    const c = look(x, y + dy, z);
+    if (!c) return null;
+    if (/_log$/.test(c.name)) return null;
+    if (c.solid && !ON_FIELD.test(c.name)) {
+      if (dy > MAX_BUMP) return null;
+      bumps.push(dy);
+    }
+  }
+  // Open sky over a planted cell (crops need the light): no stone overhead; leaves are cleared
+  if (ring <= planted) {
+    for (let dy = MAX_BUMP + 2; dy <= 10; dy++) {
+      const c = look(x, y + dy, z);
+      if (c?.solid && !/_leaves$/.test(c.name)) return null;
+    }
+  }
+  const g = look(x, y, z);
+  if (!g) return null;
+  const done = { x, z, bumps, swap: false, fill: 0 };
+  if (ring === 0 && g.name === "water") return done;
+  if (ring > planted ? g.solid : DIRT.test(g.name)) return done;
+  // Stone, sand or snow in the ground: swapped for dirt
+  if (g.solid) return { ...done, swap: true };
+  // A dip: filled up from the first solid block below
+  for (let d = 1; d <= maxDip; d++) if (look(x, y - d, z)?.solid) return { ...done, fill: d };
+  return null;
+}
+
+/** Blocks a column's work moves. */
+const workCost = (w: ColumnWork): number => w.bumps.length + (w.swap ? 1 : 0) + w.fill;
+
+/**
+ * What it takes to level a field round `middle` (its ground at middle.y),
+ * `half` rings out: a block for each bump dug out, each stone or snow block
+ * in the ground swapped for dirt, each dip filled with dirt. The rings up
+ * to `planted` are sown; the ones outside are its fence's ground. Null when
+ * it can't be (something kept, a tree, a hill, a deep dip, a roof). Pure
+ * over `look` and `kept`.
+ */
+export function levelCost(middle: P3, half: number, look: (x: number, y: number, z: number) => LevelCell, kept: (p: P3) => boolean = () => false, planted = half): number | null {
   let cost = 0;
   for (let dx = -half; dx <= half; dx++) {
     for (let dz = -half; dz <= half; dz++) {
       const x = middle.x + dx;
       const z = middle.z + dz;
-      const y = middle.y;
-      if (kept({ x, y, z }) || kept({ x, y: y + 1, z })) return null;
-      // Above the ground: a bump dug out (leaves too); higher is a hill; a trunk stays
-      for (let dy = 1; dy <= MAX_BUMP + 1; dy++) {
-        const c = look(x, y + dy, z);
-        if (!c) return null;
-        if (/_log$/.test(c.name)) return null;
-        if (c.solid) {
-          if (dy > MAX_BUMP) return null;
-          cost++;
-        }
-      }
-      // Open sky over it (crops need the light): no stone overhead; leaves are cleared
-      for (let dy = MAX_BUMP + 2; dy <= 10; dy++) {
-        const c = look(x, y + dy, z);
-        if (c?.solid && !/_leaves$/.test(c.name)) return null;
-      }
-      // The ground: dirt as it is; stone or snow swapped; a dip filled
-      const g = look(x, y, z);
-      if (!g) return null;
-      if (DIRT.test(g.name)) continue;
-      cost++;
-      if (!g.solid) {
-        let filled = false;
-        for (let d = 1; d <= MAX_DIP; d++) {
-          if (look(x, y - d, z)?.solid) {
-            filled = true;
-            break;
-          }
-          cost++;
-        }
-        if (!filled) return null;
-      }
+      if (kept({ x, y: middle.y, z }) || kept({ x, y: middle.y + 1, z })) return null;
+      const w = columnWork(middle, x, z, planted, look);
+      if (!w) return null;
+      cost += workCost(w);
     }
   }
   return cost;
@@ -231,8 +276,9 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
   let checked = 0;
   let cheapest: number | null = null;
   for (const half of FIELD_HALVES) {
-    const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + half + 1);
-    const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
+    // (both fences and a path between them)
+    const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + half + 3);
+    const kept = (p: P3): boolean => isProtected(p) || nearOwnPassage(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
     let best: { middle: P3; cost: number; r: number } | null = null;
     for (let r = half + 3; r <= NEAR_HOME; r++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -244,7 +290,7 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
           const y = groundAt(x, z, home.y - 1);
           if (y === null) continue;
           const middle = { x, y, z };
-          const cost = levelCost(middle, half, levelCellAt, kept);
+          const cost = levelCost(middle, half + 1, levelCellAt, kept, half);
           checked++;
           if (cost === null) continue;
           if (cheapest === null || cost < cheapest) cheapest = cost;
@@ -261,52 +307,73 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
 }
 
 /**
- * Levels a field's planted part: bumps dug out, stone or snow in the ground
- * swapped for dirt, dips filled with dirt (from what it carries, its
- * chests, or dug nearby). True when it's ready to till.
+ * Levels a field (owner: a flat surface first, made with dirt, then the
+ * field on it, and its fence on it too): the whole ground kept for it
+ * (`reserve` rings) and the ring outside it where the fence stands. Bumps
+ * dug out, stone or snow in the sown ground swapped for dirt, dips filled
+ * with dirt (from what it carries, its chests, or dug nearby, never from a
+ * field). Also how a field is mended when it's tended (a creeper's crater
+ * filled, like its shelter's walls). How many blocks it moved.
  */
-async function levelPlot(middle: P3, half: number): Promise<boolean> {
-  const need = levelCost(middle, half, levelCellAt) ?? 0;
-  if (need === 0) return true;
-  const { storedNear, takeItems } = await import("../actions/storage");
-  if (count("dirt") < need && storedNear("dirt", 32) > 0) await takeItems([{ name: "dirt", count: need - count("dirt") }], true);
+async function levelPlot(middle: P3, reserve: number): Promise<number> {
+  const area = reserve + 1;
+  const kept = (p: P3): boolean => {
+    const by = protectedBy(p);
+    return (by !== null && by !== "farm") || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
+  };
+  const work = (): ColumnWork[] => {
+    const out: ColumnWork[] = [];
+    for (let dx = -area; dx <= area; dx++)
+      for (let dz = -area; dz <= area; dz++) {
+        const x = middle.x + dx;
+        const z = middle.z + dz;
+        if (kept({ x, y: middle.y, z })) continue;
+        const w = columnWork(middle, x, z, reserve, levelCellAt, REPAIR_DIP);
+        if (w && workCost(w) > 0) out.push(w);
+      }
+    return out;
+  };
+  const todo = work();
+  if (todo.length === 0) return 0;
+  const need = todo.reduce((n, w) => n + (w.swap ? 1 : 0) + w.fill, 0);
   if (count("dirt") < need) {
+    const { storedNear, takeItems } = await import("../actions/storage");
+    if (storedNear("dirt", 32) > 0) await takeItems([{ name: "dirt", count: need - count("dirt") }], true);
+  }
+  if (count("dirt") < need) {
+    // Dug from the ground it can see round the field (its fields and home
+    // are kept; never a tunnel from its shelter: it broke the roof that way)
+    if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 3))).ok) return 0;
     const { collectBlock } = await import("../actions/collectBlock");
-    await collectBlock("dirt", need - count("dirt"), 24);
+    for (const ground of ["dirt", "grass_block"]) if (count("dirt") < need) await collectBlock(ground, need - count("dirt"), 20, { seenOnly: true });
   }
   const { breakBlock } = await import("../core/primitives");
   const { placeBlockResult } = await import("../actions/blockPlacing");
-  const cells = sowOrder(middle, half).concat([{ ...middle }]);
   let moved = 0;
-  for (const c of cells) {
-    if (isCommandCancelled()) return false;
-    if (!(await goTo(new pf.goals.GoalNear(c.x, c.y + 1, c.z, 3))).ok) continue;
-    // Bumps over the ground
-    for (let dy = MAX_BUMP; dy >= 1; dy--) {
-      const above = levelCellAt(c.x, c.y + dy, c.z);
-      if (above?.solid && (await breakBlock(new Vec3(c.x, c.y + dy, c.z), { allowWithoutHarvest: true })).ok) moved++;
+  // Nearest first from the middle outward
+  const ring = (w: ColumnWork): number => Math.max(Math.abs(w.x - middle.x), Math.abs(w.z - middle.z));
+  for (const w of todo.sort((a, b) => ring(a) - ring(b))) {
+    if (isCommandCancelled()) break;
+    if (!(await goTo(new pf.goals.GoalNear(w.x, middle.y + 1, w.z, 3))).ok) continue;
+    // Bumps over the ground, top down
+    for (const dy of [...w.bumps].sort((a, b) => b - a)) {
+      if ((await breakBlock(new Vec3(w.x, middle.y + dy, w.z), { allowWithoutHarvest: true })).ok) moved++;
     }
-    const g = levelCellAt(c.x, c.y, c.z);
-    if (!g || DIRT.test(g.name)) continue;
     // Stone, snow or the like in the ground: out, dirt in
-    if (g.solid && !(await breakBlock(new Vec3(c.x, c.y, c.z), { allowWithoutHarvest: true })).ok) continue;
-    // A dip: filled from the bottom up
-    // (from just over the first solid block below, up to the ground)
-    let from = 0;
-    for (let d = 1; d <= MAX_DIP; d++) {
-      if (levelCellAt(c.x, c.y - d, c.z)?.solid) break;
-      from = -d;
-    }
+    if (w.swap && count("dirt") > 0 && !(await breakBlock(new Vec3(w.x, middle.y, w.z), { allowWithoutHarvest: true })).ok) continue;
+    // A dip (or the swapped cell): filled from the bottom up
+    const from = w.swap ? 0 : 1 - w.fill;
     for (let dy = from; dy <= 0; dy++) {
-      const cell = levelCellAt(c.x, c.y + dy, c.z);
-      if (cell?.solid || count("dirt") === 0) continue;
-      if ((await placeBlockResult("dirt", c.x, c.y + dy, c.z, "bottom")).ok) moved++;
+      if (count("dirt") === 0) break;
+      if (levelCellAt(w.x, middle.y + dy, w.z)?.solid) continue;
+      if ((await placeBlockResult("dirt", w.x, middle.y + dy, w.z, "bottom")).ok) moved++;
     }
   }
   const { pickupNearbyItems } = await import("../actions/pickup");
   await pickupNearbyItems(bot, 6);
-  if (moved > 0) console.log(`Farm: levelled the field at ${middle.x}, ${middle.z} (${moved} blocks moved).`);
-  return true;
+  const left = work().length;
+  if (moved > 0) console.log(`Farm: levelled the field at ${middle.x}, ${middle.z} and its fence ring (${moved} blocks moved${left > 0 ? `, ${left} spots left` : ""}).`);
+  return moved;
 }
 
 const count = (name: string): number => bot.inventory.items().filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
@@ -378,9 +445,11 @@ export async function makeFarm(): Promise<ActionResult> {
   // Water now if it has it (owner: crops grow without it too, slower; the
   // middle gets it once it has a bucket)
   if (count("water_bucket") > 0) await waterField(middle);
-  // Levelled first (dirt in the dips, bumps dug out)
-  await levelPlot(middle, half);
+  // A flat surface first, the whole ground kept for it and its fence's ring
+  // (owner: flat with dirt, then the field on it, the fence on it too)
+  await levelPlot(middle, reserve);
   await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half, reserve } });
+  protectFields();
   const sown = await sowPlot(middle, seed, half);
   await fenceField(middle, reserve);
   report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < (2 * half + 1) ** 2 - 1 ? "; it grows as the harvests give more seeds" : ""}.`);
@@ -551,6 +620,10 @@ export async function tendFarm(): Promise<number> {
     if (isCommandCancelled()) break;
     const field = new Vec3(farm.x, farm.y + 1, farm.z);
     if (!(await goTo(new pf.goals.GoalNear(field.x, field.y, field.z, 4))).ok) continue;
+    // Checked and mended like its shelter (owner: a creeper can blow a
+    // crater in it): the ground made flat again, dirt in the holes
+    const mended = await levelPlot(farm, farm.reserve);
+    if (mended > 0) chatter(`Mended my field at ${farm.x}, ${farm.z}: ${mended} block${mended === 1 ? "" : "s"} put right.`, "farm");
     const { harvestCrops } = await import("../actions/farming");
     harvested += await harvestCrops({ maxDistance: farm.half + 2, point: field });
     // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
@@ -561,7 +634,6 @@ export async function tendFarm(): Promise<number> {
     if (grown > farm.half && SEEDS.some((s2) => count(s2) > 0)) {
       await addPlace({ kind: "farm", name: farm.name, x: farm.x, y: farm.y, z: farm.z, details: { seed: farm.seed, half: grown, reserve: farm.reserve } });
       console.log(`Farm: ${farm.name} grows to ${2 * grown + 1} by ${2 * grown + 1}.`);
-      await levelPlot(farm, grown);
       const more = SEEDS.find((s2) => count(s2) > 0);
       if (more) await sowPlot(farm, more, grown);
     }

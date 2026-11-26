@@ -94,6 +94,20 @@ const isOwnPassage = (key: string): boolean => {
   return false;
 };
 
+/**
+ * True for a cell of its own passages (shelter stairs, doorways and room,
+ * mine stairs) or right next to one: nothing it places goes there (owner:
+ * the shelter's exit is untouchable; a furnace on its first step shut it in,
+ * and it dug a new way out into its mine).
+ */
+export function nearOwnPassage(p: { x: number; y: number; z: number }): boolean {
+  const x = Math.floor(p.x);
+  const y = Math.floor(p.y);
+  const z = Math.floor(p.z);
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) if (isOwnPassage(`${x + dx},${y + dy},${z + dz}`)) return true;
+  return false;
+}
+
 /** The cells of its own passages (shelter, mine stairs): stalls there are never held against them. */
 export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>, owner = "shelter"): void {
   ownPassages.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));

@@ -5,7 +5,7 @@ const ROOT = `${import.meta.dir}/..`;
 const registry = require(`${ROOT}/node_modules/prismarine-registry`)("1.20.4");
 const Block = require(`${ROOT}/node_modules/prismarine-block`)(registry);
 const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
-const { safeMovements, clearSolidDoors, avoidStep, protectCells, isProtected, setOwnPassages } = await import(`${ROOT}/src/core/movements.ts`);
+const { safeMovements, clearSolidDoors, avoidStep, protectCells, isProtected, setOwnPassages, nearOwnPassage } = await import(`${ROOT}/src/core/movements.ts`);
 beforeEach(() => clearSolidDoors());
 
 const world = new Map<string, any>();
@@ -79,5 +79,13 @@ test("a stall inside its own shelter is never held against the stairs", () => {
   setOwnPassages([{ x: 0, y: 66, z: 3 }]);
   avoidStep({ x: 0, y: 66, z: 3 });
   expect(moves.exclusionStep({ position: new Vec3(0, 66, 3) })).toBe(0);
+  setOwnPassages([]);
+});
+
+test("nothing it places goes in or right next to its shelter's stairs and doorways (owner: the exit is untouchable)", () => {
+  setOwnPassages([{ x: 0, y: 76, z: -23 }, { x: 1, y: 77, z: -23 }]);
+  expect(nearOwnPassage({ x: 0, y: 76, z: -23 })).toBe(true); // the first step (the furnace went there)
+  expect(nearOwnPassage({ x: 2, y: 77, z: -23 })).toBe(true); // right in front of the way in
+  expect(nearOwnPassage({ x: 4, y: 77, z: -23 })).toBe(false);
   setOwnPassages([]);
 });

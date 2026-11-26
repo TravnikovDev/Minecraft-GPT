@@ -474,10 +474,20 @@ export function shelterIntact(): boolean {
  * steps, nor a keep-out area.
  */
 function stairBlocked(p: Vec3, surfaceY: number): boolean {
-  if (p.y >= surfaceY || forbiddenAt(p)) return false;
+  if (forbiddenAt(p)) return false;
   const b = knownBlock(p);
-  return b !== null && b.boundingBox === "block" && isNatural(b.name) && !isWoodenDoor(b.name);
+  if (b === null) return false;
+  // Its own furniture in its stairs, the top step too (owner: the exit is
+  // untouchable; a furnace it put on the first step shut it in)
+  if (OWN_FURNITURE.test(b.name)) return true;
+  if (p.y >= surfaceY) return false;
+  return b.boundingBox === "block" && isNatural(b.name) && !isWoodenDoor(b.name);
 }
+
+// What it puts down itself when it needs one (a table to craft at, a furnace
+// to cook in): taken out of its stairs when one ended up there (a chest
+// stays: it may be the owner's, and breaking it spills it)
+const OWN_FURNITURE = /^(crafting_table|furnace|smoker|blast_furnace)$/;
 
 /** Goes home and mends the shelter: fills holes in its walls, roof and floor, and puts in any missing door. */
 async function repairShelter(): Promise<ActionResult> {
@@ -488,10 +498,14 @@ async function repairShelter(): Promise<ActionResult> {
   const doors = [plan.entrance, plan.exit].filter((at) => !isWoodenDoor(knownBlock(at)?.name ?? "")).length;
   const blocked = plan.stairs.filter((c) => stairBlocked(c, plan.stairs[0]!.y));
   report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", blocked.length ? `${blocked.length} blocks in my stairs` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
-  // Blocks in the stairs dug out first, from the top down (the way home)
+  // Blocks in the stairs dug out first, from the top down (the way home);
+  // its own furniture there picked up (it's put somewhere else when needed)
   for (const c of [...blocked].sort((a, b) => b.y - a.y)) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
+    const furniture = OWN_FURNITURE.test(knownBlock(c)?.name ?? "");
+    if (furniture) await goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 3));
     await breakBlockAt(c.x, c.y, c.z);
+    if (furniture) await pickupNearbyItems(bot, 4);
   }
   const home = await walkHome(room);
   if (!home.ok) return home;

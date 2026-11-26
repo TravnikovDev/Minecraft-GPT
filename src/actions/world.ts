@@ -2,7 +2,7 @@
 
 import { Block } from "prismarine-block";
 import { goals } from "mineflayer-pathfinder";
-import { safeMovements } from "../core/movements";
+import { nearOwnPassage, safeMovements } from "../core/movements";
 import * as gameData from "../utils/minecraftData";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
@@ -45,6 +45,8 @@ export function getNearestFreeSpace(
           !top ||
           top.name !== "air" ||
           occupied(empty_pos[i].offset(x, 0, z)) ||
+          // Never in or next to its shelter's stairs, doorways and room, or its mine stairs
+          nearOwnPassage(empty_pos[i].offset(x, 0, z)) ||
           !bottom ||
           bottom.boundingBox !== "block" ||
           (bottom.drops?.length ?? 0) === 0 ||

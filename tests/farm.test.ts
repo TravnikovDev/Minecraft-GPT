@@ -91,6 +91,32 @@ test("levelling a plot by home: bumps, stone and dips cost a block each; a tree 
   expect(levelCost({ x: 0, y: 63, z: 0 }, 2, hill)).toBeNull();
 });
 
+test("the flat surface is the whole field and its fence ring; its own farmland, fence and water stay (owner)", async () => {
+  const { columnWork } = await import(`${ROOT}/src/skills/farm.ts`);
+  type L = { name: string; solid: boolean } | null;
+  const mid = { x: 0, y: 63, z: 0 };
+  const ground = (y0: number, top = "grass_block") => (_x: number, y: number): L => (y <= y0 ? { name: y === y0 ? top : "dirt", solid: true } : { name: "air", solid: false });
+  // Fresh farmland is level ground, never broken and put back as dirt (game test)
+  expect(levelCost(mid, 3, ground(63, "farmland"), () => false, 2)).toBe(0);
+  // A dip in the fence ring (ring 3 of a 5x5 kept) counts: the fence stands on flat ground
+  const ringDip = (x: number, y: number, z: number): L => (x === 3 && z === 0 && y === 63 ? { name: "air", solid: false } : ground(63)(x, y));
+  expect(levelCost(mid, 3, ringDip, () => false, 2)).toBe(1);
+  // Stone in the ring is fine ground for a post; stone in the sown part is swapped
+  const stoneAt = (sx: number) => (x: number, y: number, z: number): L => (x === sx && z === 0 && y === 63 ? { name: "stone", solid: true } : ground(63)(x, y));
+  expect(levelCost(mid, 3, stoneAt(3), () => false, 2)).toBe(0);
+  expect(levelCost(mid, 3, stoneAt(1), () => false, 2)).toBe(1);
+  // Its fence post on the ring isn't a bump to dig out
+  const post = (x: number, y: number, z: number): L => (x === 3 && z === 1 && y === 64 ? { name: "oak_fence", solid: true } : ground(63)(x, y));
+  expect(columnWork(mid, 3, 1, 2, post)).toEqual({ x: 3, z: 1, bumps: [], swap: false, fill: 0 });
+  // The middle's water stays
+  const water = (x: number, y: number, z: number): L => (x === 0 && z === 0 && y === 63 ? { name: "water", solid: false } : ground(63)(x, y));
+  expect(levelCost(mid, 3, water, () => false, 2)).toBe(0);
+  // A creeper's crater 5 deep: past what a new field takes on, but mended when tended
+  const crater = (x: number, y: number, z: number): L => (x === 1 && z === 1 && y > 58 ? { name: "air", solid: false } : ground(63)(x, y));
+  expect(columnWork(mid, 1, 1, 2, crater)).toBeNull();
+  expect(columnWork(mid, 1, 1, 2, crater, 6)).toEqual({ x: 1, z: 1, bumps: [], swap: false, fill: 5 });
+});
+
 test("a fence all round the field's ground, a gate on the side facing home (owner)", async () => {
   const { fenceRing } = await import(`${ROOT}/src/skills/farm.ts`);
   const { posts, gate } = fenceRing({ x: 0, y: 63, z: 0 }, 3, { x: 20, z: 2 });
