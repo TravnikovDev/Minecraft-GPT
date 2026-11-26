@@ -174,6 +174,13 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
   const window = opened.value;
   let cooked = 0;
   try {
+    // Whatever is still in it from before (done food, a different input)
+    // comes out first. Game test: its home furnace held something, so the
+    // raw iron "had no room", and it walked off at night to make a furnace
+    // in the mine
+    if (window.outputItem()) await windowStep("taking out what was done", () => window.takeOutput());
+    const stale = window.inputItem();
+    if (stale && !foods.includes(stale.name)) await windowStep(`taking out the ${stale.name.replace(/_/g, " ")} left in it`, () => window.takeInput());
     for (const food of foods) {
       if (cooked >= limit || isCommandCancelled()) break;
       const n = Math.min(count(food), limit - cooked, 64);
@@ -190,10 +197,16 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
           break;
         }
       }
-      const loaded = await windowStep(`putting ${food} in`, () => window.putInput(bot.registry.itemsByName[food]!.id, null, n));
-      if (!loaded.ok) {
-        console.log(`Cooking: couldn't put ${food} in: ${describeFailure(loaded)}`);
-        break;
+      // Only what fits: the same thing already in it (from before) counts
+      const already = window.inputItem();
+      const room = already && already.name === food ? Math.max(0, 64 - already.count) : 64;
+      const put = Math.min(n, room);
+      if (put > 0) {
+        const loaded = await windowStep(`putting ${food} in`, () => window.putInput(bot.registry.itemsByName[food]!.id, null, put));
+        if (!loaded.ok && !(already && already.name === food)) {
+          console.log(`Cooking: couldn't put ${food} in: ${describeFailure(loaded)}`);
+          break;
+        }
       }
       // Take the cooked food out as it comes; stop when nothing comes for a while
       let idle = 0;
