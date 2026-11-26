@@ -135,3 +135,17 @@ test("stair care digs out fallen gravel, never its own paving or anything built"
   expect(fillsStep({ name: "air", boundingBox: "empty" })).toBe(false);
   expect(fillsStep({ name: "torch", boundingBox: "empty" })).toBe(false);
 });
+
+test("a long trip to the surface from down in its home starts up its stairs", async () => {
+  // Game test: off to a chicken in a field it went down its mine and dug along at y 5
+  const { startsOutByTheFront } = await import(`${ROOT}/src/actions/movement.ts`);
+  const top = { x: 0, y: 64, z: 0 };
+  // Down in its mine, off to a field 100 blocks away
+  expect(startsOutByTheFront({ x: 5, y: 40, z: 10 }, top, { x: 100, y: null, z: 0 }, 100)).toBe(true);
+  // Already on the surface: no
+  expect(startsOutByTheFront({ x: 5, y: 64, z: 10 }, top, { x: 100, y: null, z: 0 }, 100)).toBe(false);
+  // Going somewhere deep (its mine's tunnels): no
+  expect(startsOutByTheFront({ x: 5, y: 40, z: 10 }, top, { x: 30, y: 10, z: 0 }, 40)).toBe(false);
+  // A short way: no
+  expect(startsOutByTheFront({ x: 5, y: 40, z: 10 }, top, { x: 20, y: null, z: 0 }, 15)).toBe(false);
+});

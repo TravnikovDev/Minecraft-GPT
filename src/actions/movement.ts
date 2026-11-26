@@ -36,6 +36,33 @@ export async function travelTo(
 }
 
 /** travelTo, with the reason when it didn't arrive. */
+// A trip this long from home counts as "away", out over the land
+const AWAY_BLOCKS = 32;
+
+/**
+ * Whether a trip should start by going up and out of its home: it's below
+ * the top of its stairs (in its shelter or its mine, near home), and the
+ * place it's going is on the surface (no height given, or not far below the
+ * top of its stairs) and far. Pure.
+ */
+export function startsOutByTheFront(me: { x: number; y: number; z: number }, top: { x: number; y: number; z: number }, target: { x: number; z: number; y: number | null }, distance: number): boolean {
+  if (distance < AWAY_BLOCKS) return false;
+  const nearHome = Math.hypot(me.x - top.x, me.z - top.z) <= 64;
+  const belowHome = me.y < top.y - 2;
+  const toSurface = target.y === null || target.y >= top.y - 8;
+  return nearHome && belowHome && toSurface;
+}
+
+/** Up its stairs to the top (out the front door) when the trip calls for it. */
+async function outByTheFront(target: { x: number; y: number | null; z: number }, distance: number): Promise<void> {
+  const { shelterLayout } = await import("./building");
+  const top = shelterLayout()?.start;
+  if (!top || !startsOutByTheFront(bot.entity.position, top, target, distance)) return;
+  console.log(`Long trip: out by the front of my home first (up to ${top.x}, ${top.y}, ${top.z}).`);
+  const out = await goTo(new pf.goals.GoalNear(top.x, top.y, top.z, 1));
+  if (!out.ok) console.log(`Long trip: couldn't get out by the front (${out.ok ? "" : out.detail}); going as I can.`);
+}
+
 export async function travelToResult(
   getTarget: () => { x: number; y: number | null; z: number } | null,
   options: { range?: number; onProgress?: (percent: number) => void } = {}
@@ -60,6 +87,12 @@ export async function travelToResult(
     if (!(await ensureBoat())) console.log("Long trip: no boat (no wood); going without.");
     if (isCommandCancelled()) return fail("aborted", "stopped");
   }
+
+  // Out by the front first: a long trip to somewhere on the surface, starting
+  // down in its shelter or its mine, goes up its stairs and over the land,
+  // not through its mine and on through the rock (game test: off to a
+  // chicken in a field it went down its mine and dug along at y 5)
+  await outByTheFront(first, total);
 
   try {
     while (failures < MAX_LEG_FAILURES) {
