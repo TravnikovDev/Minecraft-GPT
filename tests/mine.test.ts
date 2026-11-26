@@ -59,6 +59,10 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
     expect(has(keep, 1, 59 + dy, 5)).toBe(true);
     expect(has(keep, -1, 59 + dy, 5)).toBe(true);
   }
+  // The roof over each step down to the first hub (a walk dug down into the
+  // stairs from the grass); not deeper, where the forward tunnel passes over
+  expect(has(keep, 0, 63, 5)).toBe(true);
+  expect(has(keep, 0, 64 - 11 + 4, 11)).toBe(false);
   // Never the step's own cells (it walks there) nor the doorway
   expect(has(keep, 0, 59, 5)).toBe(false);
   expect(has(keep, 0, 63, 0)).toBe(false);

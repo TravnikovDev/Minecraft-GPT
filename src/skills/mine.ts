@@ -117,7 +117,7 @@ export function protectMine(): void {
   setOwnPassages(walk, "mine");
 }
 
-/** The stairs' protected cells (floors, side walls but the hubs') and walking cells (each step's feet, head and the cell above). Pure. */
+/** The stairs' protected cells (floors, roofs, side walls but the hubs') and walking cells (each step's open space). Pure. */
 export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number): { keep: Vec3[]; walk: Vec3[] } {
   const keep: Vec3[] = [];
   const walk: Vec3[] = [];
@@ -129,11 +129,18 @@ export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, l
   return { keep, walk };
 }
 
-/** One step's floor and side walls (none for the doorway, no side walls at a hub). Pure. */
+/**
+ * One step's floor, roof and side walls (none for the doorway, no side
+ * walls at a hub). The roof too: a walk home dug down from the grass into
+ * the stairs behind the shelter, and a skeleton came in that way. Pure.
+ */
 function stepShell(start: Pos, dir: DirectionType, i: number, level: number): Vec3[] {
   if (i === 0) return [];
   const s = stepAt(start, dir, i);
   const cells = [s.offset(0, -1, 0)];
+  // The roof only above the first hub, near the surface: deeper, the stairs
+  // run under the first level's forward tunnel, which is a step's "roof" there
+  if (i < hubStep(0)) cells.push(s.offset(0, STAIR_HEADROOM + 1, 0));
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
   if (hubs.has(i)) return cells;
   for (const side of [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]]) {
