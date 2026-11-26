@@ -94,9 +94,10 @@ export async function collectBlock(
       console.log(`Giving up on ${blockType} after ${failures} failed tries.`);
       break;
     }
-    // Not ones it gave up on, nor ones in an area it must keep out of
-    // Never its shelter's walls (protected), nor where it must keep out
-    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && !isProtected(b.position));
+    // Not ones it gave up on, nor ones in an area it must keep out of.
+    // Never its shelter's or stairs' walls (protected), but ore in them is
+    // fair game: mined, then the spot filled back (owner)
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && (!isProtected(b.position) || c.isOre(b.name)));
     for (const b of blocks.slice(0, 8)) recordSighting(b.name, b.position); // hints for later
 
     if (blocks.length === 0) {
@@ -183,9 +184,27 @@ export async function collectBlock(
 
 /** Mines one block (checked) and picks up what it drops. */
 async function mineAndCollect(block: Block): Promise<ActionResult<{ name: string; alreadyGone: boolean }>> {
+  const kept = isProtected(block.position);
   const broken = await breakBlockAtResult(block.position.x, block.position.y, block.position.z);
   if (broken.ok && !broken.value.alreadyGone) await pickupNearbyItems(bot, 5);
+  // Ore taken out of a wall or a step it keeps: the spot filled back
+  if (broken.ok && kept) await fillBack(block.position);
   return broken;
+}
+
+// What a mined-out spot in a kept wall or step is filled with
+const FILL_BACK = ["cobblestone", "cobbled_deepslate", "stone", "deepslate", "andesite", "diorite", "granite", "tuff", "dirt"];
+
+/** Fills a spot of a kept wall or step that ore was mined out of. */
+async function fillBack(p: { x: number; y: number; z: number }): Promise<void> {
+  const filler = FILL_BACK.find((n) => bot.inventory.items().some((i) => i.name === n));
+  if (!filler) {
+    console.log(`Mined ore out of my wall at ${p}; nothing to fill it back with yet.`);
+    return;
+  }
+  const { placeBlockResult } = await import("./blockPlacing");
+  const placed = await placeBlockResult(filler, p.x, p.y, p.z);
+  console.log(placed.ok ? `Filled the spot at ${p} back with ${filler}.` : `Couldn't fill the spot at ${p} back (${placed.ok ? "" : placed.detail}).`);
 }
 
 // Function to find connected blocks (vein mining)

@@ -95,3 +95,17 @@ test("not down the mine hurt or without food", async () => {
   expect(hungry.ok).toBe(false);
   expect(hungry.reason).toBe("missing_items");
 });
+
+test("the stairs down to the shelter are part of its shell: floor, side walls and roof below the surface", async () => {
+  const { stairsShell } = await import(`${ROOT}/src/actions/building.ts`);
+  const { Vec3 } = await import(`${ROOT}/node_modules/vec3`);
+  // Two steps going +x from the surface at y=64, 2 cells tall
+  const stairs = [new Vec3(0, 64, 0), new Vec3(0, 65, 0), new Vec3(1, 63, 0), new Vec3(1, 64, 0)];
+  const shell = stairsShell(stairs, [], new Vec3(0, 0, 1), 64);
+  const has = (x: number, y: number, z: number) => shell.some((p: { x: number; y: number; z: number }) => p.x === x && p.y === y && p.z === z);
+  expect(has(0, 63, 0)).toBe(true); // floor under the top step
+  expect(has(1, 62, 0)).toBe(true); // floor under the second step
+  expect(has(1, 63, 1) && has(1, 63, -1)).toBe(true); // side walls below the surface
+  expect(has(0, 64, 1)).toBe(false); // at the surface: the open world, not a wall
+  expect(has(1, 64, 0)).toBe(false); // a stair cell is never part of the shell
+});

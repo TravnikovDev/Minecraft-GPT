@@ -149,13 +149,37 @@ export function shelterPlan(start: Pos, dir: DirectionType, room: RoomSize = DEF
     room: roomCells,
     // Around the room: its walls, roof and floor (the doorways left open).
     // These must be solid ground, or it isn't really a shelter (a hillside
-    // left its roof open to the sky, fresh-world test)
-    shell: shellAround(roomCells, doorways),
+    // left its roof open to the sky, fresh-world test). And the stairs down
+    // to it: their floor, side walls and roof below the surface (owner: a
+    // walk dug through the stairs' walls; they're kept and mended like the room)
+    shell: [...new Map([...shellAround(roomCells, doorways), ...stairsShell(stairs, [...doorways, ...roomCells], across, s.y)].map((p) => [cellKey(p), p])).values()],
+    // The stairs' open cells (kept clear: a block fallen or put in them is dug out)
+    stairs,
   };
 }
 
 const cellKey = (p: Pos): string => `${p.x},${p.y},${p.z}`;
 const NEIGHBOURS = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+
+/**
+ * The ground round the stairs down to the room: the floor under each step,
+ * the side walls and the roof over each step, those below the surface
+ * (`surfaceY`; above it is the open world). Pure.
+ */
+export function stairsShell(stairs: Vec3[], others: Vec3[], across: Vec3, surfaceY: number): Vec3[] {
+  const open = new Set([...stairs, ...others].map(cellKey));
+  const out = new Map<string, Vec3>();
+  const add = (p: Vec3): void => {
+    if (p.y < surfaceY && !open.has(cellKey(p))) out.set(cellKey(p), p);
+  };
+  for (const c of stairs) {
+    add(c.plus(across));
+    add(c.minus(across));
+    add(c.offset(0, -1, 0));
+    add(c.offset(0, 1, 0));
+  }
+  return [...out.values()];
+}
 
 /** Every cell next to the room that isn't the room or a doorway. */
 function shellAround(room: Vec3[], doorways: Vec3[]): Vec3[] {
@@ -421,11 +445,18 @@ export function shelterIntact(): boolean {
   if (!mine) return true;
   const { plan } = mine;
   if (plan.shell.some(shellHole)) return false;
+  if (plan.stairs.some(stairBlocked)) return false;
   for (const at of [plan.entrance, plan.exit]) {
     const b = knownBlock(at);
     if (b && !isWoodenDoor(b.name)) return false;
   }
   return true;
+}
+
+/** A stairs cell filled with something (a block put or fallen there): not a torch, a door or a plant. */
+function stairBlocked(p: Vec3): boolean {
+  const b = knownBlock(p);
+  return b !== null && b.boundingBox === "block" && !isWoodenDoor(b.name);
 }
 
 /** Goes home and mends the shelter: fills holes in its walls, roof and floor, and puts in any missing door. */
@@ -435,7 +466,13 @@ async function repairShelter(): Promise<ActionResult> {
   const { room, plan } = mine;
   const holes = plan.shell.filter(shellHole).length;
   const doors = [plan.entrance, plan.exit].filter((at) => !isWoodenDoor(knownBlock(at)?.name ?? "")).length;
-  report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
+  const blocked = plan.stairs.filter(stairBlocked);
+  report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", blocked.length ? `${blocked.length} blocks in my stairs` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
+  // Blocks in the stairs dug out first, from the top down (the way home)
+  for (const c of [...blocked].sort((a, b) => b.y - a.y)) {
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    await breakBlockAt(c.x, c.y, c.z);
+  }
   const home = await walkHome(room);
   if (!home.ok) return home;
   if (holes > 0) {
