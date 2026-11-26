@@ -33,12 +33,16 @@ export function toolTier(kind: "pickaxe" | "axe" | "sword" | "shovel" | "hoe"): 
   return Math.max(-1, ...bot.inventory.items().filter((i) => c.toolKind(i.name) === kind).map((i) => c.toolTier(i.name)));
 }
 
-/** Food points it carries (cooked steak 8, bread 5...), junk left out. */
+// Raw meat and fish: food once cooked, not food in stock (owner: the bot must
+// keep a stock of cooked food; raw chicken can poison it)
+export const RAW_FOOD = new Set(["beef", "porkchop", "mutton", "chicken", "rabbit", "cod", "salmon"]);
+
+/** Food points it carries ready to eat (cooked steak 8, bread 5...): raw meat and junk left out. */
 export function foodPoints(): number {
   const foods = (bot.registry.foodsByName ?? {}) as Record<string, { foodPoints?: number }>;
   return bot.inventory
     .items()
-    .filter((i) => !JUNK_FOOD.has(i.name))
+    .filter((i) => !JUNK_FOOD.has(i.name) && !RAW_FOOD.has(i.name))
     .reduce((n, i) => n + (foods[i.name]?.foodPoints ?? 0) * i.count, 0);
 }
 

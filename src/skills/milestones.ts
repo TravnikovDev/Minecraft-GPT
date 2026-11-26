@@ -12,9 +12,8 @@ import { report } from "../core/narrator";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
-import { animalsInSight, exploreFor } from "./explore";
 import { isCommandCancelled } from "../core/commandContext";
-import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
+import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
@@ -66,6 +65,8 @@ export function milestoneHere(m: Milestone): boolean {
 }
 
 const FOOD_STOCK = 20; // food points carried: a couple of days' eating
+// Hunting for the stock: only animals this close (no long trips after them)
+const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
 const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
@@ -93,35 +94,59 @@ async function stockFood(): Promise<ActionResult> {
   const { pickBerries } = await import("../commands/StarterKit");
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
-  // Its farm first (owner: hunting isn't sustainable), then berries, then hunting
-  if (foodPoints() < FOOD_STOCK && myFarm()) await tendFarm();
-  if (foodPoints() < FOOD_STOCK) await pickBerries();
-  if (foodPoints() < FOOD_STOCK) await hunt({ maxDistance: 60, mobType: null, count: 4 });
-  // Hunted out around here: go farther and hunt there (a player doesn't wait hungry)
-  for (let trip = 0; trip < 2 && foodPoints() < FOOD_STOCK && !isCommandCancelled(); trip++) {
-    if (!(await exploreFor("animals", animalsInSight))) break;
-    await hunt({ maxDistance: 40, mobType: null, count: 4 });
-  }
-  // Starving and nothing else found: apples from oak leaves round about
-  // (owner: if it's starving and there are oak trees near, their leaves give
-  // apples; one leaf in 200 does, so it's a last resort, by day)
-  if (foodPoints() < STARVING_FOOD && bot.time?.isDay !== false && !isCommandCancelled()) {
-    const { applesFromLeaves } = await import("./apples");
-    await applesFromLeaves();
-  }
-  // Still short, no farm yet, its bucket at hand, by day: the farm now. Food
-  // is a first-day milestone and the farm a later one, so while food kept
-  // failing the farm never came up (game test: 0 food points, no animals
-  // in the open, the same loop every two minutes)
+  const short = (): boolean => foodPoints() < FOOD_STOCK && !isCommandCancelled();
+  const byDay = (): boolean => bot.time?.isDay !== false;
+  // Owner: a stock of cooked food, and hunting isn't a way to keep one (it
+  // walked 100-plus blocks after single sheep and chickens, through caves,
+  // and died). Lasting sources first, in this order:
+  // 1. cooked food in its own chests; raw meat and fish (carried or stored) cooked
+  await foodFromChests();
+  if (short() && hasRawFood()) await cookTheMeat(cookFood);
+  // 2. its farm: tended, or made now (it has a bucket, it's day)
+  if (short() && myFarm()) await tendFarm();
   const hasBucket = bot.inventory.items().some((i) => /^(water_)?bucket$/.test(i.name));
-  if (foodPoints() < FOOD_STOCK && !myFarm() && hasBucket && bot.time?.isDay !== false && !isCommandCancelled()) {
+  if (short() && !myFarm() && hasBucket && byDay()) {
     const made = await makeFarm();
     if (!made.ok) console.log(`Food: no farm yet (${describeFailure(made)}).`);
   }
-  // Raw meat is worth more cooked: a furnace from the cobblestone it has
-  const hasRaw = bot.inventory.items().some((i) => /^(beef|porkchop|mutton|chicken|rabbit|cod|salmon)$/.test(i.name));
-  if (hasRaw) await cookTheMeat(cookFood);
-  return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points; no more animals or berries around`);
+  // 3. berries; fishing (a rod, or string for one, and open water near)
+  if (short()) await pickBerries();
+  if (short()) {
+    const { goFishing } = await import("./fishing");
+    if ((await goFishing()) > 0) await cookTheMeat(cookFood);
+  }
+  // 4. starving: apples from oak leaves round about (owner; one leaf in 200)
+  if (foodPoints() < STARVING_FOOD && byDay() && !isCommandCancelled()) {
+    const { applesFromLeaves } = await import("./apples");
+    await applesFromLeaves();
+  }
+  // 5. last: animals close by only (no long walks, no exploring for them)
+  if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
+  if (hasRawFood()) await cookTheMeat(cookFood);
+  return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points ready to eat; nothing more near home today`);
+}
+
+/** True when it carries raw meat or fish. */
+const hasRawFood = (): boolean => bot.inventory.items().some((i) => RAW_FOOD.has(i.name));
+
+// Ready food worth taking out of its chests, best first, and raw food to cook
+const READY_FOOD = ["cooked_beef", "cooked_porkchop", "cooked_mutton", "golden_carrot", "cooked_salmon", "cooked_chicken", "baked_potato", "cooked_rabbit", "bread", "cooked_cod", "pumpkin_pie", "apple", "carrot", "melon_slice", "sweet_berries"];
+
+/** Ready food from its own chests near home, then raw food to cook, until the stock is full. */
+async function foodFromChests(): Promise<void> {
+  const { storedNear, takeItems } = await import("../actions/storage");
+  const foods = (bot.registry.foodsByName ?? {}) as Record<string, { foodPoints?: number }>;
+  for (const name of [...READY_FOOD, ...RAW_FOOD]) {
+    const short = FOOD_STOCK - foodPoints();
+    if (short <= 0 || isCommandCancelled()) return;
+    const stored = storedNear(name, 32);
+    if (stored === 0) continue;
+    const per = foods[name]?.foodPoints ?? 2;
+    const take = Math.min(stored, Math.ceil(short / per) + (RAW_FOOD.has(name) ? 2 : 0));
+    const got = await takeItems([{ name, count: take }], true);
+    const n = got?.taken.get(name) ?? 0;
+    if (n > 0) console.log(`Food: took ${n} ${name.replace(/_/g, " ")} from my chests.`);
+  }
 }
 
 /**

@@ -26,6 +26,7 @@ Example: "Go hunting", "Hunt for pigs", "Kill 3 sheep", "Kill the chicken" (coun
 
 export const parameters = z.object({
   maxDistance: z.number().nullable().describe("How far to look for animals (default 60)."),
+  walkFar: z.boolean().nullable().describe("Walk to animals out of sight further off (default true; false: only ones close by)."),
   mobType: z
     .string()
     .nullable()
@@ -81,7 +82,7 @@ export async function execute(args: any): Promise<void> {
   // server says some are about (up to 200 blocks): walk there until they are
   let found = lookForAnimals().filter((p) => p.distance <= maxDistance);
   let plan = planHunt(found, mobType, count);
-  if (plan.total === 0) {
+  if (plan.total === 0 && parsed.data.walkFar !== false) {
     const inView = new Set(found.map((p) => p.id));
     const far = knownAnimals().find((p) => isGame(p, mobType) && !inView.has(p.id));
     if (far) {
@@ -114,7 +115,7 @@ export async function execute(args: any): Promise<void> {
         command: BotCommands.Hunting,
         priority: 3,
         retryCount: 0,
-        args: { maxDistance, mobType, count: seenCount },
+        args: { maxDistance, mobType, count: seenCount, walkFar: parsed.data.walkFar ?? null },
       });
     });
     return;
@@ -165,7 +166,7 @@ export async function execute(args: any): Promise<void> {
         command: BotCommands.Hunting,
         priority: 3,
         retryCount: 0,
-        args: { maxDistance, mobType, count: null },
+        args: { maxDistance, mobType, count: null, walkFar: parsed.data.walkFar ?? null },
       });
     });
   } else if (more.total > 0) {

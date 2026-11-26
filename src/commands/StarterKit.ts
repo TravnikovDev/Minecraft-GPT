@@ -72,7 +72,7 @@ export async function execute(): Promise<void> {
 
   if (foodCount() < MIN_FOOD) await pickBerries();
   if (isCommandCancelled()) return;
-  if (foodCount() < MIN_FOOD) await hunt({ maxDistance: 48, mobType: null, count: 2 });
+  if (foodCount() < MIN_FOOD) await hunt({ maxDistance: 48, mobType: null, count: 2, walkFar: null });
   if (isCommandCancelled()) return;
 
   const parts = [
