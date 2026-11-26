@@ -83,3 +83,16 @@ test("a creeper out of sight for a moment stays the target", () => {
   expect(stillTracked(1_000, 3_500, 9, 13)).toBe(false); // gone for over 2 s
   expect(stillTracked(1_000, 1_500, 14, 13)).toBe(false); // too far now
 });
+
+test("a creeper behind its shelter wall doesn't count; one right by it outside does", async () => {
+  const { creeperCounts, engagementStalled } = await import(`${ROOT}/src/actions/creeperReflex.ts`);
+  // Shut in for the night: only one it can see (in the room with it)
+  expect(creeperCounts(4.8, false, true)).toBe(false);
+  expect(creeperCounts(3, true, true)).toBe(true);
+  // Outside: one right by it counts even when the sight line misses it
+  expect(creeperCounts(4.8, false, false)).toBe(true);
+  expect(creeperCounts(8, false, false)).toBe(false);
+  // 20 s with no hit and no closer: it can't get at it
+  expect(engagementStalled(0, 19_000)).toBe(false);
+  expect(engagementStalled(0, 21_000)).toBe(true);
+});

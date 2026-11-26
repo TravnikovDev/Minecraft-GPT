@@ -32,6 +32,13 @@ const GIVE_WAY_MS = 4_000;
 // each flicker handed the legs back and forth (game test: 700 on/off switches
 // in two minutes; every walk home failed with "the goal was changed")
 const KEEP_SEEN_MS = 2_000;
+// No hit landed and no closer than before for this long: it can't get at
+// that creeper (behind a wall, across a ravine); it's let be for a while.
+// Game test: a creeper outside the shelter wall, 4.8 blocks away, held the
+// bot's body from 07:09 on; for 25 minutes it couldn't craft, walk or go
+// home
+const STALL_MS = 20_000;
+const IGNORE_STALLED_MS = 60_000;
 
 let active = false;
 let busy = false;
@@ -39,6 +46,12 @@ let lastHitAt = 0;
 let givingWayUntil = 0;
 let trackedId: number | null = null;
 let trackedSeenAt = 0;
+// While engaged: when it last got anywhere (a hit, or closer than ever)
+let progressAt = 0;
+let closest = Infinity;
+const ignoredUntil = new Map<number, number>();
+// Each time the same creeper stalls it, it's left be twice as long (up to 16 min)
+const stalledTimes = new Map<number, number>();
 
 /** True while the bot is dealing with a creeper (other code should wait). */
 export function isCreeperReflexActive(): boolean {
@@ -81,6 +94,22 @@ export function stillTracked(seenAt: number, now: number, distance: number, maxD
   return now - seenAt < keepMs && distance <= maxDistance;
 }
 
+/**
+ * Whether a creeper counts at all: one it can see, or one right by it (the
+ * sight line can miss a creeper at its side). Shut in its shelter, only one
+ * it can see (in the room with it): through the walls neither can reach the
+ * other. Pure.
+ */
+export function creeperCounts(distance: number, visible: boolean, sheltered: boolean, closeBy = CREEPER_FIRST_WITHIN): boolean {
+  if (visible) return true;
+  return !sheltered && distance <= closeBy;
+}
+
+/** True when an engagement has gone nowhere for `stallMs` (no hit, no closer). Pure. */
+export function engagementStalled(progressAt: number, now: number, stallMs = STALL_MS): boolean {
+  return now - progressAt > stallMs;
+}
+
 function finish(reason = "clear"): void {
   trackedId = null;
   if (!active) return;
@@ -101,6 +130,11 @@ function brawler(): Entity | null {
 
 async function tick(): Promise<void> {
   if (busy || !bot.entity || !(bot.health > 0)) return;
+  // In bed it can't move; a creeper in sight wakes it first (the server won't let it sleep)
+  if (bot.isSleeping) {
+    finish("in bed");
+    return;
+  }
   if (areReflexesMuted()) {
     finish(); // the owner said stop (e.g. penned-in creepers at a mob farm)
     return;
@@ -116,13 +150,14 @@ async function tick(): Promise<void> {
   // reach the bot, and going for it digs the bot out of its shelter
   const eyes = bot.entity.position.offset(0, 1.62, 0);
   const range = active ? SAFE_DISTANCE + 4 : radius;
+  const now = Date.now();
   const seen = bot.nearestEntity((e) => {
     if (e.name !== "creeper") return false;
+    if ((ignoredUntil.get(e.id) ?? 0) > now) return false;
     const d = e.position.distanceTo(bot.entity.position);
     if (d > range) return false;
-    if (d <= CREEPER_FIRST_WITHIN) return true;
-    if (isSheltered()) return false;
-    return canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
+    const visible = canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
+    return creeperCounts(d, visible, isSheltered());
   });
   if (seen) {
     trackedId = seen.id;
@@ -151,10 +186,28 @@ async function tick(): Promise<void> {
   try {
     if (!active) {
       active = true;
+      progressAt = Date.now();
+      closest = distance;
       console.log(`Creeper reflex: creeper ${distance.toFixed(1)} blocks away${isNight() ? " (night)" : ""}.`);
       setReflexActive("creeper", true);
       takeOverBody(); // take over movement from whatever task is running
       fighting.stop();
+    }
+
+    // Getting anywhere? Closer than ever, or a hit (below)
+    if (distance < closest - 0.5) {
+      closest = distance;
+      progressAt = Date.now();
+    }
+    // (a hissing one isn't left: it's about to go off; one close by but out
+    // of reach, behind a wall, is)
+    if (!isFusing(creeper) && engagementStalled(progressAt, Date.now())) {
+      const times = (stalledTimes.get(creeper.id) ?? 0) + 1;
+      stalledTimes.set(creeper.id, times);
+      const forMs = IGNORE_STALLED_MS * 2 ** Math.min(times - 1, 4);
+      ignoredUntil.set(creeper.id, Date.now() + forMs);
+      finish(`can't get at the creeper ${distance.toFixed(1)} blocks away; leaving it be for ${Math.round(forMs / 60_000)} min`);
+      return;
     }
 
     const weapon = bestWeapon();
@@ -173,6 +226,7 @@ async function tick(): Promise<void> {
     if (distance <= HIT_RANGE) {
       if (Date.now() - lastHitAt >= HIT_COOLDOWN_MS) {
         lastHitAt = Date.now();
+        progressAt = Date.now();
         hitEntity(creeper);
       }
       setOnly({ back: true }); // step back after the hit, out of blast range
@@ -197,6 +251,8 @@ export function registerCreeperReflex(): void {
   givingWayUntil = 0;
   trackedId = null;
   trackedSeenAt = 0;
+  ignoredUntil.clear();
+  stalledTimes.clear();
   // Its moves run as the creeper reflex: they never wait for the task it paused
   const timer = setInterval(() => void asReflex("creeper", tick), CHECK_MS);
   onConnectionEnd(bot, () => clearInterval(timer));
