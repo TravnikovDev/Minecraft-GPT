@@ -38,15 +38,16 @@ test("hubs: at the stairs' bottom, then every 20 steps deeper", () => {
   expect([0, 1, 2].map(hubStep)).toEqual([MINE_DEPTH, MINE_DEPTH + LEVEL_STEP, MINE_DEPTH + 2 * LEVEL_STEP]);
 });
 
-test("paving: every step below the doorway with a step below it, hubs left flat", () => {
-  // Stairs down to the first hub (steps 0..10): steps 1..9 (10 is the hub)
-  expect(stepsToPave(11, 0)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  // Dug on to the second hub (steps 0..30): the first hub (10) and the second (30) stay flat
-  const deep = stepsToPave(31, 1);
+test("paving: every step below the doorway, hubs and the bottom step too", () => {
+  // Owner: a flat hub between paved steps is a step and a half up, which no one can walk
+  // Stairs down to the first hub (steps 0..10): steps 1..10 (10 is the hub, paved from its forward tunnel)
+  expect(stepsToPave(11)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  // Dug on to the second hub (steps 0..30): both hubs paved, the doorway's step never
+  const deep = stepsToPave(31);
   expect(deep).not.toContain(0);
-  expect(deep).not.toContain(10);
-  expect(deep).not.toContain(30);
-  expect(deep.length).toBe(28);
+  expect(deep).toContain(10);
+  expect(deep).toContain(30);
+  expect(deep.length).toBe(30);
 });
 
 test("the stairs' floors and side walls are kept; hubs stay open to the sides; the doorway is the shelter's", () => {

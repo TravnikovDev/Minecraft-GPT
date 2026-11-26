@@ -342,18 +342,25 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
  * has a dug step below it to stand on, except the hubs, which stay flat for
  * their tunnels. Pure.
  */
-export function stepsToPave(stairs: number, level: number): number[] {
-  const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
+export function stepsToPave(stairs: number): number[] {
+  // Every step below the doorway, hubs too (owner: a flat hub between paved
+  // steps is a step and a half up, which no one can walk; game test). The
+  // bottom step is paved from its forward tunnel, the rest from the step below
   const steps: number[] = [];
-  for (let i = 1; i + 1 < stairs; i++) if (!hubs.has(i)) steps.push(i);
+  for (let i = 1; i < stairs; i++) steps.push(i);
   return steps;
+}
+
+/** The hub steps of a mine `level` levels deep (where the side tunnels leave the stairs). Pure. */
+export function hubSteps(level: number): Set<number> {
+  return new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
 }
 
 /** The steps of its mine's stairs still without a stair block (as far as it can see). */
 export function unpavedSteps(): number[] {
   const rec = mineRecord();
   if (!rec?.bottom) return [];
-  return stepsToPave(rec.stairs, rec.level).filter((i) => {
+  return stepsToPave(rec.stairs).filter((i) => {
     const b = bot.blockAt(stepAt(rec.start, rec.direction, i));
     return b !== null && !b.name.endsWith("_stairs");
   });
@@ -362,7 +369,7 @@ export function unpavedSteps(): number[] {
 /** True when its mine has stairs to pave and every one of them is paved. */
 export function stairsPaved(): boolean {
   const rec = mineRecord();
-  return Boolean(rec?.bottom) && stepsToPave(rec!.stairs, rec!.level).length > 0 && unpavedSteps().length === 0;
+  return Boolean(rec?.bottom) && stepsToPave(rec!.stairs).length > 0 && unpavedSteps().length === 0;
 }
 
 /**
@@ -397,18 +404,32 @@ async function paveSteps(): Promise<ActionResult> {
   const { breakBlock } = await import("../core/primitives");
   const { placeBlockResult } = await import("../actions/blockPlacing");
   let paved = 0;
+  const hubs = hubSteps(rec.level);
   for (const i of steps) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     if (carried(["cobblestone_stairs"]) === 0) break;
     const step = stepAt(rec.start, rec.direction, i);
-    const below = stepAt(rec.start, rec.direction, i + 1);
-    const there = await goTo(new pf.goals.GoalBlock(below.x, below.y, below.z));
+    // Placed facing up the stairs: from the step below, or (the bottom step)
+    // from its forward tunnel, which is level with it
+    const stand = i + 1 < rec.stairs ? stepAt(rec.start, rec.direction, i + 1) : step.plus(STEP[rec.direction]);
+    if (i + 1 >= rec.stairs && bot.blockAt(stand)?.boundingBox !== "empty") continue;
+    const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
     if (!there.ok) continue;
     // One block more headroom over the step (a stair raises the floor half a block)
     const head = step.offset(0, 3, 0);
     if (bot.blockAt(head)?.boundingBox === "block") await breakBlock(head);
     const placed = await placeBlockResult("cobblestone_stairs", step.x, step.y, step.z, "bottom");
     if (placed.ok) paved++;
+    // A hub, now half a block up: the block over each side tunnel's opening
+    // dug out, so stepping off it into a side tunnel has headroom (owner)
+    if (placed.ok && hubs.has(i)) {
+      for (const side of [STEP[armDirection("right", rec.direction)], STEP[armDirection("left", rec.direction)]]) {
+        const opening = step.plus(side);
+        if (bot.blockAt(opening)?.boundingBox !== "empty") continue; // no tunnel that way
+        const over = opening.offset(0, 2, 0);
+        if (bot.blockAt(over)?.boundingBox === "block") await breakBlock(over);
+      }
+    }
   }
   console.log(`Mine: paved ${paved} of ${steps.length} stair steps.`);
   return unpavedSteps().length === 0 ? ok() : fail("refused", `${unpavedSteps().length} of my mine's steps aren't paved yet`);
