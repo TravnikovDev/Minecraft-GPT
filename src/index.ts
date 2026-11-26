@@ -37,6 +37,7 @@ import { registerCombatReflex } from "./actions/combatReflex";
 import { resetReflexes } from "./core/reflexes";
 import { pathing } from "./core/plugins";
 import { eatWhenHungry } from "./actions/upkeep";
+import { lightTheWay } from "./actions/caveLighting";
 import { checkPlacesNearby, resetPlaceChecks } from "./actions/placeCheck";
 import { resetPerception } from "./actions/perception";
 import { registerOwnerUpdates } from "./actions/ownerUpdates";
@@ -96,6 +97,7 @@ onConnectionReady((currentBot) => {
   onConnectionEnd(currentBot, abortForDisconnect); // a running task must not drive the next connection
   registerCombatReflex(); // fights back when mobs attack, pausing the task
   everyWhileConnected(currentBot, 2_000, eatWhenHungry); // eats between the task's actions (actions/upkeep)
+  everyWhileConnected(currentBot, 2_500, lightTheWay); // a torch down in a dark cave as it goes (actions/caveLighting)
   resetPlaceChecks(); // check remembered places again as it comes near
   everyWhileConnected(currentBot, 10_000, checkPlacesNearby); // forget tables, chests, beds that are gone
   resetPerception(); // sightings from before may be out of date
