@@ -37,6 +37,11 @@ const FLEE_DISTANCE = 16; // how far to get from the mobs
 const CORNERED_RANGE = 1.5; // a mob this close while running: hit it
 const MAX_FLEE_MS = 25_000;
 const RETREAT_NOTICE_MS = 60_000;
+// Archers shoot from further than it hits back: one hitting it from up to
+// here is fought (when it can) or run from. Game test: a skeleton 6-7 blocks
+// off shot it for a minute while it stood still eating, and killed it
+export const ARCHERS = new Set(["skeleton", "stray", "pillager", "witch", "piglin"]);
+const ARCHER_RANGE = 16;
 
 let fleeing: Entity | null = null; // the mob it's running from
 let fleeStartedAt = 0;
@@ -168,6 +173,11 @@ function stopRetreat(reason: string): void {
   console.log(`Combat reflex: ${reason}.`);
 }
 
+/** An archer within ARCHER_RANGE that can see it (so it's the one shooting), ignored ones too. */
+function nearestArcher(): Entity | null {
+  return getPriorityTargets(ARCHER_RANGE).find((e) => isAlive(e) && ARCHERS.has(e.name ?? "") && canFight(e)) ?? null;
+}
+
 /** The nearest hostile mob within `range` (ignored ones too: they still hurt). */
 function nearestThreat(range: number): Entity | null {
   // Running from a flyer is no use: it follows; going on (inside) is
@@ -198,7 +208,7 @@ function tick(): void {
     return;
   }
   if (bot.health <= RETREAT_HEALTH) {
-    const threat = nearestThreat(HIT_BACK_RANGE);
+    const threat = nearestThreat(HIT_BACK_RANGE) ?? nearestArcher();
     if (threat && distanceTo(threat) > CORNERED_RANGE) {
       retreat(threat);
       return;
@@ -260,9 +270,16 @@ export function registerCombatReflex(): void {
   unsubscribe?.();
   unsubscribe = on("bot:damaged", () =>
     asReflex("combat", () => {
-      if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive() || isLavaReflexActive()) return;
-      const mob = pickTarget(HIT_BACK_RANGE);
-      if (mob) engage(mob);
+      if (target || fleeing || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive() || isLavaReflexActive()) return;
+      const near = bot.health > RETREAT_HEALTH ? pickTarget(HIT_BACK_RANGE) : null;
+      if (near) return engage(near);
+      // Shot from further off: at the archer if it can, out of its way if it's
+      // hurt or gave up on reaching it (it stood and took arrows till it died)
+      const archer = nearestArcher();
+      if (!archer) return;
+      const unreachable = (ignored.get(archer.id) ?? 0) > Date.now();
+      if (bot.health > RETREAT_HEALTH && !unreachable) engage(archer);
+      else retreat(archer);
     })
   );
 }
