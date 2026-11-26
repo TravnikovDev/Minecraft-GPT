@@ -185,5 +185,8 @@ export async function lightUpHome(byDay: boolean): Promise<ActionResult> {
   if (placed > 0) chatter(`Put up ${placed} torch${placed === 1 ? "" : "es"} round my home, so nothing spawns by it.`, "lighting");
   if (homeLit()) return ok();
   if (!byDay && plan.outside.length > 0) return fail("refused", "the ground round my home is lit by day");
+  // Lighting some shows others (a spot it couldn't see from inside): said as what's left
+  const left = torchesNeeded();
+  if (missed === 0) return fail("not_found", `${left} more spot${left === 1 ? "" : "s"} round my home to light`);
   return fail("not_found", `${missed} spot${missed === 1 ? "" : "s"} round my home I couldn't light`);
 }
