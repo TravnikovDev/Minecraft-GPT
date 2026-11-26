@@ -3,7 +3,7 @@
 // over it, and never on what it keeps (its shelter, its stairs).
 import { expect, test } from "bun:test";
 const ROOT = `${import.meta.dir}/..`;
-const { plotFits, FARM_HALF, sowOrder, torchSpots } = await import(`${ROOT}/src/skills/farm.ts`);
+const { plotFits, FARM_HALF, sowOrder, torchSpots, levelCost } = await import(`${ROOT}/src/skills/farm.ts`);
 
 type Cell = { ground: boolean; clear: boolean; sky?: boolean; tree?: boolean } | null;
 const flat = (groundY: number) => (_x: number, y: number): Cell => (y === groundY ? { ground: true, clear: false } : y === groundY + 1 ? { ground: false, clear: true } : { ground: false, clear: false });
@@ -71,4 +71,22 @@ test("a field starts 5 by 5 in ground kept for 9 by 9 and grows a ring once it's
   expect(nextHalf(3, 4, 0)).toBe(4); // then 9x9
   expect(nextHalf(4, 4, 0)).toBe(4); // as big as its ground
   expect(nextHalf(2, 2, 0)).toBe(2); // only 5x5 of ground kept
+});
+
+test("levelling a plot by home: bumps, stone and dips cost a block each; a tree or a hill rules it out (owner)", () => {
+  type L = { name: string; solid: boolean } | null;
+  const ground = (y0: number) => (_x: number, y: number): L => (y <= y0 ? { name: y === y0 ? "grass_block" : "dirt", solid: true } : { name: "air", solid: false });
+  // Flat grass: nothing to do
+  expect(levelCost({ x: 0, y: 63, z: 0 }, 2, ground(63))).toBe(0);
+  // One block of stone sticking up: 1 to dig out
+  const bump = (x: number, y: number, z: number): L => (x === 1 && z === 1 && y === 64 ? { name: "stone", solid: true } : ground(63)(x, y));
+  expect(levelCost({ x: 0, y: 63, z: 0 }, 2, bump)).toBe(1);
+  // A one-deep dip: the ground cell filled
+  const dip = (x: number, y: number, z: number): L => (x === 0 && z === 2 && y === 63 ? { name: "air", solid: false } : ground(63)(x, y));
+  expect(levelCost({ x: 0, y: 63, z: 0 }, 2, dip)).toBe(1);
+  // A tree on it, or a 3-high hill: not here
+  const tree = (x: number, y: number, z: number): L => (x === -1 && z === 0 && y === 64 ? { name: "oak_log", solid: true } : ground(63)(x, y));
+  expect(levelCost({ x: 0, y: 63, z: 0 }, 2, tree)).toBeNull();
+  const hill = (x: number, y: number, z: number): L => (x === 2 && z === -2 && y <= 66 ? { name: "stone", solid: true } : ground(63)(x, y));
+  expect(levelCost({ x: 0, y: 63, z: 0 }, 2, hill)).toBeNull();
 });
