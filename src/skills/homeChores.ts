@@ -22,6 +22,17 @@ export async function homeChores(): Promise<ActionResult> {
   // What didn't work, said at the end (never a plain "done" when it wasn't)
   const problems: string[] = [];
 
+  // Raw iron first into an iron pickaxe if it has none (storing would put
+  // the raw iron away first and the pickaxe step found none: review)
+  const { toolTier: tier0, TIER: T0 } = await import("../skills/capabilities");
+  const rawIronNow = bot.inventory.items().filter((i) => i.name === "raw_iron").reduce((n, i) => n + i.count, 0);
+  if (rawIronNow > 0 && tier0("pickaxe") < T0.iron) {
+    const { smeltIronAndMakePickaxe } = await import("../skills/milestones");
+    const made = await smeltIronAndMakePickaxe();
+    if (!made.ok) console.log(`Home: no iron pickaxe yet (${describeFailure(made)}).`);
+  }
+  if (isCommandCancelled()) return fail("aborted", "stopped");
+
   // Cheap stuff in the chests (it keeps its working supply)
   const { storeItems } = await import("../actions/storage");
   const stored = await storeItems("lowValue");

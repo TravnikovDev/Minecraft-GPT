@@ -544,6 +544,14 @@ async function makeFromIron(things: Array<[string, number]>): Promise<ActionResu
   const ingots = missing.reduce((n, [, cost]) => n + cost, 0);
   if (ingots === 0) return ok();
   const have = (): number => carriedOf(["iron_ingot"]) + carriedOf(["raw_iron"]);
+  // Iron in its own chests first (put away at home), then the mine (review)
+  if (have() < ingots) {
+    const { storedNear, takeItems } = await import("../actions/storage");
+    for (const name of ["iron_ingot", "raw_iron"]) {
+      const short = ingots - have();
+      if (short > 0 && storedNear(name, 32) > 0) await takeItems([{ name, count: short }], true);
+    }
+  }
   if (have() < ingots) {
     const mined = await branchMine([{ item: "raw_iron", enough: ingots - carriedOf(["iron_ingot"]), counts: ["raw_iron"] }], 20);
     if (!mined.ok && have() < ingots) return mined;

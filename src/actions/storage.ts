@@ -32,7 +32,8 @@ export type Deposit = { stack: Stack; count: number };
 export type StoreMode = "items" | "resources" | "lowValue" | "room" | "duplicates" | "all";
 export type Wanted = { name: string; count: number | null };
 
-const OTHER_GEAR = new Set(["bow", "crossbow", "shield", "trident", "fishing_rod", "shears", "flint_and_steel", "elytra", "spyglass"]);
+// (its buckets too: stored, the bucket milestone reopened and it mined iron for another, review)
+const OTHER_GEAR = new Set(["bow", "crossbow", "shield", "trident", "fishing_rod", "shears", "flint_and_steel", "elytra", "spyglass", "bucket", "water_bucket", "lava_bucket"]);
 const SUPPLIES = new Set(["torch", "crafting_table", "arrow", "spectral_arrow", "tipped_arrow"]);
 /** Things nobody needs to carry around (some count as food, but nobody eats them by choice). */
 const JUNK = new Set(["rotten_flesh", "poisonous_potato", "dead_bush", "spider_eye"]);
