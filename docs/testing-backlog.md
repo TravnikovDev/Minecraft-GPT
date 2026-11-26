@@ -4,6 +4,23 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 8: companion roles (2026-11-26, not yet run; see Log Entry 17)
+
+Each role is a standing order ("be my guard", "be my farmer here, put the wheat in the chest next to me", "mine iron for me", "sort my chests", "build a hut here"); "what's your job?" and "you're off duty" are answered in code.
+
+- [ ] Guard: follows you; a zombie or skeleton near you → it fights it, then follows again; never a creeper, an enderman, a zombified piglin, a villager, a wolf or another player
+- [ ] Guard at low health → the combat reflex retreats and the guard doesn't walk it back into the mobs
+- [ ] "stop" while guarding → it stops; a minute later it goes on; "off duty" → it stops for good
+- [ ] Guard "stay here" / "patrol here" → it stays at (or walks round) the spot, back there after a fight
+- [ ] Farmer: harvests the ripe crops of the field only (not the village's), replants, puts the crops in the chest you showed, keeps seeds; nothing ripe → no shift; at night it rests
+- [ ] Farmer on a keep-out field → "As your farmer: the field is in a keep-out area ..."
+- [ ] Miner "mine iron for me" → mining trips, the ore in the chest; "mine bananas" → "I don't know ... as something to mine"
+- [ ] Hauler with 3+ chests around → each kind of thing ends in one chest; its own tools and food stay with it; a double chest is sorted once
+- [ ] Builder "build a hut here" → materials got (chests, mine, trees), terrain cleared, walls then roof; your chest in the footprint is reported, never broken; "The hut is finished" and it goes off duty
+- [ ] New job while one runs ("be my miner" while farming) → the farming shift stops at once
+- [ ] Friend: "how was your day?" → an answer from its diary
+- [ ] `SERVER_AUTOMATION=forbidden` → "go live your life" and jobs are refused; `SERVER_CHAT_SPACING_MS` slows its chat
+
 ## Phase 7: the diary and the day planner (2026-11-26, not yet run; see Log Entry 16)
 
 Past its first day, living its own life ("go live your life"), the bot plans its days with the model: at dusk, when it has nothing left to do, after a death and when you join.

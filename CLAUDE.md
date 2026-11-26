@@ -89,6 +89,8 @@ Everything the bot does is a task in one arbiter (`src/core/arbiter.ts`), by pri
 
 The day planner (Phase 7) is in `src/planner/`: the diary code writes (`diary.ts`, `diaryHooks.ts`), model spending and the monthly cap (`cost.ts`, `LLM_MONTHLY_CAP_USD`, `usage.json`), the goal vocabulary with its "possible now?" checks (`goals.ts`), the plan schema, validator and store (`plan.ts`), the planning call (`planner.ts`, Responses API with strict tools; never inside a task or reflex) and the step runner in B5 (`runner.ts`). Past Tier 1 the curriculum runs plan steps; with none, the next milestone is the fallback.
 
+Companion roles (Phase 8) are in `src/roles/`: the role model in world memory (`role.ts`), the B3 runner that proposes a shift only when there's work, pauses on "stop" and backs off on failures (`runner.ts`), and one file per job (`guard.ts`, `farmer.ts`, `miner.ts`, `hauler.ts`, `builder.ts`). Set by the Role command; `SERVER_AUTOMATION` / `SERVER_CHAT_SPACING_MS` are the server's rules (`src/config/serverProfile.ts`).
+
 Getting an item goes through one planner, `acquire(item, n)` (`src/skills/acquire.ts`, sources in `src/skills/world.ts`); the `ensure*` helpers are thin wrappers over it and must not call each other. What the bot has right now (tool tiers, food, shelter, bed) is computed in `src/skills/capabilities.ts`, never cached. Command modules load `skills/curriculum` and other commands lazily (`await import(...)`): a static import closes a cycle through `commands/registry.ts`.
 
 ## OpenAI Integration

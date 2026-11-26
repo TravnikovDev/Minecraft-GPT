@@ -773,3 +773,36 @@ The architect was consulted on the design before building and reviewed the resul
 - **Tests:** 235 pass.
 - **Left:** the plan's in-game check only (Phase 7 in the testing backlog). A per-server profile moves to Phase 8's server courtesy.
 - **Next:** the Phase 7 game test, then Phase 8 (companion roles) or Phase 9.
+
+## Entry 17: Phase 8, companion roles (2026-11-26)
+
+**Planned.** Phase 8 of the plan: "The bot can help you as a farmer, guard, miner, hauler, builder or friend. Each role is a standing order, set and changed by chat." Written by code and reasoning only; no game run (the owner's request).
+
+**What happened**
+- Built in one step: the role model and runner, five jobs, the friend's chat context, the Role command and the server profile (`5c3891c`).
+- **The architect's review** found the runner unsafe with the arbiter, and more:
+  - "stop" restarted a role within 5 seconds, and the guard fought the mobs the owner had just said to leave alone;
+  - a new job first ran a leftover shift of the old one (for up to 15 minutes);
+  - the guard would attack neutral mobs (endermen, zombified piglins, the warden) and could set its follow goal over a reflex's flight from danger;
+  - a shift that threw, failed or got stuck was proposed again every 5 seconds, forever;
+  - the hauler deposited the bot's own things with the misplaced ones and stranded what didn't fit;
+  - shifts took turns with the night routine and its own life (a guard every minute, a farmer with nothing ripe every two);
+  - the builder broke anything in its footprint (a chest, a bed, the owner's walls);
+  - the farmer's search drifted off its field; unknown crops and ores were guessed.
+- **The review's questions for the owner**, answered with the safe default for now: "stop" pauses the role for the quiet minute and "off duty" ends it; a following guard with the owner away lives its own life; the builder clears only terrain and plants; the hauler sorts the chests it knows around its post; a farmer on a keep-out field says so (the owner lifts it with "you can work here").
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Role model and runner | `roles/role`: job, anchor and radius, stance, target, storage chest, in world memory. `roles/runner`: B3 shifts that rest between rounds, resumed after cut-ins (`5c3891c`) |
+| Jobs | Guard (follow and defend), farmer (harvest, replant, store), miner (mine trips, store the ore), hauler (one kind per chest), builder (blueprints: hut, pen, wall), friend (chat replies get today's diary, yesterday's summary and the job) (`5c3891c`) |
+| Chat | Role command; "what's your job?" and "off duty" in code (`5c3891c`) |
+| Server courtesy | `SERVER_AUTOMATION=forbidden` turns off its own life and jobs; `SERVER_CHAT_SPACING_MS` sets the chat pace; refused blocks already mark keep-out areas (`5c3891c`) |
+| Review fixes | Stop pauses, no stale shifts, backoff and a no-progress pause, shifts only with work; a guard with a shared neutral list, sight, an ignore list, following under the leases, stay and patrol; the hauler moves only what it took and counts double chests once; the builder never breaks what isn't terrain, fills fluids, roofs edge-first; the farmer around its field; unknown crops and ores refused (`9b40cce`) |
+
+**Outcome and what follows**
+- **Tests:** 244 pass.
+- **Not yet seen in the game:** all of Phase 8. The plan's in-game check: one role per session for a full game day, with owner commands interrupting it.
+- **Not done:** breeding animals (optional in the plan); a test of the runner with a fake arbiter and clock.
+- **Next:** the Phase 7 and 8 game tests, then Phase 9 (Nether to the dragon).

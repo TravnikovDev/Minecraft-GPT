@@ -379,7 +379,14 @@ It survives the first night, and it reports milestones in chat.
 7. **Friend:** conversational replies use the diary and day summaries. This is cheap: one call per owner message, and only when the owner talks.
 8. **Server courtesy:** a refused break, place or open marks a forbidden area instead of retrying. Add a per-server profile (automation allowed, PvP allowed, chat rate).
 
-**In-game check.** Run one role per session for a full in-game day, and check that owner commands still interrupt it.
+**Status (2026-11-26).** Code done, not yet tested in the game (Log Entry 17). From the architect's review:
+- "stop" pauses the role for the quiet minute; "off duty" ends it; a new job never runs a leftover shift of the old one.
+- A shift is proposed only when a check shows work, so roles don't take turns with the night routine; failures back off; a role that gets nothing done pauses itself and says why.
+- The guard shares one neutral-mob list with combat (never endermen, piglins, the warden) and never overrides a reflex's flight.
+- The hauler counts a double chest once; the builder never breaks what isn't terrain.
+- Not done: breeding animals (optional); a runner test with a fake arbiter.
+
+**In-game check.** Run one role per session for a full in-game day, and check that owner commands still interrupt it, and that "stop" pauses it.
 
 ---
 
