@@ -313,7 +313,11 @@ async function planStepProposed(): Promise<boolean> {
     void planDay("idle");
     return false;
   }
-  if (!stepAllowedNow(next.step)) return isNight(); // at night the plan waits for the morning
+  // A step that waits for the morning doesn't hold the night up: the night
+  // milestones go on meanwhile (game test: the plan's "resting at home" step
+  // waited all night; it said "carrying on in my mine" and only replanted
+  // and tidied till dawn)
+  if (!stepAllowedNow(next.step)) return false;
   const task = planStepTask(next.planId, next.index);
   if (!task) return false;
   propose(task);

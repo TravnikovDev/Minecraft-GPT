@@ -171,7 +171,8 @@ export function firstDayUnderway(): boolean {
  * for minutes; jungle trees rarely drop one) and is tried again later.
  */
 export async function replantWhenIdle(): Promise<void> {
-  if (felled.length === 0 || !isIdle() || firstDayUnderway()) return;
+  // Stumps are out in the open: not after dark (it went out at night to replant a birch)
+  if (felled.length === 0 || !isIdle() || firstDayUnderway() || bot.time?.isDay === false) return;
   const now = Date.now();
   for (let i = felled.length - 1; i >= 0; i--) {
     if (now - felled[i].at <= FORGET_AFTER_MS) continue;
