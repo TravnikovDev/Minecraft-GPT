@@ -21,6 +21,7 @@ import { canSeePoint, type SightWorld } from "./sight";
 import { isSheltered } from "../core/sheltered";
 import { isCreeperReflexActive } from "./creeperReflex";
 import { isDrowningReflexActive } from "./drowningReflex";
+import { isLavaReflexActive } from "./lavaReflex";
 
 const CHECK_MS = 300;
 const MELEE_RANGE = 3.5; // a mob this close is about to hit
@@ -177,7 +178,7 @@ function nearestThreat(range: number): Entity | null {
 function tick(): void {
   if (!bot.entity || !(bot.health > 0)) return;
   if (bot.vehicle) return; // no melee from a boat (and rowing owns movement)
-  if (isCreeperReflexActive() || isDrowningReflexActive()) {
+  if (isCreeperReflexActive() || isDrowningReflexActive() || isLavaReflexActive()) {
     finish("stepping aside for another reflex");
     stopRetreat("stepping aside for another reflex");
     return;
@@ -259,7 +260,7 @@ export function registerCombatReflex(): void {
   unsubscribe?.();
   unsubscribe = on("bot:damaged", () =>
     asReflex("combat", () => {
-      if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive()) return;
+      if (target || fleeing || bot.health <= RETREAT_HEALTH || bot.vehicle || isCreeperReflexActive() || isDrowningReflexActive() || isLavaReflexActive()) return;
       const mob = pickTarget(HIT_BACK_RANGE);
       if (mob) engage(mob);
     })

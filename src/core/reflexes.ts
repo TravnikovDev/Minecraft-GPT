@@ -13,7 +13,7 @@
 import { isTakenUrgently, release, runAs, takeoverCount, takeUrgently, waitTurn, type Holder } from "./leases";
 
 // How urgent each reflex is (core/arbiter buckets: 0 survival, 1 threats)
-const BUCKETS: Record<string, number> = { drowning: 0, creeper: 1, combat: 1, unstuck: 1 };
+const BUCKETS: Record<string, number> = { drowning: 0, lava: 0, creeper: 1, combat: 1, unstuck: 1 };
 const holders = new Map<string, Holder>();
 // Reflexes the owner can stop, and how each one ends itself
 const stoppers = new Map<string, () => void>();
