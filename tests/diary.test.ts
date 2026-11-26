@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { useFakeBot } from "./fakeBody";
 const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
-const { partOfDay, withLine, renderDay, linesSince } = await import(`${ROOT}/src/planner/diary.ts`);
+const { partOfDay, withLine, renderDay, linesSince, nextDayCount } = await import(`${ROOT}/src/planner/diary.ts`);
 const { taskLine } = await import(`${ROOT}/src/planner/diaryHooks.ts`);
 
 test("parts of the day from the game's time", () => {
@@ -37,4 +37,13 @@ test("after a summary only the newer lines go to the planner; the day keeps all 
   const day = { day: 5, lines: [{ at: 10, time: "morning", text: "a" }, { at: 20, time: "afternoon", text: "b" }] };
   expect(linesSince(day, 15).lines.map((l: any) => l.text)).toEqual(["b"]);
   expect(day.lines.length).toBe(2);
+});
+
+test("its own day count: a new day when the clock comes round to the morning, never from /time set by day or a still clock", () => {
+  expect(nextDayCount(4, null, 1000)).toBe(4); // just connected: no day counted
+  expect(nextDayCount(4, 23990, 10)).toBe(5); // the night passed
+  expect(nextDayCount(4, 13000, 0)).toBe(5); // it slept: the clock jumped to morning
+  expect(nextDayCount(4, 6000, 6020)).toBe(4); // the day goes on
+  expect(nextDayCount(4, 6000, 1000)).toBe(4); // /time set back in daytime
+  expect(nextDayCount(4, 18000, 18000)).toBe(4); // the Nether's clock stands still
 });

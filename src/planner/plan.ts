@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
-import { GOALS, goalNamed, openMilestones, type Feasible } from "./goals";
+import { GOALS, goalNamed, openMilestones, policy, type Feasible } from "./goals";
 
 /** The step count the plan must have, enforced in code (the model gave 2 when asked for 3-5). */
 export const MIN_STEPS = 3;
@@ -72,7 +72,12 @@ function argsFor(step: RawStep): Record<string, unknown> {
  */
 export function validateSteps(
   raw: RawStep[],
-  feasible: (goal: string, args: Record<string, unknown>) => Feasible = (goal, args) => goalNamed(goal)?.feasible(args) ?? { ok: false, why: "unknown goal" },
+  // Possible now, and allowed (the policy: keep-out areas)
+  feasible: (goal: string, args: Record<string, unknown>) => Feasible = (goal, args) => {
+    const allowed = policy(goal, args);
+    if (!allowed.ok) return allowed;
+    return goalNamed(goal)?.feasible(args) ?? { ok: false, why: "unknown goal" };
+  },
   open: () => string[] = openMilestones
 ): { accepted: PlanStep[]; rejected: { step: string; why: string }[] } {
   const accepted: PlanStep[] = [];

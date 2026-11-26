@@ -206,7 +206,10 @@ export async function planDay(trigger: Trigger, ownerRequest: string | null = nu
     await note(`Planned: ${accepted.map((s) => goalNamed(s.goal)?.describe(s.args) ?? s.goal).join(", ")}.`);
     // Said only when it changed (an idle re-plan of the same steps stays quiet)
     const sig = (p: StoredPlan | null): string => JSON.stringify(p?.steps.filter((x) => x.status === "pending").map((x) => [x.goal, x.args]) ?? []);
-    if (trigger === "owner asked" || sig(before) !== sig(stored)) report(describePlan(stored));
+    if (trigger === "owner asked" || sig(before) !== sig(stored)) {
+      report(describePlan(stored));
+      if (ownerOnline()) sharedPlanId = id; // the owner heard it
+    }
     if (plan.ownerMessage) report(plan.ownerMessage);
     return true;
   } catch (error) {
@@ -216,6 +219,30 @@ export async function planDay(trigger: Trigger, ownerRequest: string | null = nu
   } finally {
     inFlight = false;
   }
+}
+
+// The plan the owner has heard about (told when they're online)
+let sharedPlanId: number | null = null;
+// Quiet this long while online: the bot tells its plan once
+const QUIET_BEFORE_SHARING_MS = 5 * 60_000;
+
+const ownerOnline = (): boolean => Object.keys(bot.players ?? {}).some((n) => n.toLowerCase() === OWNER_USERNAME.toLowerCase());
+
+/**
+ * The owner online but quiet, and a plan they haven't heard (made while
+ * they were away): tells it once ("Today I want to mine iron..."), with
+ * what's left of it. True when it said it.
+ */
+export function sharePlanIfQuiet(now = Date.now()): boolean {
+  const plan = currentPlan();
+  if (!plan || !ownerOnline() || overBudget()) return false;
+  const id = plan.id ?? plan.madeAt;
+  if (id === sharedPlanId || !plan.steps.some((s) => s.status === "pending")) return false;
+  const lastOwner = [...recentConversation()].reverse().find((t) => t.role === "owner");
+  if (lastOwner && now - lastOwner.at < QUIET_BEFORE_SHARING_MS) return false;
+  sharedPlanId = id;
+  report(describePlan(plan));
+  return true;
 }
 
 /** Dusk: plan tomorrow, once per game day (planning never waits for sleep). */

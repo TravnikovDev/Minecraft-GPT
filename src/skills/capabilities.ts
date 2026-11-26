@@ -42,16 +42,30 @@ export function foodPoints(): number {
     .reduce((n, i) => n + (foods[i.name]?.foodPoints ?? 0) * i.count, 0);
 }
 
+// Tables it couldn't get to lately, by position, until when (set by crafting)
+const unreachableTables = new Map<string, number>();
+const UNREACHABLE_FOR_MS = 5 * 60 * 1000;
+const tableKey = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},${p.z}`;
+
+/** A table it couldn't get to: left out for a few minutes (crafting and the planner both). */
+export function markTableUnreachable(p: { x: number; y: number; z: number }): void {
+  unreachableTables.set(tableKey(p), Date.now() + UNREACHABLE_FOR_MS);
+}
+
+/** True for a table it couldn't get to a little while ago. */
+export const tableUnreachable = (p: { x: number; y: number; z: number }): boolean => (unreachableTables.get(tableKey(p)) ?? 0) > Date.now();
+
 /** True when it carries a crafting table or one stands within reach of a short walk. */
 export function hasTableAccess(): boolean {
   if (carried("crafting_table") > 0) return true;
   const id = bot.registry.blocksByName["crafting_table"]?.id;
-  if (id !== undefined && bot.findBlock({ matching: id, maxDistance: TABLE_RANGE })) return true;
+  if (id !== undefined && bot.findBlock({ matching: id, maxDistance: TABLE_RANGE, useExtraInfo: (b) => !tableUnreachable(b.position) })) return true;
   // One of its own it would walk back to (its shelter's): crafting goes there
   // anyway, so a new table would be wasted planks (it made one 80 blocks out)
   const dim = currentDimension();
   const here = bot.entity?.position;
-  return Boolean(here) && getPlaces("crafting_table").some((t) => (t.dimension ?? dim) === dim && here!.distanceTo(new Vec3(t.x, t.y, t.z)) <= REMEMBERED_TABLE_RANGE);
+  // (not one it couldn't get to lately: the planner would wait on it for ever)
+  return Boolean(here) && getPlaces("crafting_table").some((t) => (t.dimension ?? dim) === dim && !tableUnreachable(t) && here!.distanceTo(new Vec3(t.x, t.y, t.z)) <= REMEMBERED_TABLE_RANGE);
 }
 
 /** Its shelter (the room it dug), in this dimension, if it has one. */

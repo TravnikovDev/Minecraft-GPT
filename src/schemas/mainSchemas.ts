@@ -138,6 +138,9 @@ export const MemorySchema = z.object({
       })
     )
     .optional(),
+  // The bot's own day count (the world clock moves with /time set and stands
+  // still in the Nether)
+  dayCount: z.object({ day: z.number() }).optional(),
   daySummaries: z.array(z.object({ day: z.number(), text: z.string(), at: z.number().optional() })).optional(),
   // The day plan the model made (validated), and how far it got
   plan: z

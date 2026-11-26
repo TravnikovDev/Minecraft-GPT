@@ -50,9 +50,42 @@ export function renderDay(day: DiaryDay): string {
   return lines.join("\n");
 }
 
-/** The game day it is now (the world's day count; it moves on when someone sleeps). */
+/**
+ * The bot's own day count, kept in world memory. The world clock can't be
+ * trusted for this: /time set moves it, and in the Nether and the End it
+ * stands still. A day begins when the time of day wraps round to the
+ * morning (the night passed, or it slept). Starts from the world's count.
+ */
 export function gameDay(): number {
-  return bot.time?.day ?? 0;
+  return getMemory().dayCount?.day ?? bot.time?.day ?? 0;
+}
+
+/**
+ * The day count after the clock moved from `before` to `now` (times of day,
+ * 0-23999): a new day when it came round to the morning from the evening or
+ * night. Pure.
+ */
+export function nextDayCount(day: number, before: number | null, now: number): number {
+  if (before === null) return day;
+  return before >= 12000 && now < 12000 && now < before ? day + 1 : day;
+}
+
+let lastTimeOfDay: number | null = null;
+
+/** Watches the clock (called on mineflayer's "time" event, about once a second). */
+export async function tickDayCount(): Promise<void> {
+  if (!bot.time) return;
+  const now = bot.time.timeOfDay;
+  const before = lastTimeOfDay;
+  lastTimeOfDay = now;
+  const current = gameDay();
+  const next = nextDayCount(current, before, now);
+  if (getMemory().dayCount === undefined || next !== current) await updateMemory({ dayCount: { day: next } });
+}
+
+/** A new connection: the clock is read afresh (no day counted for the time it was away). */
+export function resetDayCount(): void {
+  lastTimeOfDay = null;
 }
 
 function days(): DiaryDay[] {

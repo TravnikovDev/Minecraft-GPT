@@ -156,6 +156,25 @@ export const reply = (text: string, to: Audience = "owner"): void => say(text, {
 export const report = (text: string, to: Audience = "owner"): void => say(text, { kind: "report", to });
 export const chatter = (text: string, topic: string, to: Audience = "owner"): void => say(text, { kind: "chatter", topic, to });
 
+// What was said under each "say once" key, and when
+const lastOnce = new Map<string, { text: string; at: number }>();
+
+/**
+ * A report said once: the same text under the same key within `everyMs` is
+ * only logged ("There are monsters nearby, so I can't sleep" was said every
+ * 30 seconds all night). A different text is said at once.
+ */
+export function reportOnce(key: string, text: string, everyMs = 10 * 60_000, now = Date.now()): boolean {
+  const last = lastOnce.get(key);
+  lastOnce.set(key, { text, at: now });
+  if (last && last.text === text && now - last.at < everyMs) {
+    console.log(`(said already) ${text}`);
+    return false;
+  }
+  report(text);
+  return true;
+}
+
 /**
  * A task ended: its chatter still waiting is dropped (and, when the owner
  * said stop, its reports too: no late "failed" after "stop").

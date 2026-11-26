@@ -162,3 +162,10 @@ test("a task that ended takes its waiting commentary with it, but not its report
   expect(N.waiting().map((l: any) => l.text)).toEqual(["I'm here!"]);
   await sleep(1);
 });
+
+test("a report said once: the same text under a key within the window is only logged; new text or later is said", () => {
+  expect(N.reportOnce("no sleep", "There are monsters nearby.", 600_000, 1_000)).toBe(true);
+  expect(N.reportOnce("no sleep", "There are monsters nearby.", 600_000, 31_000)).toBe(false);
+  expect(N.reportOnce("no sleep", "Someone is already in that bed.", 600_000, 61_000)).toBe(true);
+  expect(N.reportOnce("no sleep", "Someone is already in that bed.", 600_000, 700_000)).toBe(true);
+});

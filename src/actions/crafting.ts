@@ -2,6 +2,7 @@
 // Crafting (at the bot's own or a nearby table) and smelting, through the
 // checked craft and window primitives in core/.
 
+import { markTableUnreachable, tableUnreachable } from "../skills/capabilities";
 import * as gameData from "../utils/minecraftData";
 import { Vec3 } from "vec3";
 import { Item } from "prismarine-item";
@@ -51,21 +52,17 @@ Possible Scenarios:
 6. **Invalid Item Name**:
    - If the provided item name is invalid, the function logs the error and returns `false`.
 */
-// Crafting tables the bot couldn't walk to recently (skipped for a while)
-const unreachableTables = new Map<string, number>();
-const UNREACHABLE_FOR_MS = 5 * 60 * 1000;
+// Crafting tables it couldn't walk to recently are skipped for a while (skills/capabilities)
 const MAX_TABLES_TRIED = 3;
-const tableKey = (b: Block): string => `${b.position.x},${b.position.y},${b.position.z}`;
 
 /** Crafting tables nearby, nearest first, minus the ones it recently couldn't reach. */
 function nearbyTables(range: number): Block[] {
   const id = bot.registry.blocksByName["crafting_table"]?.id;
   if (id === undefined) return [];
-  const now = Date.now();
   return bot
     .findBlocks({ matching: id, maxDistance: range, count: 16 })
     .map((p) => bot.blockAt(p))
-    .filter((b): b is Block => b !== null && (unreachableTables.get(tableKey(b)) ?? 0) < now)
+    .filter((b): b is Block => b !== null && !tableUnreachable(b.position))
     .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
 }
 
@@ -105,7 +102,7 @@ function rememberedTable(range: number): Vec3 | null {
     getPlaces("crafting_table")
       .filter((t) => (t.dimension ?? dim) === dim)
       .map((t) => new Vec3(t.x, t.y, t.z))
-      .filter((p) => p.distanceTo(here) <= range && (bot.blockAt(p)?.name ?? "crafting_table") === "crafting_table")
+      .filter((p) => p.distanceTo(here) <= range && !tableUnreachable(p) && (bot.blockAt(p)?.name ?? "crafting_table") === "crafting_table")
       .sort((a, b) => a.distanceTo(here) - b.distanceTo(here))[0] ?? null
   );
 }
@@ -214,7 +211,7 @@ export async function craftRecipe(
       const p = table.position;
       const walked = await travelToResult(() => ({ x: p.x, y: p.y, z: p.z }), { range: 2 });
       if (walked.ok && (await moveToAndCraft(table))) return true;
-      unreachableTables.set(tableKey(table), Date.now() + UNREACHABLE_FOR_MS);
+      markTableUnreachable(table.position);
       console.log(`Can't get to the crafting table at ${table.position}.`);
     }
     // Owner's rule: never a second table with one within TABLE_RANGE, even
@@ -227,6 +224,7 @@ export async function craftRecipe(
         const walked = await travelToResult(() => ({ x: near.x, y: near.y, z: near.z }), { range: 2 });
         const there = bot.blockAt(near);
         if (walked.ok && there?.name === "crafting_table" && (await moveToAndCraft(there))) return true;
+        if (!walked.ok) markTableUnreachable(near);
       }
       console.log(`There's a crafting table at ${near} already (within ${TABLE_RANGE}) that I can't get to; I won't place another, so no ${itemName} for now.`);
       return false;
@@ -246,6 +244,7 @@ export async function craftRecipe(
         const walked = await travelToResult(() => ({ x: home.x, y: home.y, z: home.z }), { range: 2 });
         const there = bot.blockAt(home);
         if (walked.ok && there?.name === "crafting_table") return moveToAndCraft(there);
+        markTableUnreachable(home);
       }
       console.log(`No crafting table, and nothing to make one from, to craft ${itemName}.`);
       return false;

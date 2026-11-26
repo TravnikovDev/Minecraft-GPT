@@ -12,7 +12,7 @@ import { currentSignal, isCommandCancelled } from "../core/commandContext";
 import { on } from "../core/events";
 import { describeFailure, type ActionResult } from "../core/result";
 import { note } from "./diary";
-import { goalNamed } from "./goals";
+import { goalNamed, policy } from "./goals";
 import { PLAN_PREFIX, stepAllowedNow } from "./names";
 import { currentPlan, currentPlanId, failuresInARow, markStep, stepStatusAfter } from "./plan";
 
@@ -36,7 +36,8 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
     maxMs: STEP_MAX_MS,
     run: async () => {
       if (currentPlanId() !== planId) return; // replaced while it waited
-      const can = goal.feasible(step.args);
+      const allowed = policy(step.goal, step.args);
+      const can = allowed.ok ? goal.feasible(step.args) : allowed;
       if (!can.ok) {
         await markStep(planId, index, "skipped", can.why);
         await note(`Skipped ${what} from my plan: ${can.why}.`);

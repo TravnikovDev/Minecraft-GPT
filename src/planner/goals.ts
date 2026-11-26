@@ -12,6 +12,9 @@ import { catalog } from "../core/catalog";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { MILESTONES } from "../skills/milestones";
 import { shelter, TIER, toolTier } from "../skills/capabilities";
+import { liveWorld } from "../skills/world";
+import { forbiddenAt } from "../core/forbidden";
+import { myMine } from "../skills/mine";
 
 /** A goal's check: possible now, or why not. */
 export type Feasible = { ok: true } | { ok: false; why: string };
@@ -42,6 +45,22 @@ const words = (s: string): string => s.replace(/_/g, " ");
 export function openMilestones(): string[] {
   const done = new Set(MILESTONES.filter((m) => m.done()).map((m) => m.id));
   return MILESTONES.filter((m) => !done.has(m.id) && (m.requires ?? []).every((r) => done.has(r))).map((m) => m.id);
+}
+
+/**
+ * Whether the item planner (skills/acquire) has a way to every raw material
+ * a craft still needs: the recipe tree from what it carries, then a source
+ * for each missing material. Without one ("a nether star"), the step is
+ * left out with the material it can't get.
+ */
+function craftable(item: string, count: number): Feasible {
+  try {
+    const plan = liveWorld.plan(item, count);
+    const noWay = plan.missing.filter((m) => !liveWorld.sources.some((src) => src.gets(m.name)));
+    return noWay.length === 0 ? yes : no(`no way to get ${noWay.map((m) => words(m.name)).join(", ")}`);
+  } catch (error) {
+    return no(`couldn't work out how to make it (${(error as Error).message})`);
+  }
 }
 
 const MINEABLE = ["coal", "raw_iron", "diamond", "cobblestone"] as const;
@@ -139,7 +158,10 @@ export const GOALS: Goal[] = [
       if (!catalog().isItem(item)) return no(`"${item}" isn't a Minecraft item`);
       const id = bot.registry?.itemsByName[item]?.id;
       const recipes = id === undefined ? [] : (bot.recipesAll?.(id, null, true) ?? []);
-      return recipes.length > 0 ? yes : no(`${words(item)} can't be crafted`);
+      if (recipes.length === 0) return no(`${words(item)} can't be crafted`);
+      // Every raw material the recipe tree still needs must have a way to get
+      // it (trees, the mine, sheep, smelting, its chests), as acquire would
+      return craftable(item, Number(a["count"] ?? 1));
     },
     menu: () => "any craftable item",
     run: async (a) => {
@@ -181,6 +203,29 @@ export const GOALS: Goal[] = [
     describe: () => "planting trees",
   },
 ];
+
+// Goals that work in its mine, and the milestones that do
+const MINE_MILESTONES = new Set(["mine", "coal", "iron", "diamonds", "paved_stairs"]);
+
+/**
+ * The owner's and the server's rules for a step (the validator's policy
+ * check): never work where it must keep out. Its mine or its shelter inside
+ * a keep-out area means no step that goes there.
+ */
+export function policy(goal: string, args: Record<string, unknown>): Feasible {
+  const mine = myMine();
+  const usesMine = goal === "mineFor" || (goal === "reachMilestone" && MINE_MILESTONES.has(String(args["milestone"])));
+  if (usesMine && mine) {
+    const area = forbiddenAt(mine.start) ?? forbiddenAt(mine.bottom);
+    if (area) return no(`my mine is in a keep-out area (${area.reason})`);
+  }
+  const home = shelter();
+  if (goal === "restAndRepair" && home) {
+    const area = forbiddenAt(home);
+    if (area) return no(`my shelter is in a keep-out area (${area.reason})`);
+  }
+  return yes;
+}
 
 /** A goal by name. */
 export const goalNamed = (name: string): Goal | undefined => GOALS.find((g) => g.name === name);

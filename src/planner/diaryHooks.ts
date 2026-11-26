@@ -4,11 +4,11 @@
 // short line from a template (planner/diary). Hooks are registered once and
 // work across reconnects (the arbiter and event bus outlive a connection).
 
-import { bot } from "../core/body";
+import { bot, listen } from "../core/body";
 import { Bucket, onTaskEnd } from "../core/arbiter";
 import { on } from "../core/events";
 import { catalog } from "../core/catalog";
-import { note, noteGain } from "./diary";
+import { note, noteGain, resetDayCount, tickDayCount } from "./diary";
 
 let registered = false;
 
@@ -36,8 +36,10 @@ export function taskLine(task: { name: string; bucket: number }, outcome: "done"
   return null;
 }
 
-/** Starts writing the diary (once per process). */
+/** Starts writing the diary (the clock per connection; the rest once per process). */
 export function registerDiary(): void {
+  resetDayCount();
+  listen(bot, "time", () => void tickDayCount());
   if (registered) return;
   registered = true;
 

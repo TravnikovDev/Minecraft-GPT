@@ -296,8 +296,10 @@ async function planStepProposed(): Promise<boolean> {
 
 /** Dusk: plan tomorrow, once per game day, whatever it's doing. */
 async function planAtDusk(): Promise<void> {
-  const { planningOn, planDay, duskDue, markDuskPlanned } = await import("../planner/planner");
-  if (!planningOn(autonomyOn()) || !duskDue()) return;
+  const { planningOn, planDay, duskDue, markDuskPlanned, sharePlanIfQuiet } = await import("../planner/planner");
+  if (!planningOn(autonomyOn())) return;
+  sharePlanIfQuiet(); // the owner online but quiet: tell them the plan once
+  if (!duskDue()) return;
   markDuskPlanned();
   void planDay("dusk");
 }

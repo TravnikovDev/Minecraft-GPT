@@ -5,6 +5,7 @@ import { catalog } from "../core/catalog";
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
+import { reportOnce } from "../core/narrator";
 import { lookAt, sleepIn, useBlock } from "../core/primitives";
 import { describeFailure, wasStopped } from "../core/result";
 import { goToPosition, travelTo } from "../actions/movement";
@@ -164,17 +165,8 @@ export async function execute(args: any = {}): Promise<void> {
       bot.chat(result.text);
       return;
     }
-    const why = `${whyNoSleep(message)} My bed is at ${where}.`;
     // The night routine tries the bed every few seconds: the same "can't
     // sleep" is said once, not every 30 seconds all night
-    if (why === lastNoSleep.text && Date.now() - lastNoSleep.at < SAME_NO_SLEEP_MS) {
-      console.log(why);
-    } else {
-      bot.chat(why);
-    }
-    lastNoSleep = { text: why, at: Date.now() };
+    reportOnce("no sleep", `${whyNoSleep(message)} My bed is at ${where}.`);
   }
 }
-
-const SAME_NO_SLEEP_MS = 10 * 60_000;
-let lastNoSleep = { text: "", at: 0 };
