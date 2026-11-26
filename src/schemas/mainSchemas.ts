@@ -138,6 +138,21 @@ export const MemorySchema = z.object({
       })
     )
     .optional(),
+  // Phase 9: the late game: its portals, the fortress and stronghold it
+  // found, and when it first did each big thing
+  endgame: z
+    .object({
+      overworldPortal: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      netherPortal: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      fortress: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      stronghold: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      endPortal: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      netherVisited: z.number().optional(),
+      endVisited: z.number().optional(),
+      dragonDefeated: z.number().optional(),
+    })
+    .passthrough()
+    .optional(),
   // Phase 8: its standing order from the owner (a companion role), if any
   role: z
     .object({

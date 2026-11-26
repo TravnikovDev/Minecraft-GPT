@@ -753,6 +753,16 @@ export function hitEntity(entity: Entity): void {
   bot.attack(entity);
 }
 
+/**
+ * Hits an entity by its id, for the parts of a many-part mob mineflayer
+ * doesn't know as entities: the ender dragon is hit through its parts (its
+ * head is the dragon's id + 1), never its own id (Phase 9).
+ */
+export function hitEntityId(id: number): void {
+  bot.swingArm("right");
+  (bot as unknown as { _client: { write: (name: string, data: unknown) => void } })._client.write("use_entity", { target: id, mouse: 1, sneaking: false });
+}
+
 /** Holds or lets go of a movement key (sneak, jump, forward...). */
 export function setControl(control: "forward" | "back" | "left" | "right" | "jump" | "sprint" | "sneak", on: boolean): void {
   bot.setControlState(control, on);

@@ -12,6 +12,7 @@
 
 import { noteMilestone, noteMilestoneFailed } from "../planner/diaryHooks";
 import { automationAllowed } from "../config/serverProfile";
+import { ENDGAME_NIGHT_OK } from "./endgame/milestones";
 import { PLAN_PREFIX, setStepGate, stepAllowedNow } from "../planner/names";
 import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
@@ -68,6 +69,10 @@ const busyWith = (bucket: number): boolean => {
   return (running !== null && running.bucket <= bucket) || pendingTasks().some((t) => t.bucket <= bucket);
 };
 const isNight = (): boolean => {
+  // The Nether and the End have no night (no night routine there: its
+  // shelter is in the overworld)
+  const dim = String((bot.game as { dimension?: string }).dimension ?? "overworld").replace(/^minecraft:/, "");
+  if (dim !== "overworld") return false;
   const s = sky();
   return s.known && (s.value.phase === "night" || s.value.phase === "dusk");
 };
@@ -77,7 +82,8 @@ async function announce(): Promise<void> {
   for (const m of await noteReached()) {
     const done = MILESTONES.filter((x) => x.tier === m.tier && x.done()).length;
     const total = MILESTONES.filter((x) => x.tier === m.tier).length;
-    report(`Milestone: ${m.title} (${done} of ${total} ${m.tier === 1 ? "for my first day" : m.tier === 2 ? "for my mine" : "for iron and diamonds"}).`);
+    const towards = ["", "for my first day", "for my mine", "for iron and diamonds", "for the Nether", "for the End"][m.tier] ?? "";
+    report(`Milestone: ${m.title} (${done} of ${total} ${towards}).`);
     noteMilestone(m.title);
   }
   if (tier1Reached() && !getMemory().milestones?.["tier1"]) {
@@ -312,7 +318,7 @@ async function planAtDusk(): Promise<void> {
 setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf === (bot.time?.day ?? 0)));
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
-const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe"]);
+const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
 
 /** Mine work it could do now (the next milestone is one underground). */
 function mineWorkTonight(): boolean {

@@ -8,6 +8,7 @@ import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/pickup";
 import { canReachBeforeDespawn, clearLastDeath, getLastDeath } from "../actions/recovery";
 import { isCommandCancelled } from "../core/commandContext";
+import { describeFailure } from "../core/result";
 import { tellOwner } from "../managers/ownerDialog";
 
 export const description = `Goes back to where the bot last died and picks up its dropped items (they disappear
@@ -27,6 +28,27 @@ export async function execute(): Promise<void> {
   }
   const p = death.position;
   const where = `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
+  // Died in another dimension (Phase 9): the Nether is back through its
+  // portal; the End's things are out of reach (the way back is long, and
+  // they may have fallen into the void)
+  const { dimensionNow, goToDimension } = await import("../skills/endgame/state");
+  const diedIn = death.dimension.replace(/^minecraft:/, "");
+  if (diedIn !== dimensionNow()) {
+    if (diedIn === "the_end") {
+      tellOwner(`I died in the End at ${where}; my things there are out of reach.`);
+      clearLastDeath();
+      return;
+    }
+    if (diedIn === "the_nether") {
+      tellOwner(`I died in the Nether at ${where}. Going back through my portal for my things.`);
+      const went = await goToDimension("the_nether");
+      if (!went.ok) {
+        tellOwner(`I can't get back to the Nether for my things: ${describeFailure(went)}.`);
+        clearLastDeath();
+        return;
+      }
+    }
+  }
   if (!canReachBeforeDespawn(death)) {
     tellOwner(`My things at ${where} are too far away to reach before they disappear.`);
     clearLastDeath();

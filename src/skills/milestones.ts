@@ -17,6 +17,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, unpavedSteps } from "./mine";
+import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
@@ -319,6 +320,8 @@ export const MILESTONES: Milestone[] = [
       return acquire("diamond_pickaxe", 1, liveWorld);
     },
   },
+  // Phase 9: the Nether and the End (skills/endgame)
+  ...ENDGAME_MILESTONES,
 ];
 
 const DIAMONDS = 3;

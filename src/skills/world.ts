@@ -65,6 +65,21 @@ export const SOURCES: Source[] = [
     },
   },
   {
+    // Flint drops from gravel now and then (a player digs gravel until it does)
+    name: "breaking gravel",
+    collects: true,
+    gets: (m) => m === "flint",
+    run: async (_m, count) => {
+      const before = carried("flint");
+      const { collectBlock } = await import("../actions/collectBlock");
+      // About one in ten gravel gives flint; a few rounds of digging
+      for (let round = 0; round < 4 && carried("flint") < before + count; round++) {
+        if ((await collectBlock("gravel", 8, 32)) === 0) break;
+      }
+      return got(before, carried("flint"), "flint in the gravel");
+    },
+  },
+  {
     name: "hunting sheep",
     collects: true,
     gets: (m) => /_wool$/.test(m),
