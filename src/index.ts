@@ -48,6 +48,7 @@ import { BotCommands } from "./commands/types";
 import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
 import { protectShelter, rememberShelterDoor } from "./actions/building";
 import { registerFaceFix } from "./core/faces";
+import { registerCreditsSkip } from "./core/primitives";
 import { registerDiary } from "./planner/diaryHooks";
 import { considerRole, resetRoleRest } from "./roles/runner";
 import { considerOpportunities, resetOpportunities } from "./skills/opportunities";
@@ -123,6 +124,8 @@ onConnectionReady((currentBot) => {
       return import("./planner/runner").then(({ registerPlanRunner }) => registerPlanRunner(autonomyOn, (why) => void planDay(why)));
     })
     .catch((error: unknown) => console.error("Couldn't start the day planner:", error));
+  registerCreditsSkip(); // after the End's exit portal, home without hanging on the credits
+  void import("./skills/endgame/state").then((m) => m.registerPortalWatch()); // where it comes out of a portal
   registerFaceFix(); // never a hair inside a block face (the server put it back 20 times a second)
   protectShelter(); // its shelter's walls are off limits to walks and collecting from the start
   void import("./skills/mine")

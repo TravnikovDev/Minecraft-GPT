@@ -18,6 +18,7 @@ import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabil
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
+import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { catalog } from "../core/catalog";
@@ -35,7 +36,19 @@ export type Milestone = {
   done: () => boolean;
   /** Gets it done (bounded; a failure says why). */
   achieve: () => Promise<ActionResult>;
+  /**
+   * Where it's worked on: "overworld" (the default: its shelter, its mine,
+   * its first day) or "any" (the late game's, which travel between
+   * dimensions themselves). In the Nether or the End an overworld milestone
+   * isn't even checked (its shelter's blocks aren't there).
+   */
+  dimension?: "overworld" | "any";
 };
+
+/** True when a milestone can be checked and worked on in the dimension it's in now. */
+export function milestoneHere(m: Milestone): boolean {
+  return m.dimension === "any" || dimensionNow() === "overworld";
+}
 
 const FOOD_STOCK = 20; // food points carried: a couple of days' eating
 // Once stocked, eating doesn't undo it: only below half does it go hunting
@@ -392,12 +405,14 @@ export async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
 const carriedOf = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
 /** The next milestone not done (and not blocked), lowest tier first; null when all are reached. */
-export function nextMilestone(list: Milestone[], blocked: (id: string) => boolean = () => false): Milestone | null {
+export function nextMilestone(list: Milestone[], blocked: (id: string) => boolean = () => false, here: (m: Milestone) => boolean = milestoneHere): Milestone | null {
   // Its prerequisites done (a set-aside shelter must not let stone tools or the mine jump ahead)
   const ready = (m: Milestone): boolean => (m.requires ?? []).every((id) => list.find((x) => x.id === id)?.done() ?? true);
   const tiers = [...new Set(list.map((m) => m.tier))].sort((a, b) => a - b);
   for (const tier of tiers) {
-    const open = list.filter((m) => m.tier === tier && !m.done());
+    // Only what can be worked on in this dimension (in the Nether its first
+    // day's milestones wait: their shelter and food checks would mislead)
+    const open = list.filter((m) => m.tier === tier && here(m) && !m.done());
     if (open.length === 0) continue;
     // A tier isn't skipped while any of it is left (a blocked one waits its turn)
     return open.find((m) => !blocked(m.id) && ready(m)) ?? null;

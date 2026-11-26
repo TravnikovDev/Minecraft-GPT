@@ -30,12 +30,21 @@ const SLOT_INDEX: Record<EquipSlot, number> = { head: 5, torso: 6, legs: 7, feet
  */
 export async function wearBestArmor(): Promise<string[]> {
   const c = catalog();
+  // In the Nether one gold piece stays on (piglins attack a player without
+  // gold): the helmet slot takes gold there, and a worn gold piece stays
+  const inNether = String((bot.game as { dimension?: string }).dimension ?? "").replace(/^minecraft:/, "") === "the_nether";
+  const wearingGold = (): boolean => (["head", "torso", "legs", "feet"] as const).some((s) => bot.inventory.slots[SLOT_INDEX[s]]?.name.startsWith("golden_"));
   for (const slot of ["head", "torso", "legs", "feet"] as const) {
     const worn = bot.inventory.slots[SLOT_INDEX[slot]];
-    const best = bot.inventory
-      .items()
-      .filter((i) => isArmorPiece(i.name) && EQUIP_SLOT[c.armorSlot(i.name) ?? ""] === slot)
-      .sort((a, b) => c.armorTier(b.name) - c.armorTier(a.name))[0];
+    if (inNether && worn?.name.startsWith("golden_")) continue;
+    const pieces = bot.inventory.items().filter((i) => isArmorPiece(i.name) && EQUIP_SLOT[c.armorSlot(i.name) ?? ""] === slot);
+    const gold = inNether && slot === "head" && !wearingGold() ? pieces.find((i) => i.name === "golden_helmet") : undefined;
+    if (gold) {
+      const result = await equipItem(gold.name, slot);
+      if (!result.ok) console.log(`Putting on ${gold.name} failed: ${describeFailure(result)}`);
+      continue;
+    }
+    const best = pieces.sort((a, b) => c.armorTier(b.name) - c.armorTier(a.name))[0];
     if (!best || (worn && c.armorTier(worn.name) >= c.armorTier(best.name))) continue;
     const result = await equipItem(best.name, slot);
     if (!result.ok) console.log(`Putting on ${best.name} failed: ${describeFailure(result)}`);

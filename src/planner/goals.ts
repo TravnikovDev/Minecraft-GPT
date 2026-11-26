@@ -10,7 +10,7 @@ import { z } from "zod";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
-import { MILESTONES } from "../skills/milestones";
+import { MILESTONES, milestoneHere } from "../skills/milestones";
 import { shelter, TIER, toolTier } from "../skills/capabilities";
 import { liveWorld } from "../skills/world";
 import { forbiddenAt } from "../core/forbidden";
@@ -43,8 +43,11 @@ const words = (s: string): string => s.replace(/_/g, " ");
 
 /** Milestones that can be worked on now: not done, everything they need done first. */
 export function openMilestones(): string[] {
-  const done = new Set(MILESTONES.filter((m) => m.done()).map((m) => m.id));
-  return MILESTONES.filter((m) => !done.has(m.id) && (m.requires ?? []).every((r) => done.has(r))).map((m) => m.id);
+  // Only those that can be worked on in this dimension (milestoneHere)
+  const here = MILESTONES.filter(milestoneHere);
+  const done = new Set(here.filter((m) => m.done()).map((m) => m.id));
+  const doneAnywhere = (id: string): boolean => done.has(id) || (MILESTONES.find((m) => m.id === id)?.dimension === "any" ? false : !here.some((m) => m.id === id));
+  return here.filter((m) => !done.has(m.id) && (m.requires ?? []).every(doneAnywhere)).map((m) => m.id);
 }
 
 /**

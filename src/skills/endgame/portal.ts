@@ -12,7 +12,7 @@ import pf from "mineflayer-pathfinder";
 import type { Block } from "prismarine-block";
 import { bot } from "../../core/body";
 import { isCommandCancelled } from "../../core/commandContext";
-import { equipItem, goTo, lookAt, useBlock, useHeldItem } from "../../core/primitives";
+import { equipItem, goTo, useBlock, useHeldItemToward } from "../../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../../core/result";
 import { report } from "../../core/narrator";
 import { portalFrame, type Axis, type P3 } from "./geometry";
@@ -43,8 +43,7 @@ async function fillWater(): Promise<ActionResult> {
   await goTo(new pf.goals.GoalNear(source.position.x, source.position.y, source.position.z, 2));
   const held = await equipItem("bucket");
   if (!held.ok) return held;
-  await lookAt(source.position.offset(0.5, 0.9, 0.5));
-  useHeldItem();
+  await useHeldItemToward(source.position.offset(0.5, 0.9, 0.5));
   await sleep(600);
   return count("water_bucket") > 0 ? ok() : fail("refused", "the water didn't go in my bucket");
 }
@@ -70,13 +69,11 @@ async function obsidianFromLava(): Promise<boolean> {
       if (!(await fillWater()).ok) return false;
       await goTo(new pf.goals.GoalNear(shore!.position.x, shore!.position.y + 1, shore!.position.z, 3));
       if (!(await equipItem("water_bucket")).ok) return false;
-      await lookAt(shore!.position.offset(0.5, 1, 0.5)); // the top face of the shore
-      useHeldItem();
+      await useHeldItemToward(shore!.position.offset(0.5, 1, 0.5)); // the top face of the shore
       await sleep(2_500); // the water runs over the lava
       // Take the water back up (it's a source on the shore)
       if ((await equipItem("bucket")).ok) {
-        await lookAt(shore!.position.offset(0.5, 1.4, 0.5));
-        useHeldItem();
+        await useHeldItemToward(shore!.position.offset(0.5, 1.4, 0.5));
         await sleep(600);
       }
       if (bot.blockAt(lava.position)?.name === "obsidian") return true;
@@ -85,15 +82,37 @@ async function obsidianFromLava(): Promise<boolean> {
   return false;
 }
 
+/**
+ * True for obsidian safe to mine: solid ground under it (obsidian on top of
+ * a lava pool drops into the lava when broken, and the bot follows). Pure.
+ */
+export function safeToMine(below: { name: string; boundingBox: string } | null): boolean {
+  return below !== null && below.boundingBox === "block" && below.name !== "magma_block";
+}
+
+/** Mines up to `n` obsidian it can see that stands on solid ground. */
+async function mineSafeObsidian(n: number): Promise<void> {
+  const id = bot.registry.blocksByName["obsidian"]?.id;
+  if (id === undefined) return;
+  const { breakBlock } = await import("../../core/primitives");
+  const { pickupNearbyItems } = await import("../../actions/pickup");
+  const spots = bot.findBlocks({ matching: id, maxDistance: 48, count: 64 }).filter((p) => safeToMine(bot.blockAt(p.offset(0, -1, 0))));
+  for (const p of spots) {
+    if (isCommandCancelled() || count("obsidian") >= OBSIDIAN || n <= 0) break;
+    if (!(await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 3))).ok) continue;
+    if ((await breakBlock(p)).ok) n--;
+    await pickupNearbyItems(bot, 4);
+  }
+}
+
 /** Gets 10 obsidian: mined where it sees some, else made from a lava pool first. */
 async function getObsidian(): Promise<ActionResult> {
-  const { collectBlock } = await import("../../actions/collectBlock");
   const { toolTier, TIER } = await import("../capabilities");
   if (toolTier("pickaxe") < TIER.diamond) return fail("no_tool", "obsidian needs a diamond pickaxe");
   for (let tries = 0; tries < 6 && count("obsidian") < OBSIDIAN; tries++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     const before = count("obsidian");
-    await collectBlock("obsidian", OBSIDIAN - before, 48, { seenOnly: true });
+    await mineSafeObsidian(OBSIDIAN - before);
     if (count("obsidian") >= OBSIDIAN) break;
     if (!(await obsidianFromLava())) {
       // Lava is common deep down: a mining trip looks for it

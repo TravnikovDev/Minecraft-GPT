@@ -53,5 +53,47 @@ test("the late-game milestones come after diamonds, each needing only milestones
     for (const r of m.requires ?? []) expect(ids.indexOf(r)).toBeGreaterThanOrEqual(0), expect(ids.indexOf(r)).toBeLessThan(i);
   });
   expect(ids.indexOf("nether_portal")).toBeGreaterThan(ids.indexOf("diamond_pickaxe"));
-  expect(ids.at(-1)).toBe("dragon");
+  expect(ids.slice(-2)).toEqual(["dragon", "home_again"]);
+});
+
+test("the reflex attacks a neutral mob (piglin, enderman, zombified piglin) only after it attacked; spiders only at night", async () => {
+  const { mayAttackFirst } = await import(`${ROOT}/src/actions/combat.ts`);
+  expect(mayAttackFirst("zombie", false, false)).toBe(true);
+  expect(["piglin", "zombified_piglin", "enderman", "warden"].some((n) => mayAttackFirst(n, true, false))).toBe(false);
+  expect(mayAttackFirst("zombified_piglin", false, true)).toBe(true); // it hit the bot
+  expect([mayAttackFirst("spider", false, false), mayAttackFirst("spider", true, false)]).toEqual([false, true]);
+});
+
+test("eyes wanted: 16 before the portal room, what the frame needs plus one after, none once in the End; rods from what's made", async () => {
+  const { eyesWanted, rodsWanted } = await import(`${ROOT}/src/skills/endgame/milestones.ts`);
+  expect(eyesWanted({})).toBe(16);
+  expect(eyesWanted({ endPortal: { x: 0, y: 0, z: 0 }, framesFilled: 3 })).toBe(10);
+  expect(eyesWanted({ endVisited: 1 })).toBe(0);
+  expect(rodsWanted(0, 0, 16)).toBe(8);
+  expect(rodsWanted(10, 1, 16)).toBe(3); // one broken eye doesn't send it back for 8 more
+  expect(rodsWanted(16, 0, 16)).toBe(0);
+});
+
+test("the stronghold: under a throw that went down for sure; else where two saved throws cross (a guess)", async () => {
+  const { strongholdFromThrows } = await import(`${ROOT}/src/skills/endgame/stronghold.ts`);
+  expect(strongholdFromThrows([])).toBeNull();
+  const a = { x: 0, z: 0, dx: 1000, dz: -500, down: false };
+  const b = { x: 0, z: -1000, dx: 1000, dz: 500, down: false };
+  const guess = strongholdFromThrows([a, b]);
+  expect([Math.round(guess.x), Math.round(guess.z), guess.sure]).toEqual([1000, -500, false]);
+  const sure = strongholdFromThrows([a, b, { x: 990, z: -505, dx: 0.1, dz: 0, down: true }]);
+  expect([sure.x, sure.z, sure.sure]).toEqual([990, -505, true]);
+});
+
+test("obsidian is mined only on solid ground (never off a lava pool's top); milestones are worked on where they belong", async () => {
+  const { safeToMine } = await import(`${ROOT}/src/skills/endgame/portal.ts`);
+  expect(safeToMine({ name: "stone", boundingBox: "block" })).toBe(true);
+  expect(safeToMine({ name: "lava", boundingBox: "empty" })).toBe(false);
+  expect(safeToMine(null)).toBe(false);
+  const { nextMilestone } = await import(`${ROOT}/src/skills/milestones.ts`);
+  const m = (id: string, tier: number, dimension: any, done = false) => ({ id, title: id, tier, dimension, done: () => done, achieve: async () => ({ ok: true }) });
+  const list = [m("food", 1, undefined), m("fortress", 4, "any")];
+  // In the Nether the first day's food check waits; the fortress is next
+  expect(nextMilestone(list as any, () => false, (x: any) => x.dimension === "any")?.id).toBe("fortress");
+  expect(nextMilestone(list as any, () => false, () => true)?.id).toBe("food");
 });

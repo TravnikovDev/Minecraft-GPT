@@ -225,7 +225,7 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   expect(REAL.map((m) => m.id)).toEqual([
     "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe",
     // Phase 9: the Nether and the End
-    "shield", "bucket", "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon",
+    "shield", "bucket", "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
   ]);
   for (const n of ["shield", "bucket", "flint_and_steel", "obsidian", "blaze_rod", "blaze_powder", "ender_pearl", "ender_eye", "golden_helmet"]) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.find((m) => m.id === "chests")?.title).toContain("chests, furnace, table");

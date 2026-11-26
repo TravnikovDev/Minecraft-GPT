@@ -150,6 +150,9 @@ export const MemorySchema = z.object({
       netherVisited: z.number().optional(),
       endVisited: z.number().optional(),
       dragonDefeated: z.number().optional(),
+      cameHome: z.number().optional(),
+      throws: z.array(z.object({ x: z.number(), z: z.number(), dx: z.number(), dz: z.number(), down: z.boolean() })).optional(),
+      framesFilled: z.number().optional(),
     })
     .passthrough()
     .optional(),

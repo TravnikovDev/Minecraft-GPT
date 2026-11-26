@@ -11,8 +11,21 @@ import { bot } from "../../core/body";
 import { eyesNeeded } from "./geometry";
 import { count, dimensionNow, endgame, goToDimension } from "./state";
 
-const EYES = eyesNeeded(); // 12 for the frame, a few spare for throws that break
-const RODS = Math.ceil(EYES / 2); // a rod makes two powder, an eye takes one
+/**
+ * Eyes of ender it still needs in all: none once it's been to the End; once
+ * the portal room is found, what the frame still needs plus one spare;
+ * before that, 12 plus spares for throws that break. (A fixed 16 sent it
+ * back to the Nether for rods whenever an eye broke.) Pure over its inputs.
+ */
+export function eyesWanted(e: { endVisited?: number; endPortal?: unknown; framesFilled?: number } = endgame()): number {
+  if (e.endVisited) return 0;
+  return e.endPortal ? eyesNeeded(e.framesFilled ?? 0, 1) : eyesNeeded();
+}
+
+/** Blaze rods still wanted, counting powder and eyes already made (a rod is two powder, an eye one powder). Pure over counts. */
+export function rodsWanted(eyes: number, powder: number, wanted: number): number {
+  return Math.max(0, Math.ceil((wanted - eyes - powder) / 2));
+}
 
 const acquireOne = async (item: string): Promise<ActionResult> => {
   const { acquire } = await import("../acquire");
@@ -28,6 +41,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "shield",
     title: "a shield",
     tier: 4,
+    dimension: "any",
     requires: ["iron_tools"],
     done: () => owns("shield"),
     achieve: async () => {
@@ -42,6 +56,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "bucket",
     title: "a bucket",
     tier: 4,
+    dimension: "any",
     requires: ["iron_tools"],
     done: () => owns("bucket") || owns("water_bucket") || owns("lava_bucket"),
     achieve: () => acquireOne("bucket"),
@@ -50,6 +65,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "flint_and_steel",
     title: "flint and steel",
     tier: 4,
+    dimension: "any",
     requires: ["iron_tools"],
     done: () => owns("flint_and_steel") || Boolean(endgame().overworldPortal),
     achieve: () => acquireOne("flint_and_steel"),
@@ -58,6 +74,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "nether_portal",
     title: "a Nether portal",
     tier: 4,
+    dimension: "any",
     requires: ["diamond_pickaxe", "bucket", "flint_and_steel"],
     done: () => Boolean(endgame().overworldPortal),
     achieve: async () => (await import("./portal")).buildNetherPortal(),
@@ -66,6 +83,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "nether",
     title: "a trip to the Nether",
     tier: 4,
+    dimension: "any",
     requires: ["nether_portal", "shield"],
     done: () => Boolean(endgame().netherVisited),
     achieve: () => goToDimension("the_nether"),
@@ -74,6 +92,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "fortress",
     title: "a Nether fortress",
     tier: 4,
+    dimension: "any",
     requires: ["nether"],
     done: () => Boolean(endgame().fortress),
     achieve: async () => (await import("./nether")).findFortress(),
@@ -82,34 +101,38 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "blaze_rods",
     title: "blaze rods",
     tier: 4,
+    dimension: "any",
     requires: ["fortress"],
-    done: () => count("blaze_rod") * 2 + count("blaze_powder") + count("ender_eye") >= EYES || Boolean(endgame().endVisited),
-    achieve: async () => (await import("./nether")).getBlazeRods(RODS),
+    done: () => count("blaze_rod") * 2 + count("blaze_powder") + count("ender_eye") >= eyesWanted(),
+    achieve: async () => (await import("./nether")).getBlazeRods(rodsWanted(count("ender_eye"), count("blaze_powder"), eyesWanted())),
   },
   {
     id: "ender_pearls",
     title: "ender pearls",
     tier: 4,
+    dimension: "any",
     requires: ["nether"],
-    done: () => count("ender_pearl") + count("ender_eye") >= EYES || Boolean(endgame().endVisited),
-    achieve: async () => (await import("./pearls")).getEnderPearls(EYES),
+    done: () => count("ender_pearl") + count("ender_eye") >= eyesWanted(),
+    achieve: async () => (await import("./pearls")).getEnderPearls(eyesWanted()),
   },
   {
     id: "ender_eyes",
     title: "eyes of ender",
     tier: 5,
+    dimension: "any",
     requires: ["blaze_rods", "ender_pearls"],
-    done: () => count("ender_eye") >= EYES || Boolean(endgame().endVisited),
+    done: () => count("ender_eye") >= eyesWanted(),
     achieve: async () => {
       const back = await goToDimension("overworld");
       if (!back.ok) return back;
-      return (await import("./pearls")).craftEyes(EYES);
+      return (await import("./pearls")).craftEyes(eyesWanted());
     },
   },
   {
     id: "stronghold",
     title: "the stronghold",
     tier: 5,
+    dimension: "any",
     requires: ["ender_eyes"],
     done: () => Boolean(endgame().endPortal),
     achieve: async () => {
@@ -122,6 +145,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "end_portal",
     title: "the End portal",
     tier: 5,
+    dimension: "any",
     requires: ["stronghold"],
     done: () => Boolean(endgame().endVisited),
     achieve: async () => {
@@ -134,6 +158,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "the_end",
     title: "a trip to the End",
     tier: 5,
+    dimension: "any",
     requires: ["end_portal"],
     done: () => Boolean(endgame().endVisited),
     achieve: async () => (await import("./stronghold")).enterEnd(),
@@ -142,6 +167,7 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     id: "dragon",
     title: "the dragon",
     tier: 5,
+    dimension: "any",
     requires: ["the_end"],
     done: () => Boolean(endgame().dragonDefeated),
     achieve: async () => {
@@ -160,7 +186,17 @@ export const ENDGAME_MILESTONES: Milestone[] = [
       return (await import("./dragon")).fightDragon();
     },
   },
+  {
+    id: "home_again",
+    title: "home from the End",
+    tier: 5,
+    dimension: "any",
+    requires: ["dragon"],
+    // Out through the exit portal (the credits are skipped), home again
+    done: () => Boolean(endgame().cameHome) || (Boolean(endgame().dragonDefeated) && dimensionNow() !== "the_end"),
+    achieve: async () => (await import("./dragon")).leaveEnd(),
+  },
 ];
 
 /** Late-game milestones it may work on at night (in the Nether and the End there's no night; pearls are a night hunt). */
-export const ENDGAME_NIGHT_OK = ["nether", "fortress", "blaze_rods", "ender_pearls", "the_end", "dragon"];
+export const ENDGAME_NIGHT_OK = ["nether", "fortress", "blaze_rods", "ender_pearls", "the_end", "dragon", "home_again"];

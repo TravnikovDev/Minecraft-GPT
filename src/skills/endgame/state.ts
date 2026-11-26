@@ -22,6 +22,11 @@ export type Endgame = {
   netherVisited?: number;
   endVisited?: number;
   dragonDefeated?: number;
+  cameHome?: number;
+  /** Eyes thrown so far: where from and which way each flew (kept between tries). */
+  throws?: { x: number; z: number; dx: number; dz: number; down: boolean }[];
+  /** End portal frame blocks that already have an eye. */
+  framesFilled?: number;
 };
 
 /** What it knows about the late game so far. */
@@ -55,12 +60,54 @@ export async function waitForDimension(dim: Dimension, ms = 20_000): Promise<boo
   return dimensionNow() === dim;
 }
 
+/** True when it stands in a Nether portal block now. */
+const inPortal = (): boolean => bot.blockAt(bot.entity.position.floored())?.name === "nether_portal";
+
+/**
+ * Relights a portal whose inside cell is `cell` when it's gone out (a ghast's
+ * fireball puts one out): flint and steel on the obsidian under it.
+ */
+async function relight(cell: P3): Promise<void> {
+  const here = bot.blockAt(new Vec3(cell.x, cell.y, cell.z));
+  const under = bot.blockAt(new Vec3(cell.x, cell.y - 1, cell.z));
+  if (!here || here.name === "nether_portal" || under?.name !== "obsidian" || count("flint_and_steel") === 0) return;
+  const { equipItem, useBlock } = await import("../../core/primitives");
+  await goTo(new pf.goals.GoalNear(cell.x, cell.y, cell.z, 2));
+  if ((await equipItem("flint_and_steel")).ok) await useBlock(under);
+  await sleep(800);
+  console.log(`Relit the portal at ${cell.x}, ${cell.y}, ${cell.z}: ${bot.blockAt(new Vec3(cell.x, cell.y, cell.z))?.name}.`);
+}
+
 /** Walks into the portal whose inside cell is `cell` and waits to come out in `to`. */
 export async function throughPortal(cell: P3, to: Dimension): Promise<ActionResult> {
+  // Standing in a portal already (just came through it): it won't take it
+  // back until it has stepped out once
+  if (inPortal()) {
+    await goTo(new pf.goals.GoalInvert(new pf.goals.GoalNear(cell.x, cell.y, cell.z, 2)));
+    await sleep(1_000);
+  }
+  await relight(cell);
   const walked = await goTo(new pf.goals.GoalBlock(cell.x, cell.y, cell.z));
   if (!walked.ok && bot.entity.position.distanceTo(new Vec3(cell.x, cell.y, cell.z)) > 1.5) return walked;
   // Standing in the portal: it takes about 4 seconds to go through
   return (await waitForDimension(to)) ? ok() : fail("refused", `the portal at ${cell.x}, ${cell.y}, ${cell.z} didn't take me`);
+}
+
+/**
+ * What it takes into the Nether: flint and steel (to relight the way home),
+ * a gold helmet when it has the gold (piglins leave a player in gold alone),
+ * blocks to bridge and wall off with. Best effort: it says what's missing.
+ */
+async function packNetherKit(): Promise<void> {
+  const { acquire } = await import("../acquire");
+  const { liveWorld } = await import("../world");
+  const missing: string[] = [];
+  if (count("flint_and_steel") === 0 && !(await acquire("flint_and_steel", 1, liveWorld)).ok) missing.push("flint and steel");
+  const goldOn = bot.inventory.slots.some((i) => i?.name.startsWith("golden_"));
+  if (!goldOn && count("golden_helmet") === 0 && count("gold_ingot") >= 5) await acquire("golden_helmet", 1, liveWorld);
+  if (count("golden_helmet") === 0 && !goldOn) missing.push("a gold helmet");
+  if (count("cobblestone", "cobbled_deepslate", "dirt") < 32) await acquire("cobblestone", 32, liveWorld);
+  if (missing.length > 0) console.log(`Nether: going without ${missing.join(" or ")}.`);
 }
 
 /**
@@ -74,10 +121,29 @@ export async function goToDimension(dim: "overworld" | "the_nether"): Promise<Ac
   if (now === "the_end") return fail("refused", "I can only leave the End through its exit portal once the dragon is dead");
   const portal = dim === "the_nether" ? e.overworldPortal : e.netherPortal;
   if (!portal) return fail("not_found", dim === "the_nether" ? "I have no Nether portal yet" : "I don't know where my portal home is");
+  if (dim === "the_nether") await packNetherKit();
   const went = await throughPortal(portal, dim);
-  if (went.ok && dim === "the_nether" && !e.netherPortal) {
-    const p = bot.entity.position.floored();
-    await noteEndgame({ netherPortal: { x: p.x, y: p.y, z: p.z }, netherVisited: e.netherVisited ?? Date.now() });
+  if (went.ok && dim === "the_nether") {
+    const { wearBestArmor } = await import("../../actions/armor");
+    await wearBestArmor(); // the gold helmet goes on in the Nether
   }
   return went;
+}
+
+/**
+ * Remembers where it comes out of a portal, however it went through (on
+ * purpose, or by stumbling in): the Nether side is the way home.
+ */
+export function registerPortalWatch(): void {
+  bot.on("respawn", () => {
+    setTimeout(() => {
+      if (!bot.entity || !inPortal()) return; // a death's respawn, not a portal
+      const p = bot.entity.position.floored();
+      const spot = { x: p.x, y: p.y, z: p.z };
+      const dim = dimensionNow();
+      const e = endgame();
+      if (dim === "the_nether") void noteEndgame({ netherPortal: spot, netherVisited: e.netherVisited ?? Date.now() });
+      else if (dim === "overworld" && !e.overworldPortal) void noteEndgame({ overworldPortal: spot });
+    }, 1_500);
+  });
 }

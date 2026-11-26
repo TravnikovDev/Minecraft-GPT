@@ -12,7 +12,7 @@ import pf from "mineflayer-pathfinder";
 import type { Entity } from "prismarine-entity";
 import { bot } from "../../core/body";
 import { isCommandCancelled } from "../../core/commandContext";
-import { equipItem, goTo, hitEntityId, lookAt, stopUsingItem, useHeldItem } from "../../core/primitives";
+import { equipItem, goTo, hitEntityId, lookAt, stopUsingItem, useHeldItemToward } from "../../core/primitives";
 import { fail, ok, type ActionResult } from "../../core/result";
 import { report } from "../../core/narrator";
 import { safeOnIsland } from "./geometry";
@@ -54,9 +54,9 @@ function spotNearMiddle(radius = 5): Vec3 | null {
 async function shootCrystal(crystal: Entity): Promise<void> {
   if (!(await equipItem("bow")).ok) return;
   const d = crystal.position.distanceTo(bot.entity.position);
-  // A full-power arrow falls about d^2/360 blocks over d blocks
-  await lookAt(crystal.position.offset(0, 0.5 + (d * d) / 360, 0));
-  useHeldItem();
+  // A full-power arrow falls about d^2/360 blocks over d blocks; the bow is
+  // drawn once the head has turned there (useHeldItemToward)
+  await useHeldItemToward(crystal.position.offset(0, 0.5 + (d * d) / 360, 0));
   await sleep(1_100);
   stopUsingItem();
   await sleep(400);
@@ -96,19 +96,26 @@ export async function fightDragon(): Promise<ActionResult> {
   const weapon = bestMeleeWeapon(bot.inventory.items(), true);
   let lastHit = 0;
   let lastSeen = Date.now();
+  // Victory only after it saw the dragon in this fight (an End whose dragon
+  // was killed before has an open exit portal and no dragon from the start)
+  let sawDragon = false;
+  const { holdPosition } = await import("../../managers/stuckWatch");
   const until = Date.now() + FIGHT_MS;
   const post = spotNearMiddle();
   if (post) await safeGoTo(post.x, post.y, post.z);
   while (Date.now() < until && !isCommandCancelled()) {
+    holdPosition(5_000); // waiting for the dragon to land is standing still on purpose
     const d = dragon();
-    if (d) lastSeen = Date.now();
-    else if (Date.now() - lastSeen > 15_000 && exitPortalOpen()) {
+    if (d) {
+      lastSeen = Date.now();
+      sawDragon = true;
+    } else if (Date.now() - lastSeen > 15_000 && (sawDragon || !endgame().endVisited) && exitPortalOpen()) {
       await noteEndgame({ dragonDefeated: Date.now() });
       report("The dragon is dead! I freed the End!");
       return ok();
     }
-    // Dragon breath (a lingering cloud) near: move to another spot
-    const breath = bot.nearestEntity((e) => e.name === "area_effect_cloud" && e.position.distanceTo(bot.entity.position) < 4);
+    // Dragon breath (a lingering cloud, radius 5 growing to about 7) near: move to another spot
+    const breath = bot.nearestEntity((e) => e.name === "area_effect_cloud" && e.position.distanceTo(bot.entity.position) < 7.5);
     if (breath) {
       const away = spotNearMiddle(7);
       if (away) await safeGoTo(away.x, away.y, away.z);
@@ -121,13 +128,41 @@ export async function fightDragon(): Promise<ActionResult> {
     }
     if (d && d.position.distanceTo(bot.entity.position) < HIT_RANGE + 4 && Date.now() - lastHit > HIT_COOLDOWN_MS) {
       if (weapon && bot.heldItem?.name !== weapon.name) await equipItem(weapon.name);
-      // The head first; the body when the head's out of reach
+      // Its head (the dragon is many parts; the head is its id + 1). One hit
+      // per swing: a second right after lands at a fifth of the strength
       await lookAt(d.position.offset(0, 1, 0));
       hitEntityId(d.id + 1);
-      hitEntityId(d.id + 2);
       lastHit = Date.now();
     }
     await sleep(150);
   }
   return fail("refused", "the dragon fight took too long; I'll try again");
+}
+
+/**
+ * Home from the End once the dragon is dead: into the exit portal in the
+ * middle; the credits that follow are skipped (core/primitives
+ * registerCreditsSkip) and it comes out at its spawn point.
+ */
+export async function leaveEnd(): Promise<ActionResult> {
+  if (dimensionNow() !== "the_end") {
+    await noteEndgame({ cameHome: endgame().cameHome ?? Date.now() });
+    return ok();
+  }
+  if (!endgame().dragonDefeated) return fail("refused", "the way out opens when the dragon is dead");
+  const id = bot.registry.blocksByName["end_portal"]?.id;
+  const portal = id === undefined ? null : bot.findBlock({ matching: id, maxDistance: 48, point: new Vec3(0, 62, 0) });
+  if (!portal) return fail("not_found", "I can't find the exit portal");
+  await goTo(new pf.goals.GoalNear(portal.position.x, portal.position.y, portal.position.z, 2));
+  // The last step by hand: walk into it
+  const { setControl } = await import("../../core/primitives");
+  await lookAt(portal.position.offset(0.5, 0, 0.5));
+  setControl("forward", true);
+  await sleep(1_500);
+  setControl("forward", false);
+  const { waitForDimension } = await import("./state");
+  if (!(await waitForDimension("overworld", 30_000))) return fail("refused", "the exit portal didn't take me home");
+  await noteEndgame({ cameHome: Date.now() });
+  report("I'm home from the End!");
+  return ok();
 }

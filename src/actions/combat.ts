@@ -1,6 +1,7 @@
 // Path: src/actions/combat.ts
 
 import { bot } from "../core/body";
+import { on } from "../core/events";
 import { chatter } from "../core/narrator";
 import { equipItem, lookAt } from "../core/primitives";
 import { stopUsingItem, useHeldItem } from "../core/primitives";
@@ -64,15 +65,47 @@ export function getMobThreatInfo(entity: Entity) {
   return hostileMobsInfo[mobName as keyof typeof hostileMobsInfo] || null;
 }
 
+// Neutral mobs that hurt the bot lately (id -> until when): those it fights back
+const provoked = new Map<number, number>();
+const PROVOKED_MS = 15_000;
+let watchingHurts = false;
+
+/** Remembers the neutral mobs right by the bot when it gets hurt: they're the ones attacking. */
+function watchHurts(): void {
+  if (watchingHurts) return;
+  watchingHurts = true;
+  on("bot:damaged", () => {
+    if (!bot.entity) return;
+    const now = Date.now();
+    for (const e of Object.values(bot.entities)) {
+      if (e.name && NEUTRAL_MOBS.has(e.name) && e.position.distanceTo(bot.entity.position) < 4.5) provoked.set(e.id, now + PROVOKED_MS);
+    }
+  });
+}
+
+/**
+ * A neutral mob is a target only when it attacked the bot (a piglin it trades
+ * with, a zombified piglin it walks past, an enderman: never first; architect
+ * review, the reflex started wars in the Nether). Pure over its inputs.
+ */
+export function mayAttackFirst(name: string, night: boolean, provokedNow: boolean): boolean {
+  return provokedNow || !isNeutralNow(name, night);
+}
+
 // Get entities sorted by priority (threat level and distance)
 export function getPriorityTargets(range = 16): Entity[] {
+  watchHurts();
+  const t = bot.time?.timeOfDay ?? 0;
+  const night = t >= 13000 && t < 23000;
+  const now = Date.now();
   const hostileEntities = Object.values(bot.entities).filter(
     (entity) =>
       // creepers are handled by the creeper reflex: rushing them in melee with
       // pvp is exactly how the bot got blown up
       entity.name !== "creeper" &&
       entity.position.distanceTo(bot.entity.position) <= range &&
-      isHostile(entity)
+      isHostile(entity) &&
+      mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now)
   );
 
   // Sort by threat level (high to low) and then by distance (close to far)

@@ -13,7 +13,9 @@ import { describeFailure, fail, ok, type ActionResult } from "../../core/result"
 import { count, dimensionNow, goToDimension } from "./state";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-// Gold worth taking to the piglins (a trade gives pearls about 1 time in 20)
+// Gold worth taking to the piglins: a trade gives pearls about 1 time in 20
+// (some 16 gold per pearl), so 32 gold is a top-up of a pearl or two;
+// endermen are the main source
 const GOLD_FOR_TRADING = 32;
 
 /** Hunts endermen around here (they're out at night): fights each until it drops its pearl. */
@@ -49,7 +51,7 @@ export async function getEnderPearls(want: number): Promise<ActionResult> {
       const { barterForPearls } = await import("./nether");
       const traded = await barterForPearls(want - count("ender_eye"));
       if (traded.ok || have() >= want) return ok();
-      console.log(`Pearls: trading wasn't enough (${describeFailure(traded)}); hunting endermen.`);
+      console.log(`Pearls: trading topped up to ${count("ender_pearl")} (${describeFailure(traded)}); hunting endermen for the rest.`);
     }
   }
   // Endermen: on the surface, best at night

@@ -738,6 +738,20 @@ export async function dismountVehicle(): Promise<ActionResult> {
 }
 
 /** Right-clicks with the held item (place a boat, a minecart; raise a shield with `offHand`). */
+/**
+ * Uses the held item (a bucket, an eye of ender) toward a point, once the
+ * head has really turned there: a forced look only sends the turn on the
+ * next physics tick, and the server aims the bucket with the old look
+ * (architect review: fills and pours mostly did nothing).
+ */
+export async function useHeldItemToward(point: Pos): Promise<ActionResult> {
+  const looked = await guarded("looking", () => bot.lookAt(new Vec3(point.x, point.y, point.z), false), { timeoutMs: 2_000 });
+  if (!looked.ok) return looked;
+  await bot.waitForTicks(1); // the turn is on its way to the server
+  bot.activateItem();
+  return ok();
+}
+
 export function useHeldItem(offHand = false): void {
   bot.activateItem(offHand);
 }
@@ -759,8 +773,24 @@ export function hitEntity(entity: Entity): void {
  * head is the dragon's id + 1), never its own id (Phase 9).
  */
 export function hitEntityId(id: number): void {
-  bot.swingArm("right");
-  (bot as unknown as { _client: { write: (name: string, data: unknown) => void } })._client.write("use_entity", { target: id, mouse: 1, sneaking: false });
+  // mineflayer's attack only reads the target's id, and picks the packet for
+  // the server's version (use_entity on 1.20, its own attack packet on 26.x)
+  bot.attack({ id } as Entity);
+}
+
+/**
+ * Skips the credits after the End's exit portal: the server waits for the
+ * client to say it's done before sending it home. mineflayer's own answer
+ * names the field "action", which 1.20.3+ calls "actionId", so it hangs on
+ * the credits; this answers with both.
+ */
+export function registerCreditsSkip(): void {
+  const client = (bot as unknown as { _client: { on: (e: string, f: (p: { reason?: number; gameMode?: number }) => void) => void; write: (n: string, d: unknown) => void } })._client;
+  client.on("game_state_change", (packet) => {
+    if (packet.reason !== 4) return; // 4: "win game" (the credits)
+    console.log("Skipping the credits.");
+    client.write("client_command", { action: 0, actionId: 0 });
+  });
 }
 
 /** Holds or lets go of a movement key (sneak, jump, forward...). */

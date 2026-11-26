@@ -40,10 +40,20 @@ function restart(): void {
   lastInventory = bot.inventory ? inventorySignature() : "";
 }
 
-/** True when the bot moved or its items changed since last time (a reflex holding it counts as fine). */
+// A task waiting on purpose (by a blaze spawner, for the dragon to land)
+// says so: standing still then is not being stuck
+let holdUntil = 0;
+
+/** A task holds its position on purpose for `ms` (call it again while it keeps waiting). */
+export function holdPosition(ms = 10_000): void {
+  holdUntil = Math.max(holdUntil, Date.now() + ms);
+}
+
+/** True when the bot moved or its items changed since last time (a reflex holding it, or a deliberate wait, counts as fine). */
 function madeProgress(): boolean {
   const p = bot.entity?.position;
   if (!p) return true;
+  if (Date.now() < holdUntil) return true;
   const moved = Math.hypot(p.x - lastPos.x, p.y - lastPos.y, p.z - lastPos.z) > 1;
   const items = inventorySignature();
   if (moved || items !== lastInventory || isAnyReflexActive()) {

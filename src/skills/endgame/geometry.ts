@@ -40,7 +40,10 @@ export function triangulate(p1: { x: number; z: number }, d1: { x: number; z: nu
   const cross = d1.x * d2.z - d1.z * d2.x;
   const n1 = Math.hypot(d1.x, d1.z);
   const n2 = Math.hypot(d2.x, d2.z);
-  if (n1 === 0 || n2 === 0 || Math.abs(cross) / (n1 * n2) < Math.sin((5 * Math.PI) / 180)) return null; // under 5 degrees apart
+  // Under 1 degree apart: too flat to trust (an eye flies straight at its
+  // target and its position comes at 1/4096 of a block, so 1 degree is
+  // plenty; 5 rejected every stronghold past about 2,300 blocks)
+  if (n1 === 0 || n2 === 0 || Math.abs(cross) / (n1 * n2) < Math.sin((1 * Math.PI) / 180)) return null;
   const dx = p2.x - p1.x;
   const dz = p2.z - p1.z;
   const t = (dx * d2.z - dz * d2.x) / cross;

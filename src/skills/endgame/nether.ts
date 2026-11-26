@@ -64,9 +64,10 @@ async function recover(from: Vec3): Promise<void> {
   }
 }
 
-/** Blaze rods: waits by the fortress's blaze spawner and fights the blazes that come near. */
+/** Blaze rods: waits by the fortress's blaze spawner and fights the blazes that come near (`want`: more rods). */
 export async function getBlazeRods(want: number): Promise<ActionResult> {
-  if (count("blaze_rod") + Math.floor(count("blaze_powder") / 2) >= want) return ok();
+  if (want <= 0) return ok();
+  const goal = count("blaze_rod") + want;
   const found = await findFortress();
   if (!found.ok) return found;
   const f = endgame().fortress!;
@@ -80,7 +81,9 @@ export async function getBlazeRods(want: number): Promise<ActionResult> {
   const { pickupNearbyItems } = await import("../../actions/pickup");
   const until = Date.now() + 10 * 60_000;
   chatter("Waiting for blazes by the spawner.", "blazes");
-  while (!isCommandCancelled() && Date.now() < until && count("blaze_rod") < want) {
+  const { holdPosition } = await import("../../managers/stuckWatch");
+  while (!isCommandCancelled() && Date.now() < until && count("blaze_rod") < goal) {
+    holdPosition(5_000); // waiting for blazes is standing still on purpose
     if (bot.health < RETREAT_HEALTH) {
       await recover(post);
       await goTo(new pf.goals.GoalNear(post.x, post.y, post.z, 6));
@@ -98,7 +101,7 @@ export async function getBlazeRods(want: number): Promise<ActionResult> {
   fighting.stop();
   await pickupNearbyItems(bot, 8);
   const have = count("blaze_rod");
-  return have >= want ? ok() : fail("missing_items", `only ${have} of ${want} blaze rods`);
+  return have >= goal ? ok() : fail("missing_items", `only ${have} of ${goal} blaze rods`);
 }
 
 /** Wears a golden helmet (piglins attack a player without gold armour). */
