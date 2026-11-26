@@ -130,6 +130,18 @@ export async function craftRecipe(
     console.log(`Invalid item name: ${itemName}`);
     return false;
   }
+  // A craft needs a free slot for what it makes: with a full inventory the
+  // result has nowhere to go and the craft hangs 20 s ("updateSlot:0 did not
+  // fire", fresh-world test, right after "my inventory was full")
+  const { inventoryFull } = await import("./storage");
+  const { isMakingRoom } = await import("./overflow");
+  if (inventoryFull() && !isMakingRoom()) {
+    const { makeRoom } = await import("./overflow");
+    if (!(await makeRoom(`craft ${itemName.replace(/_/g, " ")}`))) {
+      console.log(`No room in my inventory to craft ${itemName}.`);
+      return false;
+    }
+  }
   const itemId: number = foundItemId; // narrowed for use inside closures
 
   // No free slot and no stack to add to: the crafted item would have nowhere to go and be lost

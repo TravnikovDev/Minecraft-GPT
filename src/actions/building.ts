@@ -643,8 +643,32 @@ export function protectShelter(): void {
   if (!room || !start || !dir) return protectCells([]);
   const plan = shelterPlan(start, dir, (room.details?.["room"] as RoomSize | undefined) ?? DEFAULT_ROOM, (room.details?.["depth"] as number | undefined) ?? DEFAULT_DEPTH);
   const seal = new Set(cellsOf(room, "seal").map(cellKey));
-  protectCells(plan.shell.filter((p) => !seal.has(cellKey(p))));
+  protectCells([...plan.shell.filter((p) => !seal.has(cellKey(p))), ...overburden(plan.cells, plan.shell, start.y + 3)]);
   setOwnPassages(plan.cells);
+}
+
+/**
+ * The ground over its home: every cell above its stairs, doorways, room and
+ * shell up to `top` (a few blocks over the surface), but its own open
+ * cells. Walks never dig down into it from the grass (a walk home dug a
+ * shaft into the back of the shelter, and a creeper came down it and blew
+ * the furniture up, fresh-world test): they come in by the stairs. Pure.
+ */
+export function overburden(open: Vec3[], shell: Vec3[], top: number): Vec3[] {
+  const openSet = new Set(open.map(cellKey));
+  const highest = new Map<string, Vec3>();
+  for (const c of [...open, ...shell]) {
+    const k = `${c.x},${c.z}`;
+    if (!highest.has(k) || highest.get(k)!.y < c.y) highest.set(k, c);
+  }
+  const cells: Vec3[] = [];
+  for (const c of highest.values()) {
+    for (let y = c.y + 1; y <= top; y++) {
+      const cell = new Vec3(c.x, y, c.z);
+      if (!openSet.has(cellKey(cell))) cells.push(cell);
+    }
+  }
+  return cells;
 }
 
 /** After a restart: blocks closing the doorway are its door again (the walking rules may break them). */

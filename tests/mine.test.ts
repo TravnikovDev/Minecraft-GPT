@@ -72,3 +72,14 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
   expect(has(walk, 0, 59, 5)).toBe(true);
   expect(has(walk, 0, 62, 5)).toBe(true); // 4 high (owner: 3 was too low)
 });
+
+test("the ground over its home is protected up to over the surface, its own open cells never", async () => {
+  const { overburden } = await import(`${ROOT}/src/actions/building.ts`);
+  const { Vec3 } = await import(`${ROOT}/node_modules/vec3`);
+  // A room cell at y 57 with its roof at 60; the surface at 62
+  const open = [new Vec3(7, 57, 8), new Vec3(7, 58, 8), new Vec3(7, 59, 8)];
+  const shell = [new Vec3(7, 60, 8)];
+  const cells = overburden(open, shell, 63);
+  expect(cells.map((c: any) => c.y)).toEqual([61, 62, 63]);
+  expect(cells.some((c: any) => c.y <= 59)).toBe(false);
+});

@@ -71,6 +71,9 @@ async function makeChest(): Promise<string | null> {
  * it was doing (for the message if it can't); `keep` is what that job needs
  * and stays with it (the ore it's mining). Returns true if it made room.
  */
+/** True while makeRoom is at work (its own chest crafting must not wait on it). */
+export const isMakingRoom = (): boolean => busy;
+
 export async function makeRoom(why: string, keep: string[] = []): Promise<boolean> {
   if (busy || !inventoryFull()) return !inventoryFull();
   if (Date.now() - lastFailedAt < RETRY_AFTER_FAIL_MS) return false;

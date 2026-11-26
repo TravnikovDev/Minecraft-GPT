@@ -21,7 +21,7 @@ import { currentDimension } from "../actions/perception";
 import { digDiagonalTunnel, digStraightTunnel, tunnelStopReason, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
-import { TIER, toolTier } from "./capabilities";
+import { shelter, TIER, toolTier } from "./capabilities";
 
 export const MINE_DEPTH = 10;
 const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
@@ -105,7 +105,7 @@ function mineRecord(): MineRecord | null {
  * steps themselves are its own passage: a stall there never sends it round
  * through the caves. The doorway (step 0) is the shelter's.
  */
-export function protectMine(): void {
+export async function protectMine(): Promise<void> {
   const rec = mineRecord();
   if (!rec) {
     protectCells([], "mine");
@@ -113,7 +113,12 @@ export function protectMine(): void {
     return;
   }
   const { keep, walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level);
-  protectCells(keep, "mine");
+  // The ground over the shallow stairs too, up to over the surface (a walk
+  // home dug down into them from the grass): only protected, never "mended"
+  const surface = (shelter()?.details?.["start"] as Pos | undefined)?.y ?? rec.start.y + 6;
+  const { overburden } = await import("../actions/building");
+  const above = overburden(walk.filter((c) => c.y > stepAt(rec.start, rec.direction, hubStep(0)).y), keep, surface + 3);
+  protectCells([...keep, ...above], "mine");
   setOwnPassages(walk, "mine");
 }
 
