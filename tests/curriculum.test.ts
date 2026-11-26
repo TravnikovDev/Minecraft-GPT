@@ -323,3 +323,11 @@ test("the shield, the water bucket and iron armour come before the other iron to
   expect(REAL.find((m) => m.id === "nether_portal")?.requires).toContain("bucket");
   expect(REAL.find((m) => m.id === "nether")?.requires).toContain("shield");
 });
+
+test("every milestone between the mine and diamonds is worked on at night (in the mine or at home)", async () => {
+  const { worksAtNight } = await import(`${ROOT}/src/skills/curriculum.ts`);
+  const ids = REAL.map((m) => m.id);
+  const from = ids.indexOf("mine");
+  const to = ids.indexOf("diamond_pickaxe");
+  for (const id of ids.slice(from, to + 1)) expect([id, worksAtNight(id)]).toEqual([id, true]);
+});

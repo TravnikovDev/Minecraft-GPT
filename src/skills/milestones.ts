@@ -326,7 +326,9 @@ export const MILESTONES: Milestone[] = [
     achieve: async () => {
       const made = await makeFromIron([["bucket", 3]]);
       if (!made.ok) return made;
-      // Filled where there's water in sight; an empty one is filled later
+      // Filled where there's water in sight (by day: at night that may be
+      // out in the open); an empty one is filled later
+      if (bot.time?.isDay === false) return ok();
       const { fillWater } = await import("./endgame/portal");
       const filled = await fillWater();
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);

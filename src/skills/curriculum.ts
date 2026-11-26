@@ -325,7 +325,14 @@ async function planAtDusk(): Promise<void> {
 setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf === (bot.time?.day ?? 0)));
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
-const UNDERGROUND = new Set(["mine", "coal", "iron", "iron_pickaxe", "iron_tools", "iron_armor", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
+// Worked on at night: in its mine, or at home (crafting, smelting: the iron
+// for a shield or a bucket comes from the mine). Game test: the shield and
+// the bucket were missing here, so the night after its iron pickaxe it had
+// "no mine work" and stood by a bed it couldn't use (monsters outside) all night
+const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
+
+/** True when a milestone is worked on at night (under ground or at home). */
+export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id);
 
 /** Mine work it could do now (the next milestone is one underground). */
 function mineWorkTonight(): boolean {
