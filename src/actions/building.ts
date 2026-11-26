@@ -539,6 +539,9 @@ async function putInDoor(at: Vec3): Promise<void> {
       return;
     }
   }
+  // Out of the doorway first: its own body there makes the server refuse the
+  // door (game test: refused again and again by the doorway)
+  await goTo(new pf.goals.GoalCompositeAll([new pf.goals.GoalNear(at.x, at.y, at.z, 4), new pf.goals.GoalInvert(new pf.goals.GoalNear(at.x, at.y, at.z, 1))]));
   const placed = await placeBlockResult(door, at.x, at.y, at.z);
   console.log(placed.ok ? `Put a door in my shelter at ${at}.` : `Couldn't put the door in (${describeFailure(placed)}); I'll close it with blocks at night.`);
 }

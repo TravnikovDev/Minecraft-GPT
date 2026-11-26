@@ -96,3 +96,14 @@ test("a creeper behind its shelter wall doesn't count; one right by it outside d
   expect(engagementStalled(0, 19_000)).toBe(false);
   expect(engagementStalled(0, 21_000)).toBe(true);
 });
+
+test("its body at a doorway's edge reaches into the door's space", async () => {
+  const { bodyReaches } = await import(`${ROOT}/src/core/primitives.ts`);
+  const door = [{ x: 7, y: 57, z: 7 }, { x: 7, y: 58, z: 7 }];
+  // Feet cell beside the doorway (z 6), but 0.2 from its edge: the body reaches in
+  expect(bodyReaches({ x: 7.5, y: 57, z: 6.8 }, door)).toBe(true);
+  // In the middle of the cell beside it: clear
+  expect(bodyReaches({ x: 7.5, y: 57, z: 6.5 }, door)).toBe(false);
+  // Two blocks below (on the stairs), head under the door: clear
+  expect(bodyReaches({ x: 7.5, y: 55, z: 7.5 }, door)).toBe(false);
+});

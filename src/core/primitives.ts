@@ -508,10 +508,27 @@ function supportFor(at: Vec3, prefer?: Vec3): { reference: Block; face: Vec3 } |
   return null;
 }
 
-/** True when the bot's own body is in that block (a full block can't go there). */
-function standingIn(at: Vec3): boolean {
-  const feet = bot.entity.position.floored();
-  return at.x === feet.x && at.z === feet.z && (at.y === feet.y || at.y === feet.y + 1);
+/**
+ * True when a body at `pos` (0.6 wide, 1.8 tall) reaches into any of these
+ * cells. Pure. Game test: standing at the edge of its shelter's doorway, its
+ * feet cell beside it, the server refused the door again and again ("still air"),
+ * most likely because its own body was in the door's space.
+ */
+export function bodyReaches(pos: Pos, cells: Pos[], halfWidth = 0.3, height = 1.8): boolean {
+  return cells.some(
+    (c) =>
+      pos.x + halfWidth > c.x && pos.x - halfWidth < c.x + 1 &&
+      pos.z + halfWidth > c.z && pos.z - halfWidth < c.z + 1 &&
+      pos.y + height > c.y && pos.y < c.y + 1
+  );
+}
+
+/** The cells a placed block takes up: a door is two tall. */
+const cellsTaken = (itemName: string, at: Vec3): Vec3[] => (itemName.endsWith("_door") ? [at, at.offset(0, 1, 0)] : [at]);
+
+/** True when the bot's own body is in the space the block would take (a full block or a door can't go there). */
+function standingIn(at: Vec3, itemName = ""): boolean {
+  return bodyReaches(bot.entity.position, cellsTaken(itemName, at));
 }
 
 export type PlaceOptions = {
@@ -538,7 +555,7 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   if (!withinReach(support.reference.position)) return fail("out_of_reach", `${at}`);
   // A solid block can't go where the bot stands; torches, rails, seeds and the
   // like can (an item that isn't a block by the same name is never solid here)
-  if (standingIn(at) && bot.registry.blocksByName[itemName]?.boundingBox === "block") return fail("occupied", "I'm standing there");
+  if (standingIn(at, itemName) && bot.registry.blocksByName[itemName]?.boundingBox === "block") return fail("occupied", "I'm standing there");
   const equipped = await equipItem(itemName, "hand");
   if (!equipped.ok) return equipped;
   await guarded("looking", () => bot.lookAt(middle(support.reference.position), true), { timeoutMs: 2_000 });
@@ -562,8 +579,9 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   // Only the server undoing it counts toward a protected area (not a mob standing in the spot)
   // A living thing in the spot (a dropped item or an orb never blocks a
   // block: counting them hid why a bed didn't go down, fresh-world test)
+  const taken = cellsTaken(itemName, at);
   const blocker = Object.values(bot.entities).find(
-    (e) => e !== bot.entity && e.position.floored().equals(at) && e.name !== "item" && e.name !== "experience_orb" && e.name !== "arrow"
+    (e) => e !== bot.entity && e.name !== "item" && e.name !== "experience_orb" && e.name !== "arrow" && bodyReaches(e.position, taken, (e.width ?? 0.6) / 2, e.height ?? 1.8)
   );
   if (!blocker) await noteRevert(at); // twice close together: a protected area
   const why = placed.ok ? "" : ` (${describeFailure(placed)})`;
