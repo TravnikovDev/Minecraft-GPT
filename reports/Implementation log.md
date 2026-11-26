@@ -734,3 +734,35 @@ The architect was consulted on the design before building and reviewed the resul
 - **Tests:** 218 pass.
 - **Phase 6 left to close:** only the 2–3 seed run the plan asks for (forest, plains, cherry).
 - **Next:** Phase 7, the diary and the LLM day planner.
+
+## Entry 16: Phase 7, the diary and the LLM day planner (2026-11-26)
+
+**Planned.** Phase 7 of the plan: "The LLM becomes the bot's decision maker. Code writes a diary. At dusk, or when the bot is idle, the bot sends the diary, its state and a menu of feasible goals to the model. It wakes up with a plan for the day."
+
+**What happened**
+- Built in four steps, each committed with tests: the diary, cost tracking, the goal vocabulary with the planner, and the triggers.
+- **A live call** with the plan schema (the Responses API, strict function tools, reasoning effort low) returned a valid plan in 4.7 s for 683 tokens (about $0.0002). The model left required step arguments empty (a `mineFor` with no count, an `explore` with nothing to look for), so each goal got defaults.
+- **The architect's review** found the step lifecycle unsafe:
+  - a step was known only by its position in whatever plan was stored, so after a re-plan ("skip mining today") the old step ran anyway and marked the new plan's step done;
+  - the dusk plan could never fire: at dusk the night routine starts first and runs until dawn;
+  - "stay with me" didn't stop plan steps;
+  - a goal that threw left its step "running" and was proposed again forever;
+  - every planning call deleted today's raw diary;
+  - the planning call had the SDK's 10-minute timeout, and "what's your plan?" waited for it;
+  - an empty plan was announced every 10 minutes; home chores always reported success.
+- **Questions the review left for the owner**, answered with the safe default for now: a change to the plan stops the running step at once; after "stop" the step resumes after the quiet minute; a new plan replaces the old one; it also plans while the owner is offline; questions about its day, plan and spending are answered in code.
+
+**How we handled it**
+
+| Item | Handling |
+|---|---|
+| Diary | `planner/diary`, `planner/diaryHooks`: one line per event under the game day and part of the day, repeats counted, pickups tallied; written from task outcomes, milestones, deaths (with the mobs near), the owner's words, gifts. "What did you do today?" (`4bf93e5`) |
+| Cost | `planner/cost`: every call priced and added to `usage.json` by month and purpose; `LLM_MONTHLY_CAP_USD` (default 10) stops all model calls past it. "How much have you spent?" (`6db630a`) |
+| Planner | `planner/goals` (8 goals with a "possible now?" check, the menu), `planner/plan` (strict schema, validator: 3–8 steps enforced in code, topped up with open milestones; rejected steps in the diary), `planner/planner` (context, the call, guards), `planner/runner` (steps in B5); the curriculum falls back to the next milestone without a plan step; "what's your plan?" and changes in the owner's words (`b0e0f2b`) |
+| Review fixes | Plan ids; one tested status rule; try/catch; the night gate on resume; dusk planned before the night routine; "stay with me" covers plan steps; raw diary kept, summaries only shorten the request; 20 s timeout and no retries; empty plans back off; home chores a skill with a typed result; diary, plan and spending questions in code (`78837a2`) |
+
+**Outcome and what follows**
+- **Tests:** 233 pass.
+- **Not yet seen in the game:** all of Phase 7. The plan's in-game check: let the bot live alone for 3–5 in-game days and read the diary; check the plans make sense and get carried out; cut the network for a day and confirm the fallback; check the logged cost.
+- **Left from the phase:** a policy check in the validator (keep-out areas, a server profile); deeper feasibility for `craft` (today any recipe passes); sharing the plan when the owner is online but quiet (only on joining today); the bot's own day counter instead of the world clock, which `/time set` and other dimensions can move; the Narrator's "once per N minutes"; marking an unreachable table.
+- **Next:** the Phase 7 game test, then Phase 8 (companion roles) or Phase 9.

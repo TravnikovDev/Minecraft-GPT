@@ -330,6 +330,12 @@ It survives the first night, and it reports milestones in chat.
 10. **Cost tracking.** Log token usage per call and keep a running monthly total, with a hard monthly cap in config. "How much have you spent?" is answered by code.
 11. **The owner can edit the plan** ("skip mining today, build a fence"). The router turns this into plan changes, and the bot shares its plan when the owner is online but quiet.
 
+**Status (2026-11-26).** Code done, not yet tested in the game (Log Entry 16). Changes from the architect's review:
+- Summaries replace raw days only *in the request*; the raw days stay on disk for the owner.
+- The dusk trigger fires whether or not the arbiter is busy, before the night routine; every model call has a 20 s timeout and no retries.
+- Plans have an identity and the step statuses follow one tested rule (a cut-in, a throw, stuck, stop, a restart).
+- Still to do: a policy check in the validator, deeper feasibility for `craft`, sharing the plan when the owner is online but quiet, the bot's own day counter (the world clock moves with `/time set` and differs per dimension).
+
 **In-game check.**
 - Let the bot live alone for 3–5 in-game days. Read the diary.
 - Check that the plans make sense and get carried out.

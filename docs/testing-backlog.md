@@ -4,6 +4,22 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Phase 7: the diary and the day planner (2026-11-26, not yet run; see Log Entry 16)
+
+Past its first day, living its own life ("go live your life"), the bot plans its days with the model: at dusk, when it has nothing left to do, after a death and when you join.
+
+- [ ] Dusk → log "Planner: planning the day (dusk)", then in chat its plan ("… Next: …, then … (0 of N done)"); in the morning it works through it ("plan: …" tasks)
+- [ ] "what's your plan?" → the plan in chat at once (answered in code)
+- [ ] "skip mining today, get food instead" → "Okay, let me plan my day around that.", the running step stops, a new plan with food first
+- [ ] "what did you do today?" → the last lines of today's diary (in code); "what happened yesterday?" → yesterday's summary
+- [ ] "how much have you spent?" → "This month (…): $… of $10 in N calls (chat …, day plans …)"; `usage.json` grows
+- [ ] A step it can't do any more when it starts → "Skipped … from my plan: …" in the diary; two failures in a row → a new plan
+- [ ] "stay with me" while a plan step runs → it stops, nothing new starts
+- [ ] Network off (or `LLM_MONTHLY_CAP_USD=0`) → no plan; it follows its milestones as before; "what's your plan?" says why
+- [ ] Restart while a plan step runs → the step is done again, not skipped
+- [ ] Night → plan steps only under ground, after it's home; the rest wait for the morning
+- [ ] 3–5 game days alone → the diary reads well (worlds/<id>.json "diary"), the plans make sense, the cost stays around a cent a day
+
 ## Past the first day: mine, iron, and the hang at open steps (2026-11-25 to 26, see Log Entry 15)
 
 **Seen working in the owner's game**
