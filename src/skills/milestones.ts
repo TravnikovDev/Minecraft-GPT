@@ -82,6 +82,8 @@ const NEAR_HUNT = 32;
 const FAR_HUNT = 96;
 // Out of food (not starving yet): how far it may walk for one it knows of (by day)
 const RESTOCK_HUNT = 64;
+// Health it needs for that walk (hurt, it stays near home and heals)
+const HEALTHY_ENOUGH = 14;
 export const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
@@ -132,8 +134,11 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     // sky up to FAR_HUNT away; dying of hunger is the bigger risk
     if (emergency && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
       const { knownAnimals } = await import("../actions/hunting");
-      const near = knownAnimals().filter((p) => p.distance <= FAR_HUNT).sort((a, b) => a.distance - b.distance)[0];
-      if (near) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+      const { isGame } = await import("../actions/hunting");
+      // The one it would walk to (the nearest it would really take) within reach
+      const near = knownAnimals().filter((p) => isGame(p, null))[0];
+      const goFar = near !== undefined && near.distance <= FAR_HUNT;
+      if (goFar) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
       // None known at all (game test: "0 in sight or earshot", starving):
       // it walks off to look, a few legs out, and hunts what it finds
       else {
@@ -171,7 +176,12 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
   if (short() && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
     const { knownAnimals } = await import("../actions/hunting");
-    if (knownAnimals().some((p) => p.distance <= RESTOCK_HUNT)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: true });
+    // The animal it would walk to (the nearest it would take) within reach,
+    // and only when it isn't hurt (game test: at 7 health it set off 79
+    // blocks for a cow and a skeleton shot it on the way)
+    const { isGame } = await import("../actions/hunting");
+    const target = knownAnimals().filter((p) => isGame(p, null))[0];
+    if (target && target.distance <= RESTOCK_HUNT && (bot.health ?? 20) >= HEALTHY_ENOUGH) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: true });
   }
   if (hasRawFood()) await cookTheMeat(cookFood);
   return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points ready to eat; nothing more near home today`);
