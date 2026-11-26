@@ -27,7 +27,7 @@ export const DayPlanSchema = z.object({
   narrative: z.string().describe("one or two sentences in character: what you'll do and why"),
   steps: z.array(StepSchema).describe(`${MIN_STEPS} to ${MAX_STEPS} goals, in the order to do them`),
   daySummary: z.string().describe("the whole of today so far, in 2-4 sentences, for your long-term memory (update today's earlier summary if one is given)"),
-  ownerMessage: z.string().nullable().describe("a short question or suggestion for the owner when they're online, else null"),
+  ownerMessage: z.string().nullable().describe("a short piece of news or a suggestion for the owner when they're online (never a question: you decide yourself), else null"),
 });
 export type DayPlan = z.infer<typeof DayPlanSchema>;
 

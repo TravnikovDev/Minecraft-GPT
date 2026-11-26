@@ -61,7 +61,7 @@ Rules:
 - Think like a player: survive first (food, tools, a safe home), then progress (iron, diamonds), and fix what went wrong yesterday.
 - Steps that failed recently with a reason will fail again unless something changed: choose something else.
 - daySummary: the whole of today so far in 2-4 sentences, for your long-term memory.
-- ownerMessage: only if the owner is online and you have a real question or suggestion; else null.
+- ownerMessage: only if the owner is online and you have news or a suggestion for them; else null. Never a question: living your own life you decide for yourself, the owner won't answer.
 - narrative: one or two sentences in character, shown to the owner.`;
 
 /** What it carries, by name, the most first (a short list). */
