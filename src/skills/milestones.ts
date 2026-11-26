@@ -128,6 +128,12 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
       const { knownAnimals } = await import("../actions/hunting");
       const near = knownAnimals().filter((p) => p.distance <= FAR_HUNT).sort((a, b) => a.distance - b.distance)[0];
       if (near) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+      // None known at all (game test: "0 in sight or earshot", starving):
+      // it walks off to look, a few legs out, and hunts what it finds
+      else {
+        const { exploreFor, animalsInSight } = await import("./explore");
+        if (await exploreFor("animals", animalsInSight, 3)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+      }
     }
     if (hasRawFood()) await cookTheMeat(cookFood);
     if (short()) {

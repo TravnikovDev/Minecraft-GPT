@@ -219,9 +219,12 @@ export async function makeFarm(): Promise<ActionResult> {
 async function sowPlot(middle: P3, seed: string): Promise<number> {
   const { tillAndSow } = await import("../actions/farming");
   let sown = 0;
+  // No hoe: only farmland already tilled is sown (game test: 80 "can't till, no hoe")
+  const hoe = bot.inventory.items().some((i) => i.name.endsWith("_hoe"));
   for (const cell of sowOrder(middle)) {
     if (isCommandCancelled() || count(seed) === 0) return sown;
     const g = new Vec3(cell.x, cell.y, cell.z);
+    if (!hoe && knownBlock(g)?.name !== "farmland") continue;
     const over = knownBlock(g.offset(0, 1, 0));
     if (over && over.name !== "air") {
       // Only a plant is cleared; a crop growing, a torch or anything else is left
