@@ -283,6 +283,14 @@ function nightTask(): TaskSpec {
         } catch (error) {
           console.log(`Night: workshop failed: ${(error as Error).message}`);
         }
+        // Its mine stairs gone over (owner: a way dug out of them to the
+        // grass let creepers into the mine): holes in their walls and roof
+        // filled, from inside, safe at night
+        try {
+          await (await import("./mine")).lookAfterStairs();
+        } catch (error) {
+          console.log(`Night: looking after my mine stairs failed: ${(error as Error).message}`);
+        }
         // The room's walls lit (the ground outside waits for the morning)
         try {
           await (await import("./lighting")).lightUpHome(false);
