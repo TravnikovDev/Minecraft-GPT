@@ -361,8 +361,10 @@ async function levelPlot(middle: P3, reserve: number): Promise<number> {
     }
     // Stone, snow or the like in the ground: out, dirt in
     if (w.swap && count("dirt") > 0 && !(await breakBlock(new Vec3(w.x, middle.y, w.z), { allowWithoutHarvest: true })).ok) continue;
-    // A dip (or the swapped cell): filled from the bottom up
+    // A dip (or the swapped cell): filled from the bottom up, not standing in it
     const from = w.swap ? 0 : 1 - w.fill;
+    const feet = bot.entity.position.floored();
+    if (feet.x === w.x && feet.z === w.z) await goTo(new pf.goals.GoalInvert(new pf.goals.GoalNear(w.x, feet.y, w.z, 1)));
     for (let dy = from; dy <= 0; dy++) {
       if (count("dirt") === 0) break;
       if (levelCellAt(w.x, middle.y + dy, w.z)?.solid) continue;
@@ -622,7 +624,8 @@ export async function tendFarm(): Promise<number> {
     if (!(await goTo(new pf.goals.GoalNear(field.x, field.y, field.z, 4))).ok) continue;
     // Checked and mended like its shelter (owner: a creeper can blow a
     // crater in it): the ground made flat again, dirt in the holes
-    const mended = await levelPlot(farm, farm.reserve);
+    // (not while starving: the harvest first, game test)
+    const mended = (bot.food ?? 20) > 6 ? await levelPlot(farm, farm.reserve) : 0;
     if (mended > 0) chatter(`Mended my field at ${farm.x}, ${farm.z}: ${mended} block${mended === 1 ? "" : "s"} put right.`, "farm");
     const { harvestCrops } = await import("../actions/farming");
     harvested += await harvestCrops({ maxDistance: farm.half + 2, point: field });
