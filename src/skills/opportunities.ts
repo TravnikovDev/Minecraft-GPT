@@ -98,18 +98,21 @@ export function considerOpportunities(): void {
   // blocks off) every iron ore it passed stopped it, three times in a minute
   const first = valuable && Date.now() - lastCutIn >= CUT_IN_GAP_MS;
   if (first) lastCutIn = Date.now();
-  console.log(`Opportunity: ${ore.name} in sight at ${ore.position}; ${first ? "now, then back to what I was doing" : "when I'm free"}.`);
-  propose(oreTask(ore, kind, first), { front: first });
+  console.log(`Opportunity: ${ore.name} in sight at ${ore.position}; ${first ? "now, then back to what I was doing" : valuable ? "next, after what I'm doing" : "when I'm free"}.`);
+  propose(oreTask(ore, kind, first, valuable), { front: first });
 }
 
 const CUT_IN_GAP_MS = 3 * 60_000;
 let lastCutIn = 0;
 
 /** The task for an ore it saw: walk there, mine it (and its vein), give up on that spot for a while if it can't. */
-function oreTask(ore: Block, kind: string, first: boolean): TaskSpec {
+function oreTask(ore: Block, kind: string, first: boolean, valuable = first): TaskSpec {
   const spec: TaskSpec = {
     name: `${TASK_PREFIX} ${kind} ore I saw`.replace("  ", " "),
-    bucket: first ? Bucket.Self : Bucket.Idle,
+    // Iron and better that can't cut in right now waits just after the
+    // current task, not with the idle chores (which never run while it has
+    // milestones: a diamond it saw would have waited for ever)
+    bucket: valuable ? Bucket.Self : Bucket.Idle,
     // Iron and better: worth stopping the milestone for (it carries on afterwards)
     interrupts: first,
     run: async () => {
@@ -123,7 +126,7 @@ function oreTask(ore: Block, kind: string, first: boolean): TaskSpec {
       if (!isCommandCancelled()) await takeDownScaffolding(true);
     },
     // Cut off (by a milestone or an order): again later if the ore is still there
-    resume: () => (bot.blockAt(ore.position)?.name === ore.name ? oreTask(ore, kind, first) : null),
+    resume: () => (bot.blockAt(ore.position)?.name === ore.name ? oreTask(ore, kind, first, valuable) : null),
   };
   return spec;
 }

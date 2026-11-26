@@ -86,7 +86,8 @@ export const GOALS: Goal[] = [
       const m = MILESTONES.find((x) => x.id === a["milestone"]);
       return m ? m.achieve() : fail("not_found", `no milestone "${String(a["milestone"])}"`);
     },
-    describe: (a) => `the ${words(String(MILESTONES.find((x) => x.id === a["milestone"])?.title ?? a["milestone"]))} milestone`,
+    // "the iron milestone", "the lit home milestone" (not "the a lit home milestone")
+    describe: (a) => `the ${words(String(MILESTONES.find((x) => x.id === a["milestone"])?.title ?? a["milestone"])).replace(/^(a|an) /, "")} milestone`,
   },
   {
     name: "stockFood",
