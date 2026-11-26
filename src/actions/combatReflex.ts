@@ -22,6 +22,7 @@ import { isSheltered } from "../core/sheltered";
 import { isCreeperReflexActive } from "./creeperReflex";
 import { isDrowningReflexActive } from "./drowningReflex";
 import { isLavaReflexActive } from "./lavaReflex";
+import { mobsOut } from "../core/daylight";
 
 const CHECK_MS = 300;
 const MELEE_RANGE = 3.5; // a mob this close is about to hit
@@ -68,8 +69,7 @@ export function isCombatReflexActive(): boolean {
 }
 
 function isNight(): boolean {
-  const t = bot.time?.timeOfDay ?? 0;
-  return t >= 13000 && t < 23000;
+  return mobsOut();
 }
 
 const distanceTo = (e: Entity): number => e.position.distanceTo(bot.entity.position);

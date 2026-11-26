@@ -14,6 +14,7 @@ import { equipItem, fishOnce, goTo, lookAt } from "../core/primitives";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter } from "../core/narrator";
 import { skyAbove } from "../actions/hunting";
+import { daylight } from "../core/daylight";
 
 // How far it looks for water, and how long it fishes at most
 const WATER_RANGE = 24;
@@ -25,8 +26,8 @@ const CATCH = ["cod", "salmon", "tropical_fish", "pufferfish"];
 
 const count = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
-/** True when it's day (sunset counts as evening: it's home by then). */
-const daytime = (): boolean => (bot.time?.timeOfDay ?? 0) < 12_000;
+// By day (sunset counts as evening: it.s home by then)
+const daytime = daylight;
 
 /** A fishing rod in its pocket: carried, or made from 3 sticks and 2 string. */
 async function haveRod(): Promise<boolean> {

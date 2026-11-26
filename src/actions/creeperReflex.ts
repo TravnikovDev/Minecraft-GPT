@@ -17,6 +17,7 @@ import { fighting, pathing, takeOverBody } from "../core/plugins";
 import { areReflexesMuted, asReflex, isAnyReflexActive, registerReflexStopper, setReflexActive } from "../core/reflexes";
 import { isDrowningReflexActive } from "./drowningReflex";
 import { isLavaReflexActive } from "./lavaReflex";
+import { mobsOut } from "../core/daylight";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -67,8 +68,7 @@ export function isCreeperReflexActive(): boolean {
 
 
 function isNight(): boolean {
-  const t = bot.time?.timeOfDay ?? 0;
-  return t >= 12500 && t <= 23500;
+  return mobsOut();
 }
 
 function bestWeapon(): Item | null {

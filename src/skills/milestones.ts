@@ -26,6 +26,7 @@ import { catalog } from "../core/catalog";
 import { breakBlockAtResult } from "../actions/blockBreaking";
 import { placeBlockResult } from "../actions/blockPlacing";
 import { pickupNearbyItems } from "../actions/pickup";
+import { daylight } from "../core/daylight";
 
 export type Milestone = {
   id: string;
@@ -103,7 +104,7 @@ async function stockFood(): Promise<ActionResult> {
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
   const short = (): boolean => foodPoints() < FOOD_STOCK && !isCommandCancelled();
-  const byDay = (): boolean => bot.time?.isDay !== false;
+  const byDay = daylight;
   // Owner: a stock of cooked food, and hunting isn't a way to keep one (it
   // walked 100-plus blocks after single sheep and chickens, through caves,
   // and died). Lasting sources first, in this order:
@@ -352,7 +353,7 @@ export const MILESTONES: Milestone[] = [
     // lit. Torches on the room's walls and in a grid on the ground round it
     // (by day); put back when a creeper knocks them out
     done: () => shelter() === null || homeLit(),
-    achieve: () => lightUpHome(bot.time?.isDay !== false),
+    achieve: () => lightUpHome(daylight()),
     reached: () => homeLitSeen(0),
   },
   {
@@ -424,7 +425,7 @@ export const MILESTONES: Milestone[] = [
       if (!made.ok) return made;
       // Filled where there's water in sight (by day: at night that may be
       // out in the open); an empty one is filled later
-      if (bot.time?.isDay === false) return ok();
+      if (!daylight()) return ok();
       const { fillWater } = await import("./endgame/portal");
       const filled = await fillWater();
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
@@ -466,7 +467,7 @@ export const MILESTONES: Milestone[] = [
     optional: true,
     requires: ["lit_home"],
     done: () => shelter() === null || homeLit(1),
-    achieve: () => lightUpHome(bot.time?.isDay !== false, 1),
+    achieve: () => lightUpHome(daylight(), 1),
     reached: () => homeLitSeen(1),
   },
   {
@@ -484,7 +485,7 @@ export const MILESTONES: Milestone[] = [
     optional: true,
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
-    achieve: () => lightUpHome(bot.time?.isDay !== false, 2),
+    achieve: () => lightUpHome(daylight(), 2),
     reached: () => homeLitSeen(2),
   },
   {

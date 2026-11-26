@@ -20,6 +20,7 @@ import { note } from "../planner/diary";
 import { currentRole, type Job, type Role } from "./role";
 import { automationAllowed } from "../config/serverProfile";
 import type { Shift } from "./guard";
+import { daylight } from "../core/daylight";
 
 export const ROLE_PREFIX = "role: ";
 // A shift is bounded by its job; this is the arbiter's backstop
@@ -71,10 +72,8 @@ async function hasWork(role: Role): Promise<boolean> {
   }
 }
 
-const isNight = (): boolean => {
-  const t = bot.time?.timeOfDay ?? 0;
-  return t >= 13000 && t < 23000;
-};
+// Outdoor jobs stop at sunset, when its own day ends too (one clock, review)
+const isNight = (): boolean => !daylight();
 
 /** True when the job may work now (by day, or a night job). Pure. */
 export function onShiftNow(job: Job, night: boolean): boolean {

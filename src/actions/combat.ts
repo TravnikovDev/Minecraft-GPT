@@ -13,6 +13,7 @@ import { goals } from "mineflayer-pathfinder";
 import { walkingRules } from "../core/movements";
 import vec3 from "vec3";
 import { fighting, pathing } from "../core/plugins";
+import { mobsOut } from "../core/daylight";
 
 // Mob types with threat levels
 export enum ThreatLevel {
@@ -95,8 +96,7 @@ export function mayAttackFirst(name: string, night: boolean, provokedNow: boolea
 // Get entities sorted by priority (threat level and distance)
 export function getPriorityTargets(range = 16): Entity[] {
   watchHurts();
-  const t = bot.time?.timeOfDay ?? 0;
-  const night = t >= 13000 && t < 23000;
+  const night = mobsOut();
   const now = Date.now();
   const hostileEntities = Object.values(bot.entities).filter(
     (entity) =>

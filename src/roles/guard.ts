@@ -23,6 +23,7 @@ import { OWNER_USERNAME } from "../config/env";
 import { isNeutralNow } from "../actions/combat";
 import { canSeePoint, type SightWorld } from "../actions/sight";
 import type { Role } from "./role";
+import { mobsOut } from "../core/daylight";
 
 export type Shift = { result: ActionResult; restMs: number; progress?: boolean };
 
@@ -47,10 +48,7 @@ export function mayFight(name: string | undefined, isHostile: (n: string) => boo
   return Boolean(name) && !NEVER.has(name!) && !isNeutralNow(name!, night) && isHostile(name!);
 }
 
-const isNight = (): boolean => {
-  const t = bot.time?.timeOfDay ?? 0;
-  return t >= 13000 && t < 23000;
-};
+const isNight = mobsOut;
 
 /** True when the bot can see the mob (through no ground or walls). */
 function inSight(e: Entity): boolean {

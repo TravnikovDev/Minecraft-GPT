@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { bot } from "../core/body";
+import { daylight } from "../core/daylight";
 
 export const description = `Describes where the bot is: biome, time of day, weather, and what's nearby (trees, ores,
 water, lava, useful blocks, animals, monsters, players). Answers immediately, even while busy.
@@ -38,7 +39,7 @@ export async function execute(): Promise<void> {
   const pos = bot.entity.position;
   const biome = bot.blockAt(pos)?.biome?.name?.replace(/_/g, " ") || "unknown";
   const dimension = String(bot.game.dimension).replace("minecraft:", "").replace(/_/g, " ");
-  const time = bot.time.isDay ? "daytime" : "night";
+  const time = daylight() ? "daytime" : "night";
   const weather = bot.thunderState > 0 ? "thunderstorm" : bot.isRaining ? "raining" : "clear";
 
   const blocks = BLOCK_GROUPS.map((g) => ({ label: g.label, dist: nearestOf(g.match) }))
