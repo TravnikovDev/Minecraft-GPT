@@ -679,6 +679,9 @@ async function craftWithNow(recipe: Recipe, times: number, table: Block | null):
   const resultId = recipe.result.id;
   const resultName = bot.registry.items[resultId]?.name ?? String(resultId);
   if (table && !withinReach(table.position)) return fail("out_of_reach", `crafting table at ${table.position}`);
+  // Leftovers in the inventory's own grid or on the cursor make the recipe
+  // come out as something else (or nothing): put them back first
+  if (!table && inventoryGridBusy()) await settleInventory("leftovers in my crafting grid");
   const before = carried(resultName);
   // In batches: each recipe run is several window clicks, and servers kick
   // players who click too fast
@@ -692,6 +695,9 @@ async function craftWithNow(recipe: Recipe, times: number, table: Block | null):
       },
     });
     if (!done.ok) {
+      // A craft that broke off leaves its ingredients in the grid or on the
+      // cursor, where they don't count as carried: back into the inventory
+      if (done.reason !== "disconnected") await settleInventory(`crafting ${resultName} broke off`);
       const made = carried(resultName) - before;
       return made > 0 && !(done.reason === "aborted" || done.reason === "disconnected") ? ok(made) : done;
     }
@@ -704,6 +710,31 @@ async function craftWithNow(recipe: Recipe, times: number, table: Block | null):
     return ok(made); // made fewer than asked (e.g. a stack was full): say how many
   }
   return ok(carried(resultName) - before);
+}
+
+/** True when the inventory's own 2x2 grid (slots 1-4) or the cursor holds something. */
+function inventoryGridBusy(): boolean {
+  const slots = bot.inventory?.slots ?? [];
+  return [1, 2, 3, 4].some((i) => slots[i]) || Boolean(bot.inventory?.selectedItem);
+}
+
+/**
+ * Puts what a broken-off craft left in the inventory's grid or on the cursor
+ * back into the inventory, and takes the server's view of it. Closing the
+ * inventory makes the server return those items; then the whole window is
+ * asked for again. Game test: a plank craft timed out in the grid, the next
+ * crafts said "missing ingredient" and 4 sticks it had just made were gone
+ * from what it counted, three times in one session.
+ */
+async function settleInventory(why: string): Promise<void> {
+  console.log(`Inventory: ${why}; putting the grid back and resyncing.`);
+  try {
+    bot._client.write("close_window", { windowId: 0 });
+  } catch (error) {
+    console.error("Inventory: couldn't close the grid:", error);
+  }
+  const sync = (bot as unknown as { _syncWindow?: (w: unknown) => Promise<void> })._syncWindow;
+  if (sync) await guarded("resyncing my inventory", () => sync(bot.inventory), { timeoutMs: 3_000 });
 }
 
 // --- Beds ------------------------------------------------------------------------
