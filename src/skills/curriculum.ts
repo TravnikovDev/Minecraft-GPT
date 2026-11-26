@@ -224,6 +224,12 @@ function nightTask(): TaskSpec {
         // Indoor work: raw iron smelted in the furnace and made into an iron
         // pickaxe (owner: it stood at home all night doing nothing)
         await smeltAtNight();
+        // The workshop: its furnace loaded with the ores in its chests (owner)
+        try {
+          await (await import("./workshop")).workshop();
+        } catch (error) {
+          console.log(`Night: workshop failed: ${(error as Error).message}`);
+        }
         // The room's walls lit (the ground outside waits for the morning)
         try {
           await (await import("./lighting")).lightUpHome(false);

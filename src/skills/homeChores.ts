@@ -37,6 +37,14 @@ export async function homeChores(): Promise<ActionResult> {
   }
   if (isCommandCancelled()) return fail("aborted", "stopped");
 
+  // Its furnace kept busy with the ores in its chests; torches from stored coal
+  try {
+    await (await import("./workshop")).workshop();
+  } catch (error) {
+    console.log(`Home: workshop failed: ${(error as Error).message}`);
+  }
+  if (isCommandCancelled()) return fail("aborted", "stopped");
+
   // Leather from its hunts becomes armour for the slots it has nothing in
   const { makeLeatherArmor } = await import("./leatherArmor");
   const leather = await makeLeatherArmor();
