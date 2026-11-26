@@ -505,6 +505,26 @@ export function stairsPaved(): boolean {
  * facing up the tunnel, so its high side is toward the shelter and walking
  * up is a slope, not a jump per step.
  */
+/**
+ * At home: the stair blocks its bare steps need (and 10% spare) made at the
+ * table, from its chests' cobblestone, ready for the next trip down.
+ */
+export async function makeStairBlocks(): Promise<void> {
+  const rec = mineRecord();
+  if (!rec?.bottom) return;
+  const want = stairsToMake(unpavedSteps().length);
+  if (want === 0 || carried(["cobblestone_stairs"]) >= want) return;
+  const { storedNear, takeItems } = await import("../actions/storage");
+  const cobble = Math.ceil((want - carried(["cobblestone_stairs"])) / 4) * 6;
+  // Once 200 have piled up (owner), and its building stock stays
+  const owned = carried(["cobblestone"]) + storedNear("cobblestone", 32);
+  if (owned < 200 || owned < cobble + 32) return;
+  if (carried(["cobblestone"]) < cobble + 32) await takeItems([{ name: "cobblestone", count: cobble }], true);
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  if ((await acquire("cobblestone_stairs", want, liveWorld)).ok) console.log(`Home: made ${carried(["cobblestone_stairs"])} cobblestone stairs for ${unpavedSteps().length} bare steps.`);
+}
+
 /** Stair blocks to make for `steps` bare steps: all of them and 10% spare (at least one). Pure. */
 export function stairsToMake(steps: number): number {
   return steps <= 0 ? 0 : steps + Math.max(1, Math.ceil(steps * 0.1));
@@ -530,6 +550,10 @@ async function paveSteps(): Promise<ActionResult> {
   const want = stairsToMake(steps.length);
   const have = carried(["cobblestone_stairs"]);
   if (have < want) {
+    // Deep down: not a climb home just for them (game test: from the bottom
+    // of its mine it climbed into flooded steps for them and drowned); its
+    // home chores make them, and the stairs are paved next time
+    if (have === 0 && bot.entity.position.y < rec.start.y - 12) return fail("missing_items", "my stair blocks are made at home first; paving next time I'm up there");
     const { enterShelter } = await import("../actions/building");
     const home = await enterShelter();
     if (!home.ok) console.log(`Paving: couldn't get home to the table first (${describeFailure(home)}).`);

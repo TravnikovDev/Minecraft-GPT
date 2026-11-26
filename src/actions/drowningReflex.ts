@@ -151,6 +151,26 @@ function dropAhead(): boolean {
   return isDropAhead(column);
 }
 
+let diggingUp = false;
+
+/** The block over its head (or the one over that) dug out, so there's air above. */
+async function digUpForAir(feet: Vec3): Promise<void> {
+  if (diggingUp) return;
+  const head = feet.offset(0, 1, 0);
+  const cell = [head.offset(0, 1, 0), head.offset(0, 2, 0)].find((c) => bot.blockAt(c)?.boundingBox === "block");
+  if (!cell) return;
+  const b = bot.blockAt(cell)!;
+  if (b.name === "bedrock" || /lava|magma/.test(bot.blockAt(cell.offset(0, 1, 0))?.name ?? "")) return;
+  diggingUp = true;
+  try {
+    const { breakBlock } = await import("../core/primitives");
+    const broken = await asReflex("drowning", () => breakBlock(cell, { allowWithoutHarvest: true }));
+    console.log(broken.ok ? `Drowning reflex: no way to air; dug the ${b.name} over my head at ${cell}.` : `Drowning reflex: couldn't dig the ${b.name} over my head (${broken.ok ? "" : broken.detail}).`);
+  } finally {
+    diggingUp = false;
+  }
+}
+
 function finish(): void {
   if (!active) return;
   active = false;
@@ -221,6 +241,10 @@ function tick(): void {
     void lookToward(bot.entity.yaw, Math.PI / 4);
     setControl("jump", true);
     setControl("forward", !path && !dropAhead());
+    // No way to air and a block over its head: dig it out. Water never flows
+    // up, so the cell it opens is air to put its head in (game test: in its
+    // flooded mine, stone overhead, it pushed up against it and drowned, twice)
+    if (!path && underwater) void digUpForAir(feet);
   }
   if (path && path.length > 1 && aside && Date.now() - lastWayLogAt > 3_000) {
     lastWayLogAt = Date.now();

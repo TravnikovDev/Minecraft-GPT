@@ -147,7 +147,13 @@ async function plugLiquids(pos: Vec3): Promise<boolean> {
     for (const c of cells) {
       const filler = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((n) => getItemCount(n) > 0);
       if (!filler) return false;
-      const placed = await placeBlockResult(filler, c.x, c.y, c.z, "side");
+      let placed = await placeBlockResult(filler, c.x, c.y, c.z, "side");
+      // Out of reach: closer, and again (game test: the last of four water
+      // cells was out of reach, the tunnel gave up there, and that water
+      // flooded the bottom of its stairs, where it later drowned twice)
+      if (!placed.ok && placed.reason === "out_of_reach" && (await goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 2))).ok) {
+        placed = await placeBlockResult(filler, c.x, c.y, c.z, "side");
+      }
       if (!placed.ok) return false;
       // Remembered as its own plug: the tunnel digs through it (cobblestone
       // otherwise counts as "something built" and stops it)

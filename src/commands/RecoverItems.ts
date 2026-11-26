@@ -17,6 +17,35 @@ Example: "Go get your stuff back", "Recover your items", "Get your things from w
 
 export const parameters = z.object({});
 
+/** A cell as the under-water check sees it (null: not loaded). */
+export type WetCell = { water: boolean; solid: boolean } | null;
+
+/**
+ * True when the spot is under water with no air close over it: its feet
+ * and head cells are water, and up the column there's water then something
+ * solid (a ceiling) before any air. Pure over `look`.
+ */
+export function drownedUnderCeiling(look: (dy: number) => WetCell): boolean {
+  if (!look(0)?.water || !look(1)?.water) return false;
+  for (let dy = 2; dy <= 12; dy++) {
+    const c = look(dy);
+    if (!c) return false;
+    if (c.solid) return true;
+    if (!c.water) return false; // air above: it can come up for breath
+  }
+  return true;
+}
+
+/** The live check at where it died. */
+function underWaterThere(p: { x: number; y: number; z: number }): boolean {
+  const at = new Vec3(p.x, p.y, p.z).floored();
+  return drownedUnderCeiling((dy) => {
+    const b = bot.blockAt(at.offset(0, dy, 0));
+    if (!b) return null;
+    return { water: b.name === "water" || b.name === "bubble_column", solid: b.boundingBox === "block" };
+  });
+}
+
 const totalItems = (): number => bot.inventory.items().reduce((n, i) => n + i.count, 0);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -51,6 +80,15 @@ export async function execute(): Promise<void> {
   }
   if (!canReachBeforeDespawn(death)) {
     tellOwner(`My things at ${where} are too far away to reach before they disappear.`);
+    clearLastDeath();
+    return;
+  }
+
+  // Under water with no air over it (it drowned there): left, not dived for
+  // (game test: it drowned in its flooded mine, went back for its things,
+  // and drowned again in the same water a minute later)
+  if (underWaterThere(p)) {
+    tellOwner(`My things at ${where} are under water where I drowned; I'm leaving them rather than drown again.`);
     clearLastDeath();
     return;
   }

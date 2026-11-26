@@ -40,6 +40,12 @@ export async function homeChores(): Promise<ActionResult> {
   if (isCommandCancelled()) return fail("aborted", "stopped");
   // Its food stock from its chests (cooked first; raw is cooked below), review
   await (await import("../skills/milestones")).foodFromChests();
+  // Stair blocks for its mine's bare steps, made here at the table (never a climb home for them)
+  try {
+    await (await import("../skills/mine")).makeStairBlocks();
+  } catch (error) {
+    console.log(`Home: stair blocks failed: ${(error as Error).message}`);
+  }
 
   // Raw meat in the furnace
   const { cookFood, rawFoodInInventory } = await import("../actions/cooking");
