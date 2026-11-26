@@ -1,6 +1,6 @@
 // Path: src/skills/reinforce.ts
 // A stone shelter, like a player (owner: once 200 cobblestone have piled up,
-// smelt cobblestone into stone and reinforce the shelter's walls). Its
+// smelt it into smooth stone and reinforce the shelter's walls with it). Its
 // shelter is dug into the ground, so its walls, roof and floor are whatever
 // was there: dirt, grass, sand, gravel, snow, planks it patched with. A
 // creeper blows those out (blast resistance under 1; stone is 6). Each weak
@@ -56,16 +56,20 @@ export function shelterWeakCells(): P3[] {
 
 const count = (name: string): number => bot.inventory.items().filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
 
-/** Stone for `n` cells: carried, from its chests, or smelted from cobblestone. */
-async function getStone(n: number): Promise<void> {
-  if (count("stone") >= n) return;
+// What it builds with, best first (owner: smooth stone, smelted twice from
+// cobblestone; then stone, then cobblestone, all the same blast resistance)
+const BUILD_WITH = ["smooth_stone", "stone", "cobblestone"];
+
+/** Smooth stone for `n` cells: carried, from its chests, or smelted (cobblestone to stone to smooth stone). */
+async function getSmoothStone(n: number): Promise<void> {
+  if (count("smooth_stone") >= n) return;
   const { storedNear, takeItems } = await import("../actions/storage");
-  if (storedNear("stone", 32) > 0) await takeItems([{ name: "stone", count: n - count("stone") }], true);
-  if (count("stone") >= n) return;
+  if (storedNear("smooth_stone", 32) > 0) await takeItems([{ name: "smooth_stone", count: n - count("smooth_stone") }], true);
+  if (count("smooth_stone") >= n) return;
   const { acquire } = await import("./acquire");
   const { liveWorld } = await import("./world");
-  const made = await acquire("stone", n, liveWorld);
-  if (!made.ok) console.log(`Reinforcing: only ${count("stone")} stone (${describeFailure(made)}); cobblestone for the rest.`);
+  const made = await acquire("smooth_stone", n, liveWorld);
+  if (!made.ok) console.log(`Reinforcing: only ${count("smooth_stone")} smooth stone (${describeFailure(made)}); stone or cobblestone for the rest.`);
 }
 
 /**
@@ -78,15 +82,15 @@ export async function reinforceShelter(byDay: boolean): Promise<ActionResult> {
   if (cells.length === 0) return ok();
   if (!byDay) return fail("refused", "the shelter's walls are changed by day");
   const batch = cells.slice(0, PER_RUN);
-  await getStone(batch.length);
-  if (count("stone") + count("cobblestone") === 0) return fail("missing_items", "no stone or cobblestone to reinforce my shelter with");
-  report(`Reinforcing my shelter: ${cells.length} weak block${cells.length === 1 ? "" : "s"} of dirt and the like to change for stone.`);
+  await getSmoothStone(batch.length);
+  if (BUILD_WITH.every((n) => count(n) === 0)) return fail("missing_items", "no smooth stone, stone or cobblestone to reinforce my shelter with");
+  report(`Reinforcing my shelter: ${cells.length} weak block${cells.length === 1 ? "" : "s"} of dirt and the like to change for smooth stone.`);
   const { breakBlock } = await import("../core/primitives");
   const { placeBlockResult } = await import("../actions/blockPlacing");
   let done = 0;
   for (const p of batch) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
-    const block = count("stone") > 0 ? "stone" : count("cobblestone") > 0 ? "cobblestone" : null;
+    const block = BUILD_WITH.find((n) => count(n) > 0) ?? null;
     if (!block) break;
     const at = new Vec3(p.x, p.y, p.z);
     // Sand or gravel over it would drop in: left as it is
@@ -101,7 +105,7 @@ export async function reinforceShelter(byDay: boolean): Promise<ActionResult> {
   // Anything it broke and couldn't fill is the shelter's patching job (night: it mends it)
   const { pickupNearbyItems } = await import("../actions/pickup");
   await pickupNearbyItems(bot, 6);
-  if (done > 0) chatter(`Reinforced ${done} block${done === 1 ? "" : "s"} of my shelter with stone.`, "reinforce");
+  if (done > 0) chatter(`Reinforced ${done} block${done === 1 ? "" : "s"} of my shelter with smooth stone.`, "reinforce");
   const left = shelterWeakCells().length;
   return left === 0 ? ok() : fail("not_found", `${left} weak block${left === 1 ? "" : "s"} of my shelter left to reinforce`);
 }

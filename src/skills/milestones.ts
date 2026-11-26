@@ -453,7 +453,7 @@ export const MILESTONES: Milestone[] = [
   // holds against a creeper). Nothing to do before then, or when it's stone
   {
     id: "stone_shelter",
-    title: "a stone shelter",
+    title: "a smooth stone shelter",
     tier: 2,
     optional: true,
     requires: ["mine"],
