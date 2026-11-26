@@ -116,3 +116,15 @@ test("the builder never breaks what isn't terrain: the owner's chest in the way 
   expect(left.fill.map((b: any) => [b.dx, b.dz])).toEqual([[-2, 0]]);
   expect(left.clear.map((b: any) => [b.dx, b.dz])).toEqual([[0, 0]]); // grass is cleared
 });
+
+test("leather armour: for empty slots only, most protective first, as far as the leather goes", async () => {
+  const { leatherPiecesToMake } = await import(`${ROOT}/src/skills/leatherArmor.ts`);
+  const none = () => false;
+  expect(leatherPiecesToMake(24, none)).toEqual(["leather_chestplate", "leather_leggings", "leather_helmet", "leather_boots"]);
+  expect(leatherPiecesToMake(9, none)).toEqual(["leather_chestplate"]); // 8 used, 1 left: nothing else fits
+  expect(leatherPiecesToMake(10, none)).toEqual(["leather_chestplate"]);
+  expect(leatherPiecesToMake(5, none)).toEqual(["leather_helmet"]);
+  // Iron chestplate on: the leather goes to the other slots
+  expect(leatherPiecesToMake(12, (slot: string) => slot === "torso")).toEqual(["leather_leggings", "leather_helmet"]);
+  expect(leatherPiecesToMake(3, none)).toEqual([]);
+});

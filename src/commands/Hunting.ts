@@ -173,4 +173,10 @@ export async function execute(args: any): Promise<void> {
   } else {
     tellOwner(`${catchReport} That's all the ${what} I can take around here.`);
   }
+  // Owner: after hunting, check the leather and make leather armour (here
+  // when a table is close; otherwise at home)
+  if (gained.has("leather")) {
+    const { makeLeatherArmor } = await import("../skills/leatherArmor");
+    await makeLeatherArmor(true);
+  }
 }

@@ -214,6 +214,13 @@ function nightTask(): TaskSpec {
       setSheltered(true);
       try {
         await cookAtNight();
+        // Leather from the day's hunts: armour for the slots it has nothing in
+        // (best effort: the night goes on whatever happens)
+        try {
+          await (await import("./leatherArmor")).makeLeatherArmor();
+        } catch (error) {
+          console.log(`Night: leather armour failed: ${(error as Error).message}`);
+        }
         // Indoor work: raw iron smelted in the furnace and made into an iron
         // pickaxe (owner: it stood at home all night doing nothing)
         await smeltAtNight();

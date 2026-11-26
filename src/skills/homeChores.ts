@@ -37,6 +37,12 @@ export async function homeChores(): Promise<ActionResult> {
   }
   if (isCommandCancelled()) return fail("aborted", "stopped");
 
+  // Leather from its hunts becomes armour for the slots it has nothing in
+  const { makeLeatherArmor } = await import("./leatherArmor");
+  const leather = await makeLeatherArmor();
+  if (!leather.ok) problems.push(`no leather armour (${describeFailure(leather)})`);
+  if (isCommandCancelled()) return fail("aborted", "stopped");
+
   // Tools: raw iron becomes an iron pickaxe; otherwise at least stone ones
   const { acquire } = await import("../skills/acquire");
   const { liveWorld } = await import("../skills/world");
