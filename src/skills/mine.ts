@@ -28,7 +28,10 @@ const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
 export const ARM_LENGTH = 50; // each tunnel from a hub
 export const LEVEL_STEP = 20; // stairs further down to the next hub
 const CHUNK = 5; // dug at a time, then the ores it uncovered
-const MAX_LEVELS = 4; // hubs at 10, 30, 50, 70 steps: deep enough for diamonds
+// Down to just over bedrock (owner: dig down until the rock that can't be
+// mined): no hub deeper than this, and never more than this many levels
+const MIN_HUB_Y = -57;
+const MAX_LEVELS = 10;
 const ORE_REACH = 6; // ores this close to a fresh tunnel get mined
 const MINE_NAME = "shelter mine";
 
@@ -72,7 +75,7 @@ const STAIRS = MINE_DEPTH + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
-type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean };
+type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]> };
 
 /**
  * True for a block that has fallen into (or grown into) a step's walking
@@ -95,7 +98,7 @@ export function nearestMineHub(pos: Pos): Vec3 | null {
   let best: Vec3 | null = null;
   for (let level = 0; level <= rec.level; level++) {
     if (hubStep(level) >= rec.stairs) break; // not dug down to yet (review: off by one)
-    const hub = new Vec3(rec.start.x, rec.start.y, rec.start.z).plus(STEP[rec.direction].scaled(hubStep(level))).offset(0, -hubStep(level), 0);
+    const hub = stepAt(rec.start, rec.direction, hubStep(level), rec.turns);
     if (!best || Math.abs(hub.y - pos.y) < Math.abs(best.y - pos.y)) best = hub;
   }
   return best;
@@ -105,11 +108,11 @@ export function nearestMineHub(pos: Pos): Vec3 | null {
  * The step of its mine's stairs nearest `pos` (the way up from wherever it
  * is in its mine), or null without a mine. Pure over the record.
  */
-export function nearestStairStep(pos: Pos, start: Pos, dir: DirectionType, stairs: number): number | null {
+export function nearestStairStep(pos: Pos, start: Pos, dir: DirectionType, stairs: number, turns: Turn[] = []): number | null {
   let best: number | null = null;
   let bestD = Infinity;
   for (let i = 0; i < stairs; i++) {
-    const s = stepAt(start, dir, i);
+    const s = stepAt(start, dir, i, turns);
     const d = Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z);
     if (d < bestD) {
       bestD = d;
@@ -132,9 +135,9 @@ export async function climbMineStairs(): Promise<boolean> {
   const here = bot.entity.position;
   // Only from down in its mine, near it
   if (here.y > rec.start.y - 3 || Math.hypot(here.x - rec.start.x, here.z - rec.start.z) > 96) return false;
-  const i = nearestStairStep(here, rec.start, rec.direction, rec.stairs);
+  const i = nearestStairStep(here, rec.start, rec.direction, rec.stairs, rec.turns);
   if (i === null) return false;
-  const step = standAt(stepAt(rec.start, rec.direction, i));
+  const step = standAt(stepAt(rec.start, rec.direction, i, rec.turns));
   console.log(`Home by my mine's stairs: from step ${i} up.`);
   if (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) return false;
   // Up them a stretch at a time (each leg short, so it keeps to the stairs);
@@ -142,7 +145,7 @@ export async function climbMineStairs(): Promise<boolean> {
   let unsticks = 0;
   for (let j = Math.max(0, i - 8); ; ) {
     if (isCommandCancelled()) return false;
-    const s = standAt(stepAt(rec.start, rec.direction, j));
+    const s = standAt(stepAt(rec.start, rec.direction, j, rec.turns));
     if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
       if (unsticks >= 3 || !(await unstickOnStairs())) return false;
       unsticks++;
@@ -188,9 +191,9 @@ export function mineArmStarts(): Vec3[] {
   if (!rec) return [];
   const out: Vec3[] = [];
   for (let level = 0; level <= rec.level; level++) {
-    const hub = new Vec3(rec.start.x, rec.start.y, rec.start.z).plus(STEP[rec.direction].scaled(hubStep(level))).offset(0, -hubStep(level), 0);
+    const hub = stepAt(rec.start, rec.direction, hubStep(level), rec.turns);
     for (const arm of ["forward", "right", "left"] as const) {
-      const cell = hub.plus(STEP[armDirection(arm, rec.direction)]);
+      const cell = hub.plus(STEP[armDirection(arm, dirAt(rec.direction, hubStep(level), rec.turns))]);
       out.push(cell, cell.offset(0, 1, 0));
     }
   }
@@ -202,7 +205,7 @@ function mineRecord(): MineRecord | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
   if (!mine) return null;
-  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]> };
   if (!d.direction) return null;
   // Older records (one dig of steps 0..10, saved when done) are finished
   const stairs = d.stairs ?? (d.depth === MINE_DEPTH ? STAIRS : 0);
@@ -218,6 +221,8 @@ function mineRecord(): MineRecord | null {
     // start of the forward tunnel
     arms: d.arms ?? { ...freshArms(), forward: { dug: Math.min(ARM_LENGTH, (d.branches ?? 0) * BRANCH_EVERY), blocked: false } },
     deepest: d.deepest ?? false,
+    turns: d.turns ?? [],
+    tried: d.tried ?? {},
   };
 }
 
@@ -235,24 +240,24 @@ export async function protectMine(): Promise<void> {
     setOwnPassages([], "mine");
     return;
   }
-  const { keep, walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level);
+  const { keep, walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns);
   // The ground over the shallow stairs too, up to over the surface (a walk
   // home dug down into them from the grass): only protected, never "mended"
   const surface = (shelter()?.details?.["start"] as Pos | undefined)?.y ?? rec.start.y + 6;
   const { overburden } = await import("../actions/building");
-  const above = overburden(walk.filter((c) => c.y > stepAt(rec.start, rec.direction, hubStep(0)).y), keep, surface + 3);
+  const above = overburden(walk.filter((c) => c.y > stepAt(rec.start, rec.direction, hubStep(0), rec.turns).y), keep, surface + 3);
   protectCells([...keep, ...above], "mine");
   setOwnPassages(walk, "mine");
 }
 
 /** The stairs' protected cells (floors, roofs, side walls but the hubs') and walking cells (each step's open space). Pure. */
-export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number): { keep: Vec3[]; walk: Vec3[] } {
+export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number, turns: Turn[] = []): { keep: Vec3[]; walk: Vec3[] } {
   const keep: Vec3[] = [];
   const walk: Vec3[] = [];
   for (let i = 0; i < stairs; i++) {
-    const s = stepAt(start, dir, i);
+    const s = stepAt(start, dir, i, turns);
     for (let dy = 0; dy <= STAIR_HEADROOM; dy++) walk.push(s.offset(0, dy, 0));
-    keep.push(...stepShell(start, dir, i, level));
+    keep.push(...stepShell(start, dir, i, level, turns));
   }
   return { keep, walk };
 }
@@ -262,16 +267,17 @@ export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, l
  * walls at a hub). The roof too: a walk home dug down from the grass into
  * the stairs behind the shelter, and a skeleton came in that way. Pure.
  */
-function stepShell(start: Pos, dir: DirectionType, i: number, level: number): Vec3[] {
+function stepShell(start: Pos, dir: DirectionType, i: number, level: number, turns: Turn[] = []): Vec3[] {
   if (i === 0) return [];
-  const s = stepAt(start, dir, i);
+  const s = stepAt(start, dir, i, turns);
+  const way = dirAt(dir, i, turns);
   const cells = [s.offset(0, -1, 0)];
   // The roof only above the first hub, near the surface: deeper, the stairs
   // run under the first level's forward tunnel, which is a step's "roof" there
   if (i < hubStep(0)) cells.push(s.offset(0, STAIR_HEADROOM + 1, 0));
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
   if (hubs.has(i)) return cells;
-  for (const side of [STEP[armDirection("right", dir)], STEP[armDirection("left", dir)]]) {
+  for (const side of [STEP[armDirection("right", way)], STEP[armDirection("left", way)]]) {
     for (let dy = -1; dy <= STAIR_HEADROOM; dy++) cells.push(s.plus(side).offset(0, dy, 0));
   }
   return cells;
@@ -291,7 +297,7 @@ export async function lookAfterStairs(): Promise<void> {
   const rec = mineRecord();
   if (!rec) return;
   const { isHoleBlock, ensureBlock, lightSpot } = await import("../actions/digging");
-  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level);
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns);
   const walkSet = new Set(walk.map((c) => c.toString()));
   const inWalk = (p: Vec3): boolean => walkSet.has(p.toString());
   const torchIds = ["torch", "wall_torch"].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
@@ -303,8 +309,8 @@ export async function lookAfterStairs(): Promise<void> {
   let noTorch = "";
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return;
-    const s = stepAt(rec.start, rec.direction, i);
-    const holes = stepShell(rec.start, rec.direction, i, rec.level).filter((c) => isHoleBlock(bot.blockAt(c)));
+    const s = stepAt(rec.start, rec.direction, i, rec.turns);
+    const holes = stepShell(rec.start, rec.direction, i, rec.level, rec.turns).filter((c) => isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     // Stairs dug before they were made a block higher: the top cell dug out now
     const low = bot.blockAt(s.offset(0, STAIR_HEADROOM, 0));
@@ -316,7 +322,7 @@ export async function lookAfterStairs(): Promise<void> {
     if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
-    const stand = floorHole || fallen.length > 0 ? stepAt(rec.start, rec.direction, i - 1) : s;
+    const stand = floorHole || fallen.length > 0 ? stepAt(rec.start, rec.direction, i - 1, rec.turns) : s;
     const there = await goToStep(stand);
     if (!there.ok) continue;
     if (fallen.length > 0) {
@@ -341,7 +347,7 @@ export async function lookAfterStairs(): Promise<void> {
       if ((await breakBlock(s.offset(0, STAIR_HEADROOM, 0))).ok) raised++;
     }
     if (torch) {
-      const placed = await lightSpot(s.offset(0, 1, 0), rec.direction);
+      const placed = await lightSpot(s.offset(0, 1, 0), dirAt(rec.direction, i, rec.turns));
       if (placed === true) lit++;
       else noTorch = placed; // no torches or coal: not again this trip
     }
@@ -350,12 +356,15 @@ export async function lookAfterStairs(): Promise<void> {
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
-async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean }): Promise<void> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]> }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
-  const keep = levels ?? (() => {
-    const rec = mineRecord();
-    return rec ? { level: rec.level, arms: rec.arms, deepest: rec.deepest } : { level: 0, arms: freshArms(), deepest: false };
-  })();
+  const rec0 = mineRecord();
+  const keep = {
+    ...(levels ?? (rec0 ? { level: rec0.level, arms: rec0.arms, deepest: rec0.deepest } : { level: 0, arms: freshArms(), deepest: false })),
+    // Its turns and what it tried at each hub, kept unless given
+    turns: levels?.turns ?? rec0?.turns ?? [],
+    tried: levels?.tried ?? rec0?.tried ?? {},
+  };
   await addPlace({
     kind: "mine",
     name: MINE_NAME,
@@ -376,7 +385,27 @@ export function myMine(): { bottom: Vec3; direction: DirectionType; branches: nu
 /** True with a stone pickaxe or better: the mine is dug with one (owner's rule). */
 const hasStonePickaxe = (): boolean => toolTier("pickaxe") >= TIER.stone;
 
-const stepAt = (start: Pos, dir: DirectionType, i: number): Vec3 => new Vec3(start.x, start.y, start.z).plus(STEP[dir].scaled(i)).offset(0, -i, 0);
+/**
+ * Where its stairs turned (owner: blocked going down, back to the crossroad
+ * above and on to the right, then the left): from hub step `at`, the steps
+ * after it go `dir`. Ordered by `at`.
+ */
+export type Turn = { at: number; dir: DirectionType };
+
+/** The way the stairs go into step `i` (step 0: the way they start). Pure. */
+export function dirAt(dir: DirectionType, i: number, turns: Turn[] = []): DirectionType {
+  let d = dir;
+  for (const t of turns) if (t.at < i) d = t.dir;
+  return d;
+}
+
+/** Step `i` of stairs from `start` going `dir`, turning where `turns` say. Pure. */
+export function stepAt(start: Pos, dir: DirectionType, i: number, turns: Turn[] = []): Vec3 {
+  if (turns.length === 0) return new Vec3(start.x, start.y, start.z).plus(STEP[dir].scaled(i)).offset(0, -i, 0);
+  let p = new Vec3(start.x, start.y, start.z);
+  for (let k = 1; k <= i; k++) p = p.plus(STEP[dirAt(dir, k, turns)]).offset(0, -1, 0);
+  return p;
+}
 
 /**
  * Where to stand to be at a step or a hub: the cell itself, or on top of it
@@ -488,7 +517,7 @@ export function unpavedSteps(): number[] {
   const rec = mineRecord();
   if (!rec?.bottom) return [];
   return stepsToPave(rec.stairs).filter((i) => {
-    const step = stepAt(rec.start, rec.direction, i);
+    const step = stepAt(rec.start, rec.direction, i, rec.turns);
     const b = bot.blockAt(step);
     if (b === null || b.name.endsWith("_stairs")) return false;
     // Under water (its flooded bottom): left bare, never dived for (game
@@ -497,7 +526,7 @@ export function unpavedSteps(): number[] {
     // The bottom step is paved from its forward tunnel: none dug yet (or
     // blocked), nothing to stand on to pave it, so it isn't counted (review:
     // it could never be done, and held the mine stage up)
-    if (i === rec.stairs - 1) return bot.blockAt(step.plus(STEP[rec.direction]))?.boundingBox === "empty";
+    if (i === rec.stairs - 1) return bot.blockAt(step.plus(STEP[dirAt(rec.direction, i, rec.turns)]))?.boundingBox === "empty";
     return true;
   });
 }
@@ -589,10 +618,10 @@ async function paveSteps(): Promise<ActionResult> {
   for (const i of steps) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     if (carried(["cobblestone_stairs"]) === 0) break;
-    const step = stepAt(rec.start, rec.direction, i);
+    const step = stepAt(rec.start, rec.direction, i, rec.turns);
     // Placed facing up the stairs: from the step below, or (the bottom step)
     // from its forward tunnel, which is level with it
-    const stand = i + 1 < rec.stairs ? stepAt(rec.start, rec.direction, i + 1) : step.plus(STEP[rec.direction]);
+    const stand = i + 1 < rec.stairs ? stepAt(rec.start, rec.direction, i + 1, rec.turns) : step.plus(STEP[dirAt(rec.direction, i, rec.turns)]);
     if (i + 1 >= rec.stairs && bot.blockAt(stand)?.boundingBox !== "empty") continue;
     // A step already paved is stood on, not in (the hubs come after the
     // steps below them were paved: its walk aimed inside the stair block,
@@ -607,7 +636,7 @@ async function paveSteps(): Promise<ActionResult> {
     // A hub, now half a block up: the block over each side tunnel's opening
     // dug out, so stepping off it into a side tunnel has headroom (owner)
     if (placed.ok && hubs.has(i)) {
-      for (const side of [STEP[armDirection("right", rec.direction)], STEP[armDirection("left", rec.direction)]]) {
+      for (const side of [STEP[armDirection("right", dirAt(rec.direction, i, rec.turns))], STEP[armDirection("left", dirAt(rec.direction, i, rec.turns))]]) {
         const opening = step.plus(side);
         if (bot.blockAt(opening)?.boundingBox !== "empty") continue; // no tunnel that way
         const over = opening.offset(0, 2, 0);
@@ -695,29 +724,38 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     let arm = nextArm(arms);
     // All three tunnels at this hub done: 20 steps further down, a new hub
     if (!arm) {
-      if (level + 1 >= MAX_LEVELS) return fail("not_found", `my mine goes no deeper and I still have too little ${stillNames()}`);
+      if (level + 1 >= MAX_LEVELS || stepAt(start, dir, hubStep(level + 1), rec.turns).y < MIN_HUB_Y) return fail("not_found", `my mine is down to bedrock and I still have too little ${stillNames()}`);
       // Its stairs were blocked going deeper: tried again after a while, not
       // never (game test: gravel fell in, "no path" to the next block, and
       // with one level of tunnels its mine was done for good: no iron, ever)
       if (rec.deepest && Date.now() < stairsBlockedUntil) return fail("not_found", `my mine's stairs were blocked going deeper; I'll dig on later (still too little ${stillNames()})`);
+      // Blocked going down last time (a mine from before turns, or after a
+      // restart): turned at once, never down the same flooded way again
+      if (rec.deepest && (await turnStairs(rec, level, dirAt(dir, Math.max(rec.stairs, hubStep(level) + 1), rec.turns), "water, lava or something built last time"))) continue;
       level += 1;
       arms = freshArms();
       report(`My mine's tunnels here are done; digging the stairs ${LEVEL_STEP} steps deeper.`);
       const deeper = await digStairsTo(rec, hubStep(level));
       if (!deeper.ok) {
         if (deeper.reason !== "refused") return deeper;
-        // Stairs blocked: this is as deep as it goes (the steps it did dig stay saved)
+        // Blocked (water, lava, the sea, something built): back to the
+        // crossroad it came down from and new stairs from there, to the
+        // right, then the left; both blocked, one crossroad higher (owner)
         const now = mineRecord() ?? rec;
+        const turned = await turnStairs(now, level - 1, dirAt(dir, now.stairs, now.turns), deeper.detail);
+        if (turned) continue;
+        // Blocked every way from every crossroad: tried again after a while
         stairsBlockedUntil = Date.now() + STAIRS_RETRY_MS;
         await saveMine(start, dir, now.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true });
-        return fail("not_found", `my mine's stairs can't go deeper (${deeper.detail}) and I still have too little ${stillNames()}`);
+        return fail("not_found", `my mine's stairs are blocked every way from every crossroad (${deeper.detail}) and I still have too little ${stillNames()}`);
       }
       await saveMine(start, dir, hubStep(level) + 1, rec.branches, rec.bottom, { level, arms, deepest: false });
       arm = nextArm(arms)!;
     }
     // Down to where this tunnel ends now, then on a few blocks
-    const hub = stepAt(start, dir, hubStep(level));
-    const way = armDirection(arm, dir);
+    const hub = stepAt(start, dir, hubStep(level), rec.turns);
+    // The hub's tunnels go by the way its stairs came in
+    const way = armDirection(arm, dirAt(dir, hubStep(level), rec.turns));
     const end = hub.plus(STEP[way].scaled(arms[arm].dug));
     const there = await goToStep(end);
     if (!there.ok) {
@@ -760,19 +798,93 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
 }
 
 /**
+ * The next way for blocked stairs (owner): from the crossroad they came down
+ * from, to the right of the way the stairs came in, then the left; with both
+ * tried, the same one crossroad higher, and so on up. `fromLevel` is the hub
+ * the blocked stairs left; `blocked` the way they went. Null when every way
+ * from every hub is tried. Pure.
+ */
+export function nextTurn(dir: DirectionType, turns: Turn[], tried: Record<string, DirectionType[]>, fromLevel: number, blocked: DirectionType): { level: number; dir: DirectionType; out: DirectionType } | null {
+  for (let L = fromLevel; L >= 0; L--) {
+    const h = hubStep(L);
+    const arrive = dirAt(dir, h, turns);
+    // The way it went down from this hub: blocked (the deepest), or the way to the blocked one
+    const out = L === fromLevel ? blocked : dirAt(dir, h + 1, turns);
+    const done = new Set([...(tried[String(h)] ?? []), out]);
+    const pick = [RIGHT[arrive], LEFT[arrive]].find((d) => !done.has(d));
+    if (pick) return { level: L, dir: pick, out };
+  }
+  return null;
+}
+
+// Every tunnel at a hub counted done: the stairs go on down from it at once
+const doneArms = (): Arms => ({ forward: { dug: ARM_LENGTH, blocked: true }, right: { dug: ARM_LENGTH, blocked: true }, left: { dug: ARM_LENGTH, blocked: true } });
+
+/**
+ * Turns its blocked stairs (owner): the next way from `nextTurn`, the old
+ * way down from that hub sealed under the tunnel floor (the flooded or
+ * lava-filled steps cut off), the record moved to the new stairs. True when
+ * there was a way left to try.
+ */
+async function turnStairs(rec: MineRecord, fromLevel: number, blocked: DirectionType, why: string): Promise<boolean> {
+  const next = nextTurn(rec.direction, rec.turns, rec.tried, fromLevel, blocked);
+  if (!next) return false;
+  const h = hubStep(next.level);
+  // What it tried at each hub from the blocked one up to this one
+  const tried: Record<string, DirectionType[]> = {};
+  for (const [k, v] of Object.entries(rec.tried)) if (Number(k) <= h) tried[k] = v;
+  tried[String(h)] = [...new Set([...(tried[String(h)] ?? []), next.out, next.dir])];
+  const hub = stepAt(rec.start, rec.direction, h, rec.turns);
+  await sealStairs(hub, next.out);
+  const turns = rec.turns.filter((t) => t.at < h).concat({ at: h, dir: next.dir });
+  const side = next.dir === RIGHT[dirAt(rec.direction, h, rec.turns)] ? "right" : "left";
+  report(`My mine's stairs hit ${why}; sealed them off and starting new stairs to the ${side} from the crossroad ${next.level + 1} level${next.level === 0 ? "" : "s"} down.`);
+  await saveMine(rec.start, rec.direction, h + 1, rec.branches, rec.bottom, { level: next.level, arms: doneArms(), deepest: false, turns, tried });
+  return true;
+}
+
+/**
+ * Seals the stairs going `way` down from `hub`: the cells of their first
+ * three steps below the hub's floor level filled, so what flooded them stays
+ * out and nothing walks down them (the tunnel at the hub keeps its floor).
+ * Best effort.
+ */
+async function sealStairs(hub: Vec3, way: DirectionType): Promise<void> {
+  const cells: Vec3[] = [];
+  for (let k = 3; k >= 1; k--) {
+    const step = hub.plus(STEP[way].scaled(k)).offset(0, -k, 0);
+    for (let dy = 0; dy <= STAIR_HEADROOM; dy++) if (step.y + dy < hub.y) cells.push(step.offset(0, dy, 0));
+  }
+  await goToStep(hub);
+  // Closer when the tunnel that way is open (the deepest cells are out of reach from the hub)
+  const near = hub.plus(STEP[way]);
+  if (bot.blockAt(near)?.boundingBox === "empty") await goTo(new pf.goals.GoalBlock(near.x, near.y, near.z));
+  const { placeBlockResult } = await import("../actions/blockPlacing");
+  let sealed = 0;
+  for (const c of cells) {
+    if (isCommandCancelled()) return;
+    if (bot.blockAt(c)?.boundingBox === "block") continue;
+    const filler = ["cobblestone", "cobbled_deepslate", "dirt", "stone"].find((n) => carried([n]) > 0);
+    if (!filler) break;
+    if ((await placeBlockResult(filler, c.x, c.y, c.z, "bottom")).ok) sealed++;
+  }
+  console.log(`Mine: sealed ${sealed} of ${cells.length} cells of the blocked stairs going ${way} from ${hub}.`);
+}
+
+/**
  * Digs the mine's stairs on down to step `to` (a step at a time, from where
  * they end now), remembering each one. A blocked step stops it.
  */
 async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   const { start, direction: dir } = rec;
   const from = Math.max(rec.stairs, 1);
-  const top = stepAt(start, dir, from - 1);
+  const top = stepAt(start, dir, from - 1, rec.turns);
   const atTop = await goToStep(top);
   // Not there (a walk that failed, a stop): try again next trip; never "as deep as it goes"
   if (!atTop.ok) return fail(atTop.reason === "aborted" ? "aborted" : "unreachable", atTop.detail);
   for (let i = from; i <= to; i++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();
       if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");

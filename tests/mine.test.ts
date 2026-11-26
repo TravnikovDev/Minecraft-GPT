@@ -167,3 +167,32 @@ test("paving: every bare step and 10% spare, at least one (owner)", async () => 
   expect(stairsToMake(47)).toBe(52);
   expect(stairsToMake(3)).toBe(4);
 });
+
+test("stairs that turn at a hub go the new way from there (owner: blocked, turn at the crossroad)", async () => {
+  const { stepAt, dirAt, hubStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  const start = { x: 0, y: 64, z: 0 };
+  const h = hubStep(1); // 30
+  const turns = [{ at: h, dir: "east" as const }];
+  // Up to the hub: straight south and down
+  expect(stepAt(start, "south", h, turns).toArray()).toEqual([0, 64 - h, h]);
+  expect(dirAt("south", h, turns)).toBe("south");
+  // After it: east and down
+  expect(dirAt("south", h + 1, turns)).toBe("east");
+  expect(stepAt(start, "south", h + 3, turns).toArray()).toEqual([3, 64 - h - 3, h]);
+});
+
+test("blocked stairs: right, then left from the same crossroad, then one crossroad higher (owner)", async () => {
+  const { nextTurn, hubStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  // Going south; level 1 hub's stairs south hit the sea
+  let t = nextTurn("south", [], {}, 1, "south");
+  expect(t).toEqual({ level: 1, dir: "west", out: "south" }); // right of south is west
+  // That's blocked too: the left
+  t = nextTurn("south", [{ at: hubStep(1), dir: "west" }], { [String(hubStep(1))]: ["south", "west"] }, 1, "west");
+  expect(t).toEqual({ level: 1, dir: "east", out: "west" });
+  // Left blocked as well: one crossroad higher, its right
+  t = nextTurn("south", [{ at: hubStep(1), dir: "east" }], { [String(hubStep(1))]: ["south", "west", "east"] }, 1, "east");
+  expect(t).toEqual({ level: 0, dir: "west", out: "south" });
+  // Every way from every crossroad tried: none
+  const all = { [String(hubStep(0))]: ["south", "west", "east"], [String(hubStep(1))]: ["south", "west", "east"] };
+  expect(nextTurn("south", [{ at: hubStep(0), dir: "east" }], all, 0, "east")).toBeNull();
+});
