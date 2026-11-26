@@ -209,6 +209,9 @@ onBotCreated((currentBot) => {
   });
 });
 
+// A death this soon after the last one: the things are let go
+const REPEAT_DEATH_MS = 5 * 60_000;
+
 /**
  * After a death: go back for the dropped items, get basic gear if still empty
  * handed, then home to its chores when it has a shelter and a bed, otherwise
@@ -216,9 +219,18 @@ onBotCreated((currentBot) => {
  * else in the queue, without asking the owner.
  */
 async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
-  const steps: Array<{ command: BotCommands; args: object }> = [
-    { command: BotCommands.RecoverItems, args: {} },
-  ];
+  // Died again within minutes of the last death (going back for its things,
+  // unarmed, into the same cave at night): those things are let go, not a
+  // third death (fresh-world test: two deaths in a minute in one cave)
+  const { loadDeaths } = await import("./core/session");
+  const deaths = loadDeaths();
+  const again = deaths.length >= 2 && deaths.at(-1)!.at - deaths.at(-2)!.at < REPEAT_DEATH_MS;
+  const steps: Array<{ command: BotCommands; args: object }> = again ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
+  if (again) {
+    const { clearLastDeath } = await import("./actions/recovery");
+    clearLastDeath();
+    reply("I died again going back for my things; I'll leave them and go home.");
+  }
   // Living its own life, its milestones get the gear back; otherwise a starter kit
   if (!autonomyOn()) steps.push({ command: BotCommands.StarterKit, args: {} });
   const ownerOnline = Object.keys(currentBot.players).some(
