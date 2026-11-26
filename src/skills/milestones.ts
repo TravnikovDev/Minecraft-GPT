@@ -129,6 +129,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     if (short() && myFarm() && farmRipe() > 0) await tendFarm();
     if (short()) await pickBerries();
     if (short()) await cocoaAndCookies();
+    if (short()) await wildFood();
     if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
     // Starving with nothing near (game test: it starved twice, no animal
     // within 32): by day the walk may go further, to animals out under the
@@ -167,6 +168,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   // Berries, cocoa (cookies with wheat); fishing (a rod, or string for one, and open water near)
   if (short()) await pickBerries();
   if (short()) await cocoaAndCookies();
+  if (short()) await wildFood();
   if (short()) {
     const { goFishing } = await import("./fishing");
     if ((await goFishing()) > 0) await cookTheMeat(cookFood);
@@ -215,6 +217,31 @@ async function cocoaAndCookies(): Promise<void> {
   const { liveWorld } = await import("./world");
   const made = await acquire("cookie", carriedOf(["cookie"]) + batches * 8, liveWorld);
   if (made.ok) console.log(`Food: baked ${batches * 8} cookies.`);
+}
+
+// How far it goes for wild melons and mushrooms
+const WILD_RANGE = 32;
+
+/**
+ * Wild food round about (owner): melons broken into slices, and brown and
+ * red mushrooms picked and cooked with a bowl into mushroom stew (a bowl
+ * from planks; the stew is a good meal, 6 food).
+ */
+async function wildFood(): Promise<void> {
+  const { harvestCrops } = await import("../actions/farming");
+  const melons = await harvestCrops({ only: ["melon"], maxDistance: WILD_RANGE });
+  if (melons > 0) console.log(`Food: broke ${melons} wild melons into slices.`);
+  // Mushrooms: one of each kind per stew
+  const { collectBlock } = await import("../actions/collectBlock");
+  for (const kind of ["brown_mushroom", "red_mushroom"]) {
+    if (carriedOf([kind]) < 2 && !isCommandCancelled()) await collectBlock(kind, 2 - carriedOf([kind]), WILD_RANGE, { seenOnly: true });
+  }
+  const stews = Math.min(carriedOf(["brown_mushroom"]), carriedOf(["red_mushroom"]));
+  if (stews === 0) return;
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  const made = await acquire("mushroom_stew", carriedOf(["mushroom_stew"]) + stews, liveWorld);
+  if (made.ok) console.log(`Food: made ${stews} mushroom stew.`);
 }
 
 /** True when it carries raw meat or fish. */
