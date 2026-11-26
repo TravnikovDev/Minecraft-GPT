@@ -350,7 +350,21 @@ export const MILESTONES: Milestone[] = [
     requires: ["chests"],
     done: hasBed,
     achieve: getBed,
+  },  {
+    id: "lit_home",
+    title: "a lit home",
+    // Day one (owner: it's critical): mobs kept coming at the shelter
+    // because nothing round it was lit. Torches on the room's walls and in a
+    // grid on the ground round it (by day), made from coal or, before it has
+    // any, charcoal from logs in its furnace; put back when a creeper knocks
+    // them out
+    tier: 1,
+    requires: ["chests"],
+    done: () => shelter() !== null && homeLit(),
+    achieve: () => lightUpHome(daylight()),
+    reached: () => shelter() !== null && homeLitSeen(0),
   },
+
   {
     id: "food",
     title: "a food stock",
@@ -395,19 +409,6 @@ export const MILESTONES: Milestone[] = [
     // stairs, mobs spawning in its tunnels): 16 made, and topped up below 8
     done: () => carriedOf(["torch"]) >= (reachedAt()["torches"] ? TORCHES_LOW : TORCHES),
     achieve: () => getAll([`${TORCHES} torch`]),
-  },
-  {
-    id: "lit_home",
-    title: "a lit home",
-    tier: 2,
-    optional: true,
-    requires: ["torches"],
-    // Owner: mobs kept coming at the shelter because nothing round it was
-    // lit. Torches on the room's walls and in a grid on the ground round it
-    // (by day); put back when a creeper knocks them out
-    done: () => shelter() === null || homeLit(),
-    achieve: () => lightUpHome(daylight()),
-    reached: () => shelter() !== null && homeLitSeen(0),
   },
   {
     id: "paved_stairs",

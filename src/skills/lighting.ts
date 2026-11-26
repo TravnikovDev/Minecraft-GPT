@@ -79,10 +79,15 @@ export function groundSpot(x: number, z: number, y: number, look: (x: number, y:
 }
 
 /** The live world's view for the ground search: open is air; ground is a full solid block that isn't leaves, glass, ice or a fluid. */
+// What a torch goes in place of (cleared first): thin snow, grass, flowers
+// (game test: in a snowy world every spot had a snow layer, no spot counted
+// as open, and the home was "lit" with no torch out)
+const SOFT = /^(snow|short_grass|grass|fern|dead_bush|dandelion|poppy|[a-z_]+_tulip|azure_bluet|oxeye_daisy|cornflower|allium|blue_orchid|lily_of_the_valley)$/;
+
 function groundCellAt(x: number, y: number, z: number): GroundCell {
   const b = knownBlock(new Vec3(x, y, z));
   if (!b) return null;
-  const open = b.name === "air" || b.name === "cave_air";
+  const open = b.name === "air" || b.name === "cave_air" || SOFT.test(b.name);
   // Natural ground only: never the owner's plank floor or roof, nor a field (review)
   const ground = b.boundingBox === "block" && isNatural(b.name) && !/leaves|ice$|^ice|farmland/.test(b.name);
   return { open, ground };
@@ -216,6 +221,12 @@ export async function lightUpHome(byDay: boolean, grade = 0): Promise<ActionResu
         missed++;
         failedSpots.set(spotKey(spot), Date.now() + FAILED_FOR_MS);
         continue;
+      }
+      // Thin snow or a plant there: cleared first
+      const there2 = knownBlock(new Vec3(spot.x, spot.y, spot.z));
+      if (there2 && SOFT.test(there2.name)) {
+        const { breakBlock } = await import("../core/primitives");
+        await breakBlock(there2.position, { allowWithoutHarvest: true });
       }
       const got = await placeBlockResult("torch", spot.x, spot.y, spot.z, "bottom");
       if (got.ok) placed++;
