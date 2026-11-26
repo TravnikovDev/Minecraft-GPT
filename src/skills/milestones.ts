@@ -403,7 +403,7 @@ export const MILESTONES: Milestone[] = [
     // (by day); put back when a creeper knocks them out
     done: () => shelter() === null || homeLit(),
     achieve: () => lightUpHome(daylight()),
-    reached: () => homeLitSeen(0),
+    reached: () => shelter() !== null && homeLitSeen(0),
   },
   {
     id: "paved_stairs",
@@ -538,7 +538,7 @@ export const MILESTONES: Milestone[] = [
     requires: ["lit_home"],
     done: () => shelter() === null || homeLit(1),
     achieve: () => lightUpHome(daylight(), 1),
-    reached: () => homeLitSeen(1),
+    reached: () => shelter() !== null && homeLitSeen(1),
   },
   {
     id: "iron_tools",
@@ -556,7 +556,7 @@ export const MILESTONES: Milestone[] = [
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
     achieve: () => lightUpHome(daylight(), 2),
-    reached: () => homeLitSeen(2),
+    reached: () => shelter() !== null && homeLitSeen(2),
   },
   {
     id: "diamonds",
@@ -741,8 +741,11 @@ export function reachedAt(): Record<string, number> {
 /** Notes milestones done for the first time; returns them (to announce). */
 export async function noteReached(list: Milestone[] = MILESTONES): Promise<Milestone[]> {
   const known = reachedAt();
-  // Only what can be checked here, and only what's really achieved
-  const fresh = list.filter((m) => !known[m.id] && milestoneHere(m) && (m.reached ?? m.done)());
+  // Only what can be checked here, only what's really achieved, and only
+  // once what it requires is done (game test: in a new world with no
+  // shelter, "a lit home" and both wider grades were announced at once)
+  const needsDone = (m: Milestone): boolean => (m.requires ?? []).every((id) => list.find((x) => x.id === id)?.done() ?? true);
+  const fresh = list.filter((m) => !known[m.id] && milestoneHere(m) && needsDone(m) && (m.reached ?? m.done)());
   if (fresh.length === 0) return [];
   const next = { ...known };
   for (const m of fresh) next[m.id] = Date.now();
