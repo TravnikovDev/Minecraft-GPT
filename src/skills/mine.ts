@@ -429,6 +429,14 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
   const still = (): OreWant[] => wants.filter((w) => carried(w.counts) < w.enough);
   if (still().length === 0) return ok();
+  // By day, ore of what it wants in the open round its home first (a ravine
+  // by the shelter), then down the mine for the rest
+  const { surfaceOresFirst } = await import("./surfaceOres");
+  for (const w of still()) {
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    if (w.item !== "cobblestone") await surfaceOresFirst(w.item, w.enough - carried(w.counts));
+  }
+  if (still().length === 0) return ok();
   const fit = fitForTheMine(bot.health, foodPoints());
   if (!fit.ok) return fit;
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
