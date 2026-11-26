@@ -66,6 +66,8 @@ export function milestoneHere(m: Milestone): boolean {
 }
 
 const FOOD_STOCK = 20; // food points carried: a couple of days' eating
+// Carrying less than this: starving (apples from leaves are worth the trouble)
+const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
 const foodTarget = (): number => (reachedAt()["food"] ? FOOD_STOCK / 2 : FOOD_STOCK);
@@ -99,6 +101,13 @@ async function stockFood(): Promise<ActionResult> {
   for (let trip = 0; trip < 2 && foodPoints() < FOOD_STOCK && !isCommandCancelled(); trip++) {
     if (!(await exploreFor("animals", animalsInSight))) break;
     await hunt({ maxDistance: 40, mobType: null, count: 4 });
+  }
+  // Starving and nothing else found: apples from oak leaves round about
+  // (owner: if it's starving and there are oak trees near, their leaves give
+  // apples; one leaf in 200 does, so it's a last resort, by day)
+  if (foodPoints() < STARVING_FOOD && bot.time?.isDay !== false && !isCommandCancelled()) {
+    const { applesFromLeaves } = await import("./apples");
+    await applesFromLeaves();
   }
   // Still short, no farm yet, its bucket at hand, by day: the farm now. Food
   // is a first-day milestone and the farm a later one, so while food kept

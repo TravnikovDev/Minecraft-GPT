@@ -42,6 +42,15 @@ const RETREAT_NOTICE_MS = 60_000;
 // off shot it for a minute while it stood still eating, and killed it
 export const ARCHERS = new Set(["skeleton", "stray", "pillager", "witch", "piglin"]);
 const ARCHER_RANGE = 16;
+// An archer this close is charged even when hurt: running from it down a
+// tunnel only gets it shot in the back (game test: at 8 health it backed off
+// from a skeleton 4 blocks away, barely moved, took four arrows and died)
+const ARCHER_CHARGE = 8;
+
+/** True for an archer close enough to charge rather than run from (not one it gave up on reaching). */
+function chargeArcher(e: Entity | null): boolean {
+  return !!e && ARCHERS.has(e.name ?? "") && distanceTo(e) <= ARCHER_CHARGE && (ignored.get(e.id) ?? 0) <= Date.now();
+}
 
 let fleeing: Entity | null = null; // the mob it's running from
 let fleeStartedAt = 0;
@@ -198,6 +207,13 @@ function tick(): void {
   if (fleeing) {
     const threat = nearestThreat(FLEE_DISTANCE);
     if (!threat || bot.health >= SAFE_HEALTH) return stopRetreat(threat ? "healed, fighting again if needed" : "got away");
+    // An archer close by: at it, not away from it
+    const archer = nearestArcher();
+    if (chargeArcher(archer)) {
+      stopRetreat(`charging the ${archer!.name}`);
+      engage(archer!);
+      return;
+    }
     if (Date.now() - fleeStartedAt > MAX_FLEE_MS) return stopRetreat("can't get away, standing my ground");
     if (distanceTo(threat) <= CORNERED_RANGE) {
       stopRetreat(`cornered by ${threat.name}`);
@@ -210,8 +226,13 @@ function tick(): void {
   if (bot.health <= RETREAT_HEALTH) {
     const threat = nearestThreat(HIT_BACK_RANGE) ?? nearestArcher();
     if (threat && distanceTo(threat) > CORNERED_RANGE) {
-      retreat(threat);
-      return;
+      // Hurt, but an archer close by is charged: its arrows hit a back too
+      // (and the fight below goes on); anything else, it backs off from
+      if (!chargeArcher(threat)) {
+        retreat(threat);
+        return;
+      }
+      if (target?.id !== threat.id) engage(threat);
     }
   }
 
@@ -278,7 +299,8 @@ export function registerCombatReflex(): void {
       const archer = nearestArcher();
       if (!archer) return;
       const unreachable = (ignored.get(archer.id) ?? 0) > Date.now();
-      if (bot.health > RETREAT_HEALTH && !unreachable) engage(archer);
+      // Healthy, or hurt but it's close: at it; hurt and it's far, or out of reach: away
+      if (!unreachable && (bot.health > RETREAT_HEALTH || chargeArcher(archer))) engage(archer);
       else retreat(archer);
     })
   );
