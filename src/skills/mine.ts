@@ -515,6 +515,9 @@ export async function makeStairBlocks(): Promise<void> {
   const want = stairsToMake(unpavedSteps().length);
   if (want === 0 || carried(["cobblestone_stairs"]) >= want) return;
   const { storedNear, takeItems } = await import("../actions/storage");
+  // Ones it has stored already first
+  if (storedNear("cobblestone_stairs", 32) > 0) await takeItems([{ name: "cobblestone_stairs", count: want - carried(["cobblestone_stairs"]) }], true);
+  if (carried(["cobblestone_stairs"]) >= want) return;
   const cobble = Math.ceil((want - carried(["cobblestone_stairs"])) / 4) * 6;
   // Once 200 have piled up (owner), and its building stock stays
   const owned = carried(["cobblestone"]) + storedNear("cobblestone", 32);
