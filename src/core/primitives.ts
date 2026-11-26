@@ -560,9 +560,14 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   if (now) return ok({ name: knownBlock(at)!.name });
   if (!placed.ok && placed.reason !== "error" && placed.reason !== "refused") return placed;
   // Only the server undoing it counts toward a protected area (not a mob standing in the spot)
-  const inTheWay = Object.values(bot.entities).some((e) => e !== bot.entity && e.position.floored().equals(at));
-  if (!inTheWay) await noteRevert(at); // twice close together: a protected area
-  return fail(inTheWay ? "occupied" : "reverted", inTheWay ? `something is standing at ${at}` : `${itemName} at ${at} didn't stay`);
+  // A living thing in the spot (a dropped item or an orb never blocks a
+  // block: counting them hid why a bed didn't go down, fresh-world test)
+  const blocker = Object.values(bot.entities).find(
+    (e) => e !== bot.entity && e.position.floored().equals(at) && e.name !== "item" && e.name !== "experience_orb" && e.name !== "arrow"
+  );
+  if (!blocker) await noteRevert(at); // twice close together: a protected area
+  const why = placed.ok ? "" : ` (${describeFailure(placed)})`;
+  return fail(blocker ? "occupied" : "reverted", blocker ? `${blocker.username ?? `a ${(blocker.name ?? "mob").replace(/_/g, " ")}`} is standing at ${at}` : `${itemName} at ${at} didn't stay${why}`);
 }
 
 // --- Hands and inventory ---------------------------------------------------------
