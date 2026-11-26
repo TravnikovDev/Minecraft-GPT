@@ -100,6 +100,15 @@ async function stockFood(): Promise<ActionResult> {
     if (!(await exploreFor("animals", animalsInSight))) break;
     await hunt({ maxDistance: 40, mobType: null, count: 4 });
   }
+  // Still short, no farm yet, its bucket at hand, by day: the farm now. Food
+  // is a first-day milestone and the farm a later one, so while food kept
+  // failing the farm never came up (game test: 0 food points, no animals
+  // in the open, the same loop every two minutes)
+  const hasBucket = bot.inventory.items().some((i) => /^(water_)?bucket$/.test(i.name));
+  if (foodPoints() < FOOD_STOCK && !myFarm() && hasBucket && bot.time?.isDay !== false && !isCommandCancelled()) {
+    const made = await makeFarm();
+    if (!made.ok) console.log(`Food: no farm yet (${describeFailure(made)}).`);
+  }
   // Raw meat is worth more cooked: a furnace from the cobblestone it has
   const hasRaw = bot.inventory.items().some((i) => /^(beef|porkchop|mutton|chicken|rabbit|cod|salmon)$/.test(i.name));
   if (hasRaw) await cookTheMeat(cookFood);
