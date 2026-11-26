@@ -39,20 +39,24 @@ function chestNear(spot: Vec3): { x: number; y: number; z: number } | null {
 export async function execute(args: z.infer<typeof parameters>): Promise<void> {
   const { currentRole, setRole, clearRole, makeRole, describeRole } = await import("../roles/role");
   const { resetRoleRest } = await import("../roles/runner");
+  const { automationAllowed } = await import("../config/serverProfile");
   if (!args.job) {
-    reply(describeRole(currentRole()));
+    const role = currentRole();
+    reply(`${describeRole(role)}${role && !automationAllowed() ? " But this server doesn't allow bots to work on their own, so I'm not doing it here." : ""}`);
     return;
   }
+  // The old job's shift (running, or waiting after this command cut in) ends now:
+  // a new job never runs a leftover shift of the old one
+  const { cancelRunning, currentTask, dropPending } = await import("../core/arbiter");
+  const { ROLE_PREFIX } = await import("../roles/runner");
+  dropPending((t) => t.name.startsWith(ROLE_PREFIX));
+  if (currentTask()?.name.startsWith(ROLE_PREFIX)) await cancelRunning(args.job === "off" ? "off duty" : "a new job", false);
   if (args.job === "off") {
     const had = currentRole();
     await clearRole();
-    const { cancelRunning, currentTask, dropPending } = await import("../core/arbiter");
-    dropPending((t) => t.name.startsWith("role: "));
-    if (currentTask()?.name.startsWith("role: ")) await cancelRunning("off duty", false);
     reply(had ? `Okay, I'm off duty as your ${had.job}.` : "I didn't have a job.");
     return;
   }
-  const { automationAllowed } = await import("../config/serverProfile");
   if (!automationAllowed()) {
     reply("This server doesn't allow bots to work on their own, so I can't take a job here.");
     return;
@@ -66,7 +70,8 @@ export async function execute(args: z.infer<typeof parameters>): Promise<void> {
     return;
   }
   const dimension = (bot.game as { dimension?: string }).dimension ?? "overworld";
-  const anchor = here && (needsPlace || args.stance === "stay") ? { x: here.x, y: here.y, z: here.z, dimension } : null;
+  // A guard that stays or patrols guards the spot where the owner stood
+  const anchor = here && (needsPlace || args.stance === "stay" || args.stance === "patrol") ? { x: here.x, y: here.y, z: here.z, dimension } : null;
   const storage = args.storageNearMe && here ? chestNear(here) : null;
   if (args.storageNearMe && !storage) {
     reply("I don't see a chest near you; I'll use the nearest chest I know.");

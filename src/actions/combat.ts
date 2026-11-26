@@ -36,6 +36,19 @@ export const hostileMobsInfo = {
   stray: { threatLevel: ThreatLevel.MEDIUM, preferredDistance: 4, preferredWeapon: "shield" }
 };
 
+/**
+ * Mobs the game calls hostile that leave a player alone unless provoked (an
+ * enderman looked at, a zombified piglin hit, a piglin without gold seen),
+ * or that a fight goes badly with (the warden). Attacking one starts a war
+ * the bot can't win: a guard never picks them (architect review: the guard
+ * would start a pigman war in the Nether).
+ */
+export const NEUTRAL_MOBS = new Set(["enderman", "zombified_piglin", "piglin", "piglin_brute", "warden", "wolf", "bee", "polar_bear", "llama", "trader_llama", "panda", "dolphin", "goat", "iron_golem"]);
+
+/** Spiders and cave spiders leave players alone by day (in light). Pure. */
+export const isNeutralNow = (name: string, night: boolean): boolean =>
+  NEUTRAL_MOBS.has(name) || (!night && (name === "spider" || name === "cave_spider"));
+
 // Check if an Entity is Hostile - standardized function
 /** A hostile mob: the game's own list (core/catalog), plus the ones the threat table knows. */
 export function isHostile(entity: Entity): boolean {

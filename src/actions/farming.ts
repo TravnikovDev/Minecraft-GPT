@@ -38,13 +38,17 @@ function isRipe(block: Block): boolean {
   return Number(block.getProperties()["age"] ?? 0) >= crop.ripeAge;
 }
 
-/** Ripe crops (and berry bushes) nearby, nearest first. `only` limits the kinds. */
-export function findRipeCrops(maxDistance = 24, only: string[] | null = null): Block[] {
+/**
+ * Ripe crops (and berry bushes) nearby, nearest first. `only` limits the
+ * kinds; `point` searches around a spot (a farmer's field) instead of the
+ * bot, so the search doesn't drift off the field as it works.
+ */
+export function findRipeCrops(maxDistance = 24, only: string[] | null = null, point: Vec3 | null = null): Block[] {
   const names = [...Object.keys(CROPS), BERRY_BUSH].filter((n) => !only || only.includes(n));
   const ids = names.map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
   if (ids.length === 0) return [];
   return bot
-    .findBlocks({ matching: ids, maxDistance, count: 512 })
+    .findBlocks({ matching: ids, maxDistance, count: 512, ...(point ? { point } : {}) })
     .map((p) => bot.blockAt(p))
     .filter((b): b is Block => b !== null && isRipe(b) && !forbiddenAt(b.position)) // not in a keep-out area (the owner's farm)
     .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
@@ -94,13 +98,13 @@ async function harvestOne(block: Block): Promise<boolean> {
  * Returns how many crops it harvested.
  */
 export async function harvestCrops(
-  options: { maxDistance?: number; only?: string[] | null; enough?: () => boolean } = {}
+  options: { maxDistance?: number; only?: string[] | null; enough?: () => boolean; point?: Vec3 | null } = {}
 ): Promise<number> {
   const maxDistance = options.maxDistance ?? 24;
   let harvested = 0;
   let failures = 0;
   while (!isCommandCancelled() && failures < 5 && !options.enough?.()) {
-    const next = findRipeCrops(maxDistance, options.only ?? null)[0];
+    const next = findRipeCrops(maxDistance, options.only ?? null, options.point ?? null)[0];
     if (!next) break;
     if (await harvestOne(next)) {
       harvested++;

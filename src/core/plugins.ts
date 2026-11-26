@@ -112,6 +112,10 @@ export const pathing = {
   isMoving(): boolean {
     return bot.pathfinder?.isMoving() ?? false;
   },
+  /** The goal being walked now, if any (a guard checks it still follows the owner). */
+  currentGoal(): Goal | null {
+    return (bot.pathfinder?.goal as Goal | undefined) ?? null;
+  },
   /** True while any goal is set (walking, or following someone). */
   hasGoal(): boolean {
     return Boolean(bot.pathfinder?.goal);

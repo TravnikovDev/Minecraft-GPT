@@ -64,41 +64,96 @@ export function sortPlan(chests: ChestContents[], categoryOf: (name: string) => 
 
 const keyOf = (p: { x: number; y: number; z: number }): string => `${p.x},${p.y},${p.z}`;
 
-/** One shift: look in the chests around its post, then move one chest's misplaced things. */
-export async function haulerShift(role: Role): Promise<Shift> {
+/**
+ * Containers counted once: the two halves of a double chest (side by side,
+ * both a chest, not "single") are one container, kept by its first half.
+ * Pure over positions and chest types.
+ */
+export function distinctContainers<T extends { x: number; y: number; z: number; double: boolean }>(chests: T[]): T[] {
+  const kept: T[] = [];
+  for (const c of chests) {
+    const half = c.double && kept.some((k) => k.double && Math.abs(k.x - c.x) + Math.abs(k.y - c.y) + Math.abs(k.z - c.z) === 1);
+    if (!half) kept.push(c);
+  }
+  return kept;
+}
+
+/** The chests (one per container) around its post that it knows. */
+function chestsAround(role: Role): { block: Block; key: string }[] {
   const centre = role.anchor ?? bot.entity.position;
   const near = loadChests().filter((c) => new Vec3(c.x, c.y, c.z).distanceTo(new Vec3(centre.x, centre.y, centre.z)) <= role.radius);
   const blocks = near.map((c) => bot.blockAt(new Vec3(c.x, c.y, c.z))).filter((b): b is Block => b !== null && /chest|barrel/.test(b.name));
-  if (blocks.length < 2) return { result: fail("not_found", "there are fewer than two chests I know here to sort"), restMs: 5 * 60_000 };
+  const typed = blocks.map((b) => ({ x: b.position.x, y: b.position.y, z: b.position.z, double: b.name.includes("chest") && String(b.getProperties()["type"] ?? "single") !== "single", block: b }));
+  return distinctContainers(typed).map((t) => ({ block: t.block, key: keyOf(t.block.position) }));
+}
+
+/** True when its chest memory shows something in the wrong chest around its post. */
+export function haulHasWork(role: Role): boolean {
+  const chests = chestsAround(role);
+  if (chests.length < 2) return false;
+  const known = new Map(loadChests().map((c) => [keyOf(c), c.contents ?? {}]));
+  return sortPlan(chests.map((c) => ({ key: c.key, contents: known.get(c.key) ?? {} }))).moves.length > 0;
+}
+
+/** One shift: look in the chests around its post, then move one chest's misplaced things. */
+export async function haulerShift(role: Role): Promise<Shift> {
+  const around = chestsAround(role);
+  if (around.length < 2) return { result: fail("not_found", "there are fewer than two chests I know here to sort"), restMs: 5 * 60_000 };
   const { lookInChest, withChest } = await import("../actions/storage");
   const chests: ChestContents[] = [];
-  for (const b of blocks) {
+  for (const c of around) {
     if (isCommandCancelled()) return { result: fail("aborted", "stopped"), restMs: 0 };
-    chests.push({ key: keyOf(b.position), contents: Object.fromEntries(await lookInChest(b)) });
+    chests.push({ key: c.key, contents: Object.fromEntries(await lookInChest(c.block)) });
   }
   const { moves } = sortPlan(chests);
-  if (moves.length === 0) return { result: ok(), restMs: 5 * 60_000 };
+  if (moves.length === 0) return { result: ok(), restMs: 5 * 60_000, progress: false };
   // One source chest per shift: take what's misplaced (as much as fits)...
   const from = moves[0]!.from;
-  const source = blocks.find((b) => keyOf(b.position) === from)!;
+  const source = around.find((c) => c.key === from)!.block;
   const mine = moves.filter((m) => m.from === from);
+  const taken = new Map<string, number>(); // only what it took out goes on (never its own things)
   await withChest(source, async (open) => {
     for (const m of mine) {
       if (bot.inventory.emptySlotCount() === 0) break;
       const item = open.containerItems().find((i) => i.name === m.name);
-      if (item) await withdrawFrom(open, item, Math.min(m.count, item.count));
+      if (!item) continue;
+      const got = await withdrawFrom(open, item, Math.min(m.count, item.count));
+      if (got.ok) taken.set(m.name, (taken.get(m.name) ?? 0) + got.value);
     }
   });
   // ...then into the chest each kind belongs in
+  let moved = 0;
   for (const to of new Set(mine.map((m) => m.to))) {
     if (isCommandCancelled()) break;
-    const target = blocks.find((b) => keyOf(b.position) === to);
+    const target = around.find((c) => c.key === to)?.block;
     if (!target) continue;
-    const names = new Set(mine.filter((m) => m.to === to).map((m) => m.name));
+    const names = mine.filter((m) => m.to === to).map((m) => m.name);
     await withChest(target, async (open) => {
-      for (const item of bot.inventory.items().filter((i) => names.has(i.name))) await depositInto(open, item, item.count);
+      for (const name of names) {
+        let left = taken.get(name) ?? 0;
+        while (left > 0) {
+          const item = bot.inventory.items().find((i) => i.name === name);
+          if (!item) break;
+          const put = await depositInto(open, item, Math.min(left, item.count));
+          if (!put.ok) break; // full: what's left goes back below
+          left -= put.value;
+          moved += put.value;
+        }
+        taken.set(name, left);
+      }
     });
   }
-  console.log(`Hauler: sorted the chest at ${from} (${mine.length} kinds moved).`);
-  return { result: ok(), restMs: 10_000 };
+  // What didn't fit goes back where it came from, never left in its pockets
+  const back = [...taken.entries()].filter(([, n]) => n > 0);
+  if (back.length > 0) {
+    await withChest(source, async (open) => {
+      for (const [name, n] of back) {
+        const item = bot.inventory.items().find((i) => i.name === name);
+        if (item) await depositInto(open, item, Math.min(n, item.count));
+      }
+    });
+    return { result: fail("refused", `the chest for some of it is full (${back.map(([n]) => n.replace(/_/g, " ")).join(", ")})`), restMs: 2 * 60_000 };
+  }
+  console.log(`Hauler: sorted the chest at ${from} (${moved} items moved).`);
+  return { result: ok(), restMs: 10_000, progress: moved > 0 };
 }
