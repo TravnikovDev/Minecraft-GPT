@@ -329,27 +329,47 @@ export async function protectMine(): Promise<void> {
 export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, level: number, turns: Turn[] = []): { keep: Vec3[]; walk: Vec3[] } {
   const keep: Vec3[] = [];
   const walk: Vec3[] = [];
+  const tunnels = hubTunnelCells(start, dir, stairs, level, turns);
   for (let i = 0; i < stairs; i++) {
     const s = stepAt(start, dir, i, turns);
     for (let dy = 0; dy <= STAIR_HEADROOM; dy++) walk.push(s.offset(0, dy, 0));
-    keep.push(...stepShell(start, dir, i, level, turns));
+    keep.push(...stepShell(start, dir, i, level, turns).filter((c) => !tunnels.has(c.toString())));
   }
   return { keep, walk };
 }
 
 /**
+ * The walking space of the tunnels from its hubs (forward, right, left, 2
+ * high, as long as a tunnel gets): never closed up as part of the stairs'
+ * shell, where the stairs run under them. Pure.
+ */
+export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, level: number, turns: Turn[] = []): Set<string> {
+  const out = new Set<string>();
+  for (let l = 0; l <= level; l++) {
+    const h = hubStep(l);
+    if (h >= stairs) break;
+    const hub = stepAt(start, dir, h, turns);
+    const arrive = dirAt(dir, h, turns);
+    for (const arm of ARMS) {
+      const way = STEP[armDirection(arm, arrive)];
+      for (let k = 1; k <= ARM_LENGTH; k++) for (const dy of [0, 1]) out.add(hub.plus(way.scaled(k)).offset(0, dy, 0).toString());
+    }
+  }
+  return out;
+}
+
+/**
  * One step's floor, roof and side walls (none for the doorway, no side
- * walls at a hub). The roof too: a walk home dug down from the grass into
- * the stairs behind the shelter, and a skeleton came in that way. Pure.
+ * walls at a hub). The roof too, all the way down (owner: seal the stairs
+ * off from the caves they cross; mobs came in from a dripstone cave and it
+ * died there three times), but never where a hub's tunnel runs over them.
+ * Pure.
  */
 function stepShell(start: Pos, dir: DirectionType, i: number, level: number, turns: Turn[] = []): Vec3[] {
   if (i === 0) return [];
   const s = stepAt(start, dir, i, turns);
   const way = dirAt(dir, i, turns);
-  const cells = [s.offset(0, -1, 0)];
-  // The roof only above the first hub, near the surface: deeper, the stairs
-  // run under the first level's forward tunnel, which is a step's "roof" there
-  if (i < hubStep(0)) cells.push(s.offset(0, STAIR_HEADROOM + 1, 0));
+  const cells = [s.offset(0, -1, 0), s.offset(0, STAIR_HEADROOM + 1, 0)];
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
   if (hubs.has(i)) return cells;
   for (const side of [STEP[armDirection("right", way)], STEP[armDirection("left", way)]]) {
@@ -373,6 +393,7 @@ export async function lookAfterStairs(): Promise<void> {
   if (!rec) return;
   const { isHoleBlock, ensureBlock, lightSpot } = await import("../actions/digging");
   const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns);
+  const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns);
   const walkSet = new Set(walk.map((c) => c.toString()));
   const inWalk = (p: Vec3): boolean => walkSet.has(p.toString());
   const torchIds = ["torch", "wall_torch"].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
@@ -385,7 +406,7 @@ export async function lookAfterStairs(): Promise<void> {
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return;
     const s = stepAt(rec.start, rec.direction, i, rec.turns);
-    const holes = stepShell(rec.start, rec.direction, i, rec.level, rec.turns).filter((c) => isHoleBlock(bot.blockAt(c)));
+    const holes = stepShell(rec.start, rec.direction, i, rec.level, rec.turns).filter((c) => !tunnels.has(c.toString()) && isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     // Stairs dug before they were made a block higher: the top cell dug out now
     const low = bot.blockAt(s.offset(0, STAIR_HEADROOM, 0));
@@ -416,7 +437,7 @@ export async function lookAfterStairs(): Promise<void> {
       // Now stand on it for the rest (holes, torches)
       if (!(await goToStep(s)).ok) continue;
     }
-    for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
+    for (const hole of holes) if (await ensureBlock(hole, (p) => inWalk(p) || tunnels.has(p.toString()))) filled++;
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
       if ((await breakBlock(s.offset(0, STAIR_HEADROOM, 0))).ok) raised++;

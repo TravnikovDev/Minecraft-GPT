@@ -60,10 +60,11 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
     expect(has(keep, 1, 59 + dy, 5)).toBe(true);
     expect(has(keep, -1, 59 + dy, 5)).toBe(true);
   }
-  // The roof over each step down to the first hub (a walk dug down into the
-  // stairs from the grass); not deeper, where the forward tunnel passes over
+  // The roof over each step, all the way down (owner: sealed off from
+  // caves); past the hub it sits above the 2-high forward tunnel, not in it
   expect(has(keep, 0, 63, 5)).toBe(true);
-  expect(has(keep, 0, 64 - 11 + 4, 11)).toBe(false);
+  expect(has(keep, 0, 64 - 11 + 4, 11)).toBe(true);
+  expect(has(keep, 0, 54, 11) || has(keep, 0, 55, 11)).toBe(false); // the tunnel's own space
   // Never the step's own cells (it walks there) nor the doorway
   expect(has(keep, 0, 59, 5)).toBe(false);
   expect(has(keep, 0, 63, 0)).toBe(false);
@@ -233,4 +234,20 @@ test("no way deeper: side routes every 3 blocks off each tunnel, both sides (own
   expect(r[0]).toEqual({ arm: "forward", at: 3, side: "right" });
   expect(r[1]).toEqual({ arm: "forward", at: 3, side: "left" });
   expect(r.length).toBe(3 * Math.floor(ARM_LENGTH / 3) * 2);
+});
+
+test("the stairs are roofed all the way down, but never where a hub's tunnel runs over them (owner: seal them off from caves)", async () => {
+  const { mineStairCells, hubStep, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+  const start = { x: 0, y: 64, z: 0 };
+  const h = hubStep(0);
+  const { keep } = mineStairCells(start, "south", h + 12, 0);
+  const has = (p: { x: number; y: number; z: number }) => keep.some((c: { x: number; y: number; z: number }) => c.x === p.x && c.y === p.y && c.z === p.z);
+  // Deep below the hub: roofed
+  const deep = stepAt(start, "south", h + 10);
+  expect(has(deep.offset(0, 4, 0))).toBe(true);
+  // Just past the hub the step's roof is the forward tunnel's walking space: left open
+  const near = stepAt(start, "south", h + 3);
+  const hub = stepAt(start, "south", h);
+  expect(near.offset(0, 4, 0).y).toBe(hub.y + 1);
+  expect(has(near.offset(0, 4, 0))).toBe(false);
 });
