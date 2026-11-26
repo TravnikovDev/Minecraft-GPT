@@ -47,7 +47,10 @@ function covered(slot: string): boolean {
  * short walk; otherwise it's left for home.
  */
 export async function makeLeatherArmor(nearTableOnly = false): Promise<ActionResult> {
-  const leather = (bot.inventory?.items() ?? []).filter((i) => i.name === "leather").reduce((n, i) => n + i.count, 0);
+  // Leather it carries and in its own chests nearby (making room for a craft
+  // put its leather away; the planner takes it back out of the chest)
+  const { storedNear } = await import("../actions/storage");
+  const leather = (bot.inventory?.items() ?? []).filter((i) => i.name === "leather").reduce((n, i) => n + i.count, 0) + storedNear("leather", 32);
   const make = leatherPiecesToMake(leather, covered);
   if (make.length === 0) return ok();
   if (nearTableOnly) {
