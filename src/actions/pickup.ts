@@ -156,11 +156,34 @@ export async function collectDrops(
   const left = leftForLackOfRoom(radius, leave);
   if (left.length > 0 && keepGoing() && !isCommandCancelled()) {
     console.log(`Inventory is full; ${left.length} item(s) still on the ground.`);
+    // First the clutter from mining (owner: it killed a sheep and left the
+    // wool and the meat, its pockets full of andesite and the like): dropped
+    // here, like a player, then the drops picked up
+    if (await dropClutter()) {
+      collected += await collectDrops(radius, { onlyVisible, keepGoing, leave });
+      if (leftForLackOfRoom(radius, leave).length === 0) return collected;
+    }
     const { makeRoom } = await import("./overflow");
     // A chore leaves it there: making room (a chest, tossing junk) is for real tasks
     if (!inChore() && (await makeRoom("pick up what's on the ground"))) collected += await collectDrops(radius, { onlyVisible, keepGoing, leave });
   }
   return collected;
+}
+
+// Stone it digs through and never uses (and the junk mobs drop): what a
+// player throws out first when their pockets are full
+export const CLUTTER = /^(andesite|diorite|granite|tuff|calcite|dripstone_block|pointed_dripstone|gravel|rotten_flesh|poisonous_potato|dead_bush|spider_eye)$/;
+
+/** Drops the clutter it carries (never to be picked up again). True when a slot came free. */
+async function dropClutter(): Promise<boolean> {
+  const stacks = bot.inventory.items().filter((i) => CLUTTER.test(i.name));
+  if (stacks.length === 0) return false;
+  const before = bot.inventory.emptySlotCount();
+  const { discard } = await import("./inventory");
+  for (const name of [...new Set(stacks.map((i) => i.name))]) await discard(name);
+  const freed = bot.inventory.emptySlotCount() - before;
+  if (freed > 0) console.log(`Full: dropped ${[...new Set(stacks.map((i) => i.name.replace(/_/g, " ")))].join(", ")} (${freed} slots free).`);
+  return freed > 0;
 }
 
 /** Items still lying within `radius` that it has no room for. */
