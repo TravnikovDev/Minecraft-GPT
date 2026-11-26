@@ -176,6 +176,7 @@ export async function lookAfterStairs(): Promise<void> {
   let filled = 0;
   let lit = 0;
   let raised = 0;
+  let cleared = 0;
   let noTorch = "";
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return;
@@ -185,12 +186,32 @@ export async function lookAfterStairs(): Promise<void> {
     // Stairs dug before they were made a block higher: the top cell dug out now
     const low = bot.blockAt(s.offset(0, STAIR_HEADROOM, 0));
     const raise = low !== null && low.boundingBox === "block" && !low.name.includes("torch");
-    if (holes.length === 0 && !torch && !raise) continue;
-    // A hole in this step's own floor can't be stood on: fill it from the step above
+    // Gravel or sand fallen into the step (or anything else filling it):
+    // walks won't dig a block with gravel over it, so it stood on the step
+    // above for five minutes (game test; the owner dug it out by hand)
+    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => bot.blockAt(c)?.boundingBox === "block");
+    if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
+    // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
-    const stand = floorHole ? stepAt(rec.start, rec.direction, i - 1) : s;
+    const stand = floorHole || fallen.length > 0 ? stepAt(rec.start, rec.direction, i - 1) : s;
     const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
     if (!there.ok) continue;
+    if (fallen.length > 0) {
+      const { breakBlock } = await import("../core/primitives");
+      // Top down, again while more gravel falls in from above
+      for (const c of [...fallen].reverse()) {
+        for (let k = 0; k < 12 && bot.blockAt(c)?.boundingBox === "block" && !isCommandCancelled(); k++) {
+          if (!(await breakBlock(c)).ok) break;
+          cleared++;
+          await new Promise((r) => setTimeout(r, 400)); // the next gravel falls
+        }
+      }
+      if (fallen.some((c) => bot.blockAt(c)?.boundingBox === "block")) continue; // still blocked: not this trip
+      const { pickupNearbyItems } = await import("../actions/pickup");
+      await pickupNearbyItems(bot, 4);
+      // Now stand on it for the rest (holes, torches)
+      if (!(await goTo(new pf.goals.GoalBlock(s.x, s.y, s.z))).ok) continue;
+    }
     for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
@@ -202,7 +223,7 @@ export async function lookAfterStairs(): Promise<void> {
       else noTorch = placed; // no torches or coal: not again this trip
     }
   }
-  if (filled + lit + raised > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up, ${raised} steps made a block higher.`);
+  if (filled + lit + raised + cleared > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up, ${raised} steps made a block higher, ${cleared} fallen blocks dug out.`);
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
@@ -475,7 +496,12 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       if (isCommandCancelled()) return fail("aborted", "stopped");
       // Can it get to the hub? Then this tunnel's end is what's out of reach:
       // that tunnel is done, on with the next (it failed there every trip)
-      const atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+      let atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+      // The stairs down may be blocked (gravel fallen in): looked after once, then again
+      if (!atHub.ok && !isCommandCancelled()) {
+        await lookAfterStairs();
+        atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+      }
       if (!atHub.ok) return there;
       console.log(`Mine: can't get to the end of my ${arm} tunnel (${there.detail}); it's done.`);
       arms = { ...arms, [arm]: { dug: arms[arm].dug, blocked: true } };
