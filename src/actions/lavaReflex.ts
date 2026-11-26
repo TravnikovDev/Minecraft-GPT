@@ -39,6 +39,26 @@ let clearSince: number | null = null;
 let restUntil = 0;
 let lastLogAt = 0;
 let lastLavaAt = 0;
+let pouring = false;
+
+/** Pours its water bucket at its feet (puts the fire out) and scoops the water back up. */
+async function pourOut(feet: P): Promise<void> {
+  pouring = true;
+  try {
+    const { equipItem, useHeldItemToward } = await import("../core/primitives");
+    const floor = { x: feet.x + 0.5, y: feet.y, z: feet.z + 0.5 }; // the top of the block it stands on
+    if (!(await asReflex("lava", () => equipItem("water_bucket"))).ok) return;
+    await asReflex("lava", () => useHeldItemToward(floor));
+    console.log("Lava reflex: on fire; poured my water bucket at my feet.");
+    await new Promise((r) => setTimeout(r, 700));
+    // The water back in the bucket (it's a source at its feet now)
+    if ((await asReflex("lava", () => equipItem("bucket"))).ok) await asReflex("lava", () => useHeldItemToward({ x: feet.x + 0.5, y: feet.y + 0.4, z: feet.z + 0.5 }));
+  } catch (error) {
+    console.log(`Lava reflex: pouring water failed: ${(error as Error).message}`);
+  } finally {
+    pouring = false;
+  }
+}
 
 /** True while the bot is getting out of lava or putting out its fire (other code should wait). */
 export function isLavaReflexActive(): boolean {
@@ -195,6 +215,7 @@ function finish(reason = "out of the lava"): void {
   }
   pathing.resumeAfterReflex();
   console.log(`Lava reflex: ${reason}.`);
+  pouring = false;
 }
 
 /** Steers along a path: faces the first cell to the side, jumps unless the next step is down. */
@@ -255,9 +276,16 @@ function tick(): void {
       steer(wayOutOfLava(feet, look), feet);
       return;
     }
-    // Out, but burning: water close by puts it out; none near, nothing to wait for
+    // Out, but burning: water close by puts it out; none near, its own
+    // bucket of water poured at its feet (game test: it burned from 11
+    // health to 2 with a water bucket in its pocket, and died)
     const water = burning ? findWay(feet, look, (p) => look(p.x, p.y, p.z)?.water === true, WATER_SEARCH_CELLS) : null;
+    if (!water && burning && !pouring && bot.inventory.items().some((i) => i.name === "water_bucket")) {
+      void pourOut(feet);
+      return;
+    }
     if (!water) {
+      if (pouring) return; // the bucket is being used: wait for it
       finish(burning ? "out of the lava (burning, no water near)" : "out of the lava");
       return;
     }

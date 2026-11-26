@@ -21,6 +21,8 @@ import { tunnelBlocked } from "../actions/digging";
 import { mayWanderTo } from "../actions/pickup";
 import { collectBlock } from "../actions/collectBlock";
 import { isCommandCancelled } from "../core/commandContext";
+import { fitForTheMine } from "./mine";
+import { foodPoints } from "./capabilities";
 
 const LOOK_RANGE = 12;
 const FAILED_FOR_MS = 10 * 60_000;
@@ -89,6 +91,10 @@ export function considerOpportunities(): void {
   if (!bot.entity || areChoresMuted()) return;
   const running = currentTask();
   if (running && running.bucket < Bucket.Self) return; // the owner's command, a threat, upkeep: not now
+  // Not off after ore hurt or without food, like a mining trip (game test: at
+  // 0 food it followed iron and diamonds down to y -44, burned in lava with
+  // nothing to heal with, and died with 514 items)
+  if (!fitForTheMine(bot.health, foodPoints()).ok) return;
   const ore = bestOreInSight();
   if (!ore) return;
   const kind = oreKind(ore.name)!;
