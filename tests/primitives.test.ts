@@ -55,7 +55,7 @@ const fake: any = Object.assign(new EventEmitter(), {
   },
   dig: (b: any) => (server.dig ? server.dig(b) : Promise.resolve(world.set(key(b.position), "air")).then(() => {})),
   placeBlock: (ref: any, face: any) => (server.place ? server.place(ref, face) : Promise.resolve()),
-  craft: () => (server.craft ? server.craft() : Promise.resolve()),
+  craft: (_recipe: unknown, count = 1) => (server.craft ? server.craft(count) : Promise.resolve()),
   pathfinder: {
     goal: null,
     isMoving: () => false,
@@ -194,8 +194,9 @@ test("a torch counts as placed though it has no collision box", async () => {
 const stickRecipe = { result: { id: registry.itemsByName.stick.id, count: 4 }, inShape: null, ingredients: [] } as any;
 
 test("crafting: the items must appear", async () => {
-  server.craft = async () => {
-    inv.push(item("stick", 8));
+  // A stick recipe run gives 4: two runs (one per call) give 8
+  server.craft = async (count = 1) => {
+    inv.push(item("stick", 4 * count));
   };
   expect(await P.craftWith(stickRecipe, 2, null)).toMatchObject({ ok: true, value: 8 });
 });

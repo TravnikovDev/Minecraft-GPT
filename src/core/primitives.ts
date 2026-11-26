@@ -43,7 +43,11 @@ const TOSS_TIMEOUT_MS = 3_000;
 // longer than that lets its own timeout fire first, so no stale wait is left
 // to grab the next window that opens (a chest)
 const CRAFT_TIMEOUT_MS = 25_000;
-const CRAFT_BATCH = 8; // recipe runs per craft call (each run is several window clicks)
+// Recipe runs per craft call: one. Several runs in one open window stall
+// after the first or second (mineflayer waits for a result slot that never
+// updates): 47 cobblestone stairs took a 25 s timeout every 4 or 8 of them
+// (game test). One run per call opens the window afresh each time, paced
+const CRAFT_BATCH = 1;
 const USE_TIMEOUT_MS = 5_000;
 const CONFIRM_MS = 1_000; // how long the server gets to show the change
 // A walk that gets nowhere for this long is stuck (owner: 8 s at most; a
