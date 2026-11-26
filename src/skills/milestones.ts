@@ -19,6 +19,7 @@ import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, u
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
 import { farmRipe, makeFarm, myFarm, tendFarm } from "./farm";
+import { reinforceShelter, shelterWeakCells } from "./reinforce";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -434,6 +435,19 @@ export const MILESTONES: Milestone[] = [
     done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
     reached: () => stairsPaved(),
     achieve: paveMineStairs,
+  },
+  // Owner: once 200 cobblestone have piled up, cobblestone smelted into stone
+  // and the shelter's walls reinforced with it (dirt and sand blow out; stone
+  // holds against a creeper). Nothing to do before then, or when it's stone
+  {
+    id: "stone_shelter",
+    title: "a stone shelter",
+    tier: 2,
+    optional: true,
+    requires: ["mine"],
+    done: () => shelter() !== null && (cobblestoneOwned() < PAVE_AFTER || shelterWeakCells().length === 0),
+    reached: () => shelter() !== null && shelterWeakCells().length === 0,
+    achieve: () => reinforceShelter(daylight()),
   },
   {
     id: "iron",
