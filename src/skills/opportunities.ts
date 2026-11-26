@@ -93,10 +93,17 @@ export function considerOpportunities(): void {
   if (!ore) return;
   const kind = oreKind(ore.name)!;
   if (alreadyOnIt(kind)) return;
-  const first = oreRank(kind) <= GOES_FIRST;
+  const valuable = oreRank(kind) <= GOES_FIRST;
+  // Cuts in at most once every few minutes: on a long walk (to sheep 160
+  // blocks off) every iron ore it passed stopped it, three times in a minute
+  const first = valuable && Date.now() - lastCutIn >= CUT_IN_GAP_MS;
+  if (first) lastCutIn = Date.now();
   console.log(`Opportunity: ${ore.name} in sight at ${ore.position}; ${first ? "now, then back to what I was doing" : "when I'm free"}.`);
   propose(oreTask(ore, kind, first), { front: first });
 }
+
+const CUT_IN_GAP_MS = 3 * 60_000;
+let lastCutIn = 0;
 
 /** The task for an ore it saw: walk there, mine it (and its vein), give up on that spot for a while if it can't. */
 function oreTask(ore: Block, kind: string, first: boolean): TaskSpec {
