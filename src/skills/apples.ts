@@ -27,7 +27,13 @@ export function naturalLeaves(props: Record<string, unknown>): boolean {
 const apples = (): number => bot.inventory.items().filter((i) => i.name === "apple").reduce((n, i) => n + i.count, 0);
 
 /** Breaks oak leaves round about for apples. How many apples it got. */
+// One try in a while (game test: two tries 90 seconds apart, 0 apples each)
+const TRY_EVERY_MS = 10 * 60_000;
+let lastTry = 0;
+
 export async function applesFromLeaves(): Promise<number> {
+  if (Date.now() - lastTry < TRY_EVERY_MS) return 0;
+  lastTry = Date.now();
   const ids = APPLE_LEAVES.map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
   const leaves = bot
     .findBlocks({ matching: ids, maxDistance: 24, count: MAX_LEAVES })

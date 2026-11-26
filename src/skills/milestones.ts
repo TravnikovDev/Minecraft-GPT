@@ -102,6 +102,9 @@ const pickaxesOfTier = (tier: number): number =>
 
 /** Food: berries, then hunting, then cooking what it caught. */
 export async function stockFood(options: { emergency?: boolean } = {}): Promise<ActionResult> {
+  // Starving is starving whoever asked: the day plan's food step too may go
+  // further for animals (game test: the plan's step only picked leaves again)
+  const emergency = options.emergency || (bot.food ?? 20) <= 6;
   const { pickBerries } = await import("../commands/StarterKit");
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
@@ -124,7 +127,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     // Starving with nothing near (game test: it starved twice, no animal
     // within 32): by day the walk may go further, to animals out under the
     // sky up to FAR_HUNT away; dying of hunger is the bigger risk
-    if (options.emergency && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
+    if (emergency && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
       const { knownAnimals } = await import("../actions/hunting");
       const near = knownAnimals().filter((p) => p.distance <= FAR_HUNT).sort((a, b) => a.distance - b.distance)[0];
       if (near) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
