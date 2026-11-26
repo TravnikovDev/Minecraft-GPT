@@ -190,8 +190,22 @@ export async function climbMineStairs(): Promise<boolean> {
   // block under itself, jumps and tries again (owner)
   let unsticks = 0;
   const MAX_UNSTICKS = 8;
+  let openedWayIn = false;
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns);
+  const walkSet = new Set(walk.map((c) => c.toString()));
+  const onMyStairs = (): boolean => walkSet.has(bot.entity.position.floored().toString());
   while (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
-    if (isCommandCancelled() || unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
+    if (isCommandCancelled()) return false;
+    // Off its stairs (in a cave beside them): a way in through their wall,
+    // once; building itself up out there does nothing (game test: it
+    // stacked blocks in a flooded cave for minutes, its sealed stairs
+    // beside it, until drowned zombies killed it)
+    if (!onMyStairs()) {
+      if (openedWayIn || !(await openWayIn(stepAt(rec.start, rec.direction, i, rec.turns), dirAt(rec.direction, i, rec.turns)))) return false;
+      openedWayIn = true;
+      continue;
+    }
+    if (unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
     unsticks++;
   }
   // Up them a stretch at a time (each leg short, so it keeps to the stairs)
@@ -206,6 +220,26 @@ export async function climbMineStairs(): Promise<boolean> {
     if (j === 0) return true;
     j = Math.max(0, j - 8);
   }
+}
+
+/**
+ * A way into its stairs from beside them: the wall of step `s` on the side
+ * nearer the bot, 2 high, dug out (it's mended on the next trip down). True
+ * when it's open.
+ */
+async function openWayIn(s: Vec3, way: DirectionType): Promise<boolean> {
+  const here = bot.entity.position;
+  const sides = [STEP[armDirection("right", way)], STEP[armDirection("left", way)]];
+  const side = sides.sort((a, b) => s.plus(a).distanceTo(here) - s.plus(b).distanceTo(here))[0]!;
+  const cells = [s.plus(side), s.plus(side).offset(0, 1, 0)];
+  if (!(await goTo(new pf.goals.GoalNear(cells[0]!.x, cells[0]!.y, cells[0]!.z, 2))).ok) return false;
+  const { breakBlock } = await import("../core/primitives");
+  for (const c of cells) {
+    if (bot.blockAt(c)?.boundingBox !== "block") continue;
+    if (!(await breakBlock(c, { allowWithoutHarvest: true })).ok) return false;
+  }
+  console.log(`Off my stairs: opened a way in at ${cells[0]} to climb home.`);
+  return true;
 }
 
 /**
