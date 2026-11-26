@@ -43,7 +43,7 @@ Along every sleeve, every **4 blocks**, a pokehole **1 wide, 3 high, 5 long**:
 - off the left and right sleeves, on both sides;
 - off the forward and back sleeves, only on the outer side. The inner side runs over the stairs.
 
-Every ore seen from a fresh sleeve or pokehole is mined (strip mining).
+Every ore seen from a fresh sleeve or pokehole is mined (strip mining). Holes that ore leaves in the floor under the room, the sleeves and the pokeholes are filled again with dirt or cobblestone. The stairs going on down are left open.
 
 ## When it can't go deeper
 

@@ -1033,6 +1033,9 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
           if (!(await goToStep(cell)).ok) break;
           await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT);
           if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+          // Every ore seen from the pokehole, and its floor mended after (owner)
+          await mineOresInSight(wants);
+          await mendFloor(hub, arrive, level);
         }
       }
     }
@@ -1059,8 +1062,37 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
     await mineOresInSight(wants);
+    // Ore dug out of the floor leaves holes in it: filled (owner)
+    await mendFloor(hub, arrive, level);
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
+}
+
+/**
+ * The floor under a floor's open space mended near the bot (owner: an ore
+ * dug out under a sleeve or a pokehole leaves a hole; the floor is
+ * recovered): every cell under its room, sleeves and pokeholes within
+ * MEND_RANGE that isn't solid gets dirt or cobblestone, the stairs going on
+ * down excepted. Best effort.
+ */
+const MEND_RANGE = 8;
+async function mendFloor(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
+  const open = floorCells(hub, arrive, level);
+  const openSet = new Set(open.map((c) => c.toString()));
+  const rec = mineRecord();
+  const stairs = rec ? new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns).walk.map((c) => c.toString())) : new Set<string>();
+  const here = bot.entity.position;
+  const { isHoleBlock, ensureBlock } = await import("../actions/digging");
+  const keepClear = (p: Vec3): boolean => openSet.has(p.toString()) || stairs.has(p.toString());
+  let mended = 0;
+  for (const c of open) {
+    if (c.y !== hub.y || isCommandCancelled()) continue;
+    const under = c.offset(0, -1, 0);
+    if (keepClear(under) || under.distanceTo(here) > MEND_RANGE) continue;
+    if (!isHoleBlock(bot.blockAt(under))) continue;
+    if (await ensureBlock(under, keepClear)) mended++;
+  }
+  if (mended > 0) console.log(`Mine: mended ${mended} hole${mended === 1 ? "" : "s"} in the ${floorName(level)}'s floor.`);
 }
 
 /**
