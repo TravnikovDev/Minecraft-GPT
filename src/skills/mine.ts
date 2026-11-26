@@ -102,6 +102,51 @@ export function nearestMineHub(pos: Pos): Vec3 | null {
 }
 
 /**
+ * The step of its mine's stairs nearest `pos` (the way up from wherever it
+ * is in its mine), or null without a mine. Pure over the record.
+ */
+export function nearestStairStep(pos: Pos, start: Pos, dir: DirectionType, stairs: number): number | null {
+  let best: number | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < stairs; i++) {
+    const s = stepAt(start, dir, i);
+    const d = Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Up its mine's stairs from down in its mine: to the nearest step, then up
+ * them to the top (the shelter's back door). True when it got to the top.
+ * Game test: walking home from 35 blocks down the pathfinder dug straight up
+ * through the rock to under the shelter, then a new way to the surface
+ * beside its entrance stairs, instead of taking the stairs it had dug.
+ */
+export async function climbMineStairs(): Promise<boolean> {
+  const rec = mineRecord();
+  if (!rec || rec.stairs < 2) return false;
+  const here = bot.entity.position;
+  // Only from down in its mine, near it
+  if (here.y > rec.start.y - 3 || Math.hypot(here.x - rec.start.x, here.z - rec.start.z) > 96) return false;
+  const i = nearestStairStep(here, rec.start, rec.direction, rec.stairs);
+  if (i === null) return false;
+  const step = standAt(stepAt(rec.start, rec.direction, i));
+  console.log(`Home by my mine's stairs: from step ${i} up.`);
+  if (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) return false;
+  // Up them a stretch at a time (each leg short, so it keeps to the stairs)
+  for (let j = Math.max(0, i - 8); ; j = Math.max(0, j - 8)) {
+    if (isCommandCancelled()) return false;
+    const s = standAt(stepAt(rec.start, rec.direction, j));
+    if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) return false;
+    if (j === 0) return true;
+  }
+}
+
+/**
  * Where its tunnels leave each hub (forward, right and left, the first cell
  * of each): never a niche for a table or a furnace (review: one dug there
  * would later stop that tunnel as "something built").
@@ -240,7 +285,7 @@ export async function lookAfterStairs(): Promise<void> {
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
     const stand = floorHole || fallen.length > 0 ? stepAt(rec.start, rec.direction, i - 1) : s;
-    const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
+    const there = await goToStep(stand);
     if (!there.ok) continue;
     if (fallen.length > 0) {
       const { breakBlock } = await import("../core/primitives");
@@ -256,7 +301,7 @@ export async function lookAfterStairs(): Promise<void> {
       const { pickupNearbyItems } = await import("../actions/pickup");
       await pickupNearbyItems(bot, 4);
       // Now stand on it for the rest (holes, torches)
-      if (!(await goTo(new pf.goals.GoalBlock(s.x, s.y, s.z))).ok) continue;
+      if (!(await goToStep(s)).ok) continue;
     }
     for (const hole of holes) if (await ensureBlock(hole, inWalk)) filled++;
     if (raise) {
@@ -300,6 +345,21 @@ export function myMine(): { bottom: Vec3; direction: DirectionType; branches: nu
 const hasStonePickaxe = (): boolean => toolTier("pickaxe") >= TIER.stone;
 
 const stepAt = (start: Pos, dir: DirectionType, i: number): Vec3 => new Vec3(start.x, start.y, start.z).plus(STEP[dir].scaled(i)).offset(0, -i, 0);
+
+/**
+ * Where to stand to be at a step or a hub: the cell itself, or on top of it
+ * once it's paved (a stair block fills the cell: walks aimed inside it got
+ * "0 moves" after the hubs were paved, game test).
+ */
+function standAt(cell: Vec3): Vec3 {
+  return bot.blockAt(cell)?.name.endsWith("_stairs") ? cell.offset(0, 1, 0) : cell;
+}
+
+/** Walks to stand at a step, a hub or a tunnel's end (paved or not). */
+const goToStep = (cell: Vec3): Promise<ActionResult> => {
+  const at = standAt(cell);
+  return goTo(new pf.goals.GoalBlock(at.x, at.y, at.z));
+};
 
 /**
  * Digs the stairs down from the shelter's exit, a step at a time, remembering
@@ -451,8 +511,7 @@ async function paveSteps(): Promise<ActionResult> {
     // A step already paved is stood on, not in (the hubs come after the
     // steps below them were paved: its walk aimed inside the stair block,
     // "0 moves", game test)
-    const feetAt = bot.blockAt(stand)?.name.endsWith("_stairs") ? stand.offset(0, 1, 0) : stand;
-    const there = await goTo(new pf.goals.GoalBlock(feetAt.x, feetAt.y, feetAt.z));
+    const there = await goToStep(stand);
     if (!there.ok) continue;
     // One block more headroom over the step (a stair raises the floor half a block)
     const head = step.offset(0, 3, 0);
@@ -569,16 +628,16 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const hub = stepAt(start, dir, hubStep(level));
     const way = armDirection(arm, dir);
     const end = hub.plus(STEP[way].scaled(arms[arm].dug));
-    const there = await goTo(new pf.goals.GoalBlock(end.x, end.y, end.z));
+    const there = await goToStep(end);
     if (!there.ok) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       // Can it get to the hub? Then this tunnel's end is what's out of reach:
       // that tunnel is done, on with the next (it failed there every trip)
-      let atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+      let atHub = await goToStep(hub);
       // The stairs down may be blocked (gravel fallen in): looked after once, then again
       if (!atHub.ok && !isCommandCancelled()) {
         await lookAfterStairs();
-        atHub = await goTo(new pf.goals.GoalBlock(hub.x, hub.y, hub.z));
+        atHub = await goToStep(hub);
       }
       if (!atHub.ok) return there;
       console.log(`Mine: can't get to the end of my ${arm} tunnel (${there.detail}); it's done.`);
@@ -617,7 +676,7 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
   const { start, direction: dir } = rec;
   const from = Math.max(rec.stairs, 1);
   const top = stepAt(start, dir, from - 1);
-  const atTop = await goTo(new pf.goals.GoalBlock(top.x, top.y, top.z));
+  const atTop = await goToStep(top);
   // Not there (a walk that failed, a stop): try again next trip; never "as deep as it goes"
   if (!atTop.ok) return fail(atTop.reason === "aborted" ? "aborted" : "unreachable", atTop.detail);
   for (let i = from; i <= to; i++) {

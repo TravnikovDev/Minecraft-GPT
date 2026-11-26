@@ -149,3 +149,13 @@ test("a long trip to the surface from down in its home starts up its stairs", as
   // A short way: no
   expect(startsOutByTheFront({ x: 5, y: 40, z: 10 }, top, { x: 20, y: null, z: 0 }, 15)).toBe(false);
 });
+
+test("the way up from down in its mine starts at the nearest step of its stairs", async () => {
+  const { nearestStairStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  // Stairs south from (0, 64, 0): step i at (0, 64 - i, i)
+  expect(nearestStairStep({ x: 0, y: 44, z: 20 }, { x: 0, y: 64, z: 0 }, "south", 40)).toBe(20);
+  // In a side tunnel off step 30, 10 blocks out
+  expect(nearestStairStep({ x: 10, y: 34, z: 30 }, { x: 0, y: 64, z: 0 }, "south", 40)).toBe(30);
+  // No stairs: none
+  expect(nearestStairStep({ x: 0, y: 0, z: 0 }, { x: 0, y: 64, z: 0 }, "south", 0)).toBeNull();
+});

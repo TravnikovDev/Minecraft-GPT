@@ -662,6 +662,12 @@ async function walkHome(room: { x: number; y: number; z: number; details?: Recor
   // there, not out to the surface and back in
   const here = bot.entity.position;
   const inside = Math.hypot(here.x - room.x, here.z - room.z) <= 32 && here.y < (top?.y ?? Infinity) - 1;
+  // Down in its mine: up its own stairs first (they lead to the back door),
+  // not a new way dug up through the rock (game test)
+  if (inside && here.y < room.y - 2) {
+    const { climbMineStairs } = await import("../skills/mine");
+    await climbMineStairs();
+  }
   if (top && !inside) {
     const atTop = (): boolean => bot.entity.position.distanceTo(new Vec3(top.x + 0.5, top.y, top.z + 0.5)) <= 1.5;
     if (bot.entity.position.distanceTo(new Vec3(top.x, top.y, top.z)) > 16) {
