@@ -373,6 +373,14 @@ function myShelterPlan(): { room: NonNullable<ReturnType<typeof shelterPlace>>; 
   return { room, plan };
 }
 
+/** Its shelter's layout: the top of its stairs (on the surface), the room's cells and the shell around them. */
+export function shelterLayout(): { start: Pos; room: Vec3[]; shell: Vec3[] } | null {
+  const mine = myShelterPlan();
+  const start = mine?.room.details?.["start"] as Pos | undefined;
+  if (!mine || !start) return null;
+  return { start, room: mine.plan.room, shell: mine.plan.shell };
+}
+
 // The inside-the-shelter answer, kept a second (the reflexes ask every 150 ms)
 let insideCache: { at: number; key: string; inside: boolean } | null = null;
 

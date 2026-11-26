@@ -201,7 +201,8 @@ export function resetTorchSpacing(): void {
  * sticks it carries (sticks from its planks or logs). It never goes off to
  * gather for this: coal turns up while mining anyway.
  */
-async function torchReady(): Promise<true | string> {
+/** Torches in hand, crafting a few from coal and sticks first if it has none; else why not. */
+export async function torchReady(): Promise<true | string> {
   if (getItemCount("torch") > 0) return true;
   const fuel = getItemCount("coal") + getItemCount("charcoal");
   if (fuel === 0) return "I have no torches and no coal to make them";

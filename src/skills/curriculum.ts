@@ -23,7 +23,7 @@ import { setSheltered } from "../core/sheltered";
 import { describeFailure } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { sky } from "../actions/perception";
-import { MILESTONES, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
+import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, tier1Reached, type Milestone } from "./milestones";
 import { hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
@@ -224,6 +224,12 @@ function nightTask(): TaskSpec {
         // Indoor work: raw iron smelted in the furnace and made into an iron
         // pickaxe (owner: it stood at home all night doing nothing)
         await smeltAtNight();
+        // The room's walls lit (the ground outside waits for the morning)
+        try {
+          await (await import("./lighting")).lightUpHome(false);
+        } catch (error) {
+          console.log(`Night: lighting the room failed: ${(error as Error).message}`);
+        }
         // Mine work to do: on through the back door, mining all night (the
         // milestone is proposed as soon as this routine ends)
         if (mineWorkTonight()) {
@@ -276,11 +282,15 @@ export async function considerNextStep(): Promise<void> {
   // plan step to do (not made yet, the model unavailable, the money spent)
   // the next milestone below is the fallback
   if (await planStepProposed()) return;
-  const next = nextMilestone(MILESTONES, isBlocked);
   // At night only work underground, and only once it's home (the night
   // routine ran: in through the shelter, doors shut): in the mine day and
   // night are the same, it only needs torches (owner)
-  if (isNight() && !(next && UNDERGROUND.has(next.id) && nightOf === day)) return;
+  if (isNight()) {
+    const tonight = nightOf === day ? nextNightMilestone() : null;
+    if (tonight) propose(milestoneTask(tonight));
+    return;
+  }
+  const next = nextMilestone(MILESTONES, isBlocked);
   if (next) propose(milestoneTask(next));
 }
 
@@ -335,9 +345,17 @@ const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", 
 export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id);
 
 /** Mine work it could do now (the next milestone is one underground). */
+/**
+ * The next milestone it can work on at night: the first open one of those
+ * (in its mine or at home); daytime work (lighting the ground round its
+ * home, food) waits for the morning without holding the night up.
+ */
+function nextNightMilestone(): Milestone | null {
+  return nextMilestone(MILESTONES, isBlocked, (m) => milestoneHere(m) && UNDERGROUND.has(m.id));
+}
+
 function mineWorkTonight(): boolean {
-  const next = nextMilestone(MILESTONES, isBlocked);
-  return next !== null && UNDERGROUND.has(next.id);
+  return nextNightMilestone() !== null;
 }
 
 /** The milestones, for "what's your progress?". */

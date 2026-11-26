@@ -18,6 +18,7 @@ import { bestWool, foodPoints, hasBed, shelter, TIER, toolTier } from "./capabil
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
+import { homeLit, lightUpHome } from "./lighting";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -275,6 +276,17 @@ export const MILESTONES: Milestone[] = [
     // stairs, mobs spawning in its tunnels): 16 made, and topped up below 8
     done: () => carriedOf(["torch"]) >= (reachedAt()["torches"] ? TORCHES_LOW : TORCHES),
     achieve: () => getAll([`${TORCHES} torch`]),
+  },
+  {
+    id: "lit_home",
+    title: "a lit home",
+    tier: 2,
+    requires: ["torches"],
+    // Owner: mobs kept coming at the shelter because nothing round it was
+    // lit. Torches on the room's walls and in a grid on the ground round it
+    // (by day); put back when a creeper knocks them out
+    done: () => shelter() === null || homeLit(),
+    achieve: () => lightUpHome(bot.time?.isDay !== false),
   },
   {
     id: "iron",
