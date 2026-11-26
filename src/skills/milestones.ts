@@ -289,6 +289,21 @@ export const MILESTONES: Milestone[] = [
     achieve: () => lightUpHome(bot.time?.isDay !== false),
   },
   {
+    id: "paved_stairs",
+    title: "paved mine stairs",
+    tier: 2,
+    requires: ["mine"],
+    // Owner: once 200 cobblestone have piled up, the mine's stairs get
+    // cobblestone stair blocks (and a block more headroom); until then (or
+    // with every step paved) there's nothing to do. In the mine stage,
+    // needing only the mine: behind the iron pickaxe and the iron armour it
+    // never came up, and it walked bare steps with over 1,400 cobblestone
+    // in its chests (owner)
+    done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
+    reached: () => stairsPaved(),
+    achieve: paveMineStairs,
+  },
+  {
     id: "iron",
     title: "iron",
     tier: 2,
@@ -387,18 +402,6 @@ export const MILESTONES: Milestone[] = [
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
     achieve: () => lightUpHome(bot.time?.isDay !== false, 2),
-  },
-  {
-    id: "paved_stairs",
-    title: "paved mine stairs",
-    tier: 3,
-    requires: ["iron_pickaxe"],
-    // Owner: once 200 cobblestone have piled up, the mine's stairs get
-    // cobblestone stair blocks (and a block more headroom); until then (or
-    // with every step paved) there's nothing to do
-    done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
-    reached: () => stairsPaved(),
-    achieve: paveMineStairs,
   },
   {
     id: "diamonds",

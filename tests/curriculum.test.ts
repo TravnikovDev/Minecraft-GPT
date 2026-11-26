@@ -223,9 +223,9 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "cobblestone_stairs"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual([
-    "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "torches", "lit_home", "iron", "iron_pickaxe",
+    "wooden_tools", "shelter", "stone_tools", "chests", "food", "bed", "mine", "coal", "torches", "lit_home", "paved_stairs", "iron", "iron_pickaxe",
     // First iron goes to safety: a shield, a water bucket, armour, then the other tools
-    "shield", "bucket", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "paved_stairs", "diamonds", "diamond_pickaxe",
+    "shield", "bucket", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "diamonds", "diamond_pickaxe",
     // Phase 9: the Nether and the End
     "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
   ]);
