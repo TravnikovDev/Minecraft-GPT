@@ -510,6 +510,10 @@ export function stairsToMake(steps: number): number {
   return steps <= 0 ? 0 : steps + Math.max(1, Math.ceil(steps * 0.1));
 }
 
+// Stairs blocked going deeper (water, lava, a fall of gravel): tried again after this long
+const STAIRS_RETRY_MS = 15 * 60_000;
+let stairsBlockedUntil = 0;
+
 export async function paveMineStairs(): Promise<ActionResult> {
   return withScaffoldingTakenDown(paveSteps);
 }
@@ -655,7 +659,11 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     let arm = nextArm(arms);
     // All three tunnels at this hub done: 20 steps further down, a new hub
     if (!arm) {
-      if (rec.deepest || level + 1 >= MAX_LEVELS) return fail("not_found", `my mine goes no deeper and I still have too little ${stillNames()}`);
+      if (level + 1 >= MAX_LEVELS) return fail("not_found", `my mine goes no deeper and I still have too little ${stillNames()}`);
+      // Its stairs were blocked going deeper: tried again after a while, not
+      // never (game test: gravel fell in, "no path" to the next block, and
+      // with one level of tunnels its mine was done for good: no iron, ever)
+      if (rec.deepest && Date.now() < stairsBlockedUntil) return fail("not_found", `my mine's stairs were blocked going deeper; I'll dig on later (still too little ${stillNames()})`);
       level += 1;
       arms = freshArms();
       report(`My mine's tunnels here are done; digging the stairs ${LEVEL_STEP} steps deeper.`);
@@ -664,6 +672,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
         if (deeper.reason !== "refused") return deeper;
         // Stairs blocked: this is as deep as it goes (the steps it did dig stay saved)
         const now = mineRecord() ?? rec;
+        stairsBlockedUntil = Date.now() + STAIRS_RETRY_MS;
         await saveMine(start, dir, now.stairs, rec.branches, rec.bottom, { level: level - 1, arms: rec.arms, deepest: true });
         return fail("not_found", `my mine's stairs can't go deeper (${deeper.detail}) and I still have too little ${stillNames()}`);
       }
