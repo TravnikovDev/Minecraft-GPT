@@ -9,6 +9,7 @@ import { bestMeleeWeapon } from "./combat";
 import { catalog } from "../core/catalog";
 import { canSeePoint, type SightWorld } from "./sight";
 import { isSheltered } from "../core/sheltered";
+import { inShelterRoom } from "./building";
 import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
 import { equipItem, hitEntity, lookAt, lookToward, setControl } from "../core/primitives";
@@ -151,13 +152,15 @@ async function tick(): Promise<void> {
   const eyes = bot.entity.position.offset(0, 1.62, 0);
   const range = active ? SAFE_DISTANCE + 4 : radius;
   const now = Date.now();
+  // Shut in: the night routine says so, or it stands in its whole shelter's room
+  const shutIn = isSheltered() || inShelterRoom(bot.entity.position);
   const seen = bot.nearestEntity((e) => {
     if (e.name !== "creeper") return false;
     if ((ignoredUntil.get(e.id) ?? 0) > now) return false;
     const d = e.position.distanceTo(bot.entity.position);
     if (d > range) return false;
     const visible = canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
-    return creeperCounts(d, visible, isSheltered());
+    return creeperCounts(d, visible, shutIn);
   });
   if (seen) {
     trackedId = seen.id;

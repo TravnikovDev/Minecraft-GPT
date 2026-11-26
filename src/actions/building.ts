@@ -145,6 +145,8 @@ export function shelterPlan(start: Pos, dir: DirectionType, room: RoomSize = DEF
     // Without a door: two blocks close the entrance doorway instead
     seal: [entrance, entrance.offset(0, 1, 0)],
     cells: [...stairs, ...doorways, ...roomCells],
+    // The room itself (where it stands shut in)
+    room: roomCells,
     // Around the room: its walls, roof and floor (the doorways left open).
     // These must be solid ground, or it isn't really a shelter (a hillside
     // left its roof open to the sky, fresh-world test)
@@ -369,6 +371,24 @@ function myShelterPlan(): { room: NonNullable<ReturnType<typeof shelterPlace>>; 
   if (!room || !start || !dir) return null;
   const plan = shelterPlan(start, dir, (room.details?.["room"] as RoomSize | undefined) ?? DEFAULT_ROOM, (room.details?.["depth"] as number | undefined) ?? DEFAULT_DEPTH);
   return { room, plan };
+}
+
+// The inside-the-shelter answer, kept a second (the reflexes ask every 150 ms)
+let insideCache: { at: number; key: string; inside: boolean } | null = null;
+
+/**
+ * True when `p` (its feet) is in its shelter's room and the shelter is whole
+ * (walls, roof, floor, doors): nothing outside can reach it, and it can reach
+ * nothing outside. Game test: creepers pressed against the shelter wall took
+ * turns holding the bot's body before its night routine had said it was shut in.
+ */
+export function inShelterRoom(p: Pos): boolean {
+  const key = cellKey({ x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) });
+  if (insideCache && insideCache.key === key && Date.now() - insideCache.at < 1_000) return insideCache.inside;
+  const mine = myShelterPlan();
+  const inside = mine !== null && mine.plan.room.some((c) => cellKey(c) === key) && shelterIntact();
+  insideCache = { at: Date.now(), key, inside };
+  return inside;
 }
 
 /** A shell cell that needs building: open, or a tree's leaves or log (one holding up sand or gravel stays). */
