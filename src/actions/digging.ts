@@ -45,7 +45,10 @@ export function inStaircase(p: Vec3, start: Vec3, direction: DirectionType, widt
 }
 
 /** Why the last tunnel stopped: something it must not dig, a drop it couldn't floor, nothing to build the floor with, or no tool that digs it. */
-export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool";
+// "blocked": water, lava or something built (a real blocker); "dig_failed"
+// and "unloaded": a dig that may work next time (review: one failed dig must
+// never end a way down for good)
+export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool" | "dig_failed" | "unloaded";
 
 /**
  * Digs one block of a tunnel; false (stop the tunnel) when it has no tool
@@ -57,7 +60,7 @@ async function digTunnelBlock(p: Vec3): Promise<boolean> {
   if (dug.ok) return true;
   // No tool: the planner makes one; anything else it couldn't dig (out of
   // reach, refused, a keep-out area) is a blocker, never counted as dug
-  lastStop = dug.reason === "no_tool" ? "no_tool" : dug.reason === "aborted" ? null : "blocked";
+  lastStop = dug.reason === "no_tool" ? "no_tool" : dug.reason === "aborted" ? null : "dig_failed";
   console.log(`Tunnel stopped: ${describeFailure(dug)}.`);
   return false;
 }
@@ -169,7 +172,7 @@ function stopTunnelAt(pos: Vec3): boolean {
   if (isCommandCancelled()) return true;
   const why = tunnelBlocked(pos);
   if (!why) return false;
-  lastStop = "blocked";
+  lastStop = why.startsWith("unloaded") ? "unloaded" : "blocked";
   console.log(`Tunnel stopped: ${why}.`);
   bot.chat(`I stopped digging: ${why}.`);
   return true;

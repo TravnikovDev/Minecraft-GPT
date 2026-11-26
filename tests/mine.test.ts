@@ -196,3 +196,31 @@ test("blocked stairs: right, then left from the same crossroad, then one crossro
   const all = { [String(hubStep(0))]: ["south", "west", "east"], [String(hubStep(1))]: ["south", "west", "east"] };
   expect(nextTurn("south", [{ at: hubStep(0), dir: "east" }], all, 0, "east")).toBeNull();
 });
+
+test("a turn's record: stairs end at the hub, the new way from it, tried kept above (review)", async () => {
+  const { planTurn, hubStep } = await import(`${ROOT}/src/skills/mine.ts`);
+  const h0 = hubStep(0);
+  const h1 = hubStep(1);
+  // Level 1's stairs south blocked: right (west) from hub 1
+  let p = planTurn({ direction: "south", turns: [], tried: {} }, 1, "south");
+  expect(p).toMatchObject({ level: 1, dir: "west", hubAt: h1, stairs: h1 + 1, turns: [{ at: h1, dir: "west" }] });
+  expect(p!.tried[String(h1)]).toEqual(["south", "west"]);
+  // West and east blocked there too: back to hub 0; what was tried at hub 1 is forgotten (it moves)
+  p = planTurn({ direction: "south", turns: [{ at: h1, dir: "east" }], tried: { [String(h1)]: ["south", "west", "east"] } }, 1, "east");
+  expect(p).toMatchObject({ level: 0, dir: "west", hubAt: h0, stairs: h0 + 1, turns: [{ at: h0, dir: "west" }] });
+  expect(Object.keys(p!.tried)).toEqual([String(h0)]);
+});
+
+test("one turn: the steps after it have side walls along the way the stairs came in (review)", async () => {
+  const { mineStairCells, hubStep, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+  const start = { x: 0, y: 64, z: 0 };
+  const h = hubStep(0);
+  const turns = [{ at: h, dir: "east" as const }];
+  const { keep } = mineStairCells(start, "south", h + 3, 0, turns);
+  const s = stepAt(start, "south", h + 2, turns);
+  const has = (x: number, y: number, z: number) => keep.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
+  // Going east: its side walls are north and south of it
+  expect(has(s.x, s.y, s.z - 1) && has(s.x, s.y, s.z + 1)).toBe(true);
+  // ... and not east or west of it (that's the way along the stairs)
+  expect(has(s.x + 1, s.y + 1, s.z)).toBe(false);
+});
