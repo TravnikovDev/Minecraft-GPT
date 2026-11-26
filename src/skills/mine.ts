@@ -448,7 +448,11 @@ async function paveSteps(): Promise<ActionResult> {
     // from its forward tunnel, which is level with it
     const stand = i + 1 < rec.stairs ? stepAt(rec.start, rec.direction, i + 1) : step.plus(STEP[rec.direction]);
     if (i + 1 >= rec.stairs && bot.blockAt(stand)?.boundingBox !== "empty") continue;
-    const there = await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
+    // A step already paved is stood on, not in (the hubs come after the
+    // steps below them were paved: its walk aimed inside the stair block,
+    // "0 moves", game test)
+    const feetAt = bot.blockAt(stand)?.name.endsWith("_stairs") ? stand.offset(0, 1, 0) : stand;
+    const there = await goTo(new pf.goals.GoalBlock(feetAt.x, feetAt.y, feetAt.z));
     if (!there.ok) continue;
     // One block more headroom over the step (a stair raises the floor half a block)
     const head = step.offset(0, 3, 0);
