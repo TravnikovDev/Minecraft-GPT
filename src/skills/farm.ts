@@ -31,6 +31,9 @@ const FAR = 40;
 // Field sizes it tries, biggest first (half-widths: 9x9, 7x7, 5x5): a smaller
 // field where the ground's too uneven for a big one
 export const FIELD_HALVES = [4, 3, 2];
+// A field starts 5x5 and grows a ring at a time, to 7x7 and 9x9, in the
+// ground kept for it (owner: start small, the space reserved)
+export const FIRST_HALF = 2;
 // Seeds, best first: what it plants (the crop block and the item it plants)
 const SEEDS = ["carrot", "potato", "beetroot_seeds", "wheat_seeds"] as const;
 // Grass broken for wheat seeds before it gives up on more (1 in 8 drops one)
@@ -41,14 +44,31 @@ const SEEDS_WANTED = 40;
 export const FIELDS_WANTED = 2;
 
 /** Its fields (each plot's middle), first made first. */
-export function myFarms(): Array<P3 & { half: number }> {
+export type Field = P3 & { name: string; seed: string; half: number; reserve: number };
+
+/** Its fields: each plot's middle, how far it's planted (`half`) and the ground kept for it (`reserve`). */
+export function myFarms(): Field[] {
   return getPlaces("farm")
     .filter((p) => p.dimension === currentDimension() && (p.name ?? "").startsWith("my farm"))
-    .map((p) => ({ x: p.x, y: p.y, z: p.z, half: Number((p.details as { half?: number } | undefined)?.half ?? FARM_HALF) }));
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+    .map((p) => {
+      const d = (p.details ?? {}) as { half?: number; reserve?: number; seed?: string };
+      const half = Number(d.half ?? FARM_HALF);
+      return { x: p.x, y: p.y, z: p.z, name: p.name ?? "my farm", seed: d.seed ?? "wheat_seeds", half, reserve: Number(d.reserve ?? half) };
+    });
+}
+
+/**
+ * The next size for a field: a ring wider once every cell it has is sown
+ * (`bare` cells left: none, or one odd cell that won't take), up to the
+ * ground kept for it. Pure.
+ */
+export function nextHalf(half: number, reserve: number, bare: number): number {
+  return bare <= 1 && half < reserve ? half + 1 : half;
 }
 
 /** Its first field (the plot's middle), or null. */
-export function myFarm(): (P3 & { half: number }) | null {
+export function myFarm(): Field | null {
   return myFarms()[0] ?? null;
 }
 
@@ -143,7 +163,7 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
   // Never on another of its fields (or right against one: a path between)
   const fields = myFarms();
   for (const half of FIELD_HALVES) {
-    const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.half + 1);
+    const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + 1);
     const kept = (p: P3): boolean => isProtected(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onField(p);
     for (let r = NEAR; r <= FAR; r++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -212,16 +232,18 @@ export async function makeFarm(): Promise<ActionResult> {
   if (!seed) return fail("missing_items", "no seeds: no carrots, potatoes or beetroot, and the grass round here gave none");
   const plot = findPlot(home);
   if (!plot) return fail("not_found", "no flat patch of open ground near my shelter for a field, not even 5 by 5");
-  const { middle, half } = plot;
+  const { middle } = plot;
+  const reserve = plot.half;
+  const half = Math.min(FIRST_HALF, reserve);
   const n = myFarms().length + 1;
-  report(`Making ${n === 1 ? "my first field" : `field ${n}`} (${2 * half + 1} by ${2 * half + 1}) at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
+  report(`Making ${n === 1 ? "my first field" : `field ${n}`} (${2 * half + 1} by ${2 * half + 1}, room to grow to ${2 * reserve + 1} by ${2 * reserve + 1}) at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
   if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 2))).ok) return fail("unreachable", "I can't get to the field's spot");
   // Water now if it has it (owner: crops grow without it too, slower; the
   // middle gets it once it has a bucket)
   if (count("water_bucket") > 0) await waterField(middle);
-  await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half } });
+  await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half, reserve } });
   const sown = await sowPlot(middle, seed, half);
-  await lightFarm(middle, half);
+  await lightFarm(middle, reserve);
   report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < (2 * half + 1) ** 2 - 1 ? "; it grows as the harvests give more seeds" : ""}.`);
   return sown > 0 ? (myFarms().length >= FIELDS_WANTED ? ok() : fail("not_found", `${FIELDS_WANTED - myFarms().length} more field to make`)) : fail("refused", "I couldn't till or sow the field");
 }
@@ -289,6 +311,14 @@ async function lightFarm(middle: P3, half = FARM_HALF): Promise<number> {
   return placed;
 }
 
+/** Cells of a field not sown yet (no crop on them; the middle's water hole aside). */
+function bareCells(f: Field): number {
+  return sowOrder(f, f.half).filter((c) => {
+    const over = knownBlock(new Vec3(c.x, c.y + 1, c.z));
+    return over === null || over.name === "air" || CLEARABLE.test(over.name);
+  }).length;
+}
+
 /** Ripe crops on its farm now. */
 export function farmRipe(): number {
   return myFarms().reduce((n, f) => n + findRipeCrops(f.half + 2, null, new Vec3(f.x, f.y + 1, f.z)).length, 0);
@@ -309,7 +339,15 @@ export async function tendFarm(): Promise<number> {
     // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
     const seed = SEEDS.find((s) => count(s) > 0);
     if (seed) await sowPlot(farm, seed, farm.half);
-    await lightFarm(farm, farm.half);
+    // Every cell of it sown and seeds over: a ring wider (owner: 5x5, then 7x7, then 9x9)
+    const grown = nextHalf(farm.half, farm.reserve, bareCells(farm));
+    if (grown > farm.half && SEEDS.some((s2) => count(s2) > 0)) {
+      await addPlace({ kind: "farm", name: farm.name, x: farm.x, y: farm.y, z: farm.z, details: { seed: farm.seed, half: grown, reserve: farm.reserve } });
+      console.log(`Farm: ${farm.name} grows to ${2 * grown + 1} by ${2 * grown + 1}.`);
+      const more = SEEDS.find((s2) => count(s2) > 0);
+      if (more) await sowPlot(farm, more, grown);
+    }
+    await lightFarm(farm, farm.reserve);
     // Its water, once it has a bucket of it (owner)
     await waterField(farm);
   }

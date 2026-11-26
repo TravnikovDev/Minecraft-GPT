@@ -62,3 +62,13 @@ test("a smaller field where a 9 by 9 doesn't fit: 7 by 7, then 5 by 5 (game test
   expect(sowOrder({ x: 0, y: 63, z: 0 }, 2).length).toBe(24);
   expect(torchSpots({ x: 0, y: 63, z: 0 }, 2)[0]).toEqual({ x: 3, y: 64, z: 0 });
 });
+
+test("a field starts 5 by 5 in ground kept for 9 by 9 and grows a ring once it's all sown (owner)", async () => {
+  const { FIRST_HALF, nextHalf } = await import(`${ROOT}/src/skills/farm.ts`);
+  expect(FIRST_HALF).toBe(2);
+  expect(nextHalf(2, 4, 0)).toBe(3); // all sown: 7x7
+  expect(nextHalf(2, 4, 6)).toBe(2); // bare cells left: not yet
+  expect(nextHalf(3, 4, 0)).toBe(4); // then 9x9
+  expect(nextHalf(4, 4, 0)).toBe(4); // as big as its ground
+  expect(nextHalf(2, 2, 0)).toBe(2); // only 5x5 of ground kept
+});
