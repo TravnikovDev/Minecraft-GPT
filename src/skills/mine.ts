@@ -154,6 +154,18 @@ export function nearestStairStep(pos: Pos, start: Pos, dir: DirectionType, stair
 }
 
 /**
+ * Work up top starting from down in its mine (fields, food, the shelter):
+ * up its own stairs first, never a new way dug up through the rock (game
+ * tests: to a field, and out for food, it tunnelled its own way up). Best
+ * effort; nothing when it's not below its home.
+ */
+export async function upFromTheMine(): Promise<void> {
+  const home = shelter();
+  if (!home || !bot.entity || bot.entity.position.y >= home.y - 3) return;
+  await climbMineStairs();
+}
+
+/**
  * Up its mine's stairs from down in its mine: to the nearest step, then up
  * them to the top (the shelter's back door). True when it got to the top.
  * Game test: walking home from 35 blocks down the pathfinder dug straight up
@@ -228,6 +240,7 @@ export async function unstickOnStairs(): Promise<boolean> {
   }
   // Each kind it carries in turn until one goes in
   for (const block of UNSTICK_BLOCKS.filter((n) => carried([n]) > 0)) {
+    if (isCommandCancelled()) return false;
     const up = await pillarUp(block);
     if (up.ok) {
       console.log(`Stuck on my stairs at ${feet}: put ${block.replace(/_/g, " ")} under me and got up a block.`);

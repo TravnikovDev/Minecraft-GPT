@@ -47,6 +47,9 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
       let result: ActionResult | null = null;
       let threw = false;
       try {
+        // Anything but mine work starts out of its mine by its own stairs
+        const mineWork = step.goal === "mineFor" || (step.goal === "reachMilestone" && (await import("../skills/curriculum")).worksAtNight(String(step.args["milestone"])));
+        if (!mineWork) await (await import("../skills/mine")).upFromTheMine();
         result = await goal.run(step.args);
       } catch (error) {
         threw = true;

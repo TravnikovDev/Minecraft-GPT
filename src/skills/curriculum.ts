@@ -139,13 +139,7 @@ function milestoneTask(m: Milestone): TaskSpec {
       // Work up top (fields, lighting, the shelter, food) from down in its
       // mine: up its own stairs first (game test: from 50 blocks down, the
       // walk to a new field dug its own tunnel up through the rock)
-      if (!UNDERGROUND.has(m.id)) {
-        const home = shelter();
-        if (home && bot.entity && bot.entity.position.y < home.y - 3) {
-          const { climbMineStairs } = await import("./mine");
-          await climbMineStairs();
-        }
-      }
+      if (!UNDERGROUND.has(m.id)) await (await import("./mine")).upFromTheMine();
       let result = await m.achieve();
       await announce();
       // "Done" without being done is a failure too (review: it was proposed

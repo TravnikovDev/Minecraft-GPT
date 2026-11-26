@@ -59,6 +59,8 @@ function foodTask(need: Exclude<FoodNeed, null>): TaskSpec {
         toldOwner = true;
         report("I'm starving and have nothing to eat: getting food before anything else.");
       }
+      // Food is up top: out of its mine by its own stairs first
+      await (await import("./mine")).upFromTheMine();
       const { stockFood } = await import("./milestones");
       const result = await stockFood({ emergency: need === "emergency" });
       if (!result.ok) {
