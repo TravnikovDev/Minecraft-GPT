@@ -13,7 +13,9 @@ import type { Item } from "prismarine-item";
 import { bot, onConnectionEnd } from "../core/body";
 import { equipItem, hitEntity, lookAt, lookToward, setControl } from "../core/primitives";
 import { fighting, pathing, takeOverBody } from "../core/plugins";
-import { areReflexesMuted, asReflex, registerReflexStopper, setReflexActive } from "../core/reflexes";
+import { areReflexesMuted, asReflex, isAnyReflexActive, registerReflexStopper, setReflexActive } from "../core/reflexes";
+import { isDrowningReflexActive } from "./drowningReflex";
+import { isLavaReflexActive } from "./lavaReflex";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -83,8 +85,9 @@ function finish(reason = "clear"): void {
   trackedId = null;
   if (!active) return;
   active = false;
-  setOnly({});
   setReflexActive("creeper", false);
+  // Another reflex holding the body (air, lava) keeps its keys
+  if (!isAnyReflexActive()) setOnly({});
   pathing.resumeAfterReflex();
   console.log(`Creeper reflex: ${reason}.`);
 }
@@ -100,6 +103,12 @@ async function tick(): Promise<void> {
   if (busy || !bot.entity || !(bot.health > 0)) return;
   if (areReflexesMuted()) {
     finish(); // the owner said stop (e.g. penned-in creepers at a mob farm)
+    return;
+  }
+  // Out of air or in lava comes first: its keys and looks would fight theirs
+  // (sprinting from a creeper deeper into lava; jump let go of underwater)
+  if (isLavaReflexActive() || isDrowningReflexActive()) {
+    finish("stepping aside for another reflex");
     return;
   }
   const radius = isNight() ? NIGHT_RADIUS : DAY_RADIUS;

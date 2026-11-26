@@ -9,7 +9,8 @@ import { Vec3 } from "vec3";
 import { lookToward, setControl } from "../core/primitives";
 import { avoidStep } from "../core/movements";
 import { pathing, takeOverBody } from "../core/plugins";
-import { asReflex, setReflexActive } from "../core/reflexes";
+import { asReflex, isAnyReflexActive, setReflexActive } from "../core/reflexes";
+import { isLavaReflexActive } from "./lavaReflex";
 
 const CHECK_MS = 250;
 // Air in ticks (full is 300 = 15 s). mineflayer's bot.oxygenLevel can't be
@@ -70,7 +71,7 @@ export function isDropAhead(column: CellLook[]): boolean {
 }
 
 /** A cell as the way-to-air search sees it (null: not loaded). */
-export type WaterCell = { water: boolean; open: boolean; level: number } | null;
+export type WaterCell = { water: boolean; open: boolean; level: number; solid?: boolean } | null;
 type P = { x: number; y: number; z: number };
 
 /**
@@ -79,7 +80,9 @@ type P = { x: number; y: number; z: number };
  * is open air, and it's water or stands on something). Returns the path from
  * the start (inclusive), or null when there's none within `maxCells`. The
  * bot is two cells tall, so every cell on the way needs room above it too.
- * Flowing water is left out: a waterfall carries it off (owner's game).
+ * Falling water (level 8 and up) is left out: a waterfall carries it off
+ * (owner's game); flowing water is fine (a tunnel into an aquifer fills
+ * with it, and that's the way back).
  * Pure over `look`.
  *
  * Game test: under a dirt ceiling in a two-high pocket the reflex held
@@ -91,7 +94,7 @@ export function wayToAir(start: P, look: (x: number, y: number, z: number) => Wa
   const fits = (p: P): boolean => {
     const feet = look(p.x, p.y, p.z);
     const head = look(p.x, p.y + 1, p.z);
-    const still = (c: WaterCell): boolean => c !== null && (c.open || (c.water && c.level === 0));
+    const still = (c: WaterCell): boolean => c !== null && (c.open || (c.water && c.level < 8));
     return still(feet) && still(head);
   };
   const breathes = (p: P): boolean => {
@@ -100,7 +103,8 @@ export function wayToAir(start: P, look: (x: number, y: number, z: number) => Wa
     const feet = look(p.x, p.y, p.z);
     if (feet?.water) return true;
     const below = look(p.x, p.y - 1, p.z);
-    return below !== null && !below.open; // air: only standing on something (never over a drop)
+    // Air: only standing on something (never over a drop, never on lava)
+    return below !== null && (below.solid ?? !below.open);
   };
   const from = new Map<string, P | null>([[key(start), null]]);
   const queue: P[] = [start];
@@ -127,9 +131,11 @@ function waterCellAt(x: number, y: number, z: number): WaterCell {
   const b = bot.blockAt(new Vec3(x, y, z));
   if (!b) return null;
   const props = b.getProperties() as { level?: number | string; waterlogged?: boolean };
-  const water = WATER_BLOCKS.has(b.name) || props.waterlogged === true;
+  // Water it can swim in: a waterlogged stair or slab is a block in its way
+  const water = (WATER_BLOCKS.has(b.name) || props.waterlogged === true) && b.boundingBox === "empty";
   const level = b.name === "water" ? Number(props.level ?? 0) : 0;
-  return { water, open: !water && b.boundingBox === "empty" && b.name !== "lava", level };
+  const hot = b.name === "lava" || b.name === "fire" || b.name === "magma_block";
+  return { water, open: !water && !hot && b.boundingBox === "empty", level, solid: b.boundingBox === "block" && b.name !== "magma_block" };
 }
 
 /** The drop check at the spot 0.8 ahead of where it faces. */
@@ -148,9 +154,12 @@ function dropAhead(): boolean {
 function finish(): void {
   if (!active) return;
   active = false;
-  setControl("jump", false);
-  setControl("forward", false);
   setReflexActive("drowning", false);
+  // Another reflex holding the body (lava) keeps its keys
+  if (!isAnyReflexActive()) {
+    setControl("jump", false);
+    setControl("forward", false);
+  }
   pathing.resumeAfterReflex();
   console.log("Drowning reflex: breathing again.");
 }
@@ -164,11 +173,12 @@ function tick(): void {
 
   // Idle in deep water: tread water instead of sinking (the pathfinder
   // swims on its own while it's walking somewhere)
-  const shouldFloat = !active && !bot.vehicle && isWaterAt(0.2) && !pathing.isMoving();
-  if (shouldFloat !== floating) {
-    floating = shouldFloat;
-    setControl("jump", shouldFloat);
-  }
+  // (set every tick, not only on a change: another reflex's keys may have
+  // let go of it meanwhile, and it sank under a creeper reflex holding it)
+  const shouldFloat = !active && !bot.vehicle && isWaterAt(0.2) && !pathing.isMoving() && !isLavaReflexActive();
+  if (shouldFloat) setControl("jump", true);
+  else if (floating) setControl("jump", false);
+  floating = shouldFloat;
 
   if (!active) {
     if (!underwater || (air > LOW_AIR && !longUnderwater)) return;

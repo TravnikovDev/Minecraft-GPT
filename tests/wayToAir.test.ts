@@ -11,6 +11,7 @@ const { stillTracked } = await import(`${ROOT}/src/actions/creeperReflex.ts`);
 type Cell = { water: boolean; open: boolean; level: number } | null;
 const WATER: Cell = { water: true, open: false, level: 0 };
 const FLOWING: Cell = { water: true, open: false, level: 3 };
+const FALLING: Cell = { water: true, open: false, level: 8 };
 const AIR: Cell = { water: false, open: true, level: 0 };
 const DIRT: Cell = { water: false, open: false, level: 0 };
 
@@ -50,8 +51,21 @@ test("a one-high gap is no way: the bot is two blocks tall", () => {
   expect(wayToAir({ x: 0, y: 0, z: 0 }, world(cells))).toBeNull();
 });
 
-test("flowing water is left out (a waterfall carries it off)", () => {
+test("falling water is left out (a waterfall carries it off)", () => {
+  const cells: Record<string, Cell> = { "0,0,0": WATER, "0,1,0": WATER, "1,0,0": FALLING, "1,1,0": FALLING, "1,2,0": AIR };
+  expect(wayToAir({ x: 0, y: 0, z: 0 }, world(cells))).toBeNull();
+});
+
+test("flowing water is a way (a tunnel dug into an aquifer fills with it)", () => {
   const cells: Record<string, Cell> = { "0,0,0": WATER, "0,1,0": WATER, "1,0,0": FLOWING, "1,1,0": FLOWING, "1,2,0": AIR };
+  const path = wayToAir({ x: 0, y: 0, z: 0 }, world(cells));
+  expect(path?.at(-1)).toEqual({ x: 1, y: 1, z: 0 });
+});
+
+test("a waterlogged stair is in the way, not water to swim through", () => {
+  // The live view marks waterlogged blocks with a collision box as not water and not open
+  const STAIR: Cell = { water: false, open: false, level: 0 };
+  const cells: Record<string, Cell> = { "0,0,0": WATER, "0,1,0": WATER, "1,0,0": STAIR, "1,1,0": STAIR, "1,2,0": AIR, "1,3,0": AIR };
   expect(wayToAir({ x: 0, y: 0, z: 0 }, world(cells))).toBeNull();
 });
 

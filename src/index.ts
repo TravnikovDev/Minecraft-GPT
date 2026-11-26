@@ -213,6 +213,8 @@ onBotCreated((currentBot) => {
 
 // A death this soon after the last one: the things are let go
 const REPEAT_DEATH_MS = 5 * 60_000;
+// Lava touched this close to the death: it died in lava (its things burned)
+const LAVA_DEATH_MS = 5_000;
 
 /**
  * After a death: go back for the dropped items, get basic gear if still empty
@@ -227,7 +229,16 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const { loadDeaths } = await import("./core/session");
   const deaths = loadDeaths();
   const again = deaths.length >= 2 && deaths.at(-1)!.at - deaths.at(-2)!.at < REPEAT_DEATH_MS;
-  const steps: Array<{ command: BotCommands; args: object }> = again ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
+  // Died in lava: its things burned there, and going back walks into it again
+  const { lastTouchedLavaAt } = await import("./actions/lavaReflex");
+  const lastDeathAt = deaths.at(-1)?.at ?? 0;
+  const inLava = lastTouchedLavaAt() > 0 && Math.abs(lastDeathAt - lastTouchedLavaAt()) < LAVA_DEATH_MS;
+  const steps: Array<{ command: BotCommands; args: object }> = again || inLava ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
+  if (inLava && !again) {
+    const { clearLastDeath } = await import("./actions/recovery");
+    clearLastDeath();
+    reply("I died in lava; my things burned, so I won't go back for them.");
+  }
   if (again) {
     const { clearLastDeath } = await import("./actions/recovery");
     clearLastDeath();

@@ -4,6 +4,20 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## Reflexes and progression from the "Great Test" deaths (2026-11-26, not yet run)
+
+Each death in the game test that led to these is in the commit messages (9fabd7c, 65cbbca, 48b7af1 and after).
+
+- [ ] Out of air in a two-high water pocket under a ceiling → `Drowning reflex: a ceiling over me; swimming to air at ...` and it surfaces to the side
+- [ ] Out of air in a tunnel dug into an aquifer (flowing water) → it swims back the way it came; near a shipwreck it never pushes into waterlogged stairs
+- [ ] A creeper flickering in and out of sight while it swims → one `Creeper reflex: creeper ...` line, not hundreds; walks home don't fail with "the goal was changed"
+- [ ] Drops into a lava pocket under a shaft → `Lava reflex: touching lava ...`, out along the pool to the corridor (never jumping at the 2-high shaft); later walks go round the spot
+- [ ] Out of lava, still burning, with water within a few blocks → `Lava reflex: on fire; to the water ...`; with none near it lets go at once
+- [ ] Walks past lava diagonally behind the rock in a tunnel corner → no lava reflex at all
+- [ ] Dies in lava → "I died in lava; my things burned, so I won't go back for them." (no walk back down)
+- [ ] Hurt (under 12 health) or with under 6 food when a mining milestone comes up → "healing before I go down the mine" / "too little food", tried again 2 minutes later
+- [ ] Coal found → torches made (16) before going for iron; first iron goes to a shield (off hand), then a bucket filled with water, then iron armour, then the iron sword, axe and shovel
+
 ## Phase 9: the Nether and the End (2026-11-26, not yet run; see Log Entry 18)
 
 After diamonds, living its own life, it goes on to the Nether and the End. Best tried one milestone at a time in a creative test world first (give it what the milestone needs).
