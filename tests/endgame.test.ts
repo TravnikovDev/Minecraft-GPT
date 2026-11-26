@@ -61,6 +61,9 @@ test("the reflex attacks a neutral mob (piglin, enderman, zombified piglin) only
   expect(mayAttackFirst("zombie", false, false)).toBe(true);
   expect(["piglin", "zombified_piglin", "enderman", "warden"].some((n) => mayAttackFirst(n, true, false))).toBe(false);
   expect(mayAttackFirst("zombified_piglin", false, true)).toBe(true); // it hit the bot
+  // An enderman that hit it: fought only when strong (game test: 11 health, stone sword, died)
+  expect(mayAttackFirst("enderman", true, true, false)).toBe(false);
+  expect(mayAttackFirst("enderman", true, true, true)).toBe(true);
   expect([mayAttackFirst("spider", false, false), mayAttackFirst("spider", true, false)]).toEqual([false, true]);
 });
 

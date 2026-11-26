@@ -89,8 +89,23 @@ function watchHurts(): void {
  * with, a zombified piglin it walks past, an enderman: never first; architect
  * review, the reflex started wars in the Nether). Pure over its inputs.
  */
-export function mayAttackFirst(name: string, night: boolean, provokedNow: boolean): boolean {
+export function mayAttackFirst(name: string, night: boolean, provokedNow: boolean, strong = true): boolean {
+  // An enderman (40 health, hits for 7) only when it's strong enough to win
+  // (game test: at 11 health with a stone sword it fought one and died)
+  if (name === "enderman" && !strong) return false;
   return provokedNow || !isNeutralNow(name, night);
+}
+
+/** Strong enough for an enderman: most of its health and an iron sword or better (tier 3). Pure. */
+export function strongEnough(health: number, swordTier: number): boolean {
+  return health >= 16 && swordTier >= 3;
+}
+
+/** The live check. */
+function strongNow(): boolean {
+  const c = catalog();
+  const sword = Math.max(-1, ...bot.inventory.items().filter((i) => c.toolKind(i.name) === "sword").map((i) => c.toolTier(i.name)));
+  return strongEnough(bot.health ?? 0, sword);
 }
 
 // Get entities sorted by priority (threat level and distance)
@@ -105,7 +120,7 @@ export function getPriorityTargets(range = 16): Entity[] {
       entity.name !== "creeper" &&
       entity.position.distanceTo(bot.entity.position) <= range &&
       isHostile(entity) &&
-      mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now)
+      mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now, strongNow())
   );
 
   // Sort by threat level (high to low) and then by distance (close to far)
