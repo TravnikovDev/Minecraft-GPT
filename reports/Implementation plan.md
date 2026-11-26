@@ -298,7 +298,7 @@ It survives the first night, and it reports milestones in chat.
 - It falls back to its own milestone plan when the API is down or the budget is used up.
 - Monthly LLM cost stays well under $10, and is logged.
 
-**Before starting.** From the architect's review (2026-11-26):
+**Before starting** (all done, 2026-11-26). From the architect's review:
 - Commands run through one lazy seam (`actionManager` loads `toolManager` at run time); keep new goal modules behind it so the command cycle doesn't come back.
 - Routine commands return typed results (see Phase 6 status), so the diary isn't fed false successes.
 - The Narrator gets a "same line at most once per N minutes" facility (today it's done by hand in `Sleep` and `queueCommand`).
@@ -334,7 +334,8 @@ It survives the first night, and it reports milestones in chat.
 - Summaries replace raw days only *in the request*; the raw days stay on disk for the owner.
 - The dusk trigger fires whether or not the arbiter is busy, before the night routine; every model call has a 20 s timeout and no retries.
 - Plans have an identity and the step statuses follow one tested rule (a cut-in, a throw, stuck, stop, a restart).
-- Still to do: a policy check in the validator, deeper feasibility for `craft`, sharing the plan when the owner is online but quiet, the bot's own day counter (the world clock moves with `/time set` and differs per dimension).
+- Done afterwards (`6c7b340`): a policy check in the validator (no step in a keep-out area), feasibility for `craft` through the item planner's sources, sharing the plan once when the owner is online but quiet, the bot's own day count (the world clock moves with `/time set` and stands still in the Nether), the Narrator's `reportOnce`, and one list of unreachable tables.
+- Left: only the in-game check below. A per-server profile (automation, PvP, chat rate) belongs with Phase 8's server courtesy.
 
 **In-game check.**
 - Let the bot live alone for 3–5 in-game days. Read the diary.

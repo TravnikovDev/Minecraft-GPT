@@ -18,6 +18,9 @@ Past its first day, living its own life ("go live your life"), the bot plans its
 - [ ] Network off (or `LLM_MONTHLY_CAP_USD=0`) → no plan; it follows its milestones as before; "what's your plan?" says why
 - [ ] Restart while a plan step runs → the step is done again, not skipped
 - [ ] Night → plan steps only under ground, after it's home; the rest wait for the morning
+- [ ] You online but quiet for 5 minutes, a plan made while you were away → it tells you the plan once
+- [ ] Its mine in a keep-out area ("keep out of here" at the mine) → mining steps left out of the plan ("my mine is in a keep-out area")
+- [ ] `/time set day` in the evening, or a trip to the Nether → its day count doesn't jump or freeze (worlds/<id>.json "dayCount")
 - [ ] 3–5 game days alone → the diary reads well (worlds/<id>.json "diary"), the plans make sense, the cost stays around a cent a day
 
 ## Past the first day: mine, iron, and the hang at open steps (2026-11-25 to 26, see Log Entry 15)

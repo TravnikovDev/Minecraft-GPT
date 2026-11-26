@@ -764,5 +764,12 @@ The architect was consulted on the design before building and reviewed the resul
 **Outcome and what follows**
 - **Tests:** 233 pass.
 - **Not yet seen in the game:** all of Phase 7. The plan's in-game check: let the bot live alone for 3–5 in-game days and read the diary; check the plans make sense and get carried out; cut the network for a day and confirm the fallback; check the logged cost.
-- **Left from the phase:** a policy check in the validator (keep-out areas, a server profile); deeper feasibility for `craft` (today any recipe passes); sharing the plan when the owner is online but quiet (only on joining today); the bot's own day counter instead of the world clock, which `/time set` and other dimensions can move; the Narrator's "once per N minutes"; marking an unreachable table.
+- **Finished in code afterwards** (`6c7b340`, by reasoning, no game run, at the owner's request):
+  - its own day count: a new day when the clock comes round to the morning, so `/time set` by day and the Nether's still clock don't move its days;
+  - a policy check in the validator and again when a step starts: nothing in its mine or shelter when that is in a keep-out area;
+  - a `craft` step passes only when the item planner has a source for every raw material still missing;
+  - its plan told once when the owner is online but quiet for 5 minutes and hasn't heard it;
+  - `reportOnce` in the Narrator (the can't-sleep line uses it); one list of tables it couldn't reach, used by crafting and by the planner's table check.
+- **Tests:** 235 pass.
+- **Left:** the plan's in-game check only (Phase 7 in the testing backlog). A per-server profile moves to Phase 8's server courtesy.
 - **Next:** the Phase 7 game test, then Phase 8 (companion roles) or Phase 9.
