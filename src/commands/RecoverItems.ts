@@ -46,6 +46,19 @@ function underWaterThere(p: { x: number; y: number; z: number }): boolean {
   });
 }
 
+// Within this of where it died: it got there
+const THERE = 6;
+
+/** A pickaxe to dig with: a stone one if it can, a wooden one from its planks otherwise. */
+async function pickaxeToDig(): Promise<void> {
+  const { toolTier } = await import("../skills/capabilities");
+  if (toolTier("pickaxe") >= 0) return;
+  const { acquire } = await import("../skills/acquire");
+  const { liveWorld } = await import("../skills/world");
+  const made = (await acquire("stone_pickaxe", 1, liveWorld)).ok || (await acquire("wooden_pickaxe", 1, liveWorld)).ok;
+  console.log(made ? "Recovery: made a pickaxe to dig down to my things." : "Recovery: no pickaxe to dig with.");
+}
+
 const totalItems = (): number => bot.inventory.items().reduce((n, i) => n + i.count, 0);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -114,6 +127,9 @@ export async function execute(): Promise<void> {
     reached = await goToPosition(p.x, p.y, p.z, 2);
     if (!reached && !isCommandCancelled()) {
       tellOwner(`I died down in a cave ${Math.round(bot.entity.position.y - p.y)} blocks below; digging down to my things.`);
+      // A pickaxe first: its own is in the pile (game test: the tunnel
+      // stopped at the first stone, "nothing I carry harvests stone")
+      await pickaxeToDig();
       reached = await tunnelTo(below, "place where I died");
     }
     if (isCommandCancelled()) return;
@@ -127,6 +143,14 @@ export async function execute(): Promise<void> {
   }
 
   const gained = totalItems() - before;
+  // Only there counts (game test: 79 blocks above its things it picked up 3
+  // stray items, said "got my things back" and never went for them)
+  const there = bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= THERE;
+  if (!there && !isCommandCancelled()) {
+    tellOwner(`I couldn't get to my things at ${where} yet${gained > 0 ? ` (picked up ${gained} on the way)` : ""}; I'll try again.`);
+    if (!canReachBeforeDespawn(death)) clearLastDeath();
+    return;
+  }
   clearLastDeath();
   if (gained > 0) {
     tellOwner(`Got my things back (${gained} items).`);
