@@ -59,3 +59,4 @@ export * as HomeChores from "./HomeChores";
 export * as Diary from "./Diary";
 export * as Spending from "./Spending";
 export * as Plan from "./Plan";
+export * as Role from "./Role";

@@ -11,6 +11,7 @@
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
 import { noteMilestone, noteMilestoneFailed } from "../planner/diaryHooks";
+import { automationAllowed } from "../config/serverProfile";
 import { PLAN_PREFIX, setStepGate, stepAllowedNow } from "../planner/names";
 import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
@@ -42,6 +43,8 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 /** True when the owner let it live its own life. */
 export function autonomyOn(): boolean {
+  // A server that forbids bots acting on their own: never (server courtesy)
+  if (!automationAllowed()) return false;
   return getMemory().autonomy?.on ?? process.env["AUTONOMY"] === "on";
 }
 

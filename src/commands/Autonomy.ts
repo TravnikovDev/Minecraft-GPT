@@ -18,6 +18,11 @@ export const parameters = z.object({
 export async function execute(args: unknown): Promise<void> {
   const parsed = parameters.safeParse(args);
   if (!parsed.success) return;
+  const { automationAllowed } = await import("../config/serverProfile");
+  if (parsed.data.on && !automationAllowed()) {
+    reply("This server doesn't allow bots to act on their own, so I'll wait for your orders.");
+    return;
+  }
   const { progressReport, setAutonomy } = await import("../skills/curriculum");
   await setAutonomy(parsed.data.on);
   reply(parsed.data.on ? `Okay, I'll look after myself! ${progressReport()}` : "Okay, I'll wait for your orders.");

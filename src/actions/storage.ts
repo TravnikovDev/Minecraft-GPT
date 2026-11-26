@@ -298,6 +298,46 @@ export async function storeItems(mode: StoreMode, wanted: Wanted[] = [], keep: s
   return { stored, leftOver, chestAt: at(chest.position) };
 }
 
+/**
+ * Puts what `which` picks into the chest at `spot` (a role's storage chest),
+ * keeping `keep` of each name on the bot (seeds to replant). Walks there,
+ * opens it, deposits, closes it. Without a spot, the nearest known chest.
+ * Returns how many went in, or why it couldn't.
+ */
+export async function depositAt(
+  spot: { x: number; y: number; z: number } | null,
+  which: (name: string) => boolean,
+  keep: Record<string, number> = {}
+): Promise<{ stored: number; problem?: string }> {
+  const chest = spot ? bot.blockAt(new Vec3(spot.x, spot.y, spot.z)) : await chooseChest();
+  if (!chest || !STORAGE_BLOCKS.has(chest.name)) return { stored: 0, problem: spot ? `there's no chest at ${spot.x}, ${spot.y}, ${spot.z} any more` : "I know no chest to put it in" };
+  const totals = tally(bot.inventory.items().filter((i) => which(i.name)));
+  if (totals.size === 0) return { stored: 0 };
+  let stored = 0;
+  try {
+    await withChest(chest, async (open) => {
+      for (const [name, total] of totals) {
+        let left = total - (keep[name] ?? 0);
+        while (left > 0) {
+          const item = bot.inventory.items().find((i) => i.name === name);
+          if (!item) break;
+          const moved = await depositInto(open, item, Math.min(left, item.count));
+          if (!moved.ok) {
+            if (wasStopped(moved)) return;
+            console.log(`Couldn't put ${name} in the chest: ${describeFailure(moved)}`);
+            break;
+          }
+          stored += moved.value;
+          left -= moved.value;
+        }
+      }
+    });
+  } catch (error) {
+    return { stored, problem: explain(error) };
+  }
+  return { stored };
+}
+
 export type TakeResult = {
   taken: Map<string, number>;
   missing: string[];

@@ -16,6 +16,7 @@
 // While the owner is offline, replies and reports wait (at most 20); when
 // they join, a short digest comes first. Display names come from the Catalog.
 
+import { chatSpacingMs } from "../config/serverProfile";
 import { OWNER_USERNAME } from "../config/env";
 import { chatSent, onLogin } from "./body";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -290,7 +291,7 @@ onLogin((currentBot) => {
   };
   // Sending starts once the bot is in the world: before that the player list
   // is empty and every line would look like it's for an owner who's offline
-  currentBot.once("spawn", () => setSender(mine));
+  currentBot.once("spawn", () => setSender(mine, chatSpacingMs())); // the server's chat pace (config/serverProfile)
   // Code that still calls bot.chat directly: public reports, capped while waiting
   currentBot.chat = (message: string): void => say(message, { kind: "report", to: "all", legacy: true });
   currentBot.whisper = (username: string, message: string): void => {

@@ -138,6 +138,18 @@ export const MemorySchema = z.object({
       })
     )
     .optional(),
+  // Phase 8: its standing order from the owner (a companion role), if any
+  role: z
+    .object({
+      job: z.enum(["guard", "farmer", "miner", "hauler", "builder"]),
+      anchor: z.object({ x: z.number(), y: z.number(), z: z.number(), dimension: z.string() }).nullable(),
+      radius: z.number(),
+      stance: z.enum(["follow", "stay", "patrol"]),
+      target: z.string().nullable(),
+      storage: z.object({ x: z.number(), y: z.number(), z: z.number() }).nullable(),
+      since: z.number(),
+    })
+    .optional(),
   // The bot's own day count (the world clock moves with /time set and stands
   // still in the Nether)
   dayCount: z.object({ day: z.number() }).optional(),

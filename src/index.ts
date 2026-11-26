@@ -49,6 +49,7 @@ import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curricul
 import { protectShelter, rememberShelterDoor } from "./actions/building";
 import { registerFaceFix } from "./core/faces";
 import { registerDiary } from "./planner/diaryHooks";
+import { considerRole, resetRoleRest } from "./roles/runner";
 import { considerOpportunities, resetOpportunities } from "./skills/opportunities";
 
 // A long-running bot must not die on one stray async error (for example a
@@ -107,6 +108,8 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 5_000, checkProgress); // nudge, replan, give up (managers/stuckWatch)
   resetCurriculum(); // milestones set aside on the old connection get another chance
   everyWhileConnected(currentBot, 15_000, considerNextStep); // its own life, when the owner turned it on (skills/curriculum)
+  resetRoleRest();
+  everyWhileConnected(currentBot, 5_000, considerRole); // its job for the owner, a shift at a time (roles/runner)
   everyWhileConnected(currentBot, 30_000, rememberShelterDoor); // after a restart, the sealed stairs are its door again
   resetOpportunities();
   registerDiary(); // the diary code writes for the day planner (Phase 7)

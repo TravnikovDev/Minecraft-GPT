@@ -20,6 +20,10 @@ const EnvSchema = z.object({
   AUTH: z.enum(["offline", "microsoft"]).default("offline"),
   // Hard monthly cap on model spending (chat and day plans together), in US dollars
   LLM_MONTHLY_CAP_USD: z.coerce.number().min(0).default(10),
+  // The server's rules for bots (Phase 8 server courtesy): may it work on its
+  // own (its own life, jobs), and how often may it chat (ms between lines)
+  SERVER_AUTOMATION: z.enum(["allowed", "forbidden"]).default("allowed"),
+  SERVER_CHAT_SPACING_MS: z.coerce.number().int().min(500).max(10_000).default(1200),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -43,3 +47,5 @@ export const OWNER_USERNAME = env.OWNER_USERNAME;
 export const BOT_USERNAME = env.BOT_USERNAME;
 export const AUTH = env.AUTH;
 export const LLM_MONTHLY_CAP_USD = env.LLM_MONTHLY_CAP_USD;
+export const SERVER_AUTOMATION = env.SERVER_AUTOMATION;
+export const SERVER_CHAT_SPACING_MS = env.SERVER_CHAT_SPACING_MS;

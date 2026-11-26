@@ -30,6 +30,8 @@ const STATUS = new RegExp(`${PREFIX}(?:status|what are you doing|what're you doi
 // they still work when this month's model budget is spent
 const DIARY = new RegExp(`${PREFIX}(?:what (?:did|have) you (?:do|done)(?: today)?|how was your day|read (?:me )?your diary)${SUFFIX}`, "i");
 const PLAN = new RegExp(`${PREFIX}(?:what(?:'s| is) your plan(?: for today)?|what are you planning(?: today)?)${SUFFIX}`, "i");
+const JOB = new RegExp(`${PREFIX}(?:what(?:'s| is) your (?:job|role)|what are you (?:for me|my))${SUFFIX}`, "i");
+const OFF_DUTY = new RegExp(`${PREFIX}(?:you(?:'re| are) off duty|off duty|stop your job|no more job)${SUFFIX}`, "i");
 const SPENT = new RegExp(`${PREFIX}(?:how much (?:have you|did you) spen[dt](?: this month)?|what(?:'s| is) your budget)${SUFFIX}`, "i");
 const WHERE = new RegExp(`${PREFIX}(?:where are you|where r u|how far are you|how far away are you|your location|location)${SUFFIX}`, "i");
 const YES = new RegExp(`${PREFIX}(?:yes|yeah|yep|yup|sure|ok|okay|go|go ahead|do it|please do)${SUFFIX}`, "i");
@@ -171,6 +173,14 @@ async function tryFastPath(message: string): Promise<boolean> {
     if (!pattern.test(message)) continue;
     console.log(`Fast path: ${command}`);
     await executeTool(command, command === BotCommands.Diary ? { yesterday: null } : command === BotCommands.Plan ? { request: null } : {});
+    return true;
+  }
+
+  // Its job (Phase 8): what it is, and off duty, in code
+  for (const [pattern, job] of [[JOB, null], [OFF_DUTY, "off"]] as const) {
+    if (!pattern.test(message)) continue;
+    console.log(`Fast path: role ${job ?? "?"}`);
+    await executeTool(BotCommands.Role, { job, target: null, radius: null, stance: null, storageNearMe: null });
     return true;
   }
 

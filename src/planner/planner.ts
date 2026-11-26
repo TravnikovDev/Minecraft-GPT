@@ -21,6 +21,7 @@ import { gameDay, linesSince, note, rawDays, renderDay, summaries, summarise, ty
 import { goalMenu, goalNamed } from "./goals";
 import { currentPlan, DayPlanSchema, describePlan, MAX_STEPS, MIN_STEPS, savePlan, validateSteps, type DayPlan, type StoredPlan } from "./plan";
 import { PLAN_PREFIX } from "./names";
+import { currentRole, describeRole } from "../roles/role";
 import { cancelRunning, currentTask, dropPending } from "../core/arbiter";
 
 const PLAN_MODEL = "gpt-6-luna";
@@ -108,6 +109,7 @@ export async function planningContext(trigger: Trigger, ownerRequest: string | n
     `Owner (${OWNER_USERNAME}): ${ownerOnline ? "online" : "offline"}${lastOwner ? `; last said: "${lastOwner.text}"` : ""}.`,
     `State: day ${day}, ${bot.time?.timeOfDay ?? 0} ticks; at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} in the ${(bot.game as { dimension?: string }).dimension ?? "overworld"}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20, food carried ${foodPoints()} points; ${hostile} hostile mobs near.`,
     `Tools: ${tiers}. Home: ${shelter() ? "a shelter" : "no shelter"}${hasBed() ? " with a bed" : ""}.`,
+    `Your job for the owner: ${describeRole(currentRole())} (it runs on its own, ahead of your plan: plan around it).`,
     `Carrying: ${inventoryLine()}.`,
     `In its chests: ${await chestsLine()}.`,
     `Milestones done: ${done.join(", ") || "none"}.`,
