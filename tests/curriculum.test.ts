@@ -224,8 +224,8 @@ test("every item the milestones plan for is a real 1.20.4 item", () => {
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual([
     "wooden_tools", "shelter", "stone_tools", "chests", "bed", "food", "mine", "coal", "torches", "lit_home", "paved_stairs", "iron", "iron_pickaxe",
-    // First iron goes to safety: a shield, a water bucket, armour, then the other tools
-    "shield", "bucket", "farm", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "diamonds", "diamond_pickaxe",
+    // First iron goes to a sword and to safety: a shield, a water bucket, armour, then the other tools
+    "iron_sword", "shield", "bucket", "farm", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "diamonds", "diamond_pickaxe",
     // Phase 9: the Nether and the End
     "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
   ]);
@@ -383,4 +383,25 @@ test("the safety order holds for the day plan: what holds a milestone back (revi
   expect(M.heldBy(list[3], list, all)).toEqual([]);
   // The real diamonds wait for the shield, the bucket and the armour
   expect(REAL.find((m: { id: string }) => m.id === "diamonds")?.requires).toEqual(["iron_pickaxe", "shield", "bucket", "iron_armor"]);
+});
+
+test("a milestone failing again and again waits longer each time, up to half an hour (review)", () => {
+  expect(C.setAsideFor(1)).toBe(2 * 60_000);
+  expect(C.setAsideFor(2)).toBe(4 * 60_000);
+  expect(C.setAsideFor(4)).toBe(16 * 60_000);
+  expect(C.setAsideFor(9)).toBe(32 * 60_000);
+});
+
+test("iron armour piece by piece: what the iron affords now, best piece first (review)", () => {
+  const none = () => false;
+  expect(M.armorPiecesNow(4, none)).toEqual([["iron_boots", 4]]);
+  expect(M.armorPiecesNow(10, none)).toEqual([["iron_chestplate", 8]]);
+  expect(M.armorPiecesNow(15, none)).toEqual([["iron_chestplate", 8], ["iron_leggings", 7]]);
+  expect(M.armorPiecesNow(24, none).length).toBe(4);
+  // What it wears already is left out
+  expect(M.armorPiecesNow(8, (i: string) => i === "iron_chestplate")).toEqual([["iron_leggings", 7]]);
+  // The sword comes before the safety items and the armour
+  const ids = REAL.map((m: { id: string }) => m.id);
+  expect(ids.indexOf("iron_sword")).toBeLessThan(ids.indexOf("shield"));
+  expect(ids.indexOf("iron_sword")).toBeLessThan(ids.indexOf("iron_armor"));
 });

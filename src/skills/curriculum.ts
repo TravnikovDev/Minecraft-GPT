@@ -40,6 +40,25 @@ const NIGHT_NAME = "night: going to my shelter";
 const isOwnLife = (task: { name: string; bucket: number }): boolean =>
   (task.bucket === Bucket.Self && (task.name.startsWith(MILESTONE_PREFIX) || task.name.startsWith(PLAN_PREFIX))) || task.name === NIGHT_NAME;
 const blockedUntil = new Map<string, number>();
+// Failures in a row per milestone: each one sets it aside twice as long, up
+// to half an hour (review: one it could never do came back every 2 minutes
+// all day, walking out and back each time). Done, it starts over.
+const failuresInRow = new Map<string, number>();
+const MAX_BLOCKED_MS = 32 * 60_000;
+
+/** How long a milestone is set aside after its `n`th failure in a row (n >= 1). Pure. */
+export function setAsideFor(n: number): number {
+  return Math.min(BLOCKED_FOR_MS * 2 ** Math.max(0, n - 1), MAX_BLOCKED_MS);
+}
+
+/** Sets a milestone aside after a failure; how long, in ms. */
+function setAside(id: string): number {
+  const n = (failuresInRow.get(id) ?? 0) + 1;
+  failuresInRow.set(id, n);
+  const ms = setAsideFor(n);
+  blockedUntil.set(id, Date.now() + ms);
+  return ms;
+}
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** True when the owner let it live its own life. */
@@ -101,14 +120,16 @@ function milestoneTask(m: Milestone): TaskSpec {
       // "Done" without being done is a failure too (review: it was proposed
       // again every second)
       if (result.ok && !m.done() && !isCommandCancelled()) result = fail("refused", `${m.title} still isn't done`);
+      if (m.done()) failuresInRow.delete(m.id);
       if (!result.ok && !isCommandCancelled()) {
-        blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
+        const ms = setAside(m.id);
         const why = describeFailure(result);
         noteMilestoneFailed(m.title, why);
-        if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < BLOCKED_FOR_MS) {
-          console.log(`Couldn't get ${m.title} either: ${why}.`);
+        if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < MAX_BLOCKED_MS) {
+          console.log(`Couldn't get ${m.title} either: ${why} (again in ${Math.round(ms / 60_000)} min).`);
         } else {
-          report(`I couldn't get ${m.title} yet: ${why}. I'll try again in a couple of minutes.`);
+          const minutes = Math.round(ms / 60_000);
+          report(`I couldn't get ${m.title} yet: ${why}. I'll try again in ${minutes <= 2 ? "a couple of" : minutes} minutes.`);
           lastFailureSaid = { why, at: Date.now() };
         }
       }
@@ -353,7 +374,7 @@ setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf 
 // for a shield or a bucket comes from the mine). Game test: the shield and
 // the bucket were missing here, so the night after its iron pickaxe it had
 // "no mine work" and stood by a bed it couldn't use (monsters outside) all night
-const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
+const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
 
 /** True when a milestone is worked on at night (under ground or at home). */
 export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id);
@@ -390,6 +411,7 @@ export function progressReport(): string {
 /** A new connection: blocked milestones get another chance. */
 export function resetCurriculum(): void {
   blockedUntil.clear();
+  failuresInRow.clear();
 }
 
 // A task ending is a good moment to look at what's next. A milestone given up
@@ -398,7 +420,7 @@ onTaskEnd((task, outcome) => {
   const why = String(task.signal.reason ?? "");
   if (outcome === "cancelled" && task.name.startsWith(MILESTONE_PREFIX) && (why === "stuck" || why === "took too long")) {
     const m = MILESTONES.find((x) => `${MILESTONE_PREFIX}${x.title}` === task.name);
-    if (m) blockedUntil.set(m.id, Date.now() + BLOCKED_FOR_MS);
+    if (m) setAside(m.id);
   }
   setTimeout(() => void considerNextStep(), 1_000);
 });

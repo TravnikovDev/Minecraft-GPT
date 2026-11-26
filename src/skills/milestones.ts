@@ -396,6 +396,16 @@ export const MILESTONES: Milestone[] = [
   // portal's obsidian later), armour; then the other tools. Game test: it
   // went down to y=-53 in a leather chestplate with stone tools and died in
   // lava and to a zombie.
+  // An iron sword first of all (two ingots: it fights what it meets on the
+  // way to the rest with it, review)
+  {
+    id: "iron_sword",
+    title: "an iron sword",
+    tier: 3,
+    requires: ["iron_pickaxe"],
+    done: () => toolTier("sword") >= TIER.iron,
+    achieve: () => makeFromIron([["iron_sword", 2]]),
+  },
   {
     id: "shield",
     title: "a shield",
@@ -449,13 +459,24 @@ export const MILESTONES: Milestone[] = [
     tier: 3,
     requires: ["iron_pickaxe"],
     done: () => IRON_ARMOR.every(([piece]) => owns(piece)),
+    // Piece by piece (review: it waited for all 24 ingots before wearing
+    // any): what the iron it has affords is made and worn first, best piece
+    // first; then one trip down for the rest
     achieve: async () => {
-      const made = await makeFromIron(IRON_ARMOR.map(([piece, n]) => [piece, n]));
-      if (!made.ok) return made;
-      // Put it on
       const { equipItem } = await import("../core/primitives");
-      for (const [piece, , slot] of IRON_ARMOR) if (carriedOf([piece]) > 0) await equipItem(piece, slot);
-      return ok();
+      const wear = async (): Promise<void> => {
+        for (const [piece, , slot] of IRON_ARMOR) if (carriedOf([piece]) > 0) await equipItem(piece, slot);
+      };
+      const { storedNear } = await import("../actions/storage");
+      const iron = (): number => carriedOf(["iron_ingot", "raw_iron"]) + storedNear("iron_ingot", 32) + storedNear("raw_iron", 32);
+      for (const [piece, n] of armorPiecesNow(iron(), owns)) {
+        if (isCommandCancelled()) return fail("aborted", "stopped");
+        if (iron() < n) continue;
+        if ((await makeFromIron([[piece, n]])).ok) await wear();
+      }
+      const made = await makeFromIron(IRON_ARMOR.map(([piece, n]) => [piece, n]));
+      await wear();
+      return made;
     },
   },
   // The lit ground round its home, further out (owner: in grades, each once
@@ -531,6 +552,26 @@ const IRON_ARMOR: Array<[string, number, "head" | "torso" | "legs" | "feet"]> = 
   ["iron_leggings", 7, "legs"],
   ["iron_boots", 4, "feet"],
 ];
+
+// Armour by what it protects for the iron: chestplate, leggings, helmet, boots
+const ARMOR_BEST_FIRST = ["iron_chestplate", "iron_leggings", "iron_helmet", "iron_boots"];
+
+/**
+ * The iron pieces it can make now with `iron` ingots (raw counts: it's
+ * smelted), best first, each one paid for before the next; pieces it owns
+ * are left out. Pure over `owns`.
+ */
+export function armorPiecesNow(iron: number, owned: (item: string) => boolean): Array<[string, number]> {
+  const out: Array<[string, number]> = [];
+  let left = iron;
+  for (const name of ARMOR_BEST_FIRST) {
+    const cost = IRON_ARMOR.find(([p]) => p === name)![1];
+    if (owned(name) || cost > left) continue;
+    out.push([name, cost]);
+    left -= cost;
+  }
+  return out;
+}
 
 /** Carried, worn or in the off-hand. */
 function owns(item: string): boolean {
