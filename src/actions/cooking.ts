@@ -3,6 +3,7 @@
 // about 30 seconds) or in a furnace or smoker (fuel: coal, charcoal, planks or
 // logs). A campfire or furnace the bot carries is put down first.
 
+import { pickFuel } from "./fuel";
 import type { Block } from "prismarine-block";
 import { bot } from "../core/body";
 import { equipItem, useBlock } from "../core/primitives";
@@ -154,20 +155,8 @@ async function cookOnCampfires(campfires: Block[], foods: string[], limit: numbe
   return cooked;
 }
 
-/**
- * Fuel to put in for `items` cooks: coal/charcoal (8 each), else planks or
- * logs (1.5 each); never `input` itself (logs being made into charcoal).
- */
 /** True when it carries something to burn (coal, charcoal, planks or logs). */
 export const carriesFuel = (): boolean => pickFuel(1) !== null;
-
-function pickFuel(items: number, input: string | null = null): { name: string; amount: number } | null {
-  for (const [match, perFuel] of [[/^(coal|charcoal)$/, 8], [/_planks$/, 1.5], [/_log$/, 1.5]] as const) {
-    const fuel = bot.inventory.items().find((i) => match.test(i.name) && i.name !== input);
-    if (fuel) return { name: fuel.name, amount: Math.min(count(fuel.name), Math.ceil(items / perFuel)) };
-  }
-  return null;
-}
 
 /** Cooks in a furnace or smoker, taking the food out as it's done. */
 async function cookInOven(oven: Block, foods: string[], limit: number): Promise<number> {

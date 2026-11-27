@@ -30,6 +30,24 @@ export const SMELT_JOBS: Array<{ input: string; output: string; above: number }>
 // A batch: at most a stack; one coal (or charcoal) smelts 8
 const BATCH = 64;
 const PER_FUEL = 8;
+// Items a plank smelts
+const PER_PLANK = 1.5;
+
+/** The planks it has most of (carried or stored), as the fuel to burn: "jungle_planks". */
+function woodPlanksName(): string {
+  const items = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count);
+  if (items[0]) return items[0].name;
+  const log = bot.inventory.items().find((i) => i.name.endsWith("_log"));
+  return log ? log.name.replace(/_log$/, "_planks") : "oak_planks";
+}
+
+/** Planks made from the logs it carries beyond its 20-log stock (best effort). */
+async function makePlanks(want: number): Promise<void> {
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  const name = woodPlanksName();
+  await acquire(name, carried(name) + want, liveWorld);
+}
 // Torches kept on hand and in its chests
 const TORCH_STOCK = 32;
 // What it keeps carrying for its own work: the workshop never takes the
@@ -161,9 +179,14 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
   if (storedNear(job.input, 32) > 0) await fetchSpare(job.input, job.count);
   const n = Math.min(spare(job.input), job.count);
   if (n === 0) return ok(done.concat("nothing to smelt").join("; "));
-  const fuelNeeded = fueled ? 0 : Math.ceil(n / PER_FUEL);
-  const fuelName = storedNear("coal", 32) + spare("coal") >= fuelNeeded ? "coal" : "charcoal";
-  if (fuelNeeded > 0 && storedNear(fuelName, 32) > 0) await fetchSpare(fuelName, fuelNeeded);
+  // With a lot of wood about, planks burn and the coal is kept for torches
+  // (owner); else coal, then charcoal
+  const { woodPlenty, woodNow } = await import("../actions/fuel");
+  const planksName = woodPlenty(woodNow()) ? woodPlanksName() : null;
+  const fuelNeeded = fueled ? 0 : Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL));
+  const fuelName = planksName ?? (storedNear("coal", 32) + spare("coal") >= fuelNeeded ? "coal" : "charcoal");
+  if (fuelNeeded > 0 && storedNear(fuelName, 32) > 0 && spare(fuelName) < fuelNeeded) await fetchSpare(fuelName, fuelNeeded);
+  if (fuelNeeded > 0 && planksName && spare(fuelName) < fuelNeeded) await makePlanks(fuelNeeded - spare(fuelName));
   if (fuelNeeded > 0 && spare(fuelName) === 0) return ok(done.concat("no spare fuel").join("; "));
   if (isCommandCancelled()) return fail("aborted", "stopped");
   window = await openHome(furnace);
@@ -171,7 +194,7 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
   try {
     if (window.inputItem()) return ok(done.concat("the furnace is busy now").join("; "));
     if (!window.fuelItem()) {
-      const put = await windowStep("fuelling", () => window!.putFuel(bot.registry.itemsByName[fuelName]!.id, null, Math.min(spare(fuelName), Math.ceil(n / PER_FUEL))));
+      const put = await windowStep("fuelling", () => window!.putFuel(bot.registry.itemsByName[fuelName]!.id, null, Math.min(spare(fuelName), Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL)))));
       if (!put.ok) return put;
     }
     const loaded = await windowStep(`putting ${job.input} in`, () => window!.putInput(bot.registry.itemsByName[job.input]!.id, null, Math.min(n, spare(job.input))));

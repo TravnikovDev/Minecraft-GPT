@@ -375,10 +375,13 @@ export async function smeltItem(itemName: string, num = 1): Promise<boolean> {
     }
     // Fuel the furnace
     if (!furnace.fuelItem()) {
-      const fuel = bot.inventory.items().find((item) => item.name === "coal" || item.name === "charcoal");
-      const putFuel = Math.ceil(num / 8);
-      if (!fuel || fuel.count < putFuel) {
-        console.log(`I do not have enough coal or charcoal to smelt ${num} ${itemName}, I need ${putFuel} coal or charcoal`);
+      // Coal or charcoal, or planks with a lot of wood about (owner)
+      const { pickFuel } = await import("./fuel");
+      const choice = pickFuel(num, itemName);
+      const fuel = choice ? bot.inventory.items().find((item) => item.name === choice.name) : undefined;
+      const putFuel = choice?.amount ?? 0;
+      if (!fuel || !choice || putFuel === 0) {
+        console.log(`I have nothing to burn to smelt ${num} ${itemName} (coal, charcoal, planks or logs).`);
         return false;
       }
       const fueled = await windowStep("fuelling the furnace", () => furnace.putFuel(fuel.type, null, putFuel));

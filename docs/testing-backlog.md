@@ -344,3 +344,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Stairs blown open or crossing a cave: "Mine: looked after my stairs: N holes filled" fills floor, both walls (5 high) and roof; "step N closed in" after each new step; with stairs still open: "my mine's stairs aren't whole yet", no mining below
 - [ ] A spider in its mine or a cave by day is fought ("Combat reflex: fighting spider"); one that bites it in the light is fought back too
 - [ ] A field's path: the ring outside its fence dug down to the field's level (banks, tall grass), its gate facing along the way in (one facing sideways replaced), torches on the corner and middle posts (made from coal it has)
+- [ ] With a lot of wood (64 planks' worth beyond its 20 logs, bag and chests): its furnaces burn planks (workshop, cooking, smelting ore), coal kept for torches
