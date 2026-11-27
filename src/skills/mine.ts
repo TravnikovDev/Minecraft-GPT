@@ -23,7 +23,12 @@ import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
 import { foodPoints, shelter, TIER, toolTier } from "./capabilities";
 
-export const MINE_DEPTH = 10;
+// The first floor this many steps down (owner: 20, not 10; at 10 the
+// tunnels kept running into canyons and caves open to the sky). A mine dug
+// before keeps its own (its record's depth).
+export const MINE_DEPTH = 20;
+// This mine's first floor's step (its record's depth; MINE_DEPTH for a new one)
+let firstFloorAt = MINE_DEPTH;
 const BRANCH_EVERY = 3; // the old layout's main tunnel steps (older mines)
 export const ARM_LENGTH = 50; // each tunnel from a hub
 // Floors (owner: every 10 blocks down, not 20)
@@ -45,7 +50,7 @@ type Pos = { x: number; y: number; z: number };
 
 /** Where the stairs from `exit` going `dir` end (pure: tested on its own). */
 export function mineBottom(exit: Pos, dir: DirectionType): Vec3 {
-  return new Vec3(exit.x, exit.y, exit.z).plus(STEP[dir].scaled(MINE_DEPTH)).offset(0, -MINE_DEPTH, 0);
+  return new Vec3(exit.x, exit.y, exit.z).plus(STEP[dir].scaled(firstFloorAt)).offset(0, -firstFloorAt, 0);
 }
 
 /** The three tunnels from a hub, in the order they're dug. */
@@ -125,14 +130,14 @@ export function floorName(level: number): string {
 }
 
 /** The stair step a hub sits on: the first at the bottom of the stairs, each next one LEVEL_STEP deeper. Pure. */
-export const hubStep = (level: number): number => MINE_DEPTH + level * LEVEL_STEP;
+export const hubStep = (level: number): number => firstFloorAt + level * LEVEL_STEP;
 
 // The stairs' open cells above each step: the step and 3 more, 4 high (owner:
 // 3 was too low, a player hit their head on the way up)
 export const STAIR_HEADROOM = 3;
 
-// Stairs are steps 0..MINE_DEPTH: the exit cell, then one down per step
-const STAIRS = MINE_DEPTH + 1;
+// Stairs are steps 0..the first floor: the exit cell, then one down per step
+const stairsToFirstFloor = (): number => firstFloorAt + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
@@ -373,12 +378,17 @@ export function mineArmStarts(): Vec3[] {
 function mineRecord(): MineRecord | null {
   const dim = currentDimension();
   const mine = getPlaces("mine").find((m) => m.name === MINE_NAME && m.dimension === dim);
-  if (!mine) return null;
+  if (!mine) {
+    firstFloorAt = MINE_DEPTH;
+    return null;
+  }
   const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number; sideFrom?: number };
   if (!d.direction) return null;
+  // Its first floor where it was dug (10 before the owner's 20)
+  firstFloorAt = d.depth ?? MINE_DEPTH;
   // Older records (one dig of steps 0..10, saved when done) are finished
-  const stairs = d.stairs ?? (d.depth === MINE_DEPTH ? STAIRS : 0);
-  const done = d.done ?? stairs >= STAIRS;
+  const stairs = d.stairs ?? (d.depth === 10 ? 11 : 0);
+  const done = d.done ?? stairs >= stairsToFirstFloor();
   return {
     start: { x: mine.x, y: mine.y, z: mine.z },
     direction: d.direction,
@@ -853,7 +863,7 @@ async function saveMine(start: Pos, direction: DirectionType, stairs: number, br
     name: MINE_NAME,
     dimension: currentDimension(),
     ...start,
-    details: { direction, depth: MINE_DEPTH, stairs, done: bottom !== null, endsAt: { x: endsAt.x, y: endsAt.y, z: endsAt.z }, branches, ...keep },
+    details: { direction, depth: firstFloorAt, stairs, done: bottom !== null, endsAt: { x: endsAt.x, y: endsAt.y, z: endsAt.z }, branches, ...keep },
   });
   protectMine();
 }
@@ -935,12 +945,12 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
   // to the sky through the roof over the exit)
   const inside = await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
   if (!inside.ok) return inside;
-  if (from === 0) report(`Digging my mine: ${MINE_DEPTH} levels down from the back of my shelter.`);
-  for (let i = from; i < STAIRS; i++) {
+  if (from === 0) report(`Digging my mine: ${firstFloorAt} steps down from the back of my shelter to its first floor.`);
+  for (let i = from; i < stairsToFirstFloor(); i++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
     // The wooden pickaxe only for the cobblestone the stone tools need
     if (!hasStonePickaxe() && carried(["cobblestone"]) >= woodUntilCobblestone) {
-      console.log(`Mine: ${i} of ${STAIRS} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
+      console.log(`Mine: ${i} of ${stairsToFirstFloor()} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
       return ok();
     }
     if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
@@ -974,7 +984,7 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
       await saveMine(start, dir, i, 0, null);
       return fail("refused", why === "drop" ? "my mine's stairs reach a drop near the top that I can't build a floor over" : "the mine's stairs hit lava, water or something built near the top");
     }
-    await saveMine(start, dir, i + 1, 0, i + 1 >= STAIRS ? stepAt(start, dir, MINE_DEPTH) : null);
+    await saveMine(start, dir, i + 1, 0, i + 1 >= stairsToFirstFloor() ? stepAt(start, dir, firstFloorAt) : null);
   }
   return myMine() ? ok() : fail("error", "the mine wasn't remembered");
 }

@@ -7,9 +7,10 @@ const ROOT = `${import.meta.dir}/..`;
 useFakeBot({});
 const { mineBottom, MINE_DEPTH, nextArm, armDirection, hubStep, ARM_LENGTH, LEVEL_STEP, stepsToPave, mineStairCells } = await import(`${ROOT}/src/skills/mine.ts`);
 
-test("the stairs end 10 down and 10 on from the exit", () => {
+test("the stairs end MINE_DEPTH down and on from the exit (owner: the first floor 20 down)", () => {
   const b = mineBottom({ x: 10, y: 65, z: -17 }, "north");
-  expect([b.x, b.y, b.z]).toEqual([10, 65 - MINE_DEPTH, -27]);
+  expect(MINE_DEPTH).toBe(20);
+  expect([b.x, b.y, b.z]).toEqual([10, 65 - MINE_DEPTH, -17 - MINE_DEPTH]);
 });
 
 const arm = (dug: number, blocked = false) => ({ dug, blocked });
@@ -91,7 +92,8 @@ test("paving: every step below the doorway, hubs and the bottom step too", () =>
 
 test("the stairs' floors and side walls are kept; hubs stay open to the sides; the doorway is the shelter's", () => {
   // Stairs south from (0, 64, 0): step i stands at (0, 64 - i, i)
-  const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", 12, 0);
+  const H = MINE_DEPTH;
+  const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", H + 2, 0);
   const has = (cells: Array<{ x: number; y: number; z: number }>, x: number, y: number, z: number): boolean => cells.some((c) => c.x === x && c.y === y && c.z === z);
   // Step 5: floor under it, walls east and west from floor to the top of its 4-high space
   expect(has(keep, 0, 58, 5)).toBe(true);
@@ -102,14 +104,14 @@ test("the stairs' floors and side walls are kept; hubs stay open to the sides; t
   // The roof over each step, all the way down (owner: sealed off from
   // caves); past the hub it sits above the 2-high forward tunnel, not in it
   expect(has(keep, 0, 63, 5)).toBe(true);
-  expect(has(keep, 0, 64 - 11 + 4, 11)).toBe(true);
-  expect(has(keep, 0, 54, 11) || has(keep, 0, 55, 11)).toBe(false); // the tunnel's own space
+  expect(has(keep, 0, 64 - (H + 1) + 4, H + 1)).toBe(true);
+  expect(has(keep, 0, 64 - H, H + 1) || has(keep, 0, 65 - H, H + 1)).toBe(false); // the tunnel's own space
   // Never the step's own cells (it walks there) nor the doorway
   expect(has(keep, 0, 59, 5)).toBe(false);
   expect(has(keep, 0, 63, 0)).toBe(false);
-  // The hub (step 10): floor kept, sides open for the right and left tunnels
-  expect(has(keep, 0, 53, 10)).toBe(true);
-  expect(has(keep, 1, 54, 10)).toBe(false);
+  // The hub (the first floor's step): floor kept, sides open for the right and left tunnels
+  expect(has(keep, 0, 63 - H, H)).toBe(true);
+  expect(has(keep, 1, 64 - H, H)).toBe(false);
   expect(has(walk, 0, 59, 5)).toBe(true);
   expect(has(walk, 0, 62, 5)).toBe(true); // 4 high (owner: 3 was too low)
 });

@@ -17,7 +17,7 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 
 ## Floors
 
-A floor every **10 steps** down, the first at the bottom of the first 10 steps. Each floor has:
+The **first floor 20 steps down** (at 10 the tunnels kept running into canyons and caves open to the sky), then a floor every **10 steps** deeper. A mine dug before keeps its first floor where it was. Each floor has:
 
 - a **room**, 3 by 3 and 3 high, with a solid floor, **beside the stairs**: the stairs run along its left column (the step coming in at the back, the landing in the middle, the step going on down at the front). The middle and right columns are flat, so you can run freely from one sleeve to another;
 - a **sign** on the room's right wall by the back corner: "1st floor", "2nd floor", ...;
