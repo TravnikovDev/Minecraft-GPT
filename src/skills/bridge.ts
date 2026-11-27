@@ -231,6 +231,12 @@ export function bridgeDone(): boolean {
   return swims < SWIMS_WANTED || swims === noCrossingAt;
 }
 
+/** True when it has a whole bridge (not just nothing to do yet): what "reached" means. */
+export function bridgeBuilt(): boolean {
+  const plan = myBridge();
+  return plan !== null && holes(plan).length === 0;
+}
+
 /** What to build with: cobblestone, else other stone, else planks. */
 function deckMaterial(need: number): string | null {
   const count = (name: string): number => bot.inventory.items().filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);

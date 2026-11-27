@@ -13,7 +13,7 @@ import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
 import { clearAroundHome, homeCleared } from "./clearing";
-import { bridgeDone, buildBridge } from "./bridge";
+import { bridgeBuilt, bridgeDone, buildBridge } from "./bridge";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, placeShelterTable, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
@@ -704,6 +704,8 @@ export const MILESTONES: Milestone[] = [
     idle: true,
     requires: ["mine"],
     done: bridgeDone,
+    // Nothing to do yet isn't a bridge (it said "Milestone: a bridge" on joining)
+    reached: bridgeBuilt,
     achieve: buildBridge,
   },
   // Owner: the shelter's weak walls (dirt and sand blow out; stone holds
