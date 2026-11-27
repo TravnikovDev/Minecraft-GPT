@@ -16,6 +16,13 @@ import { describeFailure } from "../core/result";
 const HUNGRY_AT = 14; // food points (of 20), like auto-eat's default
 const STARVING_AT = 6;
 const HURT_AT = 10; // health: eat to heal, even if not very hungry
+// Health this low with food on it: eaten now, no waiting for a gap between
+// actions (game test: starving at half a heart, it killed a pig, held the
+// porkchops for 6 seconds and starved to death; the bite came after)
+const CRITICAL_AT = 4;
+
+/** True when it must eat at once: nearly dead, or starving at nothing on the bar. Pure. */
+export const mustEatNow = (health: number, food: number): boolean => food < 20 && (health <= CRITICAL_AT || food === 0);
 // Only when nothing else is left
 const LAST_RESORT = new Set(["rotten_flesh", "poisonous_potato", "spider_eye", "pufferfish", "suspicious_stew"]);
 
@@ -53,7 +60,8 @@ export async function eatWhenHungry(): Promise<void> {
     else console.log(`Couldn't eat ${food}: ${describeFailure(result)}`);
   };
   try {
-    const done = await borrow(
+    // Nearly dead: no waiting for a gap at all
+    const done = mustEatNow(bot.health, bot.food) ? null : await borrow(
       holder,
       ["hands"],
       async () => {

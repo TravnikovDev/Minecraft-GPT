@@ -99,6 +99,11 @@ onConnectionReady((currentBot) => {
   onConnectionEnd(currentBot, abortForDisconnect); // a running task must not drive the next connection
   registerCombatReflex(); // fights back when mobs attack, pausing the task
   everyWhileConnected(currentBot, 2_000, eatWhenHungry); // eats between the task's actions (actions/upkeep)
+  // Hurt or starving with food just picked up: eats then, not 2 seconds later
+  currentBot.on("health", () => void eatWhenHungry());
+  currentBot.on("playerCollect", (collector) => {
+    if (collector === currentBot.entity) void eatWhenHungry();
+  });
   everyWhileConnected(currentBot, 2_500, lightTheWay); // a torch down in a dark cave as it goes (actions/caveLighting)
   resetPlaceChecks(); // check remembered places again as it comes near
   everyWhileConnected(currentBot, 10_000, checkPlacesNearby); // forget tables, chests, beds that are gone

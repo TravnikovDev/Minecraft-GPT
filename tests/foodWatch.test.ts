@@ -53,3 +53,12 @@ test("no animals about: it looks in a direction over dry land, up to 75 blocks (
   const tried: Record<string, number> = { south: 5, "south-west": 5 };
   expect(dryDirection({ x: 0, z: 0 }, 75, lake, (n) => tried[n] ?? 0)[0]).toBe("west");
 });
+
+test("nearly dead or at an empty bar with food on it: eaten at once (game test: it starved holding porkchops)", async () => {
+  const { mustEatNow } = await import(`${import.meta.dir}/../src/actions/upkeep.ts`);
+  expect(mustEatNow(0.5, 0)).toBe(true);
+  expect(mustEatNow(3, 12)).toBe(true);
+  expect(mustEatNow(20, 0)).toBe(true);
+  expect(mustEatNow(15, 10)).toBe(false); // hungry but fine: between actions
+  expect(mustEatNow(2, 20)).toBe(false); // full: nothing to eat for
+});
