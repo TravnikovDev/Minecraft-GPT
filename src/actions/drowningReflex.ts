@@ -192,6 +192,22 @@ function finish(): void {
 let surfacings: number[] = [];
 let gettingOut = false;
 
+/** The block between it and the shore, at its head and over it, dug out (its way out of walled-in water). */
+async function digTowardShore(land: Vec3): Promise<void> {
+  const me = bot.entity.position;
+  const dx = land.x + 0.5 - me.x;
+  const dz = land.z + 0.5 - me.z;
+  const step = Math.abs(dx) >= Math.abs(dz) ? new Vec3(Math.sign(dx), 0, 0) : new Vec3(0, 0, Math.sign(dz));
+  const head = me.offset(0, 1.62, 0).floored();
+  const { breakBlock } = await import("../core/primitives");
+  for (const cell of [head.plus(step), head.offset(0, 1, 0), head.plus(step).offset(0, 1, 0)]) {
+    const b = bot.blockAt(cell);
+    if (!b || b.boundingBox !== "block" || b.name === "bedrock") continue;
+    const broken = await breakBlock(cell, { allowWithoutHarvest: true, intoLiquid: true });
+    console.log(broken.ok ? `Drowning reflex: dug the ${b.name} at ${cell} on my way out of the water.` : `Drowning reflex: couldn't dig the ${b.name} at ${cell} (${broken.detail}).`);
+  }
+}
+
 /** The nearest dry spot to stand on (solid ground, open feet and head, no water) within 24 blocks. */
 function nearestDryLand(): Vec3 | null {
   const me = bot.entity.position;
@@ -207,27 +223,57 @@ function nearestDryLand(): Vec3 | null {
   return best;
 }
 
-/** Swims out of the water to the nearest dry land, as a survival task. */
+/**
+ * Swims out of the water to the nearest dry land, steering itself (game
+ * test: the walk planner, asked for the shore 7 blocks up, kept sinking it
+ * in the same spot): jump held to swim up, facing the shore, forward, until
+ * it stands on dry ground or 25 seconds pass.
+ */
 async function getOntoLand(): Promise<void> {
+  if (gettingOut) return;
   gettingOut = true;
   try {
     const land = nearestDryLand();
     if (!land) return;
-    console.log(`Drowning reflex: in the water again and again; out onto dry land at ${land} first.`);
-    const { propose, Bucket } = await import("../core/arbiter");
-    const { goTo } = await import("../core/primitives");
-    const pf = (await import("mineflayer-pathfinder")).default;
-    propose(
-      {
-        name: "getting out of the water",
-        bucket: Bucket.Survival,
-        run: async () => {
-          await goTo(new pf.goals.GoalBlock(land.x, land.y, land.z));
-          surfacings = [];
-        },
-      },
-      { front: true }
-    );
+    console.log(`Drowning reflex: in the water again and again; swimming out onto dry land at ${land}.`);
+    await asReflex("drowning", async () => {
+      setReflexActive("drowning", true);
+      takeOverBody();
+      try {
+        const until = Date.now() + 25_000;
+        let lastDig = Date.now();
+        let lastSpot = bot.entity.position.clone();
+        while (Date.now() < until && bot.entity && bot.health > 0) {
+          const me = bot.entity.position;
+          // Walled in (it sealed a canyon round its own water): not getting
+          // anywhere for 6 seconds, it digs the way toward the shore open
+          if (Date.now() - lastDig > 6_000) {
+            if (me.distanceTo(lastSpot) < 1) await digTowardShore(land);
+            lastDig = Date.now();
+            lastSpot = me.clone();
+          }
+          const feetWet = isWaterAt(0.2);
+          if (!feetWet && bot.entity.onGround && Math.hypot(land.x + 0.5 - me.x, land.z + 0.5 - me.z) < 1.5) break;
+          const dx = land.x + 0.5 - me.x;
+          const dz = land.z + 0.5 - me.z;
+          await lookToward(Math.atan2(-dx, -dz), 0);
+          // Up while the shore is above it, forward once level with it or near
+          setControl("jump", feetWet || me.y < land.y);
+          setControl("forward", Math.hypot(dx, dz) > 0.6);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      } finally {
+        setControl("jump", false);
+        setControl("forward", false);
+        setReflexActive("drowning", false);
+      }
+    });
+    const out = !isWaterAt(0.2);
+    console.log(out ? `Drowning reflex: out of the water at ${bot.entity.position.floored()}.` : "Drowning reflex: still in the water; trying again next time.");
+    if (out) {
+      surfacings = [];
+      pathing.resumeAfterReflex();
+    }
   } finally {
     gettingOut = false;
   }
