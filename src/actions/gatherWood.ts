@@ -137,6 +137,79 @@ export async function gatherWood(
   }
 }
 
+/**
+ * The top of a tree's crown over its trunk: the highest leaf in the column
+ * right over the top log (the top log's own height when there's none). Pure
+ * over `blockAt`.
+ */
+export function crownTop(top: { x: number; y: number; z: number }, blockAt: (p: Vec3) => { name: string } | null): number {
+  let y = top.y;
+  while (y < top.y + 6 && (blockAt(new Vec3(top.x, y + 1, top.z))?.name.endsWith("_leaves") ?? false)) y++;
+  return y;
+}
+
+/**
+ * Where its pillar goes (owner: beside the crown, not against the trunk):
+ * a spot on the ground 2 to 4 blocks out from the trunk with nothing but air
+ * from its feet up over `standY`, nearest the trunk first. Pure over `blockAt`.
+ */
+export function pillarSpot(top: { x: number; y: number; z: number }, standY: number, blockAt: (p: Vec3) => { boundingBox: string; name: string } | null): Vec3 | null {
+  for (const r of [2, 3, 4]) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (const dz of Math.abs(dx) === r ? Array.from({ length: 2 * r + 1 }, (_, k) => k - r) : [-r, r]) {
+        const x = top.x + dx;
+        const z = top.z + dz;
+        // The ground under this column: the first solid block going down
+        let feet: number | null = null;
+        for (let y = top.y; y >= top.y - 16; y--) {
+          const below = blockAt(new Vec3(x, y - 1, z));
+          if (below && below.boundingBox === "block" && !below.name.endsWith("_leaves")) {
+            feet = y;
+            break;
+          }
+        }
+        if (feet === null || feet > standY) continue;
+        let clear = true;
+        for (let y = feet; y <= standY + 1 && clear; y++) clear = blockAt(new Vec3(x, y, z))?.boundingBox === "empty";
+        if (clear) return new Vec3(x, feet, z);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Up to the top of a tree's crown the way a player does it: a pillar on the
+ * ground just outside the crown, up to the crown's top, then across the
+ * leaves to stand over the trunk. The pillar is its scaffolding (taken down
+ * after). True when it stands over the trunk.
+ */
+async function climbBesideCrown(top: Vec3, crown: number): Promise<boolean> {
+  const standY = crown + 1;
+  const spot = pillarSpot(top, standY, (p) => bot.blockAt(p));
+  if (!spot) return false;
+  if (!(await goTo(new pf.goals.GoalBlock(spot.x, spot.y, spot.z), { timeoutMs: 20_000 })).ok) return false;
+  const name = pillarBlockName();
+  if (!name) return false;
+  const { pillarUp } = await import("../core/primitives");
+  const { recordScaffold } = await import("../core/scaffold");
+  while (bot.entity.position.y < standY - 0.01) {
+    if (isCommandCancelled()) return false;
+    const feet = bot.entity.position.floored();
+    if (!(await pillarUp(name)).ok) return false;
+    recordScaffold(feet, name);
+  }
+  // Across the crown's top to over the trunk (walking on leaves, never digging them)
+  const over = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(top.x, standY, top.z), { timeoutMs: 15_000 }));
+  return over.ok;
+}
+
+/** A block it pillars up with (dirt, cobblestone...), or null. */
+function pillarBlockName(): string | null {
+  const ids = (bot.pathfinder?.movements as unknown as { scafoldingBlocks?: number[] } | undefined)?.scafoldingBlocks ?? [];
+  return bot.inventory.items().find((i) => ids.includes(i.type))?.name ?? null;
+}
+
 /** Blocks it carries that the walks pillar up on (dirt, cobblestone...). */
 function pillarBlocks(): number {
   const ids = ((bot.pathfinder?.movements as unknown as { scafoldingBlocks?: number[] } | undefined)?.scafoldingBlocks ?? []);
@@ -171,24 +244,29 @@ export function fellFromTop(trunk: Array<{ name: string; position: { x: number; 
  * the bottom as before. False when it was stopped.
  */
 export async function fellTree(trunk: Block[]): Promise<boolean> {
+  const top = trunk[trunk.length - 1]!.position;
+  const at = (p: Vec3) => bot.blockAt(p);
+  const crown = crownTop(top, at);
   // Only with blocks to pillar up on (game test: its first tree, empty bag,
   // it worked out a way up for 8 s, stalled, then cut it from the bottom)
-  if (fellFromTop(trunk) && pillarBlocks() >= trunk.length) {
-    const top = trunk[trunk.length - 1]!.position;
-    const onTop = await pathing.withRules({ allow1by1towers: true }, () => goTo(new pf.goals.GoalBlock(top.x, top.y + 1, top.z), { timeoutMs: 20_000 }));
-    if (onTop.ok) {
-      for (let i = trunk.length - 1; i >= 0; i--) {
+  if (fellFromTop(trunk) && pillarBlocks() >= crown + 1 - trunk[0]!.position.y) {
+    if (await climbBesideCrown(top, crown)) {
+      // Down the column: the leaves over the trunk, then log after log
+      for (let y = crown; y >= trunk[0]!.position.y; y--) {
         if (isCommandCancelled()) return false;
+        const p = new Vec3(top.x, y, top.z);
+        const b = at(p);
+        if (!b || b.boundingBox === "empty") continue;
+        if (!b.name.endsWith("_leaves") && !catalog().isTreeLog(b.name)) break;
         // Landed first: digging in the air is 5 times slower (game test:
         // every log took 4 seconds with a stone axe, started mid-drop)
         await landed();
-        const p = trunk[i]!.position;
-        // The log under its feet (each break waits for the server; it drops onto the next)
+        // The block under its feet (each break waits for the server; it drops onto the next)
         await breakBlockAt(p.x, p.y, p.z);
       }
       return true;
     }
-    console.log(`Couldn't get on top of the ${trunk[0]!.name} at ${trunk[0]!.position} (${onTop.ok ? "" : onTop.detail ?? onTop.reason}); from the bottom instead.`);
+    console.log(`Couldn't get up beside the ${trunk[0]!.name}'s crown at ${trunk[0]!.position}; from the bottom instead.`);
   }
   for (const aLog of trunk) {
     if (isCommandCancelled()) return false;

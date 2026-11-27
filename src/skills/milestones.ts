@@ -502,8 +502,25 @@ export const MILESTONES: Milestone[] = [
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
     achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
   },
-  // Owner (2026-11-27): in the woods, the trees round the shelter cut down
-  // after its stone tools (shade where mobs hide by day; and wood)
+  {
+    id: "chests",
+    title: "my shelter set up (chests, furnace, table)",
+    tier: 1,
+    requires: ["shelter", "stone_tools"],
+    done: () => shelter() !== null && furnished(),
+    achieve: furnishShelter,
+  },
+  {
+    id: "bed",
+    title: "a bed",
+    tier: 1,
+    requires: ["chests"],
+    done: hasBed,
+    achieve: getBed,
+  },  // Owner (2026-11-27): in the woods, the trees round the shelter cut down
+  // (shade where mobs hide by day; and wood), once its shelter is furnished
+  // and has a bed (owner: furnishing the shelter is a strict procedure,
+  // right after its stone tools)
   {
     id: "clearing",
     title: "a clearing round my home",
@@ -525,21 +542,6 @@ export const MILESTONES: Milestone[] = [
     achieve: () => acquire("logs", WOOD_STOCK, liveWorld),
   },
   {
-    id: "chests",
-    title: "my shelter set up (chests, furnace, table)",
-    tier: 1,
-    requires: ["shelter", "stone_tools"],
-    done: () => shelter() !== null && furnished(),
-    achieve: furnishShelter,
-  },
-  {
-    id: "bed",
-    title: "a bed",
-    tier: 1,
-    requires: ["chests"],
-    done: hasBed,
-    achieve: getBed,
-  },  {
     id: "lit_home",
     title: "a lit home",
     // Day one (owner: it's critical): mobs kept coming at the shelter
