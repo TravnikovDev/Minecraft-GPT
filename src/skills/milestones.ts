@@ -240,7 +240,9 @@ async function huntTheHerd(emergency: boolean, hunt: (args: Record<string, unkno
   }
   const count = huntCount(await stockShortfall());
   console.log(`Food: out to the ${herd > 1 ? "herd" : first!.name} ${Math.round(first!.distance)} blocks off for ${count} animals (a stock and a reserve at home).`);
-  await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: null, upTo: count, walkFar: true });
+  // Starving, it takes what it finds, the last pair too (game test: it walked
+  // 54 blocks to a chicken starving and left it "so they can breed")
+  await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: starving ? count : null, upTo: starving ? null : count, walkFar: true });
 }
 
 /**
