@@ -478,7 +478,7 @@ export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, l
  * four sleeves (2 high, ARM_LENGTH long) and their pokeholes (1 wide,
  * POKE_HEIGHT high, POKE_LENGTH long, every POKE_EVERY blocks). Pure.
  */
-export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side = true): Vec3[] {
+export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side = true, dugTo?: Partial<Record<ArmName, number>>): Vec3[] {
   const out: Vec3[] = [];
   const R = STEP[RIGHT[arrive]];
   const F = STEP[arrive];
@@ -487,7 +487,8 @@ export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side =
     const way = STEP[armDirection(arm, arrive)];
     const across = STEP[RIGHT[armDirection(arm, arrive)]];
     const base = sleeveBase(hub, arrive, arm);
-    for (let k = 1; k <= ARM_LENGTH; k++) {
+    const last = dugTo?.[arm] ?? ARM_LENGTH;
+    for (let k = 1; k <= last; k++) {
       const cell = base.plus(way.scaled(k));
       for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) out.push(cell.offset(0, dy, 0));
       if (k % POKE_EVERY !== 0) continue;
@@ -612,13 +613,9 @@ export async function sealMineFromOutside(): Promise<void> {
   const rec = mineRecord();
   if (!rec || !bot.entity) return;
   const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
-  const open: Vec3[] = [...walk];
-  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
-    const h = hubStep(l);
-    open.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
-  }
-  // Only what's dug out already (a sleeve not dug that far isn't open yet)
-  const near = open.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && bot.blockAt(c)?.boundingBox === "empty");
+  const open: Vec3[] = [...walk, ...floorsAsDug(rec)];
+  // Only what's dug out already, and dry
+  const near = open.filter(openDryNear);
   const look = (p: Vec3): SealLook => {
     const b = bot.blockAt(p);
     if (!b) return null;
@@ -680,16 +677,33 @@ export async function sealMineFromOutside(): Promise<void> {
   console.log(`Mine: sealed ${sealed} of ${holes.length} openings to the outside.`);
 }
 
+/**
+ * Its floors' cells as far as it has dug them (rooms, sleeves to their dug
+ * length, their pokeholes), never the plan beyond (game test: a planned
+ * sleeve over a lake counted as its mine, and it walked into the lake to
+ * "seal" it). The floors above the deepest were dug out in full.
+ */
+function floorsAsDug(rec: MineRecord): Vec3[] {
+  const out: Vec3[] = [];
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    const h = hubStep(l);
+    const dugTo = l === rec.level ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug])) : undefined;
+    out.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, true, dugTo));
+  }
+  return out;
+}
+
+/** Open, dry (no water or lava) and within reach of a walk. */
+const openDryNear = (c: Vec3): boolean => {
+  const b = bot.blockAt(c);
+  return c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && b !== null && b.boundingBox === "empty" && !/water|lava/.test(b.name);
+};
+
 /** The dug-out cells of its floors (rooms, sleeves, pokeholes) within reach of a walk. */
 function dugFloorCells(): Vec3[] {
   const rec = mineRecord();
   if (!rec || !bot.entity) return [];
-  const out: Vec3[] = [];
-  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
-    const h = hubStep(l);
-    out.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
-  }
-  return out.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && bot.blockAt(c)?.boundingBox === "empty");
+  return floorsAsDug(rec).filter(openDryNear);
 }
 
 // Water or lava beside an ore: it's left (breaking it would let it in)
@@ -1432,9 +1446,11 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
  */
 const MEND_RANGE = 8;
 async function mendFloor(hub: Vec3, arrive: DirectionType, level: number, side: boolean): Promise<void> {
-  const open = floorCells(hub, arrive, level, side);
-  const openSet = new Set(open.map((c) => c.toString()));
   const rec = mineRecord();
+  // As far as it has dug (never the plan beyond: a planned sleeve over a lake)
+  const dugTo = rec && level === rec.level ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug])) : undefined;
+  const open = floorCells(hub, arrive, level, side, dugTo);
+  const openSet = new Set(open.map((c) => c.toString()));
   const stairs = rec ? new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString())) : new Set<string>();
   const here = bot.entity.position;
   const { isHoleBlock, ensureBlock } = await import("../actions/digging");
