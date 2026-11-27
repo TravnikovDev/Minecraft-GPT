@@ -123,7 +123,7 @@ The shelter was built into a hill under a tree and its mine came out into a ravi
 
 The bot can now live its own life when the owner lets it: it works through a player's first day (wooden tools, a shelter, stone tools, food, a bed, two chests) and goes into its shelter at night. It's **off until you say so**. Every "make me X" now goes through one planner that gets the materials, a table and the tools first.
 
-Best in a **fresh world**: open it to LAN, start the bot, and say "go live your life".
+Best in a **fresh world**: open it to LAN and start the bot; it greets you and starts its own life after 30 seconds without an order.
 
 **The plan's checks**
 - [x] (5 of 6 in the first run; 6 of 6 in the hillside world, Log Entry 15) Fresh world, "go live your life" → within a game day: "Milestone: wooden tools (1 of 6 …)", then a shelter, stone tools, food, a bed, chests, and finally "I've got everything for my first day …"
@@ -131,7 +131,8 @@ Best in a **fresh world**: open it to LAN, start the bot, and say "go live your 
 - [ ] "stop" while it works on a milestone → it stops, and doesn't start the next one for a minute
 
 **Autonomy and progress**
-- [x] Before "go live your life": it stands and waits; no tree cutting near your base
+- [x] Before "go live your life": it stands and waits; no tree cutting near your base (older builds; now it starts on its own after the 30-second greeting)
+- [ ] Joining: "I'm here. Anything you need? …30 seconds…", then its first milestone; an order in those 30 seconds runs first; "stay with me" keeps it waiting, also after a restart
 - [ ] "what's your progress?" → "First day: N of 6 done (…); still to do: …"
 - [ ] "stay with me" / "take a break" → "Okay, I'll wait for your orders."; the current milestone finishes or you say stop, no new one starts
 - [x] Restart the bot after "go live your life" → it carries on by itself (the choice is remembered)

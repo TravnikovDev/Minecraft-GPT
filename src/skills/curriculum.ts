@@ -84,11 +84,35 @@ function clearDoneFailures(): void {
 }
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** True when the owner let it live its own life. */
+// Owner: no "go live your life" needed. Joining, it says hello and waits
+// this long for an order; then it gets on with its own life (orders always
+// come first anyway, and "stay with me" turns its own life off)
+export const GREETING_WAIT_MS = 30_000;
+let ownLifeFrom = 0;
+let greetingTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** True when it lives its own life now: on unless the owner said "stay with me" (or AUTONOMY=off), after the greeting's wait. */
 export function autonomyOn(): boolean {
   // A server that forbids bots acting on their own: never (server courtesy)
   if (!automationAllowed()) return false;
-  return getMemory().autonomy?.on ?? process.env["AUTONOMY"] === "on";
+  if (Date.now() < ownLifeFrom) return false;
+  return getMemory().autonomy?.on ?? process.env["AUTONOMY"] !== "off";
+}
+
+/**
+ * Joining the world: hello to the owner, and 30 seconds for an order before
+ * its own life starts (owner: "he just tries to contact the owner; no
+ * response in 30 seconds, he starts minding his own business").
+ */
+export function greetOwner(): void {
+  if (getMemory().autonomy?.on === false || process.env["AUTONOMY"] === "off" || !automationAllowed()) {
+    report("I'm here, waiting for your orders.");
+    return;
+  }
+  ownLifeFrom = Date.now() + GREETING_WAIT_MS;
+  report(`I'm here. Anything you need? If I don't hear from you in ${GREETING_WAIT_MS / 1000} seconds, I'll get on with my own life.`);
+  if (greetingTimer) clearTimeout(greetingTimer);
+  greetingTimer = setTimeout(() => void considerNextStep(), GREETING_WAIT_MS + 500);
 }
 
 /** The owner turns it on ("go live your life") or off ("stay with me"). */
@@ -465,7 +489,7 @@ export function progressReport(): string {
   const tier1 = MILESTONES.filter((m) => m.tier === 1);
   const done = tier1.filter((m) => m.done());
   const left = tier1.filter((m) => !m.done());
-  const state = autonomyOn() ? "I'm living my own life" : "I'm waiting for you to tell me what to do (say \"go live your life\" to let me)";
+  const state = autonomyOn() ? "I'm living my own life" : "I'm waiting for your orders (say \"go live your life\" to let me live my own)";
   if (left.length === 0) {
     const tier2 = MILESTONES.filter((m) => m.tier === 2);
     const left2 = tier2.filter((m) => !m.done());
@@ -479,6 +503,9 @@ export function progressReport(): string {
 export function resetCurriculum(): void {
   blockedUntil.clear();
   failuresInRow.clear();
+  ownLifeFrom = 0;
+  if (greetingTimer) clearTimeout(greetingTimer);
+  greetingTimer = null;
 }
 
 // A task ending is a good moment to look at what's next. A milestone given up

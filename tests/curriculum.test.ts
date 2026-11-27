@@ -1,5 +1,6 @@
 // Phase 6: living its own life. Off by default: nothing happens until the
-// owner says "go live your life". Then it goes for the next milestone when
+// owner says "go live your life" (in the game it's on by default, after a
+// 30-second greeting; the tests keep it off). Then it goes for the next milestone when
 // nothing more urgent is running, one after another; the owner's commands cut
 // in and it carries on afterwards; "stop" keeps it quiet; at night it goes to
 // its shelter instead (once per night). Also the pure parts: which milestone
@@ -82,11 +83,33 @@ beforeEach(async () => {
   runs = [];
   shelterLog.length = 0;
   fake.time = { timeOfDay: 1000, age: 1000 };
-  delete process.env["AUTONOMY"];
+  process.env["AUTONOMY"] = "off";
   await P.updateMemory({ autonomy: undefined, milestones: undefined, places: [], bed: undefined });
 });
 
-test("off by default: with no word from the owner it does nothing", async () => {
+test("on by default (owner): joining, it greets the owner and waits 30 seconds for an order, then lives its own life", async () => {
+  delete process.env["AUTONOMY"];
+  const said: string[] = [];
+  fake.chat = (m: string) => said.push(m);
+  try {
+    C.greetOwner();
+    expect(C.GREETING_WAIT_MS).toBe(30_000);
+    // The greeting's wait: nothing of its own yet
+    expect(C.autonomyOn()).toBe(false);
+    await C.considerNextStep();
+    await idle();
+    expect(runs).toEqual([]);
+    // "Stay with me" (off in its memory): it waits for orders, whatever the default
+    await P.updateMemory({ autonomy: { on: false, since: Date.now() } });
+    C.greetOwner();
+    await P.updateMemory({ autonomy: undefined });
+  } finally {
+    process.env["AUTONOMY"] = "off";
+    C.resetCurriculum();
+  }
+});
+
+test("AUTONOMY=off (and the tests' default): it waits for orders", async () => {
   await C.considerNextStep();
   await idle();
   expect(runs).toEqual([]);

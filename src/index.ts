@@ -48,7 +48,7 @@ import { registerSuffocationReflex } from "./actions/suffocationReflex";
 import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
-import { autonomyOn, considerNextStep, resetCurriculum } from "./skills/curriculum";
+import { autonomyOn, considerNextStep, greetOwner, resetCurriculum } from "./skills/curriculum";
 import { protectShelter, rememberShelterDoor } from "./actions/building";
 import { registerFaceFix } from "./core/faces";
 import { registerCreditsSkip } from "./core/primitives";
@@ -151,6 +151,8 @@ onConnectionReady((currentBot) => {
   everyWhileConnected(currentBot, 5_000, considerFood); // starving: food now; low: a restock by day (skills/foodWatch)
 
   console.log(`Bot spawned and initialized successfully (Minecraft ${currentBot.version})`);
+  // Hello to the owner; its own life starts after 30 seconds with no order (owner)
+  greetOwner();
 
   // Died shortly before the bot was restarted? Its items may still be there.
   if (!restartRecoveryChecked) {

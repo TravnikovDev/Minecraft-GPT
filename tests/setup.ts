@@ -11,4 +11,6 @@ process.env.DB_PATH = join(dir, "db.json");
 // planner made real calls from the curriculum tests before), and spending is
 // counted in a throwaway file, never the owner's usage.json
 process.env.LLM_MONTHLY_CAP_USD = "0";
+// Its own life is on by default in the game; tests turn it on themselves when they need it
+process.env.AUTONOMY = "off";
 process.env.USAGE_PATH = join(dir, "usage.json");
