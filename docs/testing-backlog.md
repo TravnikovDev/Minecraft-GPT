@@ -348,3 +348,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] At night it works on (milestones, trees, chores); a mob hurts it: "Attacked at night (zombie): off to my shelter", the night routine, in its shelter till morning
 - [ ] A new field never on the way of its mine's stairs (34 ahead of the shelter's back door, 2 either side); walks never go over its bed
 - [ ] With 64 copper (raw, ingots, blocks; bag and chests): copper ore in sight and in its tunnels' walls is left
+- [ ] Taking down scaffolding: walks to it never place blocks; a pillar too tall to reach from the ground gets a column of its own beside it, then both come down on the way back (no loop)

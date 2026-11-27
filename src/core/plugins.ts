@@ -134,7 +134,7 @@ export const pathing = {
    * one task (e.g. mining digs cheaply; plain walking prefers to go around).
    */
   async withRules<T>(
-    patch: Partial<Pick<Movements, "digCost" | "placeCost" | "allowSprinting" | "allow1by1towers">>,
+    patch: Partial<Pick<Movements, "digCost" | "placeCost" | "allowSprinting" | "allow1by1towers" | "scafoldingBlocks">>,
     fn: () => Promise<T>
   ): Promise<T> {
     const rules = bot.pathfinder?.movements as unknown as Record<string, unknown> | undefined;

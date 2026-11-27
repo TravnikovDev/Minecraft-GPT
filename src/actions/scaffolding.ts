@@ -8,9 +8,9 @@ import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { pathing } from "../core/plugins";
-import { goTo } from "../core/primitives";
+import { goTo, pillarUp } from "../core/primitives";
 import { wasStopped } from "../core/result";
-import { isOwnScaffold, ownScaffolds } from "../core/scaffold";
+import { isOwnScaffold, ownScaffolds, recordScaffold } from "../core/scaffold";
 import { isCommandCancelled, markOwnWork } from "../core/commandContext";
 import { asBackgroundJob, isIdle, mayWanderTo, noRealWork } from "./pickup";
 import { breakBlockAt } from "./blockBreaking";
@@ -47,14 +47,81 @@ async function climbDownOwnPillar(keepGoing: () => boolean): Promise<number> {
   return removed;
 }
 
-/** Breaks its scaffolding it can reach from where it stands, highest first. */
-async function breakWithinReach(keepGoing: () => boolean): Promise<number> {
+/** Breaks its scaffolding it can reach from where it stands, highest first (only `which`, when given). */
+async function breakWithinReach(keepGoing: () => boolean, which: (p: Vec3) => boolean = () => true): Promise<number> {
   let removed = 0;
   for (const s of ownScaffolds()) {
     if (!keepGoing()) break;
+    if (!which(new Vec3(s.x, s.y, s.z))) continue;
     if (eyes().distanceTo(center(s)) > REACH) continue;
     if (await breakBlockAt(s.x, s.y, s.z)) removed++;
   }
+  return removed;
+}
+
+// Blocks it climbs a column of its own with (cheap ones), to reach a tall pillar's top
+const CLIMB_WITH = ["dirt", "cobblestone", "cobbled_deepslate", "netherrack"];
+// A pillar this many blocks over the ground it stands on is out of reach from there
+const GROUND_REACH = 4;
+const SIDES = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+// Walks to its scaffolding never put blocks down (game test: walking to a
+// pillar placed new blocks, which were scaffolding too; it took the new ones
+// down first and went round in a loop, wasting minutes)
+const NO_BUILDING = { allow1by1towers: false, scafoldingBlocks: [] as number[], digCost: 100 };
+
+/** The cells of its scaffolding in one column (x, z), highest first. Pure. */
+export function columnOf(cells: Array<{ x: number; y: number; z: number }>, x: number, z: number): Array<{ x: number; y: number; z: number }> {
+  return cells.filter((c) => c.x === x && c.z === z).sort((a, b) => b.y - a.y);
+}
+
+/** True when a pillar's top is out of reach from the ground at its foot. Pure. */
+export function tooTallFromGround(column: Array<{ y: number }>): boolean {
+  if (column.length === 0) return false;
+  const foot = Math.min(...column.map((c) => c.y));
+  const top = Math.max(...column.map((c) => c.y));
+  return top - foot >= GROUND_REACH;
+}
+
+/**
+ * A pillar of its scaffolding too tall to reach from the ground: like a
+ * player, up a column of its own right beside it (recorded as scaffolding),
+ * then down that column a block at a time, breaking the old pillar beside it
+ * on the way; nothing is left standing. How many blocks it removed.
+ */
+async function takeDownTallPillar(column: Array<{ x: number; y: number; z: number }>, keepGoing: () => boolean): Promise<number> {
+  const top = column[0]!;
+  const foot = column[column.length - 1]!;
+  const old = new Set(column.map((c) => `${c.x},${c.y},${c.z}`));
+  const inOld = (p: Vec3): boolean => old.has(`${p.x},${p.y},${p.z}`);
+  // A free cell beside its foot, on solid ground
+  const stand = SIDES.map((d) => new Vec3(foot.x + d.x, foot.y, foot.z + d.z)).find((c) => {
+    const at = (dy: number) => bot.blockAt(c.offset(0, dy, 0));
+    return at(-1)?.boundingBox === "block" && at(0)?.boundingBox === "empty" && at(1)?.boundingBox === "empty";
+  });
+  const filler = (): string | null => CLIMB_WITH.find((n) => bot.inventory.items().some((i) => i.name === n)) ?? null;
+  if (!stand || !filler()) return 0;
+  const there = await pathing.withRules(NO_BUILDING, () => goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z)));
+  if (!there.ok) return 0;
+  // Up its own column till the old top is within reach
+  while (keepGoing() && bot.entity.position.y < top.y - 2) {
+    const name = filler();
+    if (!name) break;
+    const feet = bot.entity.position.floored();
+    if (!(await pillarUp(name)).ok) break;
+    recordScaffold(feet, name);
+  }
+  // Down again: what of the old pillar is in reach, then the block underfoot
+  let removed = 0;
+  for (let i = 0; i < MAX_PILLAR && keepGoing(); i++) {
+    removed += await breakWithinReach(keepGoing, inOld);
+    const below = bot.entity.position.floored().offset(0, -1, 0);
+    if (!isOwnScaffold(below) || inOld(below)) break;
+    const y = bot.entity.position.y;
+    if (!(await breakBlockAt(below.x, below.y, below.z))) break;
+    removed++;
+    await landed(y);
+  }
+  removed += await breakWithinReach(keepGoing, inOld);
   return removed;
 }
 
@@ -68,9 +135,18 @@ export async function takeDownScaffolding(walk = false, keepGoing: () => boolean
   removed += await breakWithinReach(keepGoing);
   if (walk) {
     const me = bot.entity.position;
+    const done = new Set<string>();
     for (const s of ownScaffolds().filter((p) => me.distanceTo(center(p)) <= CLEANUP_RADIUS && mayWanderTo(p))) {
       if (!keepGoing()) break;
-      const walked = await pathing.withRules({ allow1by1towers: false }, () => goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 3)));
+      if (done.has(`${s.x},${s.z}`) || !isOwnScaffold(new Vec3(s.x, s.y, s.z))) continue;
+      done.add(`${s.x},${s.z}`);
+      // A pillar too tall to reach from the ground: up beside it and down again
+      const column = columnOf(ownScaffolds(), s.x, s.z);
+      if (tooTallFromGround(column)) {
+        removed += await takeDownTallPillar(column, keepGoing);
+        continue;
+      }
+      const walked = await pathing.withRules(NO_BUILDING, () => goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 3)));
       if (!walked.ok) {
         if (wasStopped(walked)) break;
         continue; // out of reach from the ground (a pillar standing alone): leave it
