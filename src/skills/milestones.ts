@@ -209,13 +209,14 @@ export function huntCount(need: number): number {
 
 /**
  * Whether to walk out to the animals it knows of: by day, the nearest within
- * FAR_HUNT, a herd (two or more together) unless it's starving (owner: not
- * 100 blocks after one chicken), and fit enough for the walk (starving it
- * goes anyway: hunger takes its health down too). Pure.
+ * FAR_HUNT, where there's at least one to take beyond the pair of each kind
+ * it leaves (`herd`), unless it's starving (owner: not 100 blocks after one
+ * chicken), and fit enough for the walk (starving it goes anyway: hunger
+ * takes its health down too). Pure.
  */
 export function walkToHerd(nearest: number | null, herd: number, health: number, starving: boolean): boolean {
   if (nearest === null || nearest > FAR_HUNT) return false;
-  if (nearest > NEAR_HUNT && herd < 2 && !starving) return false;
+  if (nearest > NEAR_HUNT && herd < 1 && !starving) return false;
   return starving || health >= WALK_HEALTH;
 }
 
@@ -225,7 +226,13 @@ async function huntTheHerd(emergency: boolean, hunt: (args: Record<string, unkno
   const game = knownAnimals().filter((p) => isGame(p, null));
   const first = game[0];
   const at = first ? bot.entities[first.id]?.position : undefined;
-  const herd = at ? game.filter((p) => bot.entities[p.id]?.position && bot.entities[p.id]!.position.distanceTo(at) <= 16).length : 0;
+  // What it may take there (owner: a pair of each kind is left to breed;
+  // game test: it walked 108 blocks to "a herd" of 2 sheep and took none)
+  const there = at ? game.filter((p) => bot.entities[p.id]?.position && bot.entities[p.id]!.position.distanceTo(at) <= 32) : [];
+  const { KEEP_PER_KIND } = await import("../actions/hunting");
+  const kinds = new Map<string, number>();
+  for (const p of there) kinds.set(p.name, (kinds.get(p.name) ?? 0) + 1);
+  const herd = [...kinds.values()].reduce((n, k) => n + Math.max(0, k - KEEP_PER_KIND), 0);
   const starving = emergency || (bot.food ?? 20) <= STARVING_FOOD;
   // None within 150 blocks (owner): a walk of up to 75 in one direction over
   // dry land to look, then the hunt there
@@ -234,8 +241,8 @@ async function huntTheHerd(emergency: boolean, hunt: (args: Record<string, unkno
     if (!(await exploreFor("animals", animalsInSight, 3, ANIMAL_WALK / 3))) return;
     return huntTheHerd(emergency, hunt);
   }
-  if (!walkToHerd(first?.distance ?? null, herd, bot.health ?? 20, starving)) {
-    if (first) console.log(`Food: not walking to the ${first.name} ${Math.round(first.distance)} blocks off (${herd} there, health ${Math.round(bot.health ?? 0)}).`);
+  if (!walkToHerd(first?.distance ?? null, starving ? there.length : herd, bot.health ?? 20, starving)) {
+    if (first) console.log(`Food: not walking to the ${first.name} ${Math.round(first.distance)} blocks off (${herd} to take there, ${there.length} in all; health ${Math.round(bot.health ?? 0)}).`);
     return;
   }
   const count = huntCount(await stockShortfall());

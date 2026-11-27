@@ -26,8 +26,9 @@ test("food stock: walks out to a herd by day when low, not only when starving (o
   expect(walkToHerd(55, 4, 9, false)).toBe(true); // a herd 55 off, health 9: goes
   expect(walkToHerd(55, 4, 5, false)).toBe(false); // too hurt for the walk while not starving
   expect(walkToHerd(55, 4, 1, true)).toBe(true); // starving: goes anyway
-  expect(walkToHerd(80, 1, 20, false)).toBe(false); // not 80 blocks for one chicken
-  expect(walkToHerd(20, 1, 20, false)).toBe(true); // one close by is fine
+  expect(walkToHerd(80, 0, 20, false)).toBe(false); // not 80 blocks for one chicken, nor a pair it leaves to breed
+  expect(walkToHerd(80, 1, 20, false)).toBe(true); // 3 cows there: one to take
+  expect(walkToHerd(20, 0, 20, false)).toBe(true); // close by it looks anyway
   expect(walkToHerd(140, 6, 20, false)).toBe(true); // owner: animals scanned for 150 blocks
   expect(walkToHerd(160, 6, 20, true)).toBe(false); // too far
   expect(walkToHerd(null, 0, 20, true)).toBe(false);
