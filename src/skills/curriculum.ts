@@ -172,7 +172,15 @@ function milestoneTask(m: Milestone): TaskSpec {
       await announce();
       // "Done" without being done is a failure too (review: it was proposed
       // again every second)
-      if (result.ok && !m.done() && !isCommandCancelled()) result = fail("refused", `${m.title} still isn't done`);
+      // Got what it set out for, and something wore out or got used up on the
+      // way (game test: the dig for 3 cobblestone for a new axe wore out one
+      // of its two stone pickaxes, and it said "the server didn't let me"):
+      // once more, now with what it gathered
+      if (result.ok && !m.done() && !isCommandCancelled()) {
+        console.log(`Milestone ${m.title}: not done yet after all (something wore out or got used up on the way); once more.`);
+        result = await m.achieve();
+      }
+      if (result.ok && !m.done() && !isCommandCancelled()) result = fail("missing_items", `${m.title} still isn't done: something I made wore out or got used up on the way`);
       if (m.done()) failuresInRow.delete(m.id);
       if (!result.ok && !isCommandCancelled()) {
         const ms = setAside(m.id, result.reason === "unreachable" && /no path/i.test(result.detail ?? ""));
