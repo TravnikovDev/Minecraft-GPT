@@ -125,6 +125,12 @@ export async function placeChestOutOfTheWay(itemName = "chest"): Promise<Block |
  */
 export async function placeOutOfTheWay(itemName: string): Promise<Block | null> {
   const blockAt = (p: Vec3): Block | null => bot.blockAt(p);
+  // A furnace or a crafting table with its shelter near and that spot free:
+  // in its shelter (owner: "why did he place the furnace outside instead of
+  // the shelter?!"; cooking before the shelter was furnished put one on the
+  // grass by the outdoor table)
+  const home = await shelterSpotFor(itemName);
+  if (home) return home;
   const tall = itemName.endsWith("chest");
   // Never where its mine's tunnels will start (they'd stop at it later)
   const { mineArmStarts } = await import("../skills/mine");
@@ -157,6 +163,31 @@ export async function placeOutOfTheWay(itemName: string): Promise<Block | null> 
   }
   console.log(`No wall to put the ${itemName} in here; free ground instead.`);
   return placeItemNear(itemName);
+}
+
+// How far from its shelter it still carries a furnace or table home to place it
+const HOME_PLACE_RANGE = 64;
+
+/** Places a furnace or crafting table in its shelter's own spot when that's free and near; null otherwise. */
+async function shelterSpotFor(itemName: string): Promise<Block | null> {
+  if (itemName !== "furnace" && itemName !== "crafting_table") return null;
+  const { shelterSlots } = await import("./building");
+  const slots = shelterSlots();
+  const spot = itemName === "furnace" ? slots?.furnace : slots?.table;
+  if (!slots || !spot) return null;
+  const at = new Vec3(spot.x, spot.y, spot.z);
+  const here = bot.entity.position;
+  // Down its mine (well under its home): a niche there is fine
+  if (here.distanceTo(at) > HOME_PLACE_RANGE || here.y < slots.stand.y - 6) return null;
+  const now = bot.blockAt(at);
+  if (!now || now.boundingBox !== "empty") return null; // something's there already
+  const near = await goTo(new pf.goals.GoalNear(slots.stand.x, slots.stand.y, slots.stand.z, 1));
+  if (!near.ok) return null;
+  if (!(await placeBlock(itemName, at.x, at.y, at.z))) return null;
+  const placed = bot.blockAt(at);
+  if (placed?.name !== itemName) return null;
+  console.log(`Put the ${itemName.replace(/_/g, " ")} in its spot in my shelter at ${at}.`);
+  return placed;
 }
 
 /** A chest it just placed is its own (the planner takes only from its own chests). */
