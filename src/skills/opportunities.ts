@@ -7,6 +7,7 @@
 // milestone (bucket 5, front), coal and copper wait for a quiet moment
 // (bucket 6). The arbiter decides when each runs, as for every other task.
 
+import { oreCapped } from "./oreCaps";
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
@@ -115,6 +116,8 @@ export function bestOreInSight(): Block | null {
     .filter((b) => catalog().canHarvest(b.name, pickaxe))
     .filter((b) => (failed.get(keyOf(b)) ?? 0) < now && !forbiddenAt(b.position) && tunnelBlocked(b.position) === null && mayWanderTo(b.position))
     .filter((b) => allowedNow(b))
+    // Plenty of it already (owner: no more copper past 64)
+    .filter((b) => !oreCapped(b.name))
     // Down in its mine, only ore its own tunnels opened up (the floor's
     // pass mines those); never a side trip dug to ore seen in a cave (owner:
     // the mine looked worse and worse, odd cuts and pillars everywhere)

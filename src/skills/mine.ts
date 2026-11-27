@@ -8,6 +8,7 @@
 // deeper to a new hub, and it starts over. Progress is remembered with the
 // mine, so the next trip carries on where the last one stopped.
 
+import { oreCapped } from "./oreCaps";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
@@ -1006,6 +1007,8 @@ async function mineExposedOresNow(): Promise<number> {
     for (const ore of ores) {
       if (isCommandCancelled() || hurtInTheMine()) break;
       if (!/_ore$/.test(bot.blockAt(ore)?.name ?? "")) continue;
+      // Plenty of it already: left in the wall (owner: no more copper past 64)
+      if (oreCapped(bot.blockAt(ore)?.name ?? "")) continue;
       // From the dug cell beside it
       const from = DIRS6.map((d) => ore.plus(d)).find((c) => openSet.has(c.toString()));
       if (from && bot.entity.position.distanceTo(from) > 4 && !(await goTo(new pf.goals.GoalNear(from.x, from.y, from.z, 1))).ok) continue;
@@ -2249,6 +2252,7 @@ async function mineOresInSight(wants: OreWant[]): Promise<void> {
   await whileGathering(async () => {
     for (const item of STRIP_ORES) {
       if (isCommandCancelled()) return;
+      if (oreCapped(item)) continue; // plenty of it (owner: copper past 64)
       await collectBlock(item, 16, ORE_REACH, { seenOnly: true });
     }
   });
