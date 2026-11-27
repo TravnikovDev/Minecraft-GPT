@@ -260,6 +260,17 @@ function nightTask(): TaskSpec {
       // Shut in: the reflexes leave what's outside alone until morning
       setSheltered(true);
       try {
+        // The day's haul in its chests (owner: kept at home, not carried
+        // about; it died in its mine with 1022 things on it)
+        try {
+          const { storeItems } = await import("../actions/storage");
+          const { toolTier, TIER } = await import("./capabilities");
+          const stored = await storeItems("lowValue", [], toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : []);
+          const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
+          if (n > 0) console.log(`Night: put ${n} things away in my chests.`);
+        } catch (error) {
+          console.log(`Night: putting things away failed: ${(error as Error).message}`);
+        }
         // Food from its chests first (cooked, or raw to cook now), review
         try {
           await (await import("./milestones")).foodFromChests();

@@ -512,6 +512,23 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number, tur
   return cells;
 }
 
+// Slots in use (of 36) that make a bag heavy enough to take home after a trip
+const HEAVY_SLOTS = 24;
+
+/**
+ * Its haul put away at home (owner: it must go to its shelter and keep its
+ * things there; it died in its mine carrying 1022): with the bag this full,
+ * out of the mine, into the shelter, and everything but its working kit
+ * (tools, food, torches, some stone, coal and dirt) in its chests.
+ */
+export async function haulHomeIfHeavy(): Promise<void> {
+  if (bot.inventory.items().length < HEAVY_SLOTS || isCommandCancelled()) return;
+  console.log(`Mine: my bag is heavy (${bot.inventory.items().length} slots); taking it home.`);
+  await upFromTheMine();
+  const { putAwayHaul } = await import("./homeChores");
+  await putAwayHaul();
+}
+
 /** A cell as the outside check sees it (null: not loaded). */
 export type SealLook = { solid: boolean; liquid: boolean; sky: boolean } | null;
 const DIRS6 = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -1240,6 +1257,8 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     await mendFloor(hub, arrive, level, side);
     await sealMineFromOutside();
   }
+  // A heavy bag goes home with it (owner: it died in the mine carrying 1022 things)
+  await haulHomeIfHeavy();
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
 }
 

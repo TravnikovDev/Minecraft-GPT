@@ -11,6 +11,28 @@ import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
 
+/**
+ * What it carries put away in its chests at home (owner: keep things in the
+ * shelter, not on it): all but its working kit (tools and armour, its food,
+ * torches, 32 cobblestone, 16 dirt, 16 coal, sticks, a few logs) and
+ * precious things. Raw iron stays while it has no iron pickaxe (it's for
+ * that). In its shelter first. How many it put away.
+ */
+export async function putAwayHaul(): Promise<number> {
+  const { enterShelter } = await import("../actions/building");
+  const home = await enterShelter();
+  if (!home.ok || isCommandCancelled()) return 0;
+  const { toolTier, TIER } = await import("../skills/capabilities");
+  const keep = toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [];
+  const { storeItems } = await import("../actions/storage");
+  const stored = await storeItems("lowValue", [], keep);
+  const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
+  if (n > 0) report(`Put ${n} things away in my chests at home.`);
+  if (stored?.problem) console.log(`Home: couldn't put everything away (${stored.problem}).`);
+  else if (stored && stored.leftOver.size > 0) console.log(`Home: my chests are full; ${[...stored.leftOver.values()].reduce((a, b) => a + b, 0)} things stay on me.`);
+  return n;
+}
+
 export async function homeChores(): Promise<ActionResult> {
   const { enterShelter } = await import("../actions/building");
   const { shelter, toolTier, TIER } = await import("../skills/capabilities");
