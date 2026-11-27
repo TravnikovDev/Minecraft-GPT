@@ -72,8 +72,10 @@ export function myFarms(): Field[] {
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
     .map((p) => {
       const d = (p.details ?? {}) as { half?: number; reserve?: number; seed?: string };
-      const half = Number(d.half ?? FARM_HALF);
-      return { x: p.x, y: p.y, z: p.z, name: p.name ?? "my farm", seed: d.seed ?? "wheat_seeds", half, reserve: Number(d.reserve ?? half) };
+      // The whole ground inside its fence is sown (owner: crops over the
+      // whole territory, 9 by 9; fields started 5 by 5 are sown out now)
+      const reserve = Number(d.reserve ?? d.half ?? FARM_HALF);
+      return { x: p.x, y: p.y, z: p.z, name: p.name ?? "my farm", seed: d.seed ?? "wheat_seeds", half: reserve, reserve };
     });
 }
 
@@ -101,6 +103,32 @@ export function protectFields(): void {
       }
   }
   protectCells(cells, "farm");
+}
+
+/** Seeds it sows: kept on it when it puts things away (owner: 200 seeds sat in its chests while its fields stood bare). */
+export const SEED_NAMES: readonly string[] = SEEDS;
+
+/** Seeds of a kind it has, carried and in its chests near home. */
+async function seedsOwned(seed: string): Promise<number> {
+  const { storedNear } = await import("../actions/storage");
+  return count(seed) + storedNear(seed, 32);
+}
+
+/** A hoe: stone if it can, wooden otherwise (game test: after a death it had none, and four hours went by with 3 seeds sown). */
+async function ensureHoe(): Promise<ActionResult> {
+  if (bot.inventory.items().some((i) => i.name.endsWith("_hoe"))) return ok();
+  const { acquire } = await import("./acquire");
+  const { liveWorld } = await import("./world");
+  let hoe = await acquire("stone_hoe", 1, liveWorld);
+  if (!hoe.ok) hoe = await acquire("wooden_hoe", 1, liveWorld);
+  return hoe.ok ? ok() : fail(hoe.reason, `no hoe (${describeFailure(hoe)})`);
+}
+
+/** Seeds for `n` cells on it, from its chests if it carries fewer. */
+async function seedsOnHand(seed: string, n: number): Promise<void> {
+  if (count(seed) >= n) return;
+  const { storedNear, takeItems } = await import("../actions/storage");
+  if (storedNear(seed, 32) > 0) await takeItems([{ name: seed, count: n - count(seed) }], true);
 }
 
 /** Its first field (the plot's middle), or null. */
@@ -438,23 +466,29 @@ export async function makeFarm(): Promise<ActionResult> {
   if (!home) return fail("not_found", "no shelter to farm next to yet");
   const { daylight } = await import("../core/daylight");
   if (!daylight()) return fail("refused", "fields are made by day");
-  const { acquire } = await import("./acquire");
-  const { liveWorld } = await import("./world");
-  // A hoe: stone if it can, wooden on its first day
-  if (!bot.inventory.items().some((i) => i.name.endsWith("_hoe"))) {
-    let hoe = await acquire("stone_hoe", 1, liveWorld);
-    if (!hoe.ok) hoe = await acquire("wooden_hoe", 1, liveWorld);
-    if (!hoe.ok) return fail(hoe.reason, `no hoe (${describeFailure(hoe)})`);
+  // The next field only once the ones it has are sown all over, and with the
+  // seeds for a whole new one (owner: one field full, then the next from
+  // its seeds)
+  const fields = myFarms();
+  const unfinished = fields.find((f) => bareCells(f) > 1);
+  if (unfinished) return fail("not_found", `${unfinished.name} isn't sown all over yet`);
+  const hoe = await ensureHoe();
+  if (!hoe.ok) return hoe;
+  let seed: string | null = null;
+  if (fields.length === 0) seed = await getSeeds();
+  else {
+    const want = (2 * FARM_HALF + 1) ** 2 - 1;
+    for (const s of SEEDS) if ((await seedsOwned(s)) >= want) seed = s;
+    if (!seed) return fail("missing_items", `not enough seeds for a new field yet (${Math.max(...(await Promise.all(SEEDS.map(seedsOwned))))} of ${want}; the harvests bring more)`);
   }
-  const seed = await getSeeds();
   if (!seed) return fail("missing_items", "no seeds: no carrots, potatoes or beetroot, and the grass round here gave none");
   const plot = findPlot(home);
   if (!plot) return fail("not_found", "no open ground by my shelter I can level for a field, not even 5 by 5");
   const { middle } = plot;
   const reserve = plot.half;
-  const half = Math.min(FIRST_HALF, reserve);
+  const half = reserve;
   const n = myFarms().length + 1;
-  report(`Making ${n === 1 ? "my first field" : `field ${n}`} (${2 * half + 1} by ${2 * half + 1}, room to grow to ${2 * reserve + 1} by ${2 * reserve + 1}) at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
+  report(`Making ${n === 1 ? "my first field" : `field ${n}`} (${2 * half + 1} by ${2 * half + 1}, sown all over) at ${middle.x}, ${middle.z}: ${seed.replace(/_/g, " ")}${count("water_bucket") > 0 ? ", water in the middle" : "; water in its middle once I have a bucket"}.`);
   if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 2))).ok) return fail("unreachable", "I can't get to the field's spot");
   // Water now if it has it (owner: crops grow without it too, slower; the
   // middle gets it once it has a bucket)
@@ -464,6 +498,7 @@ export async function makeFarm(): Promise<ActionResult> {
   await levelPlot(middle, reserve);
   await addPlace({ kind: "farm", name: n === 1 ? "my farm" : `my farm ${n}`, x: middle.x, y: middle.y, z: middle.z, details: { seed, half, reserve } });
   protectFields();
+  await seedsOnHand(seed, (2 * half + 1) ** 2 - 1);
   const sown = await sowPlot(middle, seed, half);
   await fenceField(middle, reserve);
   report(`Field ${n} is planted: ${sown} blocks of ${seed.replace(/_/g, " ")}${sown < (2 * half + 1) ** 2 - 1 ? "; it grows as the harvests give more seeds" : ""}.`);
@@ -644,7 +679,13 @@ export async function tendFarm(): Promise<number> {
     // Bare farmland sown again, and the plot grown outward with the seeds the
     // harvest gave; none left and the field bare: seeds from the grass round
     // about (game test: a field stood as grass, nothing sown, for an hour)
-    if (!SEEDS.some((s) => count(s) > 0) && bareCells(farm) > 0 && (bot.food ?? 20) > 6) await getSeeds();
+    const bare = bareCells(farm);
+    if (bare > 0) {
+      // Its hoe (lost in a death, it sowed nothing for hours) and its seeds from the chests
+      await ensureHoe();
+      for (const s of SEEDS) if (count(s) < bare) await seedsOnHand(s, bare);
+    }
+    if (!SEEDS.some((s) => count(s) > 0) && bare > 0 && (bot.food ?? 20) > 6) await getSeeds();
     const seed = SEEDS.find((s) => count(s) > 0);
     if (seed) await sowPlot(farm, seed, farm.half);
     // Every cell of it sown and seeds over: a ring wider (owner: 5x5, then 7x7, then 9x9)

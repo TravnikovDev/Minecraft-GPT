@@ -273,7 +273,8 @@ function nightTask(): TaskSpec {
         try {
           const { storeItems } = await import("../actions/storage");
           const { toolTier, TIER } = await import("./capabilities");
-          const stored = await storeItems("lowValue", [], toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : []);
+          const { SEED_NAMES } = await import("./farm");
+          const stored = await storeItems("lowValue", [], [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])]);
           const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
           if (n > 0) console.log(`Night: put ${n} things away in my chests.`);
         } catch (error) {

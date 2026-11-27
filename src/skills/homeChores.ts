@@ -23,7 +23,9 @@ export async function putAwayHaul(): Promise<number> {
   const home = await enterShelter();
   if (!home.ok || isCommandCancelled()) return 0;
   const { toolTier, TIER } = await import("../skills/capabilities");
-  const keep = toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [];
+  // Its seeds stay on it for its fields (owner: they sat in its chests while the fields stood bare)
+  const { SEED_NAMES } = await import("./farm");
+  const keep = [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])];
   const { storeItems } = await import("../actions/storage");
   const stored = await storeItems("lowValue", [], keep);
   const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
