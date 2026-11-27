@@ -123,3 +123,28 @@ test("from dry land a walk never goes under water; in the water it may swim out 
   for (const k of ["5,60,5", "5,61,5", "0,64,0", "0,65,0"]) world.delete(k);
   delete bot.entity;
 });
+
+test("walled in, its walks break through its own cobblestone by its passages, never its shell or with water behind (game test: three hours shut in its mine)", async () => {
+  const { setWalledIn } = await import(`${ROOT}/src/core/movements.ts`);
+  const at = (n: string, x: number, y: number, z: number) => {
+    const b = Block.fromStateId(registry.blocksByName[n].defaultState, 0);
+    b.position = new Vec3(x, y, z);
+    world.set(`${x},${y},${z}`, b);
+    return b;
+  };
+  setOwnPassages([{ x: -54, y: 49, z: 2 }], "mine");
+  const seal = at("cobblestone", -55, 49, 2);
+  const far = at("cobblestone", -60, 49, 2);
+  expect(moves.safeToBreak(seal)).toBe(false); // ordinarily: built, never broken
+  setWalledIn(60_000);
+  expect(moves.safeToBreak(seal)).toBe(true);
+  expect(moves.safeToBreak(far)).toBe(false); // nowhere near its passages
+  protectCells([{ x: -55, y: 49, z: 2 }], "mine");
+  expect(moves.safeToBreak(seal)).toBe(false); // its mine's shell
+  protectCells([], "mine");
+  at("water", -55, 50, 2);
+  expect(moves.safeToBreak(seal)).toBe(false); // water would come in
+  setWalledIn(0);
+  setOwnPassages([], "mine");
+  for (const k of ["-55,49,2", "-60,49,2", "-55,50,2"]) world.delete(k);
+});

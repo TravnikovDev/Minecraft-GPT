@@ -16,7 +16,7 @@ import { bot } from "./body";
 import { guarded } from "./guard";
 import { paceClicks } from "./pace";
 import { pathing, tools } from "./plugins";
-import { avoidStep, isNatural, isProtected, liquidBehind } from "./movements";
+import { avoidStep, isNatural, isProtected, liquidBehind, setWalledIn, walledIn } from "./movements";
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
@@ -344,8 +344,40 @@ const onTree = (): boolean => TREE_BLOCK.test(blockUnderMe()?.name ?? "");
 // its mine, the way back to an ore "took too long to decide", fresh-world test)
 const LONG_THINK_MS = 15_000;
 
+// Walled in: every walk "no path" for this long without it moving from the
+// spot (game test: three hours in a pocket of its mine shut by its own
+// seals); then for a while its walks break through its own fillers
+const WALLED_IN_AFTER_MS = 2 * 60_000;
+const WALLED_IN_FOR_MS = 5 * 60_000;
+let noPathSince: { at: number; pos: Vec3 } | null = null;
+
+/**
+ * Keeps count of walks with no path from one spot; true when that's gone on
+ * long enough that it's walled in (its walks now break its own fillers).
+ */
+function noteWalk(result: ActionResult): boolean {
+  if (!bot.entity) return false;
+  const here = bot.entity.position;
+  const moved = !noPathSince || noPathSince.pos.distanceTo(here) > 4;
+  if (result.ok) {
+    if (moved) noPathSince = null;
+    return false;
+  }
+  if (result.reason !== "unreachable" || !/no path/i.test(result.detail ?? "") || walledIn()) return false;
+  if (moved) {
+    noPathSince = { at: Date.now(), pos: here.clone() };
+    return false;
+  }
+  if (Date.now() - noPathSince!.at < WALLED_IN_AFTER_MS) return false;
+  noPathSince = null;
+  setWalledIn(WALLED_IN_FOR_MS);
+  console.log(`Walled in at ${here.floored()}: no way anywhere for ${WALLED_IN_AFTER_MS / 60_000} minutes; breaking through my own cobblestone and dirt to get out.`);
+  return true;
+}
+
 export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean; thoughtLonger?: boolean } = {}): Promise<ActionResult> {
   let result = await walkTo(goal, options);
+  if (noteWalk(result)) result = await walkTo(goal, options);
   if (!result.ok && result.reason === "unreachable" && !options.thoughtLonger && /too? long to decide/i.test(result.detail ?? "")) {
     const saved = pathing.thinkTimeout;
     pathing.thinkTimeout = Math.max(saved, LONG_THINK_MS);

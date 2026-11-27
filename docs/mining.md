@@ -51,3 +51,4 @@ With every way down blocked, or at the bottom, it digs side routes off its lowes
 - It goes down only with enough health and food.
 - **Closed to the outside**: where a floor's room, sleeve or pokehole (or the stairs) opens into open air that reaches the sky (a canyon, a ravine), the opening is blocked with cobblestone, at the start of every trip and after every stretch it digs. Caves that stay underground are left open.
 - Gravel or sand falling into its head is dug out at once (the suffocation reflex).
+- **Walled in** (no way anywhere for 2 minutes from one spot, e.g. a pocket shut by its own seals with the way back under water): for 5 minutes its walks may break the cobblestone and dirt it put down beside its own passages. Never its shelter's or mine's shell, never with water or lava behind.

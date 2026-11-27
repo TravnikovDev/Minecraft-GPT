@@ -163,6 +163,22 @@ const submergedStep = (bot: Bot) => (block: { position?: { x: number; y: number;
   return meWet ? SUBMERGED_COST : SUBMERGED_BAN;
 };
 
+// Walled in (game test: a pocket of its mine shut by its own cobblestone
+// seals on every side, the way back under water; every walk had "no path"
+// for three hours): for a while its walks may break the cobblestone and dirt
+// it puts down (plugs, seals, patches), next to its own passages only; never
+// its shelter's or mine's shell, never with water or lava behind
+const WALL_FILLERS = new Set(["cobblestone", "cobbled_deepslate", "dirt"]);
+let walledInUntil = 0;
+
+/** Walled in for `ms` from now (0: no longer). */
+export function setWalledIn(ms: number): void {
+  walledInUntil = ms > 0 ? Date.now() + ms : 0;
+}
+
+/** True while its walks may break through its own fillers to get out. */
+export const walledIn = (): boolean => Date.now() < walledInUntil;
+
 function stuckStep(block: { position?: { x: number; y: number; z: number } }): number {
   if (!block.position || avoidedSteps.size === 0) return 0;
   const until = avoidedSteps.get(`${block.position.x},${block.position.y},${block.position.z}`);
@@ -245,7 +261,10 @@ export function safeMovements(bot: Bot): pf.Movements {
       const [block] = args;
       // Never in an area it must keep out of, its own scaffolding included
       if (block?.position && forbiddenAt(block.position)) return false;
-      if (block?.position && isOwnBlock(block.position, block.name)) {
+      // Walled in: its own fillers beside its passages, unless protected
+      const wallIn = !!block?.position && walledIn() && WALL_FILLERS.has(block.name) && nearOwnPassage(block.position);
+      if (wallIn && this.exclusionBreak(block as never) >= 100) return false;
+      if (block?.position && (wallIn || isOwnBlock(block.position, block.name))) {
         // Only "built" is waived: next to water or lava, or under sand and
         // gravel, its own scaffolding stays too (same checks as for any block)
         if (!this.canDig) return false;
