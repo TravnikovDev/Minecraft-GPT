@@ -645,16 +645,37 @@ export async function sealMineFromOutside(): Promise<void> {
   // to a hole, fell into the water at the canyon's bottom and swam there for
   // 20 minutes): standing in the mine's cell beside the hole, in reach
   const nearKeys = new Set(near.map((c) => c.toString()));
+  // Where to stand: the floor of the mine's own column beside the hole (game
+  // test: it aimed at the empty top of its 5-high stairs, couldn't stand
+  // there, and sealed 4 of 110 in 4 minutes)
+  const floorOf = (c: Vec3): Vec3 => {
+    let f = c;
+    while (nearKeys.has(f.offset(0, -1, 0).toString())) f = f.offset(0, -1, 0);
+    return f;
+  };
   const inside = (h: Vec3): Vec3 | undefined => DIRS6.map((d) => h.plus(d)).find((c) => nearKeys.has(c.toString()));
   const until = Date.now() + SEAL_TIME_MS;
   let sealed = 0;
+  let missed = 0;
+  const unreachable = new Set<string>();
+  // Nearest first, so it works along rather than back and forth
+  holes.sort((a, b) => a.distanceTo(bot.entity.position) - b.distanceTo(bot.entity.position));
   for (const h of holes) {
-    if (isCommandCancelled() || Date.now() > until || hurtInTheMine()) break;
+    if (isCommandCancelled() || Date.now() > until || hurtInTheMine() || missed >= 3) break;
     const from = inside(h);
     if (!from) continue;
-    if (bot.entity.position.distanceTo(h) > 4 && !(await goToStep(from)).ok) continue;
+    const stand = floorOf(from);
+    if (unreachable.has(stand.toString())) continue;
+    if (bot.entity.position.distanceTo(h) > 4 && !(await goToStep(stand)).ok) {
+      unreachable.add(stand.toString());
+      missed++;
+      continue;
+    }
     if (bot.entity.position.distanceTo(h) > 5) continue;
-    if (await ensureBlock(h, keepClear, STONE_FILLERS)) sealed++;
+    if (await ensureBlock(h, keepClear, STONE_FILLERS)) {
+      sealed++;
+      missed = 0;
+    }
   }
   console.log(`Mine: sealed ${sealed} of ${holes.length} openings to the outside.`);
 }
