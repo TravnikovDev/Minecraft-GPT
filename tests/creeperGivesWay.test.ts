@@ -56,3 +56,12 @@ test("a creeper left be stays left be unless it really comes closer (game test: 
   // Behind a wall: never
   expect(cameCloser(2, false, 4.1)).toBe(false);
 });
+
+test("hurt, it runs from a creeper instead of fighting it (game test: at 1 health it closed in with a sword and died)", async () => {
+  const { runFromCreeper, safeDistance } = await import(`${import.meta.dir}/../src/actions/creeperReflex.ts`);
+  expect(runFromCreeper(true, false, 8.7, 1)).toBe(true);
+  expect(runFromCreeper(true, false, 8.7, 20)).toBe(false); // healthy with a sword: fights it
+  expect(runFromCreeper(false, false, 8.7, 20)).toBe(true); // no weapon
+  expect(runFromCreeper(true, true, 3, 20)).toBe(true); // hissing right by it
+  expect(safeDistance(5)).toBeGreaterThan(safeDistance(20));
+});

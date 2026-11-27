@@ -123,6 +123,23 @@ const FUSE_RANGE = 3;
  * a moment later for 12 minutes ("within 6" was true from the start), and
  * the bot stood frozen at the bottom of its mine all night.
  */
+// Hurt this much (health of 20), a creeper is run from, never fought: one
+// blast kills (game test: at 1 health it closed in with its sword on a
+// creeper 9 blocks off, and it went off). Run this far before it's safe.
+const RUN_WHEN_HEALTH_UNDER = 10;
+const HURT_SAFE_DISTANCE = 16;
+
+/**
+ * Whether to run from the creeper rather than fight it: no weapon, a hissing
+ * one close by, or itself too hurt to take a blast. Pure.
+ */
+export function runFromCreeper(hasWeapon: boolean, fusing: boolean, distance: number, health: number): boolean {
+  return !hasWeapon || (fusing && distance < 4) || health < RUN_WHEN_HEALTH_UNDER;
+}
+
+/** How far from the creeper it runs before it's safe. Pure. */
+export const safeDistance = (health: number): number => (health < RUN_WHEN_HEALTH_UNDER ? HURT_SAFE_DISTANCE : SAFE_DISTANCE);
+
 export function cameCloser(d: number, visible: boolean, leftAt: number): boolean {
   if (!visible) return false;
   if (d <= FUSE_RANGE) return true;
@@ -174,7 +191,7 @@ async function tick(): Promise<void> {
   // Only a creeper it can see (or one right by it): through ground it can't
   // reach the bot, and going for it digs the bot out of its shelter
   const eyes = bot.entity.position.offset(0, 1.62, 0);
-  const range = active ? SAFE_DISTANCE + 4 : radius;
+  const range = active ? safeDistance(bot.health ?? 20) + 4 : radius;
   const now = Date.now();
   // Shut in: the night routine says so, or it stands in its whole shelter's room
   const shutIn = isSheltered() || inShelterRoom(bot.entity.position);
@@ -232,7 +249,7 @@ async function tick(): Promise<void> {
       progressAt = Date.now();
     }
     const weapon = bestWeapon();
-    const mustRun = !weapon || (isFusing(creeper) && distance < 4);
+    const mustRun = runFromCreeper(weapon !== null && weapon !== undefined, isFusing(creeper), distance, bot.health ?? 20);
     // (a hissing one isn't left: it's about to go off; one close by but out
     // of reach, behind a wall, is. Running from it isn't stalling: the
     // distance grows on purpose, and one still chasing it isn't left: review)
@@ -250,7 +267,7 @@ async function tick(): Promise<void> {
       // Run straight away until safe
       await faceAwayFrom(creeper);
       setOnly({ forward: true, sprint: true, jump: distance < 3 });
-      if (distance > SAFE_DISTANCE) finish();
+      if (distance > safeDistance(bot.health ?? 20)) finish();
       return;
     }
 
