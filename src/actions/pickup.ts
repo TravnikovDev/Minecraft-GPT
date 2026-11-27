@@ -262,6 +262,12 @@ export async function tidyUpWhileIdle(): Promise<void> {
   });
 }
 
+/** How many drops it can see lying within `radius` (not on leaves, not its own tossed ones). */
+export function dropsLyingNear(radius: number): number {
+  if (!bot.entity) return 0;
+  return looseItems(radius, new Map(), true).length;
+}
+
 /** Picks up the items within `distance` (see collectDrops above). */
 export async function pickupNearbyItems(_bot: Bot, distance = 8): Promise<boolean> {
   await collectDrops(distance);

@@ -403,6 +403,14 @@ export async function considerNextStep(): Promise<void> {
     return;
   }
   if (busyWith(Bucket.Self)) return;
+  // Between tasks, by day: what's lying about picked up first (owner: it cut
+  // trees, made a field and went home leaving logs, saplings and sticks
+  // behind; "after each action it must check for items to collect")
+  if (!isNight() && Date.now() >= nextPickupAt && (await import("../actions/pickup")).dropsLyingNear(PICKUP_RADIUS) > 0) {
+    nextPickupAt = Date.now() + PICKUP_GAP_MS; // a drop it can't reach never holds its day up
+    propose(pickupTask());
+    return;
+  }
   // Past its first day the day plan decides what's next (Phase 7); with no
   // plan step to do (not made yet, the model unavailable, the money spent)
   // the next milestone below is the fallback
@@ -424,6 +432,23 @@ export async function considerNextStep(): Promise<void> {
   }
   const next = nextMilestone(MILESTONES, isBlocked);
   if (next) propose(milestoneTask(next));
+}
+
+// How far round it looks for drops between tasks, and how often at most
+const PICKUP_RADIUS = 16;
+const PICKUP_GAP_MS = 30_000;
+let nextPickupAt = 0;
+
+/** Picking up the drops lying about, between its tasks (its own life, bucket 5). */
+function pickupTask(): TaskSpec {
+  return {
+    name: "picking up what's lying about",
+    bucket: Bucket.Self,
+    run: async () => {
+      const { collectDrops } = await import("../actions/pickup");
+      await collectDrops(PICKUP_RADIUS, { onlyVisible: true });
+    },
+  };
 }
 
 /** Plan steps that make sense at night: under ground, like its night milestones. */
@@ -478,7 +503,7 @@ setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf 
 const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
 
 /** True when a milestone is worked on at night (under ground or at home). */
-export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id);
+export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id) || INDOORS.has(id);
 
 /** Mine work it could do now (the next milestone is one underground). */
 /**
@@ -486,8 +511,13 @@ export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id);
  * (in its mine or at home); daytime work (lighting the ground round its
  * home, food) waits for the morning without holding the night up.
  */
+// Work inside its shelter, fine at night too: furnishing it (owner: at night
+// it stood in its shelter doing nothing; "I expected mining", and the mine
+// waits for the furnished shelter)
+const INDOORS = new Set(["chests"]);
+
 function nextNightMilestone(): Milestone | null {
-  return nextMilestone(MILESTONES, isBlocked, (m) => milestoneHere(m) && UNDERGROUND.has(m.id));
+  return nextMilestone(MILESTONES, isBlocked, (m) => milestoneHere(m) && (UNDERGROUND.has(m.id) || INDOORS.has(m.id)));
 }
 
 function mineWorkTonight(): boolean {

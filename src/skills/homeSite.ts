@@ -3,13 +3,13 @@
 // (owner, 2026-11-27: "it just built straight in the bloody cold snow
 // taiga"; the 2024 site check in actions/ensureLocation was never used by
 // its own life). Before its first shelter it checks the place it stands:
-// - the biome: not snowy, icy, frozen, desert or ocean (beaches and
-//   mountains are fine);
+// - the biome: not snowy, icy, frozen, desert, ocean, swamp or badlands
+//   (beaches and mountains are fine);
 // - trees (about 24 logs; it replants) and animals near;
 // - the way down for its mine, the diagonal to the 2nd floor (about 30
 //   blocks), free of water and lava.
-// Not good: it walks on, up to 500 blocks, checking as it goes, and settles
-// for the best place it saw (by day; at dusk, the best one near).
+// Not good: it walks on, checking as it goes, as far as it takes (owner),
+// by day; at dusk it settles for the best place it saw near.
 
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
@@ -26,9 +26,11 @@ import { hubStep, stepAt } from "./mine";
 export const LOGS_WANTED = 24;
 export const ANIMALS_WANTED = 3;
 const LOOK = 48; // how far round it counts trees and animals
-export const SEARCH_MAX = 500; // blocks it walks looking
+// Blocks it walks looking: no limit (owner: it may start in a desert or
+// badlands); it searches by day and, at dusk, settles for the best near
+export const SEARCH_MAX = Infinity;
 const LEG = 48; // blocks per leg of the search
-const BAD_BIOME = /snowy|ice|frozen|desert|ocean/;
+const BAD_BIOME = /snowy|ice|frozen|desert|ocean|swamp|badlands/;
 
 /** What it found where it stands. */
 export type AreaCheck = { biome: string; goodBiome: boolean; logs: number; animals: number; dryMine: boolean };
@@ -107,7 +109,7 @@ export async function findHomeArea(dryMine: () => boolean): Promise<void> {
   console.log(`Home site: ${here.biome}, ${here.logs} logs, ${here.animals} animals, mine way ${here.dryMine ? "dry" : "wet"}.`);
   if (areaGood(here)) return;
   let best = { pos: bot.entity.position.clone(), check: here, score: areaScore(here) };
-  report(`This isn't a good place for my home (${areaIssues(here)}); I'll look for a better one, up to ${SEARCH_MAX} blocks away.`);
+  report(`This isn't a good place for my home (${areaIssues(here)}); I'll look for a better one.`);
   let walked = 0;
   let d = 0;
   let sinceBetter = 0;

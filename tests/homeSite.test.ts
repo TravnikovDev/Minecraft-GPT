@@ -4,13 +4,13 @@ import { expect, test } from "bun:test";
 const ROOT = `${import.meta.dir}/..`;
 const { goodBiome, areaGood, areaScore, areaIssues, LOGS_WANTED, ANIMALS_WANTED, SEARCH_MAX } = await import(`${ROOT}/src/skills/homeSite.ts`);
 
-test("biomes: no snow, ice, frozen ground, desert or ocean; beaches and mountains are fine (owner)", () => {
-  for (const b of ["snowy_taiga", "snowy_plains", "ice_spikes", "frozen_river", "desert", "deep_ocean", "snowy_beach"]) expect(goodBiome(b)).toBe(false);
+test("biomes: no snow, ice, frozen ground, desert, ocean, swamp or badlands; beaches and mountains are fine (owner)", () => {
+  for (const b of ["snowy_taiga", "snowy_plains", "ice_spikes", "frozen_river", "desert", "deep_ocean", "snowy_beach", "swamp", "mangrove_swamp", "badlands", "eroded_badlands"]) expect(goodBiome(b)).toBe(false);
   for (const b of ["plains", "forest", "taiga", "beach", "windswept_hills", "jagged_peaks", "meadow", "savanna"]) expect(goodBiome(b)).toBe(true);
 });
 
 test("a good place: good biome, 24 logs, 3 animals and a dry way down; the best seen ranks the biome and the dry way first", () => {
-  expect([LOGS_WANTED, ANIMALS_WANTED, SEARCH_MAX]).toEqual([24, 3, 500]);
+  expect([LOGS_WANTED, ANIMALS_WANTED, SEARCH_MAX]).toEqual([24, 3, Infinity]);
   const good = { biome: "forest", goodBiome: true, logs: 24, animals: 3, dryMine: true };
   expect(areaGood(good)).toBe(true);
   expect(areaGood({ ...good, logs: 10 })).toBe(false);
