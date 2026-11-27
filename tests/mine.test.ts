@@ -36,16 +36,41 @@ test("right and left are the stairs' right and left; back is behind", () => {
   expect(["forward", "right", "left", "back"].map((a) => armDirection(a, "east"))).toEqual(["east", "south", "north", "west"]);
 });
 
-test("floors (owner): left and right sleeves from the middle; forward and back from the left column on odd floors, the right on even", async () => {
+test("floors (owner, older room round the stairs): left and right sleeves from the middle; forward and back from the left column on odd floors, the right on even", async () => {
   const { sleeveColumn, pokeSides, floorName } = await import(`${ROOT}/src/skills/mine.ts`);
-  expect([sleeveColumn("left", 0), sleeveColumn("right", 1)]).toEqual([0, 0]);
-  expect([sleeveColumn("forward", 0), sleeveColumn("back", 0)]).toEqual([-1, -1]); // 1st floor: left column
-  expect([sleeveColumn("forward", 1), sleeveColumn("back", 1)]).toEqual([1, 1]); // 2nd floor: right column
+  expect([sleeveColumn("left", 0, false), sleeveColumn("right", 1, false)]).toEqual([0, 0]);
+  expect([sleeveColumn("forward", 0, false), sleeveColumn("back", 0, false)]).toEqual([-1, -1]); // 1st floor: left column
+  expect([sleeveColumn("forward", 1, false), sleeveColumn("back", 1, false)]).toEqual([1, 1]); // 2nd floor: right column
   // Pokeholes both sides off left and right; only the outer side off forward and back (the stairs are inside)
-  expect(pokeSides("left", 0)).toEqual([1, -1]);
-  expect(pokeSides("forward", 0)).toEqual([-1]);
-  expect(pokeSides("back", 0)).toEqual([1]);
+  expect(pokeSides("left", 0, false)).toEqual([1, -1]);
+  expect(pokeSides("forward", 0, false)).toEqual([-1]);
+  expect(pokeSides("back", 0, false)).toEqual([1]);
   expect([0, 1, 2, 3, 10].map(floorName)).toEqual(["1st floor", "2nd floor", "3rd floor", "4th floor", "11th floor"]);
+});
+
+test("floors (owner): the room beside the stairs, not round them, so the middle is free to run from sleeve to sleeve", async () => {
+  const { sleeveColumn, pokeSides, roomColumns, floorCells, roomBeside } = await import(`${ROOT}/src/skills/mine.ts`);
+  // The stairs along the room's left column; the middle and right columns flat
+  expect(roomColumns(true)).toEqual([0, 1, 2]);
+  // Left from the stairs' landing, right from the right column (both the middle row)
+  expect([sleeveColumn("left", 1), sleeveColumn("right", 1)]).toEqual([0, 2]);
+  // Forward and back alternate between the middle and the right column
+  expect([sleeveColumn("forward", 0), sleeveColumn("back", 0)]).toEqual([1, 1]);
+  expect([sleeveColumn("forward", 1), sleeveColumn("back", 1)]).toEqual([2, 2]);
+  // Pokeholes off forward and back only away from the stairs (their right)
+  expect([pokeSides("forward", 1), pokeSides("back", 1)]).toEqual([[1], [-1]]);
+  // The floors dug before keep the older room: the first floor here was
+  expect([roomBeside(0, 1), roomBeside(1, 1)]).toEqual([false, true]);
+  // No room cell in the stairs' own column but the landing, the step in and the step down
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  const hub = new Vec3(0, 40, 0);
+  const cells = floorCells(hub, "south", 1);
+  const has = (x: number, y: number, z: number) => cells.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
+  // South: right is west (-x). The room spans x 0..-2, z -1..1
+  expect(has(-1, 40, 0) && has(-2, 40, 1) && has(-2, 40, -1)).toBe(true);
+  // Nothing on the stairs' left but the left sleeve leaving the landing (east, +x)
+  expect(has(1, 40, 0)).toBe(true);
+  expect(has(1, 40, 1) || has(1, 40, -1)).toBe(false);
 });
 
 test("floors: at the stairs' bottom, then every 10 steps deeper (owner)", () => {
@@ -254,7 +279,8 @@ test("the stairs are roofed all the way down, but never where a hub's tunnel run
   const { mineStairCells, hubStep, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
   const start = { x: 0, y: 64, z: 0 };
   const h = hubStep(0);
-  const { keep } = mineStairCells(start, "south", h + 12, 0);
+  // (the older room round the stairs: sideFrom past every floor)
+  const { keep } = mineStairCells(start, "south", h + 12, 0, [], Infinity);
   const has = (p: { x: number; y: number; z: number }) => keep.some((c: { x: number; y: number; z: number }) => c.x === p.x && c.y === p.y && c.z === p.z);
   // Deep below the hub: roofed
   const deep = stepAt(start, "south", h + 10);

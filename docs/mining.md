@@ -19,29 +19,32 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 
 A floor every **10 steps** down, the first at the bottom of the first 10 steps. Each floor has:
 
-- a **room**, 3 by 3 around the stairs and 3 high, with a solid floor. The stairs come in at the back middle and go on down at the front middle;
-- a **sign** on the room's wall: "1st floor", "2nd floor", ...;
+- a **room**, 3 by 3 and 3 high, with a solid floor, **beside the stairs**: the stairs run along its left column (the step coming in at the back, the landing in the middle, the step going on down at the front). The middle and right columns are flat, so you can run freely from one sleeve to another;
+- a **sign** on the room's right wall by the back corner: "1st floor", "2nd floor", ...;
 - **four sleeves**, each 50 blocks long, 1 wide and 2 high:
 
 ```
-1st floor (odd floors)                 2nd floor (even floors)
-[   ][ F ][   ][   ][   ]              [   ][   ][   ][ F ][   ]
-[   ][ X ][ X ][ X ][   ]              [   ][ X ][ X ][ X ][   ]
-[ L ][ X ][ X ][ X ][ R ]              [ L ][ X ][ X ][ X ][ R ]
-[   ][ X ][ X ][ X ][   ]              [   ][ X ][ X ][ X ][   ]
-[   ][ B ][   ][   ][   ]              [   ][   ][   ][ B ][   ]
+odd floors (1st, 3rd...)               even floors (2nd, 4th...)
+[   ][   ][ F ][   ][   ]              [   ][   ][   ][ F ][   ]
+[   ][ S↓][ X ][ X ][   ]              [   ][ S↓][ X ][ X ][   ]
+[ L ][ S ][ X ][ X ][ R ]              [ L ][ S ][ X ][ X ][ R ]
+[   ][ S↑][ X ][ X ][   ]              [   ][ S↑][ X ][ X ][   ]
+[   ][   ][ B ][   ][   ]              [   ][   ][   ][ B ][   ]
+S: the stairs (↑ the step coming in, ↓ the step going on down)
 ```
 
-- Left and right sleeves always leave from the middle of the room's sides.
-- Forward and back sleeves alternate: from the left column on odd floors, from the right column on even floors. The middle column stays free for the stairs going on down (forward) and coming in (back).
+- Left and right sleeves always leave from the middle row: left from the stairs' landing, right from the room's right column.
+- Forward and back sleeves alternate: from the middle column on odd floors, from the right column on even floors.
 - They're dug in this order: forward, right, left, back.
+- The floors dug before this layout (the room round the stairs) keep their old shape.
+- The rooms, sleeves and pokeholes are the bot's own passages: walks never put a block down in them, and blocks left standing there are taken out when the floor is mended.
 
 ## Pokeholes
 
 Along every sleeve, every **4 blocks**, a pokehole **1 wide, 3 high, 5 long**:
 
 - off the left and right sleeves, on both sides;
-- off the forward and back sleeves, only on the outer side. The inner side runs over the stairs.
+- off the forward and back sleeves, only on the side away from the stairs.
 
 Every ore seen from a fresh sleeve or pokehole is mined (strip mining). Holes that ore leaves in the floor under the room, the sleeves and the pokeholes are filled again with dirt or cobblestone. The stairs going on down are left open.
 
