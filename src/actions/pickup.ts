@@ -86,12 +86,22 @@ function hasRoomFor(e: Entity): boolean {
 }
 
 /** Items within `radius` it may pick up, nearest first. */
+/**
+ * True for a drop lying on leaves (up in a tree's canopy after its trunk is
+ * felled): left until the leaves decay and it falls (game test: four walks
+ * of 16 s each to saplings 4 blocks up in the leaves, none got there).
+ */
+function onLeaves(e: Entity): boolean {
+  const under = bot.blockAt?.(e.position.offset(0, -0.3, 0).floored());
+  return under?.name.endsWith("_leaves") ?? false;
+}
+
 function looseItems(radius: number, skip: Map<number, number>, onlyVisible: boolean, leave: (e: Entity) => boolean = () => false): Entity[] {
   const eyes = bot.entity.position.offset(0, 1.62, 0);
   const world = bot.world as unknown as SightWorld;
   return Object.values(bot.entities)
     .filter((e) => isDroppedItem(e) && !tossedByMe.has(e) && !leave(e) && (skip.get(e.id) ?? 0) < MAX_TRIES_PER_ITEM)
-    .filter((e) => (unreachableUntil.get(e) ?? 0) < Date.now() && hasRoomFor(e))
+    .filter((e) => (unreachableUntil.get(e) ?? 0) < Date.now() && hasRoomFor(e) && !onLeaves(e))
     .map((e) => ({ e, d: e.position.distanceTo(bot.entity.position) }))
     .filter(({ e, d }) => d <= radius && (!onlyVisible || d <= 3 || canSeePoint(world, eyes, e.position.offset(0, 0.25, 0), radius)))
     .sort((a, b) => a.d - b.d)

@@ -137,6 +137,12 @@ export async function gatherWood(
   }
 }
 
+/** Blocks it carries that the walks pillar up on (dirt, cobblestone...). */
+function pillarBlocks(): number {
+  const ids = ((bot.pathfinder?.movements as unknown as { scafoldingBlocks?: number[] } | undefined)?.scafoldingBlocks ?? []);
+  return bot.inventory.items().filter((i) => ids.includes(i.type)).reduce((n, i) => n + i.count, 0);
+}
+
 /** Waits (up to 1.5 s) until it stands on the ground again. */
 async function landed(): Promise<void> {
   for (let t = 0; t < 30 && bot.entity && !bot.entity.onGround; t++) await new Promise((r) => setTimeout(r, 50));
@@ -165,9 +171,11 @@ export function fellFromTop(trunk: Array<{ name: string; position: { x: number; 
  * the bottom as before. False when it was stopped.
  */
 export async function fellTree(trunk: Block[]): Promise<boolean> {
-  if (fellFromTop(trunk)) {
+  // Only with blocks to pillar up on (game test: its first tree, empty bag,
+  // it worked out a way up for 8 s, stalled, then cut it from the bottom)
+  if (fellFromTop(trunk) && pillarBlocks() >= trunk.length) {
     const top = trunk[trunk.length - 1]!.position;
-    const onTop = await pathing.withRules({ allow1by1towers: true }, () => goTo(new pf.goals.GoalBlock(top.x, top.y + 1, top.z)));
+    const onTop = await pathing.withRules({ allow1by1towers: true }, () => goTo(new pf.goals.GoalBlock(top.x, top.y + 1, top.z), { timeoutMs: 20_000 }));
     if (onTop.ok) {
       for (let i = trunk.length - 1; i >= 0; i--) {
         if (isCommandCancelled()) return false;
