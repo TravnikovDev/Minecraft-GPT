@@ -41,8 +41,20 @@ test("the pillar goes beside the crown, not against the trunk (owner), on free g
   expect(spot.y).toBe(64);
 });
 
-test("a giant 2x2 trunk is wide (only what's in reach from the ground is cut, and only when no ordinary tree is near)", async () => {
-  const { isWide } = await import(`${ROOT}/src/actions/gatherWood.ts`);
-  expect(isWide([...column("jungle_log", 20, 0, 0), ...column("jungle_log", 20, 1, 0), ...column("jungle_log", 20, 0, 1), ...column("jungle_log", 20, 1, 1)])).toBe(true);
-  expect(isWide(column("oak_log", 6))).toBe(false);
+test("giant 2x2 trees and jungle trees over 6 logs are left standing; acacia's crooked trunk isn't a giant", async () => {
+  const { isGiant, leftStanding } = await import(`${ROOT}/src/actions/gatherWood.ts`);
+  const giant = [...column("jungle_log", 20, 0, 0), ...column("jungle_log", 20, 1, 0), ...column("jungle_log", 20, 0, 1), ...column("jungle_log", 20, 1, 1)];
+  expect(isGiant(giant)).toBe(true);
+  expect(leftStanding(giant)).toBe(true);
+  expect(leftStanding([...column("dark_oak_log", 6, 0, 0), ...column("dark_oak_log", 6, 1, 0), ...column("dark_oak_log", 6, 0, 1), ...column("dark_oak_log", 6, 1, 1)])).toBe(true);
+  // Acacia: one log at its foot, then a branch off to the side
+  const acacia = [...column("acacia_log", 4), { name: "acacia_log", position: { x: 1, y: 68, z: 0 } }, { name: "acacia_log", position: { x: 2, y: 69, z: 0 } }];
+  expect(isGiant(acacia)).toBe(false);
+  expect(leftStanding(acacia)).toBe(false);
+  // One-trunk jungle trees: up to 6 logs are cut, taller ones aren't
+  expect(leftStanding(column("jungle_log", 6))).toBe(false);
+  expect(leftStanding(column("jungle_log", 7))).toBe(true);
+  // Other tall trees are cut as before
+  expect(leftStanding(column("spruce_log", 9))).toBe(false);
+  expect(leftStanding(column("oak_log", 6))).toBe(false);
 });

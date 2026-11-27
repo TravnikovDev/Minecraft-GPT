@@ -334,3 +334,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Trees felled from the top: it gets on top of a straight trunk (pillaring beside it if needed), breaks the log under its feet down to the ground; acacia, 2x2 and 1-2 log trees from the bottom
 - [ ] Shelter dug through gravel: what falls into the room or a doorway is dug out (top first, again while more comes down) and the roof hole above patched; gravel already lying in a room counts as "fixing my shelter"
 - [ ] Night with no stone tools yet but the stone and wood for them in its bag: the shelter's table goes in its spot, the tools are crafted inside, then the furnishing
+- [ ] Giant 2x2 trees (jungle, dark oak, big spruce) and jungle trees over 6 logs are never cut, for wood or for the clearing (the clearing counts as done with only those left); with no other tree near it goes further for wood
+- [ ] At night, not well equipped: no idle chores (taking down scaffolding, replanting, tidying); they wait for the morning

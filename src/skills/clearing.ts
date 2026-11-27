@@ -13,7 +13,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
 import { chatter } from "../core/narrator";
 import { fail, ok, type ActionResult } from "../core/result";
-import { fellTree } from "../actions/gatherWood";
+import { fellTree, leftStanding } from "../actions/gatherWood";
 import { findTrunk, isNaturalTree } from "../actions/forestry";
 import { goToPosition } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/pickup";
@@ -38,14 +38,32 @@ function homeCentre(): Vec3 | null {
   return start ? new Vec3(start.x, start.y, start.z) : null;
 }
 
-/** Tree logs within the clearing round its home (what's loaded), nearest the bot first. */
+/**
+ * Tree logs within the clearing round its home (what's loaded), nearest the
+ * bot first. Not giant 2x2 trees nor tall jungle ones: never cut (owner), so
+ * they don't keep the clearing "not done".
+ */
 export function treesNearHome(skip: Set<string> = new Set()): Vec3[] {
   const centre = homeCentre();
   if (!centre || !bot.entity) return [];
-  return bot
+  const at = (p: Vec3) => bot.blockAt(p);
+  const standing = new Set<string>();
+  const checked = new Set<string>();
+  const logs = bot
     .findBlocks({ point: centre, matching: (b) => catalog().isTreeLog(b.name), maxDistance: CLEAR_RADIUS, count: 400 })
-    .filter((p) => !skip.has(p.toString()) && !forbiddenAt(p))
-    .sort((a, b) => a.distanceTo(bot.entity.position) - b.distanceTo(bot.entity.position));
+    .filter((p) => !skip.has(p.toString()) && !forbiddenAt(p));
+  for (const p of logs) {
+    if (checked.has(p.toString())) continue;
+    const log = at(p);
+    if (!log) continue;
+    const trunk = findTrunk(log, at);
+    const keep = leftStanding(trunk);
+    for (const l of trunk) {
+      checked.add(l.position.toString());
+      if (keep) standing.add(l.position.toString());
+    }
+  }
+  return logs.filter((p) => !standing.has(p.toString())).sort((a, b) => a.distanceTo(bot.entity.position) - b.distanceTo(bot.entity.position));
 }
 
 /** Fells the trees round its home, a run at a time. ok when none are left. */

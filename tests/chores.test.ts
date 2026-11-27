@@ -98,3 +98,22 @@ test("code knows when it runs for a chore", async () => {
   });
   expect(inside).toBe(true);
 });
+
+test("no idle chores at night unless it's well equipped: they wait for the morning", async () => {
+  const { asBackgroundJob } = await import(`${ROOT}/src/actions/pickup.ts`);
+  fake.game = { dimension: "overworld" };
+  fake.time = { timeOfDay: 18000, age: 18000 }; // midnight
+  try {
+    let ran = false;
+    expect(await asBackgroundJob("taking down scaffolding", async () => void (ran = true))).toBe(false);
+    expect(ran).toBe(false);
+    expect(isChoreRunning()).toBe(false);
+    // By day it runs
+    fake.time = { timeOfDay: 1000, age: 1000 };
+    expect(await asBackgroundJob("taking down scaffolding", async () => void (ran = true))).toBe(true);
+    expect(ran).toBe(true);
+  } finally {
+    delete fake.time;
+    delete fake.game;
+  }
+});

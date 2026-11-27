@@ -209,8 +209,18 @@ function leftForLackOfRoom(radius: number, leave: (e: Entity) => boolean): Entit
 
 // --- Tidying up while idle ---------------------------------------------------
 
-/** Runs a background job as the one idle chore (see core/chores). Returns false if it didn't run. */
-export function asBackgroundJob(name: string, job: () => Promise<void>): Promise<boolean> {
+/**
+ * Runs a background job as the one idle chore (see core/chores). Returns
+ * false if it didn't run. Not at night unless it's well equipped: chores
+ * (scaffolding, replanting, tidying) wait for the morning (game test: taking
+ * down its scaffolding at dusk it was out among the mobs, and a creeper got it).
+ */
+export async function asBackgroundJob(name: string, job: () => Promise<void>): Promise<boolean> {
+  const { daylight } = await import("../core/daylight");
+  if (!daylight()) {
+    const { wellEquipped } = await import("../skills/capabilities");
+    if (!wellEquipped()) return false;
+  }
   return runChore(name, job);
 }
 
