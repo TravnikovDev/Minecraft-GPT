@@ -490,21 +490,6 @@ export const MILESTONES: Milestone[] = [
     done: () => shelter() !== null && shelterIntact(),
     achieve: () => buildShelter(),
   },
-  // Fields on its first day, right after the shelter (owner: wheat from the
-  // grass's seeds is a good source of food from the start; at least 2 fields
-  // to live on; no bucket needed, water goes in their middles once it has
-  // one; torches all round them). By day
-  {
-    id: "farm",
-    title: "my fields",
-    tier: 1,
-    optional: true,
-    requires: ["shelter"],
-    // Waiting for seeds or sowing is "not yet": nothing to do now, no failure
-    done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
-    reached: () => myFarms().length >= FIELDS_WANTED,
-    achieve: makeFarm,
-  },
   {
     id: "stone_tools",
     title: "stone tools",
@@ -530,7 +515,24 @@ export const MILESTONES: Milestone[] = [
     requires: ["chests"],
     done: hasBed,
     achieve: getBed,
-  },  {
+  },  // Fields on its first day, once its shelter is finished: chests, furnace,
+  // table and a bed, a safe place to come back to (owner: "shelter finishing
+  // is top 1 priority"; the fields' stone hoe sent it digging its mine before
+  // it had chests or a bed). Wheat from the grass's seeds is a good source of
+  // food from the start; no bucket needed, water goes in their middles once
+  // it has one; torches all round them. By day
+  {
+    id: "farm",
+    title: "my fields",
+    tier: 1,
+    optional: true,
+    requires: ["shelter"],
+    // Waiting for seeds or sowing is "not yet": nothing to do now, no failure
+    done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
+    reached: () => myFarms().length >= FIELDS_WANTED,
+    achieve: makeFarm,
+  },
+  {
     id: "lit_home",
     title: "a lit home",
     // Day one (owner: it's critical): mobs kept coming at the shelter
