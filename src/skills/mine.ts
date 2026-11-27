@@ -590,6 +590,8 @@ export function outsideOpenings(open: Vec3[], look: (p: Vec3) => SealLook, kept:
 // Ways in from outside sealed in one go, at most (the rest next time; owner:
 // 48 left a canyon half open)
 const SEALS_PER_RUN = 400;
+// Time a sealing pass may take (the rest next stretch)
+const SEAL_TIME_MS = 4 * 60_000;
 // How far from it the floors are gone over (the whole floor, its sleeves 50 long)
 const LOOK_AFTER_RANGE = 96;
 
@@ -626,10 +628,19 @@ export async function sealMineFromOutside(): Promise<void> {
   report(`My mine is open to the outside in ${holes.length} place${holes.length === 1 ? "" : "s"} (a canyon or the like): blocking it with cobblestone.`);
   const { ensureBlock, STONE_FILLERS } = await import("../actions/digging");
   const keepClear = (p: Vec3): boolean => openKeys.has(p.toString());
+  // From inside its mine, never out in the canyon (game test: it walked out
+  // to a hole, fell into the water at the canyon's bottom and swam there for
+  // 20 minutes): standing in the mine's cell beside the hole, in reach
+  const nearKeys = new Set(near.map((c) => c.toString()));
+  const inside = (h: Vec3): Vec3 | undefined => DIRS6.map((d) => h.plus(d)).find((c) => nearKeys.has(c.toString()));
+  const until = Date.now() + SEAL_TIME_MS;
   let sealed = 0;
   for (const h of holes) {
-    if (isCommandCancelled()) break;
-    if (!(await goTo(new pf.goals.GoalNear(h.x, h.y, h.z, 3))).ok) continue;
+    if (isCommandCancelled() || Date.now() > until) break;
+    const from = inside(h);
+    if (!from) continue;
+    if (bot.entity.position.distanceTo(h) > 4 && !(await goToStep(from)).ok) continue;
+    if (bot.entity.position.distanceTo(h) > 5) continue;
     if (await ensureBlock(h, keepClear, STONE_FILLERS)) sealed++;
   }
   console.log(`Mine: sealed ${sealed} of ${holes.length} openings to the outside.`);

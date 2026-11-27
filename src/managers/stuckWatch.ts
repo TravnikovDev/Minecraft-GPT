@@ -6,6 +6,7 @@
 // the place it was trying to reach as unreachable for a while (core/failures),
 // so walking there again fails at once instead of getting stuck again.
 
+import { isDrowningReflexActive } from "../actions/drowningReflex";
 import { bot } from "../core/body";
 import { cancelRunning, currentTask, onTaskStart } from "../core/arbiter";
 import { isAnyReflexActive } from "../core/reflexes";
@@ -54,9 +55,12 @@ function madeProgress(): boolean {
   const p = bot.entity?.position;
   if (!p) return true;
   if (Date.now() < holdUntil) return true;
-  const moved = Math.hypot(p.x - lastPos.x, p.y - lastPos.y, p.z - lastPos.z) > 1;
+  // Bobbing up and down in water isn't getting anywhere, nor is the drowning
+  // reflex lifting it for air every few seconds (game test: 20 minutes in a
+  // canyon's water, never seen as stuck)
+  const moved = Math.hypot(p.x - lastPos.x, p.z - lastPos.z) > 1 || Math.abs(p.y - lastPos.y) > 3;
   const items = inventorySignature();
-  if (moved || items !== lastInventory || isAnyReflexActive()) {
+  if (moved || items !== lastInventory || (isAnyReflexActive() && !isDrowningReflexActive())) {
     lastPos = { x: p.x, y: p.y, z: p.z };
     lastInventory = items;
     return true;
