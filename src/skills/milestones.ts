@@ -80,7 +80,7 @@ const FOOD_STOCK = 20; // food points carried: a couple of days' eating
 const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
 // Starving with nothing near: how far it may walk for an animal (by day)
-const FAR_HUNT = 96;
+const FAR_HUNT = 150; // owner: animals scanned for 150 blocks round
 // Health it needs for a walk out to a herd by day (owner: cows and pigs 50
 // to 80 blocks off while it starved for an hour at home; at 14 it never
 // went, as starving kept its health down). Starving, it goes whatever its health.
@@ -148,8 +148,8 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
       // None known at all (game test: "0 in sight or earshot", starving):
       // it walks off to look, a few legs out, and hunts what it finds
       else {
-        const { exploreFor, animalsInSight } = await import("./explore");
-        if (await exploreFor("animals", animalsInSight, 3)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, upTo: null, walkFar: true });
+        const { exploreFor, animalsInSight, ANIMAL_WALK } = await import("./explore");
+        if (await exploreFor("animals", animalsInSight, 3, ANIMAL_WALK / 3)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, upTo: null, walkFar: true });
       }
     }
     if (hasRawFood()) await cookTheMeat(cookFood);
@@ -227,6 +227,13 @@ async function huntTheHerd(emergency: boolean, hunt: (args: Record<string, unkno
   const at = first ? bot.entities[first.id]?.position : undefined;
   const herd = at ? game.filter((p) => bot.entities[p.id]?.position && bot.entities[p.id]!.position.distanceTo(at) <= 16).length : 0;
   const starving = emergency || (bot.food ?? 20) <= STARVING_FOOD;
+  // None within 150 blocks (owner): a walk of up to 75 in one direction over
+  // dry land to look, then the hunt there
+  if (!first && (starving || (bot.health ?? 20) >= WALK_HEALTH)) {
+    const { exploreFor, animalsInSight, ANIMAL_WALK } = await import("./explore");
+    if (!(await exploreFor("animals", animalsInSight, 3, ANIMAL_WALK / 3))) return;
+    return huntTheHerd(emergency, hunt);
+  }
   if (!walkToHerd(first?.distance ?? null, herd, bot.health ?? 20, starving)) {
     if (first) console.log(`Food: not walking to the ${first.name} ${Math.round(first.distance)} blocks off (${herd} there, health ${Math.round(bot.health ?? 0)}).`);
     return;
