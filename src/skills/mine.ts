@@ -904,7 +904,17 @@ export async function branchMine(wants: OreWant[], chunksThisTrip = 12): Promise
 async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<ActionResult> {
   const first = myMine();
   if (!first) return fail("not_found", "no mine yet");
-  if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
+  // Its pickaxe lost (a death) or worn out: a stone one made first, from the
+  // cobblestone it carries or keeps (game test: back from a death with no
+  // tools, every coal and iron trip was refused, "I have none yet", while
+  // its stone tools counted as done)
+  if (!hasStonePickaxe()) {
+    const { acquire } = await import("./acquire");
+    const { liveWorld } = await import("./world");
+    const made = await acquire("stone_pickaxe", 1, liveWorld);
+    if (!made.ok) return fail("no_tool", `I mine with a stone pickaxe, and I couldn't make one (${describeFailure(made)})`);
+    if (!hasStonePickaxe()) return fail("no_tool", "I mine with a stone pickaxe, and I have none yet");
+  }
   const still = (): OreWant[] => wants.filter((w) => carried(w.counts) < w.enough);
   if (still().length === 0) return ok();
   // Fit for it first (hurt or without food it doesn't go, not even for ore in the open)
