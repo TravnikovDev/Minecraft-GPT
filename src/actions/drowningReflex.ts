@@ -182,6 +182,55 @@ function finish(): void {
   }
   pathing.resumeAfterReflex();
   console.log("Drowning reflex: breathing again.");
+  // Under again and again in the same water (game test: 20 minutes in a
+  // canyon's water): out onto dry land first, whatever the task wanted
+  const now = Date.now();
+  surfacings = surfacings.filter((t) => now - t < 90_000).concat(now);
+  if (surfacings.length >= 2 && !gettingOut) void getOntoLand();
+}
+
+let surfacings: number[] = [];
+let gettingOut = false;
+
+/** The nearest dry spot to stand on (solid ground, open feet and head, no water) within 24 blocks. */
+function nearestDryLand(): Vec3 | null {
+  const me = bot.entity.position;
+  const ground = bot.findBlocks({ matching: (b) => b !== null && b.boundingBox === "block", maxDistance: 24, count: 2000, point: me });
+  let best: Vec3 | null = null;
+  for (const g of ground) {
+    const feet = bot.blockAt(g.offset(0, 1, 0));
+    const head = bot.blockAt(g.offset(0, 2, 0));
+    if (!feet || !head || feet.boundingBox !== "empty" || head.boundingBox !== "empty") continue;
+    if (/water|lava/.test(feet.name) || /water|lava/.test(head.name)) continue;
+    if (!best || g.distanceTo(me) < best.distanceTo(me)) best = g.offset(0, 1, 0);
+  }
+  return best;
+}
+
+/** Swims out of the water to the nearest dry land, as a survival task. */
+async function getOntoLand(): Promise<void> {
+  gettingOut = true;
+  try {
+    const land = nearestDryLand();
+    if (!land) return;
+    console.log(`Drowning reflex: in the water again and again; out onto dry land at ${land} first.`);
+    const { propose, Bucket } = await import("../core/arbiter");
+    const { goTo } = await import("../core/primitives");
+    const pf = (await import("mineflayer-pathfinder")).default;
+    propose(
+      {
+        name: "getting out of the water",
+        bucket: Bucket.Survival,
+        run: async () => {
+          await goTo(new pf.goals.GoalBlock(land.x, land.y, land.z));
+          surfacings = [];
+        },
+      },
+      { front: true }
+    );
+  } finally {
+    gettingOut = false;
+  }
 }
 
 function tick(): void {

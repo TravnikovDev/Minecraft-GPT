@@ -110,3 +110,16 @@ test("ordinary errands walk; a fight or the way home at dusk sprints (owner: spr
   setHurry(bot, "dusk", false);
   expect(rules.allowSprinting).toBe(false);
 });
+
+test("from dry land a walk never goes under water; in the water it may swim out (owner: it drowned on its way again and again)", () => {
+  const water = Block.fromStateId(registry.blocksByName.water.defaultState, 0);
+  for (const y of [60, 61]) world.set(`5,${y},5`, water);
+  const step = { position: new Vec3(5, 60, 5) };
+  bot.entity = { position: new Vec3(0, 64, 0) }; // on dry land
+  expect(moves.exclusionStep(step)).toBeGreaterThan(100); // the pathfinder drops it
+  world.set(`0,64,0`, water);
+  world.set(`0,65,0`, water);
+  expect(moves.exclusionStep(step)).toBeLessThan(100); // under water itself: it can swim out
+  for (const k of ["5,60,5", "5,61,5", "0,64,0", "0,65,0"]) world.delete(k);
+  delete bot.entity;
+});

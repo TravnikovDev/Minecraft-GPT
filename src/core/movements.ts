@@ -146,12 +146,21 @@ export function liquidBehind(p: { x: number; y: number; z: number }, look: (x: n
   return OPEN_TO.some(([dx, dy, dz]) => LIQUID.test(look(p.x + dx, p.y + dy, p.z + dz) ?? ""));
 }
 
-/** The step cost for cells under water head and feet, for this bot's world. */
+// Out of the water, a walk never goes under it (owner: again and again it
+// walked into water on its way and drowned; a cost of 6 still let a walk
+// through a flooded canyon). A ban (the pathfinder drops any move over 100).
+// In the water already, the cost stays: it must be able to swim out.
+const SUBMERGED_BAN = 10_000;
+
+/** The step cost for cells under water head and feet, for this bot's world: banned unless it's under water itself. */
 const submergedStep = (bot: Bot) => (block: { position?: { x: number; y: number; z: number } }): number => {
   const p = block.position;
   if (!p) return 0;
   const at = (y: number) => bot.blockAt(new Vec3(p.x, y, p.z)) as { name: string; getProperties: () => Record<string, unknown> } | null;
-  return isWet(at(p.y)) && isWet(at(p.y + 1)) ? SUBMERGED_COST : 0;
+  if (!(isWet(at(p.y)) && isWet(at(p.y + 1)))) return 0;
+  const me = bot.entity?.position;
+  const meWet = me ? isWet(bot.blockAt(me.offset(0, 1.62, 0).floored()) as never) || isWet(bot.blockAt(me.floored()) as never) : false;
+  return meWet ? SUBMERGED_COST : SUBMERGED_BAN;
 };
 
 function stuckStep(block: { position?: { x: number; y: number; z: number } }): number {
