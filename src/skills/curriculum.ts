@@ -22,7 +22,7 @@ import { chatter, report } from "../core/narrator";
 import { setSheltered } from "../core/sheltered";
 import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
-import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, tier1Reached, type Milestone } from "./milestones";
+import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, stoneToolsFromBag, tier1Reached, type Milestone } from "./milestones";
 import { foodPoints, hasBed, shelter, TIER, toolTier, wellEquipped } from "./capabilities";
 import { Vec3 } from "vec3";
 import { fitForTheMine } from "./mine";
@@ -355,7 +355,8 @@ function nightTask(): TaskSpec {
         // milestone is proposed as soon as this routine ends)
         // (not after it came back from the mine for bed: it stays, review)
         if (mineWorkTonight() && bedTonight !== (bot.time?.day ?? 0)) {
-          chatter("Night: carrying on in my mine.", "night");
+          const next = nextNightMilestone();
+          chatter(next && !UNDERGROUND.has(next.id) ? `Night: ${next.title}, in my shelter.` : "Night: carrying on in my mine.", "night");
           return;
         }
         // Wait for the morning in bed: at dusk the bed says "not yet", so it
@@ -542,7 +543,7 @@ setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf 
 const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
 
 /** True when a milestone is worked on at night (under ground or at home). */
-export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id) || INDOORS.has(id);
+export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id) || (INDOORS[id]?.() ?? false);
 
 /** Mine work it could do now (the next milestone is one underground). */
 /**
@@ -553,10 +554,12 @@ export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id) || INDO
 // Work inside its shelter, fine at night too: furnishing it (owner: at night
 // it stood in its shelter doing nothing; "I expected mining", and the mine
 // waits for the furnished shelter)
-const INDOORS = new Set(["chests"]);
+// Stone tools too, from what it carries (game test: none yet at dusk, so no
+// furnishing either, and it stood in its room all night)
+const INDOORS: Record<string, () => boolean> = { chests: () => true, stone_tools: stoneToolsFromBag };
 
 function nextNightMilestone(): Milestone | null {
-  return nextMilestone(MILESTONES, isBlocked, (m) => milestoneHere(m) && (UNDERGROUND.has(m.id) || INDOORS.has(m.id)));
+  return nextMilestone(MILESTONES, isBlocked, (m) => milestoneHere(m) && (UNDERGROUND.has(m.id) || (INDOORS[m.id]?.() ?? false)));
 }
 
 function mineWorkTonight(): boolean {

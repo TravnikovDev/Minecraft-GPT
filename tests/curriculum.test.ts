@@ -458,3 +458,41 @@ test("a low-priority job waits for everything else on its list (owner: the smoot
   const early = [{ ...fakeMilestone("bed_w"), tier: 1 }, { ...fakeMilestone("job_w"), tier: 2, optional: true, idle: true }];
   expect(M.nextMilestone(early, (id: string) => id === "bed_w")).toBeNull();
 });
+
+test("gravel fallen into the shelter's room or doorways is found; the walls and roof aren't counted", () => {
+  const { shelterPlan, fallenInRoom } = realShelter;
+  const plan = shelterPlan({ x: 0, y: 70, z: 0 }, "south");
+  const key = (p: any) => `${p.x},${p.y},${p.z}`;
+  const blocks = new Map<string, string>();
+  const at = (p: any) => ({ name: blocks.get(key(p)) ?? "air" });
+  expect(fallenInRoom(plan, at)).toEqual([]);
+  // A row of gravel along one side of the floor, one in the back doorway
+  for (const c of plan.room.filter((c: any) => c.y === plan.room[0].y).slice(0, 3)) blocks.set(key(c), "gravel");
+  blocks.set(key(plan.exit), "sand");
+  // Gravel in the roof (part of the shell) is not "fallen in"
+  blocks.set(key(plan.shell[0]), "gravel");
+  expect(fallenInRoom(plan, at).length).toBe(4);
+});
+
+test("stone tools count as night work in the shelter only when the bag holds what they take", () => {
+  const item = (name: string, count: number) => ({ name, count, type: registry.itemsByName[name].id });
+  const bag = (items: any[]) => (fake.inventory.items = () => items);
+  try {
+    // Nothing to make them from: not tonight
+    bag([item("wooden_pickaxe", 1)]);
+    expect(M.stoneToolsFromBag()).toBe(false);
+    // 2 pickaxes, axe, shovel, sword: 12 stone and 9 sticks
+    bag([item("cobblestone", 12), item("stick", 9)]);
+    expect(M.stoneToolsFromBag()).toBe(true);
+    bag([item("cobblestone", 11), item("stick", 9)]);
+    expect(M.stoneToolsFromBag()).toBe(false);
+    // Sticks from planks and logs count
+    bag([item("cobbled_deepslate", 12), item("jungle_log", 2)]);
+    expect(M.stoneToolsFromBag()).toBe(true);
+    // All made already: nothing to do
+    bag([item("stone_pickaxe", 1), item("stone_pickaxe", 1), item("stone_axe", 1), item("stone_shovel", 1), item("stone_sword", 1), item("cobblestone", 64)]);
+    expect(M.stoneToolsFromBag()).toBe(false);
+  } finally {
+    bag([]);
+  }
+});

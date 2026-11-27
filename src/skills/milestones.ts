@@ -15,7 +15,7 @@ import { liveWorld } from "./world";
 import { clearAroundHome, homeCleared } from "./clearing";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
-import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
+import { buildShelter, chestInPlace, enterShelter, placeShelterTable, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
@@ -117,6 +117,41 @@ async function getAll(items: string[]): Promise<ActionResult> {
 /** Pickaxes it carries of at least `tier` (a spare for mining: one wears out). */
 const pickaxesOfTier = (tier: number): number =>
   bot.inventory.items().filter((i) => catalog().toolKind(i.name) === "pickaxe" && catalog().toolTier(i.name) >= tier).length;
+
+const STONE_TOOL_COST: Record<"pickaxe" | "axe" | "shovel" | "sword", { stone: number; sticks: number }> = {
+  pickaxe: { stone: 3, sticks: 2 },
+  axe: { stone: 3, sticks: 2 },
+  shovel: { stone: 1, sticks: 2 },
+  sword: { stone: 2, sticks: 1 },
+};
+const TOOL_STONE = /^(cobblestone|cobbled_deepslate|blackstone)$/;
+
+/**
+ * True when what it carries makes the stone tools it still lacks (stone,
+ * sticks or wood for them, and planks for its shelter's table if it has
+ * none): work for the night in its shelter, no trip out (game test: no stone
+ * tools yet at dusk, so no furnishing, and it stood in its room all night).
+ */
+export function stoneToolsFromBag(): boolean {
+  const items = bot.inventory.items();
+  const count = (test: (name: string) => boolean): number => items.filter((i) => test(i.name)).reduce((n, i) => n + i.count, 0);
+  let stone = 0;
+  let sticks = 0;
+  const lack = (["axe", "shovel", "sword"] as const).filter((k) => toolTier(k) < TIER.stone);
+  const picks = Math.max(0, 2 - pickaxesOfTier(TIER.stone));
+  for (const k of lack) {
+    stone += STONE_TOOL_COST[k].stone;
+    sticks += STONE_TOOL_COST[k].sticks;
+  }
+  stone += picks * STONE_TOOL_COST.pickaxe.stone;
+  sticks += picks * STONE_TOOL_COST.pickaxe.sticks;
+  if (stone === 0) return false; // nothing to make
+  const slots = shelterSlots();
+  const tablePlanks = slots?.table && knownBlock(slots.table)?.name !== "crafting_table" && count((n) => n === "crafting_table") === 0 ? 4 : 0;
+  // In stick-sized pieces: a plank makes 2 sticks, a log 4 planks
+  const wood = count((n) => n === "stick") + 2 * count((n) => catalog().isPlanks(n)) + 8 * count((n) => catalog().isLog(n));
+  return count((n) => TOOL_STONE.test(n)) >= stone && wood >= sticks + 2 * tablePlanks;
+}
 
 /** Food: berries, then hunting, then cooking what it caught. */
 export async function stockFood(options: { emergency?: boolean } = {}): Promise<ActionResult> {
@@ -500,7 +535,15 @@ export const MILESTONES: Milestone[] = [
     requires: ["shelter"],
     // Two pickaxes: mining wears one out
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
-    achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
+    achieve: async () => {
+      // At night (from what it carries, see stoneToolsFromBag): the
+      // shelter's own table first, so it crafts inside, not at one outside
+      if (!daylight() && shelter()) {
+        const table = await placeShelterTable();
+        if (!table.ok) return table;
+      }
+      return getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]);
+    },
   },
   {
     id: "chests",

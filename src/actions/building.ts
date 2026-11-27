@@ -381,6 +381,9 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
     // Make a doorway on another side of the room: the mine starts there
     await digDoorway(plan.exit.minus(ALONG[dir]), dir);
   }
+  // Gravel or sand over the room falls in when the ground under it is dug
+  // (game test: a row of gravel lay along one wall of the new room)
+  await digOutFallenInRoom(plan);
   // Pick up what it dug (the dirt and stone to patch with), then make the
   // shell solid, and only then count the shelter as done; otherwise the next
   // try carries on at the same spot
@@ -470,6 +473,7 @@ export function shelterIntact(): boolean {
   if (!mine) return true;
   const { plan } = mine;
   if (plan.shell.some(shellHole)) return false;
+  if (fallenInRoom(plan).length > 0) return false;
   // (the stairs' first cell is the top step, at the surface)
   if (plan.stairs.some((c) => stairBlocked(c, plan.stairs[0]!.y))) return false;
   for (const at of [plan.entrance, plan.exit]) {
@@ -501,6 +505,43 @@ function stairBlocked(p: Vec3, surfaceY: number): boolean {
 // stays: it may be the owner's, and breaking it spills it)
 const OWN_FURNITURE = /^(crafting_table|furnace|smoker|blast_furnace)$/;
 
+/** The room's cells and its doorways (feet and head), where nothing may lie. */
+const roomAndDoorways = (plan: ReturnType<typeof shelterPlan>): Vec3[] => [
+  ...plan.room,
+  ...[plan.entrance, plan.exit].flatMap((d) => [d, d.offset(0, 1, 0)]),
+];
+
+/** Gravel or sand lying in its room or doorways (fallen in from above). `at`: the block at a spot. */
+export function fallenInRoom(plan: ReturnType<typeof shelterPlan>, at: (p: Vec3) => { name: string } | null = knownBlock): Vec3[] {
+  return roomAndDoorways(plan).filter((c) => FALLING.has(at(c)?.name ?? ""));
+}
+
+// Rounds of digging out what fell (more can come down from above each time)
+const FALLEN_ROUNDS = 8;
+
+/**
+ * Digs out the gravel and sand fallen into its room, the top of each column
+ * first, again while more comes down; the roof's hole it leaves is patched
+ * with the rest of the shell. How many it dug.
+ */
+async function digOutFallenInRoom(plan: ReturnType<typeof shelterPlan>): Promise<number> {
+  let dug = 0;
+  for (let round = 0; round < FALLEN_ROUNDS && !isCommandCancelled(); round++) {
+    const fallen = fallenInRoom(plan).sort((a, b) => b.y - a.y);
+    if (fallen.length === 0) break;
+    for (const c of fallen) {
+      if (isCommandCancelled()) break;
+      if (FALLING.has(knownBlock(c)?.name ?? "") && (await breakBlockAt(c.x, c.y, c.z))) dug++;
+    }
+    await new Promise<void>((r) => setTimeout(r, 800)); // what's over it lands
+  }
+  if (dug > 0) {
+    console.log(`Shelter: dug ${dug} block${dug === 1 ? "" : "s"} of gravel or sand out of my room.`);
+    await pickupNearbyItems(bot);
+  }
+  return dug;
+}
+
 /** Goes home and mends the shelter: fills holes in its walls, roof and floor, and puts in any missing door. */
 async function repairShelter(): Promise<ActionResult> {
   const mine = myShelterPlan();
@@ -509,7 +550,8 @@ async function repairShelter(): Promise<ActionResult> {
   const holes = plan.shell.filter(shellHole).length;
   const doors = [plan.entrance, plan.exit].filter((at) => !isWoodenDoor(knownBlock(at)?.name ?? "")).length;
   const blocked = plan.stairs.filter((c) => stairBlocked(c, plan.stairs[0]!.y));
-  report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", blocked.length ? `${blocked.length} blocks in my stairs` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
+  const fallen = fallenInRoom(plan).length;
+  report(`Fixing my shelter: ${[holes ? `${holes} blocks of wall, roof or floor` : "", blocked.length ? `${blocked.length} blocks in my stairs` : "", fallen ? `${fallen} blocks of gravel or sand fallen into my room` : "", doors ? `${doors} door${doors > 1 ? "s" : ""}` : ""].filter(Boolean).join(" and ")}.`);
   // Blocks in the stairs dug out first, from the top down (the way home);
   // its own furniture there picked up (it's put somewhere else when needed)
   for (const c of [...blocked].sort((a, b) => b.y - a.y)) {
@@ -521,9 +563,12 @@ async function repairShelter(): Promise<ActionResult> {
   }
   const home = await walkHome(room);
   if (!home.ok) return home;
-  if (holes > 0) {
+  if (fallen > 0) await digOutFallenInRoom(plan);
+  // (digging out what fell can open the roof over it: counted again)
+  const gaps = plan.shell.filter(shellHole).length;
+  if (gaps > 0) {
     const filler = bot.inventory.items().filter((i) => PATCH_FILLERS.includes(i.name) || catalog().isPlanks(i.name)).reduce((c, i) => c + i.count, 0);
-    if (holes > filler) await collectBlock("dirt", holes - filler + 4, 16, { seenOnly: true });
+    if (gaps > filler) await collectBlock("dirt", gaps - filler + 4, 16, { seenOnly: true });
     const patched = await patchShell(plan.shell);
     if (!patched.ok) return patched;
   }
@@ -881,6 +926,22 @@ async function carry(item: string, n: number): Promise<ActionResult> {
 }
 
 /**
+ * The shelter's own table in its spot (made from what it carries if it has
+ * none), so what it crafts at home it crafts inside. ok when it's there.
+ */
+export async function placeShelterTable(): Promise<ActionResult> {
+  const slots = shelterSlots();
+  if (!slots || !slots.direction) return fail("not_found", "no shelter");
+  if (!slots.table || knownBlock(slots.table)?.name === "crafting_table") return ok();
+  const table = await carry("crafting_table", 1);
+  if (!table.ok) return table;
+  const placed = await placeFromRow("crafting_table", slots.table, slots.stand, slots.direction);
+  if (!placed.ok) return placed;
+  await saveCraftingTableLocation(slots.table);
+  return ok();
+}
+
+/**
  * Furnishes the shelter exactly as the owner's original setupTheShelter did:
  * first everything it needs (6 chests for 3 double chests, a furnace, a
  * crafting table), then, in this order, standing in the middle of each row:
@@ -915,13 +976,8 @@ export async function setupTheShelter(): Promise<ActionResult> {
   // crafted at it, inside (game test, at night: it walked out to its table
   // on the surface and made 6 chests from all 48 of its planks, with none
   // left for the shelter's table, and the night's work stopped there)
-  if (slots.table && knownBlock(slots.table)?.name !== "crafting_table") {
-    const table = await carry("crafting_table", 1);
-    if (!table.ok) return table;
-    const placed = await placeFromRow("crafting_table", slots.table, stand, dir);
-    if (!placed.ok) return placed;
-    await saveCraftingTableLocation(slots.table);
-  }
+  const table = await placeShelterTable();
+  if (!table.ok) return table;
   const todo = steps.filter((step) => !done(step));
 
   // Prepare resources first: each trip to a table is a trip out of the shelter
