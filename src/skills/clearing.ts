@@ -24,6 +24,13 @@ import { shelter } from "./capabilities";
 export const CLEAR_RADIUS = 16;
 // Trees per go (a forest is cleared over a few visits)
 const TREES_PER_RUN = 25;
+// Fewer logs than this left round its home: cleared (owner: "most of the
+// trees"; game test, one stray log it couldn't fell brought it up out of its
+// mine again and again)
+export const CLEARED_BELOW = 5;
+
+/** True when the trees round its home are cleared (a stray log or two don't count). */
+export const homeCleared = (): boolean => treesNearHome().length < CLEARED_BELOW;
 
 /** Its shelter's entrance (where the clearing is centred), or null. */
 function homeCentre(): Vec3 | null {
@@ -72,5 +79,5 @@ export async function clearAroundHome(): Promise<ActionResult> {
   }
   if (felled > 0) chatter(`Cut down ${felled} tree${felled === 1 ? "" : "s"} round my home (no shade for mobs to hide in).`, "clearing");
   const left = treesNearHome().length;
-  return left === 0 ? ok() : fail("not_found", `${left} logs of trees round my home still standing`);
+  return left < CLEARED_BELOW ? ok() : fail("not_found", `${left} logs of trees round my home still standing`);
 }

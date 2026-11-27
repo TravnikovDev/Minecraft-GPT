@@ -12,7 +12,7 @@ import { report } from "../core/narrator";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
-import { clearAroundHome, treesNearHome } from "./clearing";
+import { clearAroundHome, homeCleared } from "./clearing";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
@@ -527,7 +527,7 @@ export const MILESTONES: Milestone[] = [
     tier: 1,
     optional: true,
     requires: ["shelter", "stone_tools"],
-    done: () => shelter() === null || treesNearHome().length === 0,
+    done: () => shelter() === null || homeCleared(),
     achieve: clearAroundHome,
   },
   // Owner (2026-11-27): after stone tools, at least 20 logs on hand (planks,
