@@ -456,6 +456,20 @@ async function getSeeds(): Promise<string | null> {
 }
 
 /**
+ * True when its next field has to wait ("not yet", never a failure: owner,
+ * "Couldn't get my fields" every few minutes): a field it has isn't sown
+ * all over, or there aren't the seeds for a whole new one. `owned`: carried
+ * and in its chests. The first field doesn't wait (it gathers its seeds).
+ */
+export function nextFieldWaits(owned: (name: string) => number): boolean {
+  const fields = myFarms();
+  if (fields.length === 0) return false;
+  if (fields.some((f) => bareCells(f) > 1)) return true;
+  const want = (2 * FARM_HALF + 1) ** 2 - 1;
+  return !SEEDS.some((s) => owned(s) >= want);
+}
+
+/**
  * Makes its farm: a hoe, seeds, the plot found, water poured in its middle,
  * the rest tilled and sown, and remembered. Done once; `tendFarm` keeps it.
  */

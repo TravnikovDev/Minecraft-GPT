@@ -61,16 +61,18 @@ let failuresDay = -1;
  * one fight sent every mining milestone to half an hour). Starving, food is
  * never set aside long.
  */
-function setAside(id: string): number {
+function setAside(id: string, noWay = false): number {
   const day = bot.time?.day ?? 0;
   if (day !== failuresDay) {
     failuresInRow.clear();
     failuresDay = day;
   }
   const unfit = !fitForTheMine(bot.health ?? 20, foodPoints()).ok;
-  const n = (failuresInRow.get(id) ?? 0) + (unfit ? 0 : 1);
+  // "No way there" is a gate too: short, never doubled (review: walled in,
+  // iron was set aside 8 minutes and it stood idle once it was out)
+  const n = (failuresInRow.get(id) ?? 0) + (unfit || noWay ? 0 : 1);
   failuresInRow.set(id, n);
-  let ms = setAsideFor(Math.max(1, n));
+  let ms = noWay ? BLOCKED_FOR_MS : setAsideFor(Math.max(1, n));
   if (id === "food" && foodPoints() < STARVING_FOOD) ms = Math.min(ms, 4 * 60_000);
   blockedUntil.set(id, Date.now() + ms);
   return ms;
@@ -147,7 +149,7 @@ function milestoneTask(m: Milestone): TaskSpec {
       if (result.ok && !m.done() && !isCommandCancelled()) result = fail("refused", `${m.title} still isn't done`);
       if (m.done()) failuresInRow.delete(m.id);
       if (!result.ok && !isCommandCancelled()) {
-        const ms = setAside(m.id);
+        const ms = setAside(m.id, result.reason === "unreachable" && /no path/i.test(result.detail ?? ""));
         const why = describeFailure(result);
         noteMilestoneFailed(m.title, why);
         if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < MAX_BLOCKED_MS) {
@@ -481,11 +483,22 @@ export function resetCurriculum(): void {
 
 // A task ending is a good moment to look at what's next. A milestone given up
 // as stuck or too long is set aside for a while, like one that failed.
+// A milestone that ran its full time while bringing things in (a mining trip
+// with ore coming up) isn't a failure: it goes again at once (review: coal
+// and iron trips were cut at 15 minutes and set aside like failures)
+const itemsAtStart = new Map<string, number>();
+const itemsNow = (): number => bot.inventory?.items().reduce((n, i) => n + i.count, 0) ?? 0;
+onTaskStart((task) => {
+  if (task.name.startsWith(MILESTONE_PREFIX)) itemsAtStart.set(task.name, itemsNow());
+});
 onTaskEnd((task, outcome) => {
   const why = String(task.signal.reason ?? "");
+  const gained = itemsNow() - (itemsAtStart.get(task.name) ?? itemsNow());
+  itemsAtStart.delete(task.name);
   if (outcome === "cancelled" && task.name.startsWith(MILESTONE_PREFIX) && (why === "stuck" || why === "took too long")) {
     const m = MILESTONES.find((x) => `${MILESTONE_PREFIX}${x.title}` === task.name);
-    if (m) setAside(m.id);
+    if (m && why === "took too long" && UNDERGROUND.has(m.id) && gained > 0) console.log(`${m.title}: the time ran out with ${gained} things brought in; going on.`);
+    else if (m) setAside(m.id);
   }
   setTimeout(() => void considerNextStep(), 1_000);
 });

@@ -16,7 +16,7 @@ import { areChoresMuted } from "../core/chores";
 import { daylight } from "../core/daylight";
 import { report } from "../core/narrator";
 import { describeFailure } from "../core/result";
-import { foodPoints } from "./capabilities";
+import { foodPoints, shelter } from "./capabilities";
 
 // The hunger bar (of 20) at which it's starving: no sprinting, health next
 const STARVING_BAR = 6;
@@ -42,6 +42,12 @@ export function foodNeed(bar: number, points: number, day: boolean, ownLife: boo
   if (ownLife && day && points < RESERVE) return "restock";
   return null;
 }
+
+/** Up at its home's level, not down its mine. */
+const upTop = (): boolean => {
+  const home = shelter();
+  return home === null || bot.entity.position.y >= home.y - 3;
+};
 
 let nextTryAt = 0;
 let nextHarvestAt = 0;
@@ -107,8 +113,10 @@ export async function considerFood(): Promise<void> {
     propose(foodTask(need));
     return;
   }
-  // Ripe fields by day: harvested, whatever food it carries
-  if (autonomyOn() && daylight() && Date.now() >= nextHarvestAt) {
+  // Ripe fields by day: harvested, whatever food it carries; only while it's
+  // up top (review: the harvest pulled it out of its mine every 20 minutes,
+  // 2 minutes of climbing each; ripe wheat waits for the trip home)
+  if (autonomyOn() && daylight() && upTop() && Date.now() >= nextHarvestAt) {
     nextHarvestAt = Date.now() + HARVEST_EVERY_MS;
     const { farmRipe, RIPE_ENOUGH } = await import("./farm");
     if (farmRipe() >= RIPE_ENOUGH) propose(harvestTask());

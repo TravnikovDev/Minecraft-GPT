@@ -22,6 +22,8 @@ export const SMELT_JOBS: Array<{ input: string; output: string; above: number }>
   { input: "raw_iron", output: "iron_ingot", above: 0 },
   { input: "raw_gold", output: "gold_ingot", above: 0 },
   { input: "raw_copper", output: "copper_ingot", above: 0 },
+  // Smooth stone for its shelter's walls (stone smelted again; only while it's wanted, see tendFurnace)
+  { input: "stone", output: "smooth_stone", above: 0 },
   { input: "sand", output: "glass", above: 32 },
   { input: "cobblestone", output: "stone", above: 256 },
 ];
@@ -39,9 +41,12 @@ const KEEP_CARRIED: Record<string, number> = { coal: 16, charcoal: 16, cobblesto
 const IRON_MILESTONES = ["iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools"];
 
 /** What to put in the furnace next, from what it has (carried and stored): the first job with something past its pile. Pure. */
-export function pickSmeltJob(have: (name: string) => number): { input: string; output: string; count: number } | null {
+export function pickSmeltJob(
+  have: (name: string) => number,
+  pileOf: (job: (typeof SMELT_JOBS)[number]) => number = (job) => job.above
+): { input: string; output: string; count: number } | null {
   for (const job of SMELT_JOBS) {
-    const spare = have(job.input) - job.above;
+    const spare = have(job.input) - pileOf(job);
     if (spare > 0) return { input: job.input, output: job.output, count: Math.min(BATCH, spare) };
   }
   return null;
@@ -60,6 +65,17 @@ async function fetchSpare(name: string, want: number): Promise<void> {
   if (short <= 0) return;
   const { takeItems } = await import("../actions/storage");
   await takeItems([{ name, count: short + Math.max(0, (KEEP_CARRIED[name] ?? 0) - carried(name)) }], true);
+}
+
+/**
+ * How much more smooth stone its shelter's weak walls want, with coal
+ * enough to make it (two stacks, owner); 0 when none.
+ */
+async function smoothStoneWanted(): Promise<number> {
+  const { owned, REINFORCE_COAL } = await import("./milestones");
+  if (owned(["coal"]) < REINFORCE_COAL) return 0;
+  const { shelterWeakCells } = await import("./reinforce");
+  return Math.max(0, shelterWeakCells().length - owned(["smooth_stone"]));
 }
 
 /** Its home furnace (the block), or null. */
@@ -130,8 +146,16 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
   const { storedNear } = await import("../actions/storage");
   const { MILESTONES } = await import("./milestones");
   const ironOpen = MILESTONES.some((m) => IRON_MILESTONES.includes(m.id) && !m.done());
-  const have = (name: string): number => (name === "raw_iron" && ironOpen ? 0 : spare(name) + storedNear(name, 32));
-  const job = pickSmeltJob(have);
+  // Smooth stone its shelter still needs (owner: only with two stacks of
+  // coal): stone smelted into it, and cobblestone into stone past a small
+  // pile instead of 256
+  const smooth = await smoothStoneWanted();
+  const have = (name: string): number => {
+    if (name === "raw_iron" && ironOpen) return 0;
+    const n = spare(name) + storedNear(name, 32);
+    return name === "stone" ? Math.min(n, smooth) : n;
+  };
+  const job = pickSmeltJob(have, (j) => (j.input === "cobblestone" && smooth > 0 ? 0 : j.above));
   if (!job) return ok(done.concat("nothing to smelt").join("; "));
   // The batch from the chests (what it carries beyond its stock counts too)
   if (storedNear(job.input, 32) > 0) await fetchSpare(job.input, job.count);

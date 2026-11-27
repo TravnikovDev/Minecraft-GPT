@@ -411,3 +411,27 @@ test("hungry: its hunger bar low or next to nothing to eat on it (game test: sta
   expect(M.isHungry(14, 30)).toBe(true);
   expect(M.isHungry(20, 4)).toBe(true);
 });
+
+test("a low-priority job waits for everything else on its list (owner: the smooth stone shelter ran ahead of iron)", () => {
+  done.clear();
+  const all = () => true;
+  const list = [
+    { ...fakeMilestone("shelter_job"), tier: 2, optional: true, idle: true },
+    { ...fakeMilestone("iron_w"), tier: 2 },
+    { ...fakeMilestone("pick_w"), tier: 3 },
+  ];
+  // Listed first, but iron goes first, then the next tier
+  expect(M.nextMilestone(list)?.id).toBe("iron_w");
+  done.add("iron_w");
+  expect(M.nextMilestone(list)?.id).toBe("pick_w");
+  // Nothing else can be done now (the rest set aside): the low-priority job
+  expect(M.nextMilestone(list, (id: string) => id === "pick_w")?.id).toBe("shelter_job");
+  // Iron set aside after a failed trip: the job may fill the wait
+  done.delete("iron_w");
+  expect(M.nextMilestone(list, (id: string) => id === "iron_w")?.id).toBe("shelter_job");
+  // The day plan can't put it ahead of iron
+  expect(M.heldBy(list[0], list, all)).toEqual(["iron_w"]);
+  // An earlier tier still open holds it, as any other
+  const early = [{ ...fakeMilestone("bed_w"), tier: 1 }, { ...fakeMilestone("job_w"), tier: 2, optional: true, idle: true }];
+  expect(M.nextMilestone(early, (id: string) => id === "bed_w")).toBeNull();
+});

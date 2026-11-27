@@ -18,8 +18,8 @@ import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntac
 import { branchMine, COAL, digMine, IRON, myMine, paveMineStairs, stairsPaved, unpavedSteps } from "./mine";
 import { ENDGAME_MILESTONES } from "./endgame/milestones";
 import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
-import { farmRipe, FIELDS_WANTED, makeFarm, myFarm, myFarms, tendFarm } from "./farm";
-import { reinforceShelter, shelterWeakCells } from "./reinforce";
+import { farmRipe, FIELDS_WANTED, makeFarm, myFarm, myFarms, nextFieldWaits, tendFarm } from "./farm";
+import { reinforceShelter, shelterSeen, shelterWeakCells } from "./reinforce";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
@@ -68,6 +68,14 @@ export type Milestone = {
    * tier above it and switched the day planner off.
    */
   supply?: boolean;
+  /**
+   * Low priority, like a player's chores on a quiet day: done only when
+   * nothing else on its list can be done now (owner: reinforcing the
+   * shelter with smooth stone ran ahead of iron, "it must be just a low
+   * priority idle thing"). Never holds a tier up; the day plan can't put it
+   * ahead of the rest of its tier either.
+   */
+  idle?: boolean;
 };
 
 /** True when a milestone can be checked and worked on in the dimension it's in now. */
@@ -492,7 +500,9 @@ export const MILESTONES: Milestone[] = [
     tier: 1,
     optional: true,
     requires: ["shelter"],
-    done: () => myFarms().length >= FIELDS_WANTED,
+    // Waiting for seeds or sowing is "not yet": nothing to do now, no failure
+    done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
+    reached: () => myFarms().length >= FIELDS_WANTED,
     achieve: makeFarm,
   },
   {
@@ -585,6 +595,7 @@ export const MILESTONES: Milestone[] = [
     title: "paved mine stairs",
     tier: 2,
     optional: true,
+    idle: true,
     requires: ["mine"],
     // Owner: once 200 cobblestone have piled up, the mine's stairs get
     // cobblestone stair blocks (and a block more headroom); until then (or
@@ -596,17 +607,22 @@ export const MILESTONES: Milestone[] = [
     reached: () => stairsPaved(),
     achieve: paveMineStairs,
   },
-  // Owner: once 200 cobblestone have piled up, cobblestone smelted into stone
-  // and the shelter's walls reinforced with it (dirt and sand blow out; stone
-  // holds against a creeper). Nothing to do before then, or when it's stone
+  // Owner: the shelter's weak walls (dirt and sand blow out; stone holds
+  // against a creeper) changed for smooth stone, a low-priority job, only
+  // with two stacks of coal and smooth stone already made (the workshop makes
+  // it in the background). Nothing to do before then ("not yet", no failure),
+  // or when it's all strong. Its walls must be in sight to count as strong
+  // (from far away they aren't loaded and read as "nothing weak": it was
+  // marked reached before any reinforcing)
   {
     id: "stone_shelter",
     title: "a smooth stone shelter",
     tier: 2,
     optional: true,
+    idle: true,
     requires: ["mine"],
-    done: () => shelter() !== null && (cobblestoneOwned() < PAVE_AFTER || shelterWeakCells().length === 0),
-    reached: () => shelter() !== null && shelterWeakCells().length === 0,
+    done: () => shelter() !== null && (!readyToReinforce() || (shelterSeen() && shelterWeakCells().length === 0)),
+    reached: () => shelter() !== null && shelterSeen() && shelterWeakCells().length === 0,
     achieve: () => reinforceShelter(daylight()),
   },
   {
@@ -712,6 +728,7 @@ export const MILESTONES: Milestone[] = [
     title: "my home lit twice as far",
     tier: 3,
     optional: true,
+    idle: true,
     requires: ["lit_home"],
     done: () => shelter() === null || homeLit(1),
     achieve: () => lightUpHome(daylight(), 1),
@@ -730,6 +747,7 @@ export const MILESTONES: Milestone[] = [
     title: "my home lit three times as far",
     tier: 3,
     optional: true,
+    idle: true,
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
     achieve: () => lightUpHome(daylight(), 2),
@@ -767,10 +785,19 @@ const TORCHES_LOW = 8;
 const PAVE_AFTER = 200;
 
 /** Cobblestone it carries and has in its chests (as last seen). */
-function cobblestoneOwned(): number {
-  const stored = (getMemory().chests ?? []).reduce((n, c) => n + ((c.contents as Record<string, number> | null)?.["cobblestone"] ?? 0), 0);
-  return carriedOf(["cobblestone"]) + stored;
+/** How many of these items it has, carried and in its chests (as last seen). */
+export function owned(names: string[]): number {
+  const stored = (getMemory().chests ?? []).reduce((n, c) => n + names.reduce((m, name) => m + ((c.contents as Record<string, number> | null)?.[name] ?? 0), 0), 0);
+  return carriedOf(names) + stored;
 }
+function cobblestoneOwned(): number {
+  return owned(["cobblestone"]);
+}
+// Owner: the shelter gets smooth stone only, and only once there are two
+// stacks of coal for the furnace (smooth stone is cobblestone smelted twice)
+export const REINFORCE_COAL = 128;
+/** Ready to reinforce: coal enough, and smooth stone made (by the workshop, in the background). */
+const readyToReinforce = (): boolean => owned(["coal"]) >= REINFORCE_COAL && owned(["smooth_stone"]) > 0;
 // Each piece, the ingots it takes, and where it's worn
 const IRON_ARMOR: Array<[string, number, "head" | "torso" | "legs" | "feet"]> = [
   ["iron_helmet", 5, "head"],
@@ -867,21 +894,30 @@ export function nextMilestone(list: Milestone[], blocked: (id: string) => boolea
   // Its prerequisites done (a set-aside shelter must not let stone tools or the mine jump ahead)
   const ready = (m: Milestone): boolean => (m.requires ?? []).every((id) => list.find((x) => x.id === id)?.done() ?? true);
   const tiers = [...new Set(list.map((m) => m.tier))].sort((a, b) => a - b);
-  for (const tier of tiers) {
-    // Only what can be worked on in this dimension (in the Nether its first
-    // day's milestones wait: their shelter and food checks would mislead)
-    const open = list.filter((m) => m.tier === tier && here(m) && !m.done());
-    if (open.length === 0) continue;
-    const now = open.find((m) => !blocked(m.id) && ready(m));
-    if (now) return now;
-    // A tier isn't skipped while any of it is left (a blocked one waits its
-    // turn), unless all that's left of it is optional: lighting further out
-    // or the farm, when they can't be done right now, never hold the day up
-    // ... nor a supply it has had before that's running low again
-    if (open.every((m) => m.optional || (m.supply && reachedAt()[m.id]))) continue;
+  const main = ((): Milestone | null => {
+    for (const tier of tiers) {
+      // Only what can be worked on in this dimension (in the Nether its first
+      // day's milestones wait: their shelter and food checks would mislead);
+      // low-priority (idle) ones wait for the end
+      const open = list.filter((m) => m.tier === tier && !m.idle && here(m) && !m.done());
+      if (open.length === 0) continue;
+      const now = open.find((m) => !blocked(m.id) && ready(m));
+      if (now) return now;
+      // A tier isn't skipped while any of it is left (a blocked one waits its
+      // turn), unless all that's left of it is optional: lighting further out
+      // or the farm, when they can't be done right now, never hold the day up
+      // ... nor a supply it has had before that's running low again
+      if (open.every((m) => m.optional || (m.supply && reachedAt()[m.id]))) continue;
+      return null;
+    }
     return null;
-  }
-  return null;
+  })();
+  if (main) return main;
+  // Nothing else on its list can be done now (iron set aside after a failed
+  // trip, say): a low-priority job, the earliest one whose earlier tiers are clear
+  const earlierClear = (m: Milestone): boolean =>
+    !list.some((x) => x.tier < m.tier && !x.idle && here(x) && !x.done() && !x.optional && !(x.supply && reachedAt()[x.id]));
+  return list.find((m) => m.idle && here(m) && !m.done() && !blocked(m.id) && ready(m) && earlierClear(m)) ?? null;
 }
 
 /**
@@ -893,7 +929,11 @@ export function nextMilestone(list: Milestone[], blocked: (id: string) => boolea
  */
 export function heldBy(m: Milestone, list: Milestone[] = MILESTONES, here: (m: Milestone) => boolean = milestoneHere): string[] {
   const needs = (m.requires ?? []).filter((id) => list.find((x) => x.id === id)?.done() === false);
-  const earlier = list.filter((x) => x.tier < m.tier && here(x) && !x.done() && !x.optional && !(x.supply && reachedAt()[x.id])).map((x) => x.id);
+  // (a low-priority job also waits for the rest of its own tier: the day
+  // plan put the smooth stone shelter ahead of iron)
+  const earlier = list
+    .filter((x) => (x.tier < m.tier || (m.idle && x.tier === m.tier && !x.idle)) && here(x) && !x.done() && !x.optional && !(x.supply && reachedAt()[x.id]))
+    .map((x) => x.id);
   return [...new Set([...needs, ...earlier])];
 }
 

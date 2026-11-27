@@ -17,3 +17,12 @@ test("sand and cobblestone only once they pile up, keeping the pile", () => {
   expect(pickSmeltJob(stock({ cobblestone: 200 }))).toBeNull();
   expect(pickSmeltJob(stock({ cobblestone: 1400 }))).toEqual({ input: "cobblestone", output: "stone", count: 64 });
 });
+
+test("smooth stone only while the shelter wants it: stone smelted, and cobblestone sooner (owner: only with two stacks of coal)", () => {
+  // Not wanted (tendFurnace counts stone as 0): nothing
+  expect(pickSmeltJob(stock({ cobblestone: 200 }))).toBeNull();
+  // Wanted: stone into smooth stone, else cobblestone into stone past no pile
+  const wanted = (j: { input: string; above: number }) => (j.input === "cobblestone" ? 0 : j.above);
+  expect(pickSmeltJob(stock({ stone: 20, cobblestone: 200 }), wanted)).toEqual({ input: "stone", output: "smooth_stone", count: 20 });
+  expect(pickSmeltJob(stock({ cobblestone: 200 }), wanted)).toEqual({ input: "cobblestone", output: "stone", count: 64 });
+});
