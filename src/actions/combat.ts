@@ -47,9 +47,19 @@ export const hostileMobsInfo = {
  */
 export const NEUTRAL_MOBS = new Set(["enderman", "zombified_piglin", "piglin", "piglin_brute", "warden", "wolf", "bee", "polar_bear", "llama", "trader_llama", "panda", "dolphin", "goat", "iron_golem"]);
 
-/** Spiders and cave spiders leave players alone by day (in light). Pure. */
-export const isNeutralNow = (name: string, night: boolean): boolean =>
-  NEUTRAL_MOBS.has(name) || (!night && (name === "spider" || name === "cave_spider"));
+/**
+ * Spiders and cave spiders leave players alone by day, in the light; in the
+ * dark (a cave, its mine) they attack any time. Pure.
+ */
+export const isNeutralNow = (name: string, night: boolean, dark = false): boolean =>
+  NEUTRAL_MOBS.has(name) || (!night && !dark && (name === "spider" || name === "cave_spider"));
+
+/** True when the bot stands where the sky's light hardly reaches (a cave, its mine). */
+function inTheDark(): boolean {
+  const here = bot.entity && typeof bot.blockAt === "function" ? bot.blockAt(bot.entity.position.floored().offset(0, 1, 0)) : null;
+  const sky = (here as unknown as { skyLight?: number } | null)?.skyLight;
+  return sky !== undefined && sky < 8;
+}
 
 // Check if an Entity is Hostile - standardized function
 /** A hostile mob: the game's own list (core/catalog), plus the ones the threat table knows. */
@@ -79,7 +89,10 @@ function watchHurts(): void {
     if (!bot.entity) return;
     const now = Date.now();
     for (const e of Object.values(bot.entities)) {
-      if (e.name && NEUTRAL_MOBS.has(e.name) && e.position.distanceTo(bot.entity.position) < 4.5) provoked.set(e.id, now + PROVOKED_MS);
+      // Any mob that leaves it alone now, spiders by day too (game test: a
+      // spider in a cave bit it from 18 health to 0 and the reflex never
+      // fought back: by day a spider only counted if it was on this list)
+      if (e.name && isNeutralNow(e.name, false) && e.position.distanceTo(bot.entity.position) < 4.5) provoked.set(e.id, now + PROVOKED_MS);
     }
   });
 }
@@ -89,11 +102,11 @@ function watchHurts(): void {
  * with, a zombified piglin it walks past, an enderman: never first; architect
  * review, the reflex started wars in the Nether). Pure over its inputs.
  */
-export function mayAttackFirst(name: string, night: boolean, provokedNow: boolean, strong = true): boolean {
+export function mayAttackFirst(name: string, night: boolean, provokedNow: boolean, strong = true, dark = false): boolean {
   // An enderman (40 health, hits for 7) only when it's strong enough to win
   // (game test: at 11 health with a stone sword it fought one and died)
   if (name === "enderman" && !strong) return false;
-  return provokedNow || !isNeutralNow(name, night);
+  return provokedNow || !isNeutralNow(name, night, dark);
 }
 
 /** Strong enough for an enderman: most of its health and an iron sword or better (tier 3). Pure. */
@@ -112,6 +125,7 @@ function strongNow(): boolean {
 export function getPriorityTargets(range = 16): Entity[] {
   watchHurts();
   const night = mobsOut();
+  const dark = inTheDark();
   const now = Date.now();
   const hostileEntities = Object.values(bot.entities).filter(
     (entity) =>
@@ -120,7 +134,7 @@ export function getPriorityTargets(range = 16): Entity[] {
       entity.name !== "creeper" &&
       entity.position.distanceTo(bot.entity.position) <= range &&
       isHostile(entity) &&
-      mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now, strongNow())
+      mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now, strongNow(), dark)
   );
 
   // Sort by threat level (high to low) and then by distance (close to far)

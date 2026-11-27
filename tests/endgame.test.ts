@@ -100,3 +100,16 @@ test("obsidian is mined only on solid ground (never off a lava pool's top); mile
   expect(nextMilestone(list as any, () => false, (x: any) => x.dimension === "any")?.id).toBe("fortress");
   expect(nextMilestone(list as any, () => false, () => true)?.id).toBe("food");
 });
+
+test("spiders: left alone by day in the light, fought in the dark (a cave, its mine) or once one bites (game test: a spider in a cave killed it from 18 health, never fought)", async () => {
+  const { mayAttackFirst, isNeutralNow } = await import(`${ROOT}/src/actions/combat.ts`);
+  expect(isNeutralNow("spider", false)).toBe(true); // by day, in the light
+  expect(isNeutralNow("spider", false, true)).toBe(false); // by day, in the dark
+  expect(isNeutralNow("cave_spider", false, true)).toBe(false);
+  expect(isNeutralNow("spider", true)).toBe(false); // at night
+  expect(mayAttackFirst("spider", false, false)).toBe(false);
+  expect(mayAttackFirst("spider", false, false, true, true)).toBe(true); // in its mine
+  expect(mayAttackFirst("spider", false, true)).toBe(true); // it bit the bot
+  // The dark never makes a neutral mob a target
+  expect(mayAttackFirst("enderman", false, false, true, true)).toBe(false);
+});

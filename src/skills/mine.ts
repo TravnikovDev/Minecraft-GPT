@@ -1082,7 +1082,7 @@ const STAIR_TORCH_EVERY = 6;
 export async function lookAfterStairs(): Promise<number> {
   const rec = mineRecord();
   if (!rec) return 0;
-  const { ensureBlock, lightSpot } = await import("../actions/digging");
+  const { lightSpot } = await import("../actions/digging");
   const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
   const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
   const walkSet = new Set(walk.map((c) => c.toString()));
@@ -1138,9 +1138,9 @@ export async function lookAfterStairs(): Promise<number> {
     const keepClear = (p: Vec3): boolean => inWalk(p) || tunnels.has(p.toString());
     // Its floor from the step above, then the rest standing on it
     const floor = s.offset(0, -1, 0);
-    for (const hole of holes.filter((h) => h.equals(floor))) if (await ensureBlock(hole, keepClear)) filled++;
+    filled += await fillFromSolid(holes.filter((h) => h.equals(floor)), keepClear);
     if (floorHole && holes.length > 1 && !(await goToStep(s)).ok) continue;
-    for (const hole of holes.filter((h) => !h.equals(floor))) if (await ensureBlock(hole, keepClear)) filled++;
+    filled += await fillFromSolid(holes.filter((h) => !h.equals(floor)), keepClear);
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
       if ((await breakBlock(s.offset(0, stepHeadroom(i, s.y), 0))).ok) raised++;
@@ -1169,13 +1169,53 @@ async function mendNewStep(i: number): Promise<void> {
   const holes = shellHoles(rec, i, walkSet, tunnels);
   if (holes.length === 0) return;
   await stockStairsFillers(holes.length);
-  const { ensureBlock } = await import("../actions/digging");
-  let filled = 0;
-  for (const h of holes) {
-    if (isCommandCancelled()) return;
-    if (await ensureBlock(h, (p) => walkSet.has(p.toString()) || tunnels.has(p.toString()))) filled++;
-  }
+  const filled = await fillFromSolid(holes, (p) => walkSet.has(p.toString()) || tunnels.has(p.toString()));
   console.log(`Mine: step ${i} closed in (${filled} of ${holes.length} open blocks of floor, wall or roof filled).`);
+}
+
+const STAIRS_FILL = ["cobblestone", "cobbled_deepslate", "dirt", "coarse_dirt", "netherrack"];
+const SIDES6 = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+
+/**
+ * Fills open blocks of its stairs' shell growing out from what's solid: each
+ * pass places the holes that have a solid block beside them (from the
+ * stairs, where it stands), until none is left or nothing more goes in;
+ * only then support blocks for what still floats (game test: it went down
+ * into the cavern under its stairs to prop a floor block, and a spider
+ * there killed it). How many it filled.
+ */
+async function fillFromSolid(holes: Vec3[], keepClear: (p: Vec3) => boolean): Promise<number> {
+  const { placeBlockResult } = await import("../actions/blockPlacing");
+  const filler = (): string | null => STAIRS_FILL.find((n) => bot.inventory.items().some((i) => i.name === n)) ?? null;
+  const solidBeside = (h: Vec3): boolean => SIDES6.some((d) => bot.blockAt(h.plus(d))?.boundingBox === "block");
+  let left = holes;
+  let filled = 0;
+  for (let pass = 0; pass < 8 && left.length > 0; pass++) {
+    const next: Vec3[] = [];
+    for (const h of left) {
+      if (isCommandCancelled()) return filled;
+      if (!isOpenForStairs(bot.blockAt(h))) continue; // filled meanwhile (a support)
+      const name = filler();
+      if (!name) return filled;
+      if (!solidBeside(h)) {
+        next.push(h);
+        continue;
+      }
+      if ((await placeBlockResult(name, h.x, h.y, h.z, "side")).ok) filled++;
+      else next.push(h);
+    }
+    if (next.length === left.length) break; // nothing more went in
+    left = next;
+  }
+  // Still floating: support blocks (the old way), best effort
+  if (left.length > 0) {
+    const { ensureBlock } = await import("../actions/digging");
+    for (const h of left) {
+      if (isCommandCancelled()) return filled;
+      if (isOpenForStairs(bot.blockAt(h)) && (await ensureBlock(h, keepClear))) filled++;
+    }
+  }
+  return filled;
 }
 
 type StairsRec = { start: Pos; direction: DirectionType; stairs: number; level: number; turns: Turn[] };
