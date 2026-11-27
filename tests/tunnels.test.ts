@@ -282,3 +282,23 @@ test("water next to the tunnel and nothing to plug it with: it stops", async () 
   fake.entity.position = new Vec3(0.5, 60, 0.5);
   expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(false);
 });
+
+test("a pool ahead: the tunnel fills its face and ends there, never digging into the water (owner: a sleeve plugged its way into a lake)", async () => {
+  // A pool from x 4 on, the tunnel's full height, across its line
+  for (let x = 4; x <= 8; x++) for (let y = 50; y <= 52; y++) for (const z of [-1, 0, 1]) changed.set(key({ x, y, z }), "water");
+  items = [{ name: "dirt", count: 64 }];
+  fake.entity.position = new Vec3(0.5, 50, 0.5);
+  expect(await digging.digStraightTunnel("east", 8, new Vec3(0, 50, 0), 1, 3)).toBe(false);
+  expect(digging.tunnelStopReason()).toBe("blocked");
+  expect(dug.some((d) => Number(d.split(",")[0]) >= 4)).toBe(false); // nothing dug in the pool
+  expect(blockAt({ x: 5, y: 50, z: 0 }).name).toBe("water"); // the pool itself left alone
+});
+
+test("water in a wall only: plugged, and the tunnel digs on past it", async () => {
+  changed.set(key({ x: 3, y: 51, z: 1 }), "water"); // beside the 3rd block
+  items = [{ name: "dirt", count: 16 }];
+  fake.entity.position = new Vec3(0.5, 50, 0.5);
+  expect(await digging.digStraightTunnel("east", 6, new Vec3(0, 50, 0), 1, 3)).toBe(true);
+  expect(blockAt({ x: 3, y: 51, z: 1 }).name).toBe("dirt");
+  expect(dug).toContain(key({ x: 6, y: 50, z: 0 }));
+});

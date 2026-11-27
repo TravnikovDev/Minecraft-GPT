@@ -172,6 +172,27 @@ async function plugLiquids(pos: Vec3): Promise<boolean> {
   return ![pos, ...SIDES.map((s) => pos.plus(s))].some(liquid);
 }
 
+/**
+ * True (the tunnel ends here) when the block it would dig next is water or
+ * lava, or a plug it put into water there: a pool or a lake ahead, not a
+ * drip in a wall. Its face is filled first. Owner: tunnels never go into
+ * water (game test: a sleeve plugged its way 4 blocks into an underground
+ * lake, the owner opened the end plug and the lake flooded the sleeve).
+ * Water beside the block only (in a wall) is still plugged and dug past.
+ */
+async function intoWater(pos: Vec3): Promise<boolean> {
+  const name = bot.blockAt(pos)?.name ?? "";
+  const liquid = name === "water" || name === "lava";
+  // (a plug spot dug out since is just air: no water there now)
+  if (!liquid && !(isPlug(pos) && bot.blockAt(pos)?.boundingBox === "block")) return false;
+  if (liquid) await plugLiquids(pos);
+  lastStop = "blocked";
+  const what = liquid ? name : "water";
+  console.log(`Tunnel stopped: ${what} ahead at ${pos}; not digging into it.`);
+  chatter(`I stopped digging: ${what} ahead at ${pos}.`, "tunnel");
+  return true;
+}
+
 /** Checks one block before a tunnel digs it; logs and tells the owner when it must stop. */
 function stopTunnelAt(pos: Vec3): boolean {
   if (isCommandCancelled()) return true;
@@ -332,6 +353,7 @@ export async function digDiagonalTunnel(
         // Its shelter's walls, roof and floor: never dug (the mine's first
         // stair, in the back doorway, dug the block over the door)
         if (isProtected(digPosition)) continue;
+        if (await intoWater(digPosition)) return false;
         await plugLiquids(digPosition);
         if (stopTunnelAt(digPosition)) return false;
         if (!(await digTunnelBlock(digPosition))) return false;
@@ -467,6 +489,7 @@ export async function digStraightTunnel(
     for (let y = 0; y < height; y++) {
       for (let x = -half; x <= width - 1 - half; x++) {
         const blockPos = position.offset(side.x * x, y, side.z * x);
+        if (await intoWater(blockPos)) return false;
         await plugLiquids(blockPos);
         if (stopTunnelAt(blockPos)) return false;
         if (!(await digTunnelBlock(blockPos))) return false;
@@ -681,6 +704,7 @@ export async function digDiagonalTunnelUp(
 
       for (let h = tunnelSize.height; h >= 0; h--) {
         const digPosition = basePosition.offset(0, h, 0);
+        if (await intoWater(digPosition)) return false;
         await plugLiquids(digPosition);
         if (stopTunnelAt(digPosition)) return false;
         if (!(await digTunnelBlock(digPosition))) return false;

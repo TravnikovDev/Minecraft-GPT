@@ -2,7 +2,7 @@
 // Ore in the open round its home first, like a player (owner: a ravine full
 // of coal, iron and copper right in front of the shelter, and it went down
 // its mine instead). By day, before a mining trip, ore of the kind it's after
-// that shows a face to the air within SURFACE_RANGE of the top of its
+// that shows a face to the open sky (lit by it) within SURFACE_RANGE of the top of its
 // stairs, and not far above or below it (no climbing down into deep caves),
 // is taken first.
 
@@ -38,11 +38,17 @@ export function surfaceTargets(home: P3, ores: Array<P3 & { open: boolean }>, ra
     .sort((a, b) => Math.hypot(a.x - home.x, a.z - home.z) - Math.hypot(b.x - home.x, b.z - home.z));
 }
 
-/** True when the block has a face open to air (not water or lava: it can stand there and mine it). */
-function openToAir(b: Block): boolean {
-  for (const d of [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)]) {
-    const n = bot.blockAt(b.position.plus(d));
-    if (n && (n.name === "air" || n.name === "cave_air")) return true;
+/**
+ * True when the block has a face open to air the sky lights (a ravine, a
+ * cliff), not water or lava. A dark cave doesn't count (owner: game test,
+ * for coal "in the open" 20 blocks down in a cave, a walk dug its own way
+ * there from the surface, through a pond where it nearly drowned twice, and
+ * on into the cave where it died; ore underground comes from its mine).
+ */
+export function openToSky(at: P3, look: (p: P3) => { name: string; skyLight?: number } | null): boolean {
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {
+    const n = look({ x: at.x + dx, y: at.y + dy, z: at.z + dz });
+    if (n && (n.name === "air" || n.name === "cave_air") && (n.skyLight ?? 0) > 0) return true;
   }
   return false;
 }
@@ -66,7 +72,7 @@ export async function surfaceOresFirst(item: string, count: number): Promise<num
     .findBlocks({ matching: ids, point: homeV, maxDistance: SURFACE_RANGE + SURFACE_DEPTH, count: 128 })
     .map((p) => bot.blockAt(p))
     .filter((b): b is Block => b !== null && !forbiddenAt(b.position));
-  const targets = surfaceTargets(home, blocks.map((b) => ({ x: b.position.x, y: b.position.y, z: b.position.z, open: openToAir(b) })));
+  const targets = surfaceTargets(home, blocks.map((b) => ({ x: b.position.x, y: b.position.y, z: b.position.z, open: openToSky(b.position, (p) => bot.blockAt(new Vec3(p.x, p.y, p.z))) })));
   if (targets.length === 0) return 0;
   const { collectBlock } = await import("../actions/collectBlock");
   const have = (): number => bot.inventory.items().filter((i) => i.name === item).reduce((n, i) => n + i.count, 0);

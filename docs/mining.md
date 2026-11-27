@@ -46,7 +46,8 @@ With every way down blocked, or at the bottom, it digs side routes off its lowes
 ## Safety rules that hold in the mine
 
 - Never break a block with water or lava at its sides or on top. Only the drowning reflex, digging up for air, may.
-- Water in a sleeve is plugged; water at the next stair step makes the stairs turn.
+- Water or lava in the block a tunnel would dig next (a pool, a lake): its face is filled and that sleeve or pokehole ends there, marked blocked; never a tube plugged through the water. Water only in a wall beside it is plugged and the tunnel goes on. Water at the next stair step makes the stairs turn.
+- Ore underground comes from the mine only: "ore in the open" round its home means a face the sky lights (a ravine, a cliff), never a dark cave it would dig its own way down to.
 - Out of the mine by its own stairs, never a new way dug up through the rock. Beside the stairs in a cave, it opens a way in through their wall.
 - It goes down only with enough health and food.
 - **Closed to the outside**: where a floor's room, sleeve or pokehole (or the stairs) opens into open air that reaches the sky (a canyon, a ravine), the opening is blocked with cobblestone, at the start of every trip and after every stretch it digs. Caves that stay underground are left open.
