@@ -31,8 +31,9 @@ export const FARM_HALF = 4;
 export const FIELD_HALVES = [4, 3, 2];
 // Fields are made this close to its home (levelled with dirt where needed:
 // owner, take a bunch of dirt and build it near the shelter)
-const NEAR_HOME = 16;
-export const FIELD_RANGE = 24;
+// (owner: bigger fields, bread; four fields need a little more room)
+const NEAR_HOME = 22;
+export const FIELD_RANGE = 34;
 // Blocks it may move to level a field, per size (beyond: a smaller field):
 // the whole ground kept for it and the ring its fence stands on (owner: a
 // flat surface of dirt first, then the field and its fence on it)
@@ -49,10 +50,13 @@ export const FIRST_HALF = 2;
 const SEEDS = ["carrot", "potato", "beetroot_seeds", "wheat_seeds"] as const;
 // Grass broken for wheat seeds before it gives up on more (1 in 8 drops one)
 const GRASS_TRIES = 80;
-const SEEDS_WANTED = 40;
+const SEEDS_WANTED = 64;
 
-// Fields it keeps (owner: at least 2 to live on)
-export const FIELDS_WANTED = 2;
+// Fields it keeps (owner: at least 2 to live on; then: bigger fields and
+// bread, the animals round its home are too few to live on)
+export const FIELDS_WANTED = 4;
+// Ripe crops that make a harvest worth the walk, by day (bread: 3 wheat each)
+export const RIPE_ENOUGH = 9;
 
 /** Its fields (each plot's middle), first made first. */
 export type Field = P3 & { name: string; seed: string; half: number; reserve: number };

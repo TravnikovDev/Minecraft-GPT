@@ -27,6 +27,9 @@ const EMERGENCY_RETRY_MS = 90_000;
 const RESTOCK_RETRY_MS = 5 * 60_000;
 const EMERGENCY = "starving: getting food now";
 const RESTOCK = "restocking my food";
+const HARVEST = "harvesting my fields";
+// Between looks at its fields for a harvest
+const HARVEST_EVERY_MS = 3 * 60_000;
 
 export type FoodNeed = "emergency" | "restock" | null;
 
@@ -41,10 +44,32 @@ export function foodNeed(bar: number, points: number, day: boolean, ownLife: boo
 }
 
 let nextTryAt = 0;
+let nextHarvestAt = 0;
 let toldOwner = false;
 
+/**
+ * Its fields harvested as they ripen, by day, whatever food it has (owner:
+ * bigger fields and bread): ripe crops picked and replanted, the fields
+ * mended and grown, the wheat baked into bread, and what's over its carried
+ * stock put in its chests at home.
+ */
+function harvestTask(): TaskSpec {
+  return {
+    name: HARVEST,
+    bucket: Bucket.Upkeep,
+    run: async () => {
+      await (await import("./mine")).upFromTheMine();
+      const { tendFarm } = await import("./farm");
+      const got = await tendFarm();
+      const { storeFoodReserve } = await import("./milestones");
+      await storeFoodReserve();
+      console.log(`Fields: harvested ${got} crops.`);
+    },
+  };
+}
+
 const onIt = (): boolean => {
-  const mine = (name: string): boolean => name === EMERGENCY || name === RESTOCK || name.includes("stocking food") || name.includes("milestone: food");
+  const mine = (name: string): boolean => name === EMERGENCY || name === RESTOCK || name === HARVEST || name.includes("stocking food") || name.includes("milestone: food");
   const running = currentTask();
   return (running !== null && mine(running.name)) || pendingTasks().some((t) => mine(t.name));
 };
@@ -78,11 +103,21 @@ export async function considerFood(): Promise<void> {
   if (Date.now() < nextTryAt || onIt()) return;
   const { autonomyOn } = await import("./curriculum");
   const need = foodNeed(bot.food ?? 20, foodPoints(), daylight(), autonomyOn());
-  if (need) propose(foodTask(need));
+  if (need) {
+    propose(foodTask(need));
+    return;
+  }
+  // Ripe fields by day: harvested, whatever food it carries
+  if (autonomyOn() && daylight() && Date.now() >= nextHarvestAt) {
+    nextHarvestAt = Date.now() + HARVEST_EVERY_MS;
+    const { farmRipe, RIPE_ENOUGH } = await import("./farm");
+    if (farmRipe() >= RIPE_ENOUGH) propose(harvestTask());
+  }
 }
 
 /** A new connection: a fresh start. */
 export function resetFoodWatch(): void {
   nextTryAt = 0;
+  nextHarvestAt = 0;
   toldOwner = false;
 }

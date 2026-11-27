@@ -45,9 +45,9 @@ test("four torches by the sides light every cell to 9 or more (crops grow at nig
     }
 });
 
-test("fields: two to live on; snow on the plot is cleared like grass (owner)", async () => {
+test("fields: four to live on (owner: bigger fields, bread); snow on the plot is cleared like grass (owner)", async () => {
   const { FIELDS_WANTED, plotFits } = await import(`${ROOT}/src/skills/farm.ts`);
-  expect(FIELDS_WANTED).toBe(2);
+  expect(FIELDS_WANTED).toBe(4); // owner: bigger fields and bread
   // A snow layer over the grass: the plot still fits (the snow counts as clear in the live view)
   expect(plotFits({ x: 0, y: 63, z: 0 }, flat(63))).toBe(true);
 });
