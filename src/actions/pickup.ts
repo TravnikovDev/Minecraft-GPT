@@ -137,7 +137,10 @@ export async function collectDrops(
     const item = looseItems(radius, skip, onlyVisible, leave)[0];
     if (!item) break; // nothing left it has room for
     const p = item.position;
-    const walked = await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1));
+    // Picking up never digs its own way round (game test: a drop at head
+    // height in its mine, and the walk to it cut a new path through the rock
+    // beside the tunnel): digging only when there's no other way
+    const walked = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1)));
     if (!walked.ok) {
       if (wasStopped(walked) || isCommandCancelled() || !keepGoing()) break; // stopped, or real work started
       if (!bot.entities[item.id]) {
