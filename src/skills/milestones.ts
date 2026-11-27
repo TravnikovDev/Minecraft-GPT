@@ -12,6 +12,7 @@ import { report } from "../core/narrator";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
+import { clearAroundHome, treesNearHome } from "./clearing";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
@@ -165,11 +166,12 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
       const { goFishing } = await import("./fishing");
       if ((await goFishing()) > 0) await cookTheMeat(cookFood);
     }
-    // Apples last: one oak leaf in 200 drops one
-    if (foodPoints() < STARVING_FOOD && byDay() && !isCommandCancelled()) {
-      const { applesFromLeaves } = await import("./apples");
-      await applesFromLeaves();
-    }
+    // Apples from oak leaves: off (owner, 2026-11-27: breaking leaves isn't
+    // productive; one leaf in 200 drops an apple, and it eats rotten flesh now)
+    // if (foodPoints() < STARVING_FOOD && byDay() && !isCommandCancelled()) {
+    //   const { applesFromLeaves } = await import("./apples");
+    //   await applesFromLeaves();
+    // }
   }
   // Fed: the lasting sources. Its farm tended, or made now (a bucket, by day)
   if (short() && myFarm()) await tendFarm();
@@ -499,6 +501,17 @@ export const MILESTONES: Milestone[] = [
     // Two pickaxes: mining wears one out
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
     achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
+  },
+  // Owner (2026-11-27): in the woods, the trees round the shelter cut down
+  // after its stone tools (shade where mobs hide by day; and wood)
+  {
+    id: "clearing",
+    title: "a clearing round my home",
+    tier: 1,
+    optional: true,
+    requires: ["shelter", "stone_tools"],
+    done: () => shelter() === null || treesNearHome().length === 0,
+    achieve: clearAroundHome,
   },
   // Owner (2026-11-27): after stone tools, at least 20 logs on hand (planks,
   // sticks, a table, chests, charcoal) before the shelter's furniture

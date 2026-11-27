@@ -329,3 +329,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Rotten flesh picked up and kept; eaten when there's nothing better
 - [ ] At dusk down in the mine it keeps working; with armour, an iron sword and a bow with 16 arrows it works outside at night too
 - [ ] A floor with one sleeve done and no iron for a pickaxe and sword: "on down to the next floor"
+- [ ] In the woods, after stone tools: "a clearing round my home": every tree within 16 blocks of the shelter's entrance felled (not replanted there)
+- [ ] Starving with no food: no more breaking oak leaves for apples (switched off)
