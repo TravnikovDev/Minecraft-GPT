@@ -340,6 +340,10 @@ export function safeMovements(bot: Bot): pf.Movements {
   // fine (owner: avoid them, but only by the one block)
   const berries = bot.registry.blocksByName["sweet_berry_bush"]?.id;
   if (berries !== undefined) moves.blocksToAvoid.add(berries);
+  // Never over a bed (game test: every walk out of its shelter planned a way
+  // over its new bed and along the table, the server put it back 120 times
+  // and it stood wedged on the bed for minutes); the room's aisle is the way
+  for (const block of bot.registry.blocksArray) if (block.name.endsWith("_bed")) moves.blocksToAvoid.add(block.id);
   // Areas it must keep out of (core/forbidden): never dig there (a hard ban),
   // and building there costs too much to choose (the primitives refuse it anyway)
   // (its fields' ground is kept from collecting and tunnels, not from its own

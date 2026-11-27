@@ -164,3 +164,14 @@ test("a field's gate faces along the way in: east or west on an east or west sid
   expect(north).toEqual({ x: 0, z: -4 });
   expect(gateFacing(middle, north)).toEqual(["north", "south"]);
 });
+
+test("fields keep off the way its mine's stairs go from the shelter's back door (game test: a field's gate right above the stairs' first steps)", async () => {
+  const { onMineWay } = await import(`${ROOT}/src/skills/farm.ts`);
+  const way = { exit: { x: -63, z: -13 }, step: { x: 0, z: 1 } }; // the stairs go south
+  expect(onMineWay({ x: -63, z: -11 }, way)).toBe(true); // that field's gate
+  expect(onMineWay({ x: -61, z: 10 }, way)).toBe(true); // two across, well along
+  expect(onMineWay({ x: -60, z: -5 }, way)).toBe(false); // three across: free
+  expect(onMineWay({ x: -63, z: -16 }, way)).toBe(false); // behind the door (the shelter)
+  expect(onMineWay({ x: -63, z: 30 }, way)).toBe(false); // past the stairs' way
+  expect(onMineWay({ x: -63, z: -11 }, null)).toBe(false); // no shelter yet
+});

@@ -20,6 +20,7 @@ import { addPlace, getPlaces } from "../managers/persistenceManager";
 import { currentDimension } from "../actions/perception";
 import { findRipeCrops } from "../actions/farming";
 import { shelter } from "./capabilities";
+import { shelterSlots } from "../actions/building";
 
 type P3 = { x: number; y: number; z: number };
 
@@ -334,6 +335,34 @@ function groundAt(x: number, z: number, y: number): number | null {
   return null;
 }
 
+// How far ahead of its shelter's back door the way of its mine's stairs is
+// kept clear of fields, and how wide (the stairs and their walls, a path)
+const MINE_WAY_LENGTH = 34;
+const MINE_WAY_HALF_WIDTH = 2;
+
+/** Its shelter's back door and the way its mine goes from it, or null. */
+function shelterExitWay(): { exit: P3; step: { x: number; z: number } } | null {
+  const slots = shelterSlots();
+  if (!slots?.exit || !slots.direction) return null;
+  const step = { north: { x: 0, z: -1 }, south: { x: 0, z: 1 }, east: { x: 1, z: 0 }, west: { x: -1, z: 0 } }[slots.direction as "north" | "south" | "east" | "west"];
+  return step ? { exit: slots.exit, step } : null;
+}
+
+/**
+ * True for a column on the way its mine's stairs go from its shelter's back
+ * door (game test: its first field went right over the back doorway, its
+ * gate above the stairs' first steps, and every walk out the back tried to
+ * climb through that gate). Pure.
+ */
+export function onMineWay(p: { x: number; z: number }, way: { exit: { x: number; z: number }; step: { x: number; z: number } } | null): boolean {
+  if (!way) return false;
+  const dx = p.x - way.exit.x;
+  const dz = p.z - way.exit.z;
+  const along = dx * way.step.x + dz * way.step.z;
+  const across = Math.abs(dx * way.step.z - dz * way.step.x);
+  return along >= -1 && along <= MINE_WAY_LENGTH && across <= MINE_WAY_HALF_WIDTH;
+}
+
 /**
  * A plot by its home (owner: a field by the shelter, levelled with dirt,
  * not a flat one far off): the biggest size whose levelling fits its
@@ -342,12 +371,13 @@ function groundAt(x: number, z: number, y: number): number | null {
 function findPlot(home: P3): { middle: P3; half: number } | null {
   // Never on another of its fields (or right against one: a path between)
   const fields = myFarms();
+  const mineWay = shelterExitWay();
   let checked = 0;
   let cheapest: number | null = null;
   for (const half of FIELD_HALVES) {
     // (both fences and a path between them)
     const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + half + 3);
-    const kept = (p: P3): boolean => isProtected(p) || nearOwnPassage(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
+    const kept = (p: P3): boolean => isProtected(p) || nearOwnPassage(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onMineWay(p, mineWay);
     let best: { middle: P3; cost: number; r: number } | null = null;
     for (let r = half + 3; r <= NEAR_HOME; r++) {
       for (let dx = -r; dx <= r; dx++) {
