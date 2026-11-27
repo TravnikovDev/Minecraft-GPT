@@ -232,6 +232,31 @@ test("stairs over a cave: each floor gets built, a support block first where not
   expect(placed.length).toBeGreaterThan(4); // floors plus supports
 });
 
+test("a cave just under a step: its floor goes in before the step is dug, so it never opens onto the drop (game test: a zombie came up, the fight followed it, the bot fell in)", async () => {
+  // A cave under the 5th step only: its block (5, 55, 0) is stone, the floor under it air
+  for (let x = 2; x <= 6; x++) for (let y = 50; y <= 54; y++) for (let z = -1; z <= 1; z++) changed.set(key({ x, y, z }), "air");
+  walkOnStairs();
+  items = [{ name: "cobblestone", count: 64 }];
+  fake.entity.position = new Vec3(0.5, 60, 0.5);
+  // What happened, in order
+  const events: string[] = [];
+  const dig = fake.dig;
+  const place = fake.placeBlock;
+  fake.dig = async (b: any) => (events.push(`dig ${key(b.position)}`), dig(b));
+  fake.placeBlock = async (wall: any, face: any) => (events.push(`place ${key(wall.position.plus(face))}`), place(wall, face));
+  try {
+    expect(await digging.digDiagonalTunnel("east", 5, { width: 1, height: 3 }, new Vec3(0, 60, 0), "test", 99, { save: false })).toBe(true);
+  } finally {
+    fake.dig = dig;
+    fake.placeBlock = place;
+  }
+  const floorAt = events.indexOf("place 5,54,0");
+  const stepAt = events.indexOf("dig 5,55,0");
+  expect(floorAt).toBeGreaterThanOrEqual(0);
+  expect(stepAt).toBeGreaterThan(floorAt); // the floor first
+  expect(blockAt({ x: 5, y: 54, z: 0 }).boundingBox).toBe("block");
+});
+
 test("stairs over a cave with nothing to build with: the tunnel stops at the drop", async () => {
   carveCave();
   items = [];

@@ -98,18 +98,45 @@ const FLOOR_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate"
  * ravine with nothing to stand on. Over a cave the step also gets its side
  * walls (a tunnel, not an open bridge mobs walk up).
  */
+/** Lava down a gap under `floor` (before solid ground, within 6). */
+function lavaBelow(floor: Vec3): boolean {
+  for (let d = 1; d <= 6; d++) {
+    const b = bot.blockAt(floor.offset(0, -d, 0));
+    if (b?.name === "lava") return true;
+    if (!b || b.boundingBox === "block") return false; // solid ground first
+  }
+  return false;
+}
+
+// Steps whose floor went in before they were dug (a cave under them): their
+// side walls go in too once they're dug (floorUnder)
+const flooredFirst = new Set<string>();
+
+/**
+ * The floor under a step put in before the step is dug, when there's a cave
+ * under it: against the underside of the step's bottom block, still
+ * standing. "lava" when there's lava down there (no step over it).
+ */
+async function floorFirst(step: Vec3, keepClear: (p: Vec3) => boolean): Promise<"filled" | "lava" | "none"> {
+  const floor = step.offset(0, -1, 0);
+  if (keepClear(floor) || !isHoleBlock(bot.blockAt(floor))) return "none";
+  if (bot.blockAt(step)?.boundingBox !== "block") return "none";
+  if (lavaBelow(floor)) return "lava";
+  const filler = FLOOR_FILLERS.find((n) => getItemCount(n) > 0);
+  if (!filler) return "none";
+  const placed = await placeBlockResult(filler, floor.x, floor.y, floor.z, "top");
+  if (!placed.ok) return "none";
+  console.log(`Cave under the step at ${step}: its floor put in first.`);
+  flooredFirst.add(step.toString());
+  return "filled";
+}
+
 async function floorUnder(step: Vec3, keepClear: (p: Vec3) => boolean, direction: DirectionType): Promise<boolean> {
   const floor = step.offset(0, -1, 0);
-  const wasHole = isHoleBlock(bot.blockAt(floor));
+  const filledFirst = flooredFirst.delete(step.toString());
+  const wasHole = filledFirst || isHoleBlock(bot.blockAt(floor));
   // Lava down in the gap: no bridge over it, the tunnel ends here (owner)
-  const lavaDown = (): boolean => {
-    for (let d = 1; d <= 6; d++) {
-      const b = bot.blockAt(floor.offset(0, -d, 0));
-      if (b?.name === "lava") return true;
-      if (!b || b.boundingBox === "block") return false; // solid ground first
-    }
-    return false;
-  };
+  const lavaDown = (): boolean => lavaBelow(floor);
   if (wasHole && lavaDown()) {
     lastStop = "blocked";
     console.log(`Tunnel stopped: lava under the gap at ${floor}; no bridge over it.`);
@@ -391,6 +418,15 @@ export async function digDiagonalTunnel(
         if (await intoWater(digPosition)) return false;
         await plugLiquids(digPosition);
         if (stopTunnelAt(digPosition)) return false;
+        // A cave under the step: its floor first, while the block over it
+        // still stands, so the step never opens onto the drop (game test:
+        // the stairs opened into a cavern, a zombie came up, the fight
+        // followed it and the bot fell in before the floor was put back)
+        if (h === 0 && (await floorFirst(basePosition, keepClear)) === "lava") {
+          lastStop = "blocked";
+          console.log(`Tunnel stopped: lava under the cave at ${basePosition.offset(0, -1, 0)}; no step over it.`);
+          return false;
+        }
         if (!(await digTunnelBlock(digPosition))) return false;
         // Straight on to the next block: each dig already waits for the server
 
