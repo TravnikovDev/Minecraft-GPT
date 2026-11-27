@@ -29,7 +29,7 @@ import { countList } from "./hunting";
 export type Stack = { name: string; count: number; type: number; nbt?: unknown };
 /** How much of which stack to put away. */
 export type Deposit = { stack: Stack; count: number };
-export type StoreMode = "items" | "resources" | "lowValue" | "room" | "duplicates" | "all";
+export type StoreMode = "items" | "resources" | "lowValue" | "half" | "room" | "duplicates" | "all";
 export type Wanted = { name: string; count: number | null };
 
 // (its buckets too: stored, the bucket milestone reopened and it mined iron for another, review)
@@ -163,6 +163,34 @@ export function chooseToStore(stacks: Stack[], mode: StoreMode, wanted: Wanted[]
     return mode === "room" ? cheapestStacks(deposits, ROOM_SLOTS) : deposits;
   }
 
+  // half (owner: at least half of its valuable resources stored at home; it
+  // takes from its chests when it runs short): cheap bulk beyond its working
+  // reserve stored, and of each valuable material (logs, coal, iron, wool...)
+  // half, never below its working reserve. Gear, food, torches stay on it
+  if (mode === "half") {
+    const reserve = [...WORKING_SUPPLY, ...BUILDING_SUPPLY].map(([matches, amount]) => ({ matches, left: amount }));
+    const totals = new Map<string, number>();
+    for (const s of stacks) totals.set(s.name, (totals.get(s.name) ?? 0) + s.count);
+    const toStore = new Map<string, number>();
+    for (const [name, total] of totals) {
+      if (isKept(name) || keep.includes(name)) continue;
+      const r = reserve.find((x) => x.matches(name));
+      const held = r ? Math.min(r.left, total) : 0;
+      if (r) r.left -= held;
+      const n = itemValue(name) <= 1 ? total - held : Math.min(total - held, Math.floor(total / 2));
+      if (n > 0) toStore.set(name, n);
+    }
+    const deposits: Deposit[] = [];
+    for (const stack of stacks) {
+      const left = toStore.get(stack.name) ?? 0;
+      if (left <= 0) continue;
+      const n = Math.min(left, stack.count);
+      deposits.push({ stack, count: n });
+      toStore.set(stack.name, left - n);
+    }
+    return deposits;
+  }
+
   if (mode === "duplicates") {
     const out: Deposit[] = [];
     const groups = new Map<string, Stack[]>();
@@ -286,6 +314,12 @@ export type StoreResult = {
   /** Why it couldn't use the chest at all (couldn't get there, couldn't open it). */
   problem?: string;
 } | null;
+
+/** How many things `mode` would put away now (what it carries, `keep` aside). */
+export function toStoreNow(mode: StoreMode, keep: string[] = []): number {
+  const stacks: Stack[] = bot.inventory.items().map((i: Item) => ({ name: i.name, count: i.count, type: i.type, nbt: i.nbt }));
+  return chooseToStore(stacks, mode, [], keep).reduce((n, d) => n + d.count, 0);
+}
 
 /**
  * Puts items in its chests, nearest first: what doesn't fit goes in the next

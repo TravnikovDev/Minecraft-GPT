@@ -896,8 +896,13 @@ async function plugCave(cells: Pos[], why: string): Promise<number> {
 async function recheckCavePlugs(): Promise<number> {
   const rec = mineRecord();
   if (!rec || rec.cavePlugs.length === 0 || !bot.entity) return 0;
+  // A plug in its own tunnels' cells (a sleeve's wall where a pokehole
+  // starts, dug through by it) stays open (game test: 12 put back, the
+  // pokeholes' entrances sealed)
+  const tunnels = new Set(floorsAsDug(rec).map((c) => c.toString()));
   const broken = rec.cavePlugs
     .map((p) => new Vec3(p.x, p.y, p.z))
+    .filter((c) => !tunnels.has(c.toString()))
     .filter((c) => {
       const b = bot.blockAt(c);
       return c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && b !== null && b.boundingBox === "empty" && !/water|lava/.test(b.name);

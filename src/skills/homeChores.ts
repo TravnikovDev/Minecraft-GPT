@@ -27,7 +27,7 @@ export async function putAwayHaul(): Promise<number> {
   const { SEED_NAMES } = await import("./farm");
   const keep = [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])];
   const { storeItems } = await import("../actions/storage");
-  const stored = await storeItems("lowValue", [], keep);
+  const stored = await storeItems("half", [], keep);
   const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
   if (n > 0) report(`Put ${n} things away in my chests at home.`);
   if (stored?.problem) console.log(`Home: couldn't put everything away (${stored.problem}).`);
@@ -57,9 +57,9 @@ export async function homeChores(): Promise<ActionResult> {
   }
   if (isCommandCancelled()) return fail("aborted", "stopped");
 
-  // Cheap stuff in the chests (it keeps its working supply)
+  // Cheap stuff and half of the valuable things in the chests (it keeps its working supply)
   const { storeItems } = await import("../actions/storage");
-  const stored = await storeItems("lowValue");
+  const stored = await storeItems("half");
   if (stored?.problem) problems.push(`couldn't put things away (${stored.problem})`);
   if (isCommandCancelled()) return fail("aborted", "stopped");
   // Its food stock from its chests (cooked first; raw is cooked below), review

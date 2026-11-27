@@ -454,7 +454,7 @@ async function furnishShelter(): Promise<ActionResult> {
   const first = shelterSlots()?.chests[0];
   const chest = first ? knownBlock(first) : null;
   if (chest?.name === "chest") await lookInChest(chest); // remembered from now on
-  await storeItems("lowValue");
+  await storeItems("half");
   return furnished() ? ok() : fail("refused", "the chests, furnace or table didn't stay");
 }
 

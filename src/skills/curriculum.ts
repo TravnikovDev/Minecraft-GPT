@@ -24,6 +24,7 @@ import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, tier1Reached, type Milestone } from "./milestones";
 import { foodPoints, hasBed, shelter, TIER, toolTier, wellEquipped } from "./capabilities";
+import { Vec3 } from "vec3";
 import { fitForTheMine } from "./mine";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
@@ -307,7 +308,7 @@ function nightTask(): TaskSpec {
           const { storeItems } = await import("../actions/storage");
           const { toolTier, TIER } = await import("./capabilities");
           const { SEED_NAMES } = await import("./farm");
-          const stored = await storeItems("lowValue", [], [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])]);
+          const stored = await storeItems("half", [], [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])]);
           const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
           if (n > 0) console.log(`Night: put ${n} things away in my chests.`);
         } catch (error) {
@@ -411,6 +412,13 @@ export async function considerNextStep(): Promise<void> {
     propose(pickupTask());
     return;
   }
+  // At home between tasks: half of what it gathered in its chests (owner: it
+  // came home with logs and more and kept it all on it)
+  if (Date.now() >= nextStoreAt && nearHome() && (await import("../actions/storage")).toStoreNow("half", await keepOnMe()) >= STORE_AT_LEAST) {
+    nextStoreAt = Date.now() + STORE_GAP_MS;
+    propose(storeTask());
+    return;
+  }
   // Past its first day the day plan decides what's next (Phase 7); with no
   // plan step to do (not made yet, the model unavailable, the money spent)
   // the next milestone below is the fallback
@@ -447,6 +455,37 @@ function pickupTask(): TaskSpec {
     run: async () => {
       const { collectDrops } = await import("../actions/pickup");
       await collectDrops(PICKUP_RADIUS, { onlyVisible: true });
+    },
+  };
+}
+
+// Putting things away when it's at home: at least this many, at most this often
+const STORE_AT_LEAST = 8;
+const STORE_GAP_MS = 2 * 60_000;
+let nextStoreAt = 0;
+
+/** In or right by its shelter's room. */
+function nearHome(): boolean {
+  const home = shelter();
+  return home !== null && !!bot.entity && bot.entity.position.distanceTo(new Vec3(home.x, home.y, home.z)) <= 8;
+}
+
+/** What stays on it when putting things away: seeds for its fields, raw iron before its iron pickaxe. */
+async function keepOnMe(): Promise<string[]> {
+  const { SEED_NAMES } = await import("./farm");
+  return [...SEED_NAMES, ...(toolTier("pickaxe") < TIER.iron ? ["raw_iron"] : [])];
+}
+
+/** Putting half of what it gathered in its chests, at home (its own life, bucket 5). */
+function storeTask(): TaskSpec {
+  return {
+    name: "putting things away at home",
+    bucket: Bucket.Self,
+    run: async () => {
+      const { storeItems } = await import("../actions/storage");
+      const stored = await storeItems("half", [], await keepOnMe());
+      const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
+      if (n > 0) console.log(`Home: put ${n} things away in my chests.`);
     },
   };
 }

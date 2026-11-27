@@ -195,3 +195,19 @@ test("a double chest's two halves are one chest", () => {
   expect(storage.sameChest({ x: -23, y: 68, z: 22 }, { x: -23, y: 68, z: 20 })).toBe(false);
   expect(storage.sameChest({ x: -23, y: 68, z: 22 }, { x: -23, y: 69, z: 22 })).toBe(false);
 });
+
+test("half (owner): half of each valuable material stored, never below its working reserve; cheap bulk beyond the reserve all; gear and food stay", () => {
+  const plan = storage.chooseToStore(
+    [item("oak_log", 40), item("coal", 30), item("raw_iron", 6), item("dirt", 64), item("cobblestone", 40), item("iron_pickaxe", 1), item("bread", 5), item("white_wool", 4)],
+    "half",
+  );
+  const stored = Object.fromEntries(storage.tally(plan.map((d: any) => ({ name: d.stack.name, count: d.count }))));
+  expect(stored.oak_log).toBe(20); // half of 40 (reserve 8 kept anyway)
+  expect(stored.coal).toBe(14); // 30 - 16 reserve = 14, under half
+  expect(stored.raw_iron).toBe(3); // half
+  expect(stored.white_wool).toBe(2); // half
+  expect(stored.dirt).toBe(48); // bulk: all but the 16 kept
+  expect(stored.cobblestone).toBe(8); // bulk: all but the 32 kept
+  expect(stored.iron_pickaxe).toBeUndefined();
+  expect(stored.bread).toBeUndefined();
+});
