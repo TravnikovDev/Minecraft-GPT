@@ -10,7 +10,7 @@ import { catalog } from "../core/catalog";
 import { Entity } from "prismarine-entity";
 import { getAttackDamage, __actionsDelay } from "../utils/utility";
 import { goals } from "mineflayer-pathfinder";
-import { walkingRules } from "../core/movements";
+import { setHurry, walkingRules } from "../core/movements";
 import vec3 from "vec3";
 import { fighting, pathing } from "../core/plugins";
 import { mobsOut } from "../core/daylight";
@@ -147,6 +147,12 @@ export async function attackEntity(targetEntity: Entity, announce = true): Promi
     // Choose appropriate tactics
     await useTacticsForTarget(targetEntity);
     
+    // A fight is a hurry: it sprints after the target (ordinary errands walk)
+    setHurry(bot, "fight", true);
+    // (mineflayer-pvp's event, not in mineflayer's event types)
+    (bot as unknown as { once: (event: string, fn: () => void) => void }).once("stoppedAttacking", () => setHurry(bot, "fight", false));
+    // (and never for long, should the event not come)
+    setTimeout(() => setHurry(bot, "fight", false), 60_000);
     // Attack
     await fighting.attack(targetEntity);
     if (announce) chatter(`Attacking ${targetEntity.name}!`, "combat");

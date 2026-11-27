@@ -166,6 +166,20 @@ const safeRules = new WeakSet<object>();
 /** True when these are walking rules built by safeMovements. */
 export const isSafeMovements = (moves: unknown): boolean => typeof moves === "object" && moves !== null && safeRules.has(moves);
 
+// Why it's in a hurry now ("fight", "dusk"): sprinting while any holds
+const hurries = new Set<string>();
+
+/** In a hurry (sprinting on its walks) or not, for `reason`; ordinary errands walk. */
+export function setHurry(bot: Bot, reason: string, on: boolean): void {
+  if (on) hurries.add(reason);
+  else hurries.delete(reason);
+  const rules = sharedRules.get(bot);
+  if (rules) rules.allowSprinting = hurries.size > 0;
+}
+
+/** Whether it sprints on its walks now. */
+export const inAHurry = (): boolean => hurries.size > 0;
+
 // The bot's one shared set of walking rules (per connection: per Bot object)
 const sharedRules = new WeakMap<Bot, pf.Movements>();
 
@@ -177,6 +191,7 @@ const sharedRules = new WeakMap<Bot, pf.Movements>();
 export function walkingRules(bot: Bot): pf.Movements {
   let rules = sharedRules.get(bot);
   if (!rules) {
+    hurries.clear(); // a new connection starts unhurried
     rules = safeMovements(bot);
     sharedRules.set(bot, rules);
   }
@@ -290,6 +305,11 @@ export function safeMovements(bot: Bot): pf.Movements {
   // ("partial" paths) and digs shafts instead of stairs (tests/noShafts)
   moves.placeCost = 6;
   moves.allow1by1towers = false; // same reason: pillars widen the search
+  // Walking, not sprinting, on ordinary errands (owner: sprinting burns about
+  // a hunger point every 40 blocks; walking burns none, and a sprinted
+  // 100-block food trip cost more than a porkchop gives). In a hurry it
+  // sprints: fighting, home at dusk (setHurry)
+  moves.allowSprinting = hurries.size > 0;
   safeRules.add(moves);
   return moves;
 }

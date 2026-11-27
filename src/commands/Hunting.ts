@@ -11,15 +11,15 @@ import { attackEntity } from "../actions/combat";
 import { collectDrops } from "../actions/pickup";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { fighting } from "../core/plugins";
-import { countList, isGame, knownAnimals, lookForAnimals, planHunt, SIGHT_RANGE, KEEP_PER_KIND } from "../actions/hunting";
+import { countList, isGame, knownAnimals, lookForAnimals, planHunt, SIGHT_RANGE } from "../actions/hunting";
 import { travelToResult } from "../actions/movement";
 import { askOwner, tellOwner } from "../managers/ownerDialog";
 import { queueCommand } from "../managers/actionManager";
 import { BotCommands } from "./types";
 
 export const description = `When user asks the bot to hunt, the bot looks around (what it can see within 60 blocks;
-animals it knows are about but can't see, up to 200 blocks, it walks to first), hunts the common game animals there (cows, pigs, sheep, chickens, rabbits), or only the kind the owner names, and leaves
-two of each kind so they can breed. It picks up the drops, reports what it got and asks whether to keep hunting.
+animals it knows are about but can't see, up to 200 blocks, it walks to first), hunts the common game animals there (cows, pigs, sheep, chickens, rabbits), or only the kind the owner names (never babies or
+named pets). It picks up the drops, reports what it got and asks whether to keep hunting.
 Only for hunting animals; for food in general use gatherFood (farms first).
 Pass count only when the owner says a number ("kill 3 sheep"); "hunt", "go hunting", "hunt some pigs" have no count.
 Example: "Go hunting", "Hunt for pigs", "Kill 3 sheep", "Kill the chicken" (count 1).`;
@@ -32,7 +32,7 @@ export const parameters = z.object({
     .nullable()
     .describe("Minecraft ID of the animal to hunt, e.g. sheep, cow, pig, chicken. Null for all common game animals."),
   count: z.number().nullable().describe("How many animals, only when the owner says a number; null otherwise."),
-  upTo: z.number().nullable().describe("At most this many, still leaving two of each kind to breed (for a food stock); null otherwise."),
+  upTo: z.number().nullable().describe("At most this many (for a food stock); null otherwise."),
 });
 
 const KILL_TIMEOUT_MS = 30000;
@@ -104,27 +104,7 @@ export async function execute(args: any): Promise<void> {
     tellOwner(`I don't see any ${what} around here.`);
     return;
   }
-  if (plan.total === 0) {
-    const seenCount = [...plan.seen.values()].reduce((a, b) => a + b, 0);
-    const them = seenCount === 1 ? "it" : "them";
-    if (!mobType) {
-      tellOwner(`I only see ${countList(plan.seen)}. I'll leave ${them} so they can breed.`);
-      return;
-    }
-    // The owner named the kind: their call whether to take the last ones
-    askOwner(`I only see ${countList(plan.seen)}; if I hunt ${them}, none are left to breed. Hunt ${them} anyway?`, async () => {
-      queueCommand({
-        id: crypto.randomUUID(),
-        command: BotCommands.Hunting,
-        priority: 3,
-        retryCount: 0,
-        args: { maxDistance, mobType, count: seenCount, upTo: null, walkFar: parsed.data.walkFar ?? null },
-      });
-    });
-    return;
-  }
-  const kept = plan.keepsPairs ? `, leaving ${KEEP_PER_KIND} of each to breed` : "";
-  tellOwner(`I see ${countList(plan.seen)}. Hunting ${countList(plan.take)}${kept}.`);
+  tellOwner(`I see ${countList(plan.seen)}. Hunting ${plan.total < [...plan.take.values()].reduce((a, b) => a + b, 0) ? plan.total : countList(plan.take)}.`);
   console.log(`Hunt plan: ${JSON.stringify([...plan.take])}, total ${plan.total}.`);
 
   // 2. Hunt the group, nearest first, picking up drops after each

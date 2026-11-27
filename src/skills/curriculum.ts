@@ -238,11 +238,19 @@ function nightTask(): TaskSpec {
       }
       // Getting in: a few tries (a walk can fail once; giving up left it
       // standing outside all night, fresh-world test)
-      let inside = await enterShelter();
-      for (let tries = 1; !inside.ok && tries < NIGHT_TRIES && isNight() && !isCommandCancelled(); tries++) {
-        console.log(`Night: couldn't get into my shelter (${describeFailure(inside)}); trying again.`);
-        await sleep(3_000);
+      // Home at dusk is a hurry: it sprints there (ordinary errands walk)
+      const { setHurry } = await import("../core/movements");
+      setHurry(bot, "dusk", true);
+      let inside;
+      try {
         inside = await enterShelter();
+        for (let tries = 1; !inside.ok && tries < NIGHT_TRIES && isNight() && !isCommandCancelled(); tries++) {
+          console.log(`Night: couldn't get into my shelter (${describeFailure(inside)}); trying again.`);
+          await sleep(3_000);
+          inside = await enterShelter();
+        }
+      } finally {
+        setHurry(bot, "dusk", false);
       }
       if (!inside.ok) {
         // Down in its mine with mine work to do: it stays and works the night

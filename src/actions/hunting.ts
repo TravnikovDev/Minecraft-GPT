@@ -1,7 +1,9 @@
 // Path: src/actions/hunting.ts
 // Hunting like a player: look around (what it can see within 60 blocks, plus
 // what it hears close by), pick out the common game animals, hunt that group
-// rather than one animal, and leave a pair of each kind so they can breed.
+// rather than one animal. No breeding pair is left in the wild (owner: they
+// wander off and are never bred, and the game slowly spawns new ones anyway;
+// it walked 100 blocks to pairs and came back with nothing, eleven times).
 // The planning is pure (plain data in, plain data out) so it can be tested
 // without a game; the scan reads the world.
 
@@ -22,14 +24,11 @@ export const HEARING_RANGE = 16;
  * until they are in sight, as a player follows the "baa".
  */
 export const KNOWN_RANGE = 200;
-/** Left alive of each kind on a general hunt, so the herd comes back. */
-export const KEEP_PER_KIND = 2;
-
 /** One animal as the planner sees it. */
 export type Prey = { id: number; name: string; distance: number; baby: boolean; named: boolean };
 
 /** What a hunt will take: the most of each kind, and the total. */
-export type HuntPlan = { seen: Map<string, number>; take: Map<string, number>; total: number; keepsPairs: boolean };
+export type HuntPlan = { seen: Map<string, number>; take: Map<string, number>; total: number };
 
 /** A grown, unnamed animal of the wanted kind (named ones are someone's pets). */
 export function isGame(p: Prey, mobType: string | null): boolean {
@@ -38,25 +37,18 @@ export function isGame(p: Prey, mobType: string | null): boolean {
 }
 
 /**
- * Decides what to hunt from the animals found.
- * - No count from the owner: every kind it found, leaving KEEP_PER_KIND alive.
- * - A count ("kill 3 sheep"): up to that many, as the owner asked.
- * - `upTo` (its food stock): at most that many, still leaving the pairs.
+ * Decides what to hunt from the animals found (grown, unnamed game).
+ * - No count: every one it found.
+ * - A count from the owner ("kill 3 sheep"): up to that many.
+ * - `upTo` (its food stock): at most that many.
  */
 export function planHunt(found: Prey[], mobType: string | null, count: number | null, upTo: number | null = null): HuntPlan {
   const seen = new Map<string, number>();
   for (const p of found) if (isGame(p, mobType)) seen.set(p.name, (seen.get(p.name) ?? 0) + 1);
-
-  const keepsPairs = count === null;
-  const take = new Map<string, number>();
-  for (const [name, n] of seen) {
-    const most = keepsPairs ? Math.max(0, n - KEEP_PER_KIND) : n;
-    if (most > 0) take.set(name, most);
-  }
+  const take = new Map(seen);
   const available = [...take.values()].reduce((a, b) => a + b, 0);
-  // `upTo`: no more than that, still leaving the pairs (its food stock)
-  const total = count !== null ? Math.min(count, available) : upTo !== null ? Math.min(upTo, available) : available;
-  return { seen, take, total, keepsPairs };
+  const total = Math.min(available, count ?? upTo ?? available);
+  return { seen, take, total };
 }
 
 /** "3 cows, 2 sheep and 1 chicken". */

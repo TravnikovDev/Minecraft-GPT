@@ -97,3 +97,16 @@ test("nothing it places goes in or right next to its shelter's stairs and doorwa
   expect(nearOwnPassage({ x: 4, y: 77, z: -23 })).toBe(false);
   setOwnPassages([]);
 });
+
+test("ordinary errands walk; a fight or the way home at dusk sprints (owner: sprinting burns food)", async () => {
+  const { walkingRules, setHurry } = await import(`${ROOT}/src/core/movements.ts`);
+  const rules = walkingRules(bot);
+  expect(rules.allowSprinting).toBe(false);
+  setHurry(bot, "fight", true);
+  expect(rules.allowSprinting).toBe(true);
+  setHurry(bot, "dusk", true);
+  setHurry(bot, "fight", false);
+  expect(rules.allowSprinting).toBe(true); // still home at dusk
+  setHurry(bot, "dusk", false);
+  expect(rules.allowSprinting).toBe(false);
+});
