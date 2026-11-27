@@ -84,7 +84,7 @@ export async function gatherWood(
       // landscape (owner): checked before walking there. With no other tree
       // within reach it goes looking further (moveAway above)
       const seen = findTrunk(woodBlock, (p: Vec3) => bot.blockAt(p));
-      if (leftStanding(seen)) {
+      if (leftStanding(seen, (p: Vec3) => bot.blockAt(p))) {
         for (const log of seen) unreachable.add(log.position.toString());
         continue;
       }
@@ -296,23 +296,34 @@ export async function fellTree(trunk: Block[]): Promise<boolean> {
 export const JUNGLE_LOGS_MAX = 6;
 
 /**
- * True for a giant tree: a 2x2 trunk (jungle, dark oak, big spruce), two or
- * more logs side by side at its foot (acacia's crooked trunk starts as one).
- * Pure.
+ * True for a giant tree: a 2x2 trunk (jungle, dark oak, big spruce), four
+ * logs in a square at some height. Anywhere up the tree, not only at its
+ * foot (game test: the top of a giant whose lower logs were already cut
+ * starts with one branch log, and it pillared up to it). Acacia's crooked
+ * trunk and big oaks' branches never make a square. Pure.
  */
 export function isGiant(trunk: Array<{ position: { x: number; y: number; z: number } }>): boolean {
-  if (trunk.length === 0) return false;
-  const foot = Math.min(...trunk.map((l) => l.position.y));
-  return new Set(trunk.filter((l) => l.position.y === foot).map((l) => `${l.position.x},${l.position.z}`)).size > 1;
+  const logs = new Set(trunk.map((l) => `${l.position.x},${l.position.y},${l.position.z}`));
+  return trunk.some(({ position: { x, y, z } }) => logs.has(`${x + 1},${y},${z}`) && logs.has(`${x},${y},${z + 1}`) && logs.has(`${x + 1},${y},${z + 1}`));
 }
 
 /**
  * True for a tree it never cuts (owner, 2026-11-27): a giant 2x2 one, or a
- * jungle tree of more than JUNGLE_LOGS_MAX logs. Pure.
+ * jungle tree of more than JUNGLE_LOGS_MAX logs. With `at` (the block at a
+ * spot), also what's left of a tree up in the air, its foot standing on
+ * nothing (a half-cut giant's top: game test). Pure but for `at`.
  */
-export function leftStanding(trunk: Array<{ name: string; position: { x: number; y: number; z: number } }>): boolean {
+export function leftStanding(
+  trunk: Array<{ name: string; position: { x: number; y: number; z: number } }>,
+  at?: (p: Vec3) => { name: string; boundingBox: string } | null
+): boolean {
+  if (trunk.length === 0) return false;
   if (isGiant(trunk)) return true;
-  return trunk.length > JUNGLE_LOGS_MAX && trunk.some((l) => l.name.startsWith("jungle"));
+  if (trunk.length > JUNGLE_LOGS_MAX && trunk.some((l) => l.name.startsWith("jungle"))) return true;
+  if (!at) return false;
+  const foot = trunk.reduce((a, b) => (b.position.y < a.position.y ? b : a));
+  const under = at(new Vec3(foot.position.x, foot.position.y - 1, foot.position.z));
+  return under !== null && (under.boundingBox === "empty" || under.name.endsWith("_leaves"));
 }
 
 /** True for a trunk of more than one column of logs (a giant 2x2 tree). Pure. */

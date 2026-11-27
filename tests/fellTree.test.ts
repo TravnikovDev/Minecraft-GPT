@@ -58,3 +58,21 @@ test("giant 2x2 trees and jungle trees over 6 logs are left standing; acacia's c
   expect(leftStanding(column("spruce_log", 9))).toBe(false);
   expect(leftStanding(column("oak_log", 6))).toBe(false);
 });
+
+test("what's left of a half-cut giant is still a giant, and a trunk up in the air is left alone", async () => {
+  const { isGiant, leftStanding } = await import(`${ROOT}/src/actions/gatherWood.ts`);
+  // The top of a giant jungle tree: its lower logs cut, one branch log lowest
+  const square = (y: number) => [0, 1].flatMap((x) => [0, 1].map((z) => ({ name: "jungle_log", position: { x, y, z } })));
+  const top = [{ name: "jungle_log", position: { x: 2, y: 75, z: 0 } }, ...square(76), ...square(77)];
+  expect(isGiant(top)).toBe(true);
+  // A big oak's branches never make a 2x2 square
+  const oak = [...column("oak_log", 5), { name: "oak_log", position: { x: 1, y: 68, z: 0 } }, { name: "oak_log", position: { x: 1, y: 68, z: 1 } }, { name: "oak_log", position: { x: 0, y: 69, z: 1 } }];
+  expect(isGiant(oak)).toBe(false);
+  // A short trunk floating over air (its foot cut away): left standing
+  const air = () => ({ name: "air", boundingBox: "empty" });
+  const grass = () => ({ name: "grass_block", boundingBox: "block" });
+  const floating = column("oak_log", 3);
+  expect(leftStanding(floating, air)).toBe(true);
+  expect(leftStanding(floating, grass)).toBe(false);
+  expect(leftStanding(floating)).toBe(false); // nothing known under it
+});

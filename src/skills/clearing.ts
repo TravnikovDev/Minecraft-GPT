@@ -57,7 +57,7 @@ export function treesNearHome(skip: Set<string> = new Set()): Vec3[] {
     const log = at(p);
     if (!log) continue;
     const trunk = findTrunk(log, at);
-    const keep = leftStanding(trunk);
+    const keep = leftStanding(trunk, at);
     for (const l of trunk) {
       checked.add(l.position.toString());
       if (keep) standing.add(l.position.toString());
