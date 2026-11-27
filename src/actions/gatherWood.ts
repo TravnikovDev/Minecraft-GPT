@@ -42,6 +42,9 @@ export async function gatherWood(
     // Logs it couldn't walk to (up a jungle trunk, behind leaves); without
     // this the nearest-log search returns the same one until it gives up
     const unreachable = new Set<string>();
+    // Giant trees passed over while an ordinary one may be near
+    const giants = new Set<string>();
+    let giantsOk = false;
     console.log(`I currently have ${logsCount} logs.`);
 
     while (logsCount < targetLogs) {
@@ -73,10 +76,27 @@ export async function gatherWood(
       });
 
       if (woodBlock) recordSighting(woodBlock.name, woodBlock.position);
+      if (!woodBlock && !giantsOk && giants.size > 0) {
+        // Only giant trees about: those after all
+        giantsOk = true;
+        for (const k of giants) unreachable.delete(k);
+        continue;
+      }
       if (!woodBlock) {
         console.log("No wood blocks found nearby.");
         failedAttempts++;
         await moveAway(50);
+        continue;
+      }
+
+      // A giant tree only when there's no ordinary one near (owner: a few logs
+      // never cost a whole giant tree): checked before walking there
+      const seen = findTrunk(woodBlock, (p: Vec3) => bot.blockAt(p));
+      if (isWide(seen) && !giantsOk) {
+        for (const log of seen) {
+          unreachable.add(log.position.toString());
+          giants.add(log.position.toString());
+        }
         continue;
       }
 
@@ -268,12 +288,24 @@ export async function fellTree(trunk: Block[]): Promise<boolean> {
     }
     console.log(`Couldn't get up beside the ${trunk[0]!.name}'s crown at ${trunk[0]!.position}; from the bottom instead.`);
   }
+  // A giant 2x2 trunk (jungle, dark oak, big spruce): only what it can reach
+  // from the ground (game test: pillaring up a giant jungle tree for 2 logs,
+  // it went round in circles placing and breaking one block for minutes)
+  const wide = isWide(trunk);
+  const reach = trunk[0]!.position.y + 4;
+  if (wide) console.log(`A giant ${trunk[0]!.name.replace(/_/g, " ")} tree: cutting what I can reach from the ground.`);
   for (const aLog of trunk) {
     if (isCommandCancelled()) return false;
+    if (wide && aLog.position.y > reach) continue;
     // Log after log, like a player (each break already waits for the server)
     await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
   }
   return true;
+}
+
+/** True for a trunk of more than one column of logs (a giant 2x2 tree). Pure. */
+export function isWide(trunk: Array<{ position: { x: number; z: number } }>): boolean {
+  return new Set(trunk.map((l) => `${l.position.x},${l.position.z}`)).size > 1;
 }
 
 /**

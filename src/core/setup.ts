@@ -11,7 +11,7 @@ import { plugin as pvp } from "mineflayer-pvp";
 import { plugin as tool } from "mineflayer-tool";
 import { everyWhileConnected } from "./body";
 import { getCurrentCommandName } from "./commandContext";
-import { isSafeMovements, walkingRules } from "./movements";
+import { avoidStep, isSafeMovements, walkingRules } from "./movements";
 import { forgetScaffold, isPlacingOnPurpose, recordScaffold } from "./scaffold";
 import { forbiddenAt, onForbiddenChange } from "./forbidden";
 import { pathing } from "./plugins";
@@ -88,9 +88,34 @@ export function installPlugins(currentBot: Bot): void {
       const name = currentBot.blockAt(target)?.name ?? null;
       if (name) recordScaffold(target, name);
       console.log(`Placed scaffolding${name ? ` (${name})` : ""} at ${target} (task ${getCurrentCommandName() ?? "idle"}).`);
+      // The same block put down and broken again and again: the walk is going
+      // round in circles (game test: a cobblestone placed and broken at one
+      // spot every 2 s for minutes, pillaring up a giant jungle tree). The
+      // walk stops, and that spot is avoided for a while
+      if (placedAgainAndAgain(target)) {
+        console.log(`Walk going round in circles at ${target} (the same block placed again and again); stopping it.`);
+        avoidStep(target);
+        currentBot.pathfinder?.setGoal(null);
+      }
     }
   }) as typeof currentBot.placeBlock;
 
   // Eating and armor are the bot's own upkeep (actions/upkeep.ts, actions/armor.ts):
   // the auto-eat and armor-manager plugins grabbed the hands whenever they liked
+}
+
+// Placements per spot, for the "round in circles" check
+const placements = new Map<string, number[]>();
+const CHURN_TIMES = 4;
+const CHURN_WINDOW_MS = 30_000;
+
+/** True when a block went down at `p` this many times within the window (the walk is looping). */
+function placedAgainAndAgain(p: { x: number; y: number; z: number }): boolean {
+  const k = `${p.x},${p.y},${p.z}`;
+  const now = Date.now();
+  const times = (placements.get(k) ?? []).filter((t) => now - t < CHURN_WINDOW_MS);
+  times.push(now);
+  placements.set(k, times);
+  if (placements.size > 200) for (const [key, ts] of placements) if (now - ts[ts.length - 1]! > CHURN_WINDOW_MS) placements.delete(key);
+  return times.length >= CHURN_TIMES;
 }

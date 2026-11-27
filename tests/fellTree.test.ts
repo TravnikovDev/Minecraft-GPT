@@ -40,3 +40,9 @@ test("the pillar goes beside the crown, not against the trunk (owner), on free g
   expect(Math.max(Math.abs(spot.x), Math.abs(spot.z))).toBe(3);
   expect(spot.y).toBe(64);
 });
+
+test("a giant 2x2 trunk is wide (only what's in reach from the ground is cut, and only when no ordinary tree is near)", async () => {
+  const { isWide } = await import(`${ROOT}/src/actions/gatherWood.ts`);
+  expect(isWide([...column("jungle_log", 20, 0, 0), ...column("jungle_log", 20, 1, 0), ...column("jungle_log", 20, 0, 1), ...column("jungle_log", 20, 1, 1)])).toBe(true);
+  expect(isWide(column("oak_log", 6))).toBe(false);
+});
