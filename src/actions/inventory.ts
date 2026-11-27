@@ -180,6 +180,10 @@ export const getItemCount = (itemName: string): number => {
 export function itemMatcher(itemName: string): (name: string) => boolean {
   const c = catalog();
   const name = c.normalize(itemName);
+  // Charcoal works wherever coal does (techTree STANDS_IN_FOR): looking for
+  // coal in its chests finds charcoal too (review: it made more charcoal
+  // while charcoal sat in its chests)
+  if (name === "coal") return (item) => item === "coal" || item === "charcoal";
   if (c.isItem(name)) return (item) => item === name;
   if (name === "planks") return (item) => c.isPlanks(item);
   if (name === "logs" || name === "log" || name === "wood") return (item) => c.isLog(item);

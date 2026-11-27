@@ -3,6 +3,7 @@
 // planner, crafting, and the sources of raw materials (trees, stone, sheep,
 // coal). Kept apart so the planner itself can be tested with a fake world.
 
+import { makeCharcoalNow } from "./coalDrought";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { fail, ok, type ActionResult } from "../core/result";
@@ -115,7 +116,8 @@ export const SOURCES: Source[] = [
     // Any ore, with the pickaxe the game requires for it (iron: stone, diamond: iron)
     name: "mining ores",
     collects: true,
-    gets: (m) => m !== "cobblestone" && catalog().oresFor(m).length > 0,
+    // (coal: not while its mine is dry of it and wood is plenty: charcoal then, skills/coalDrought)
+    gets: (m) => m !== "cobblestone" && catalog().oresFor(m).length > 0 && !(m === "coal" && makeCharcoalNow()),
     needs: (m) => {
       const pickaxe = pickaxeFor(m, catalog());
       return pickaxe && toolTier("pickaxe") < catalog().toolTier(pickaxe) ? [{ item: pickaxe, count: 1 }] : [];

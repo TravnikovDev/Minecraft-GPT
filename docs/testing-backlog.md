@@ -349,3 +349,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] A new field never on the way of its mine's stairs (34 ahead of the shelter's back door, 2 either side); walks never go over its bed
 - [ ] With 64 copper (raw, ingots, blocks; bag and chests): copper ore in sight and in its tunnels' walls is left
 - [ ] Taking down scaffolding: walks to it never place blocks; a pillar too tall to reach from the ground gets a column of its own beside it, then both come down on the way back (no loop)
+- [ ] Coal drought: two coal trips that dug 60+ blocks and no coal ore ("Coal: a dry trip … 2 in a row"); with plenty of wood (bag+chests or 40 tree logs by home) the next coal goes "made N charcoal from spare wood" (logs from chests first, its 20 kept); torches use it too; at night with no spare logs, a mine trip instead; coal ore dug ends it

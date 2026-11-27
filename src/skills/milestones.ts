@@ -650,7 +650,21 @@ export const MILESTONES: Milestone[] = [
       const short = (reachedAt()["coal"] ? 4 : COAL.enough) - carriedOf(COAL.counts);
       const { storedNear, takeItems } = await import("../actions/storage");
       if (short > 0 && storedNear("coal", 32) > 0) await takeItems([{ name: "coal", count: Math.max(short, COAL.enough - carriedOf(COAL.counts)) }], true);
-      return carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough) ? ok() : branchMine([COAL, IRON]);
+      if (carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough)) return ok();
+      // Its mine dry of coal for a while and plenty of wood: charcoal
+      // (owner); at night with no spare logs at hand, the mine after all
+      const { makeCharcoalNow, makeCharcoal, coalTripStart, coalTripEnd } = await import("./coalDrought");
+      if (makeCharcoalNow()) {
+        const made = await makeCharcoal(COAL.enough - carriedOf(COAL.counts));
+        if (made.ok) return carriedOf(COAL.counts) >= (reachedAt()["coal"] ? 4 : COAL.enough) ? ok() : made;
+        console.log(`Coal: no charcoal this time (${describeFailure(made)}); down my mine.`);
+      }
+      const start = coalTripStart();
+      try {
+        return await branchMine([COAL, IRON]);
+      } finally {
+        await coalTripEnd(start);
+      }
     },
   },
   {

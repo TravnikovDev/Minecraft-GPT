@@ -129,6 +129,8 @@ export const MemorySchema = z.object({
   plugs: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).optional(),
   // Where it went into the water near its home (a bridge where it swims across often)
   swims: z.array(z.object({ x: z.number(), y: z.number(), z: z.number(), at: z.number() })).optional(),
+  // Coal trips in a row that dug their tunnels and found no coal ore (skills/coalDrought)
+  coalDrought: z.object({ dryTrips: z.number(), since: z.number() }).optional(),
   // Phase 7. The diary code writes, one entry per game day (raw lines until
   // the planner summarises the day), and the day summaries that replace them
   diary: z

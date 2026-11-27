@@ -184,8 +184,10 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
   const { woodPlenty, woodNow } = await import("../actions/fuel");
   const planksName = woodPlenty(woodNow()) ? woodPlanksName() : null;
   const fuelNeeded = fueled ? 0 : Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL));
-  const fuelName = planksName ?? (storedNear("coal", 32) + spare("coal") >= fuelNeeded ? "coal" : "charcoal");
+  // (looking for coal in its chests finds charcoal too: what it has in hand decides)
+  let fuelName = planksName ?? "coal";
   if (fuelNeeded > 0 && storedNear(fuelName, 32) > 0 && spare(fuelName) < fuelNeeded) await fetchSpare(fuelName, fuelNeeded);
+  if (!planksName && spare("coal") === 0 && spare("charcoal") > 0) fuelName = "charcoal";
   if (fuelNeeded > 0 && planksName && spare(fuelName) < fuelNeeded) await makePlanks(fuelNeeded - spare(fuelName));
   if (fuelNeeded > 0 && spare(fuelName) === 0) return ok(done.concat("no spare fuel").join("; "));
   if (isCommandCancelled()) return fail("aborted", "stopped");

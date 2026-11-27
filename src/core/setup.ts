@@ -5,6 +5,7 @@
 // safe walking rules, and the wrappers that log every broken block and record
 // scaffolding.
 
+import { noteDug } from "./digTally";
 import type { Bot } from "mineflayer";
 import { pathfinder } from "mineflayer-pathfinder";
 import { plugin as pvp } from "mineflayer-pvp";
@@ -70,6 +71,7 @@ export function installPlugins(currentBot: Bot): void {
     const moving = currentBot.pathfinder.isMoving() ? "while walking" : "standing";
     await (dig as (...a: unknown[]) => Promise<void>)(block, ...rest);
     forgetScaffold(block.position);
+    noteDug(what);
     console.log(`Broke ${what} at ${block.position} (${moving}, task ${getCurrentCommandName() ?? "idle"}).`);
   }) as typeof currentBot.dig;
 
