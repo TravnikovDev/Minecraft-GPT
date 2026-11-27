@@ -633,7 +633,10 @@ export async function sealMineFromOutside(): Promise<void> {
   const { inOwnPassage } = await import("../core/movements");
   const openKeys = new Set(open.map((c) => c.toString()));
   const kept = (p: Vec3): boolean => inOwnPassage(p) && !openKeys.has(p.toString());
-  const holes = outsideOpenings(near, look, kept, 6000).slice(0, SEALS_PER_RUN);
+  // A canyon or a hole to the sky is close by: a cave that reaches the
+  // surface only far off is a cave, left open (owner: caverns stay open; the
+  // wide search had it walking about caves and getting stuck sealing them)
+  const holes = outsideOpenings(near, look, kept, 600).slice(0, SEALS_PER_RUN);
   if (holes.length === 0) return;
   // Said once as running commentary (the newest replaces it), never a report
   // to the owner after every stretch (owner: chat full of these)

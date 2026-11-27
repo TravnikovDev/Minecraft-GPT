@@ -23,7 +23,8 @@ import { mayWanderTo } from "../actions/pickup";
 import { collectBlock } from "../actions/collectBlock";
 import { isCommandCancelled } from "../core/commandContext";
 import { fitForTheMine } from "./mine";
-import { foodPoints } from "./capabilities";
+import { foodPoints, shelter } from "./capabilities";
+import { inOwnPassage } from "../core/movements";
 import { daylight } from "../core/daylight";
 import { underRoof } from "../actions/placement";
 import { skyAbove } from "../actions/hunting";
@@ -37,6 +38,12 @@ const ORE_RANK = ["diamond", "emerald", "gold", "iron", "redstone", "lapis", "co
 const GOES_FIRST = ORE_RANK.indexOf("iron");
 
 const failed = new Map<string, number>();
+const NEXT_TO = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+/** Well under its home's ground (in its mine or a cave). */
+const underground = (): boolean => {
+  const home = shelter();
+  return home !== null && bot.entity.position.y < home.y - 4;
+};
 // Failures by area (about 4 blocks): an unreachable vein isn't retried block by block
 const keyOf = (b: Block): string => `${Math.floor(b.position.x / 4)},${Math.floor(b.position.y / 4)},${Math.floor(b.position.z / 4)}`;
 
@@ -107,7 +114,11 @@ export function bestOreInSight(): Block | null {
     .filter((b) => openFaces(world, b).length > 0 && canSee(world, eyes, b, LOOK_RANGE))
     .filter((b) => catalog().canHarvest(b.name, pickaxe))
     .filter((b) => (failed.get(keyOf(b)) ?? 0) < now && !forbiddenAt(b.position) && tunnelBlocked(b.position) === null && mayWanderTo(b.position))
-    .filter((b) => allowedNow(b));
+    .filter((b) => allowedNow(b))
+    // Down in its mine, only ore its own tunnels opened up (the floor's
+    // pass mines those); never a side trip dug to ore seen in a cave (owner:
+    // the mine looked worse and worse, odd cuts and pillars everywhere)
+    .filter((b) => !underground() || NEXT_TO.some((d) => inOwnPassage(b.position.plus(d))));
   candidates.sort((a, b) => oreRank(oreKind(a.name)!) - oreRank(oreKind(b.name)!) || a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
   return candidates[0] ?? null;
 }
