@@ -412,3 +412,15 @@ test("near the surface the stairs are lower, ground kept over them (game test: t
   expect(capUnderSurface(4, 96, 89)).toBe(4); // deep enough: the full 5 high
   expect(capUnderSurface(4, 96, 93)).toBe(2); // never under 3 high
 });
+
+test("every floor's crafting table stands in its room's front-left corner, on no sleeve's way or the stairs'", async () => {
+  const { ROOM_CELLS, TABLE_CELL, sleeveStart, floorTableSpot } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  expect(ROOM_CELLS.some(([a, b]: number[]) => a === TABLE_CELL[0] && b === TABLE_CELL[1])).toBe(true);
+  for (const arm of ["left", "right", "back", "forward"]) expect(sleeveStart(arm)).not.toEqual(TABLE_CELL);
+  // The stairs run down the middle (across 0), the room's middle line is along 1
+  expect(TABLE_CELL[0]).not.toBe(0);
+  expect(TABLE_CELL[1]).not.toBe(1);
+  // Arriving south: right is west, so across -1 is east; 2 along is 2 south
+  expect(floorTableSpot(new Vec3(0, 20, 0), "south")).toEqual(new Vec3(1, 20, 2));
+});

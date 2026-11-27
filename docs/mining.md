@@ -30,6 +30,7 @@ The **first floor 20 steps down**, then a floor every **10 blocks** deeper.
 - Every sleeve is **50 blocks long and 3 high**. Dug in this order: forward, right, left, back.
 - **Iron first** (owner): once one sleeve of a floor is done, if it's still short of iron for an iron pickaxe and an iron sword, or has under 32 coal, it goes on down to the next floor instead of the floor's other sleeves. With enough, every floor is finished in order.
 - A **sign** on the room's right wall: "1st floor", "2nd floor", ...
+- A **crafting table** in the room's front-left corner (on no sleeve's way, nor the stairs'): it crafts down there instead of walking home. Put in when it starts work on a floor, the floors dug before included.
 
 ## Pokeholes
 
