@@ -585,6 +585,11 @@ export function myMine(): { bottom: Vec3; direction: DirectionType; branches: nu
 
 /** True with a stone pickaxe or better: the mine is dug with one (owner's rule). */
 const hasStonePickaxe = (): boolean => toolTier("pickaxe") >= TIER.stone;
+// Pickaxes it takes down the mine (owner: 3 in the bag, just in case)
+export const SPARE_PICKAXES = 3;
+/** Stone-or-better pickaxes it carries. */
+const pickaxesForTrip = (): number =>
+  bot.inventory.items().filter((i) => i.name.endsWith("_pickaxe") && i.name !== "wooden_pickaxe" && i.name !== "golden_pickaxe").reduce((n, i) => n + i.count, 0);
 
 /**
  * Where its stairs turned (owner: blocked going down, back to the crossroad
@@ -908,6 +913,15 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   // cobblestone it carries or keeps (game test: back from a death with no
   // tools, every coal and iron trip was refused, "I have none yet", while
   // its stone tools counted as done)
+  // Spares for the trip (owner: craft them in bulk, 3 in the bag; one stone
+  // pickaxe lasts about 3 minutes of tunnelling, and it walked to a table
+  // for each new one)
+  if (pickaxesForTrip() < SPARE_PICKAXES && toolTier("pickaxe") < TIER.iron) {
+    const { acquire } = await import("./acquire");
+    const { liveWorld } = await import("./world");
+    const spares = await acquire("stone_pickaxe", SPARE_PICKAXES, liveWorld);
+    if (!spares.ok) console.log(`Mine: ${pickaxesForTrip()} pickaxe${pickaxesForTrip() === 1 ? "" : "s"} for the trip (${describeFailure(spares)}).`);
+  }
   if (!hasStonePickaxe()) {
     const { acquire } = await import("./acquire");
     const { liveWorld } = await import("./world");

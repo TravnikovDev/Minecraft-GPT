@@ -37,7 +37,10 @@ export async function replaceBrokenTool(block: Block): Promise<boolean> {
       .find((item) => bot.registry.itemsByName[item] && planCraft(item, 1).missing.length === 0);
     if (!best) return false;
     console.log(`No ${kind} that can break ${block.name}: making a ${best.replace(/_/g, " ")}.`);
-    if (!(await craftNow(best, 1)).ok) return false;
+    // A stone pickaxe for the mine: a few at once when it can (owner: in bulk,
+    // 3 in the bag; it walked to a table for each one)
+    const n = kind === "pickaxe" && best === "stone_pickaxe" ? ([3, 2].find((k) => planCraft(best, k).missing.length === 0) ?? 1) : 1;
+    if (!(await craftNow(best, n)).ok) return false;
     await tools.equipForBlock(block);
     return block.canHarvest(bot.heldItem ? bot.heldItem.type : null);
   } catch (error) {
