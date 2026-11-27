@@ -331,3 +331,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] A floor with one sleeve done and no iron for a pickaxe and sword: "on down to the next floor"
 - [ ] In the woods, after stone tools: "a clearing round my home": every tree within 16 blocks of the shelter's entrance felled (not replanted there)
 - [ ] Starving with no food: no more breaking oak leaves for apples (switched off)
+- [ ] Trees felled from the top: it gets on top of a straight trunk (pillaring beside it if needed), breaks the log under its feet down to the ground; acacia, 2x2 and 1-2 log trees from the bottom

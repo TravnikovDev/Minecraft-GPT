@@ -10,6 +10,10 @@ import { forbiddenAt } from "../core/forbidden";
 import { recordSighting } from "./perception";
 import { findTrunk, firstDayUnderway, isNaturalTree, rememberFelledTree, stumpsOf, treesToReplant } from "./forestry";
 import { takeDownScaffolding } from "./scaffolding";
+import pf from "mineflayer-pathfinder";
+import type { Block } from "prismarine-block";
+import { goTo } from "../core/primitives";
+import { pathing } from "../core/plugins";
 
 // Give up after this many failed attempts in a row to find or reach a tree
 const MAX_FAILED_ATTEMPTS = 5;
@@ -106,11 +110,7 @@ export async function gatherWood(
       const stumps = stumpsOf(aTree, at);
 
       try {
-        for (const aLog of aTree) {
-          if (isCommandCancelled()) return false;
-          // Log after log, like a player (each break already waits for the server)
-          await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
-        }
+        if (!(await fellTree(aTree))) return false;
         // Off the pillar it built to reach the top, and its scaffolding gone,
         // before moving on (otherwise it bridges from tree to tree)
         await takeDownScaffolding();
@@ -135,6 +135,51 @@ export async function gatherWood(
     console.error("Failed to gather wood:", error);
     return false;
   }
+}
+
+// A trunk this tall or more is felled from its top
+const TOP_DOWN_FROM = 3;
+
+/**
+ * Whether a trunk is felled from the top: one straight column of logs (not
+ * acacia's crooked savanna trunk, not a wide 2x2 one), at least 3 tall.
+ * Pure.
+ */
+export function fellFromTop(trunk: Array<{ name: string; position: { x: number; z: number } }>): boolean {
+  if (trunk.length < TOP_DOWN_FROM || trunk.some((l) => l.name.startsWith("acacia"))) return false;
+  const { x, z } = trunk[0]!.position;
+  return trunk.every((l) => l.position.x === x && l.position.z === z);
+}
+
+/**
+ * Fells a whole trunk (`trunk` bottom to top). From the top where it can
+ * (owner: it stands on top of the trunk and grinds it down, no reaching up
+ * through the leaves): it gets onto the top log (pillaring up beside it if
+ * it must), then breaks the log under its feet, one after another, down to
+ * the ground. Acacia (savanna), wide trunks, short ones, or no way up: from
+ * the bottom as before. False when it was stopped.
+ */
+export async function fellTree(trunk: Block[]): Promise<boolean> {
+  if (fellFromTop(trunk)) {
+    const top = trunk[trunk.length - 1]!.position;
+    const onTop = await pathing.withRules({ allow1by1towers: true }, () => goTo(new pf.goals.GoalBlock(top.x, top.y + 1, top.z)));
+    if (onTop.ok) {
+      for (let i = trunk.length - 1; i >= 0; i--) {
+        if (isCommandCancelled()) return false;
+        const p = trunk[i]!.position;
+        // The log under its feet (each break waits for the server; it drops onto the next)
+        await breakBlockAt(p.x, p.y, p.z);
+      }
+      return true;
+    }
+    console.log(`Couldn't get on top of the ${trunk[0]!.name} at ${trunk[0]!.position} (${onTop.ok ? "" : onTop.detail ?? onTop.reason}); from the bottom instead.`);
+  }
+  for (const aLog of trunk) {
+    if (isCommandCancelled()) return false;
+    // Log after log, like a player (each break already waits for the server)
+    await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
+  }
+  return true;
 }
 
 /**

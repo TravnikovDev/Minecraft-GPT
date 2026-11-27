@@ -13,7 +13,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
 import { chatter } from "../core/narrator";
 import { fail, ok, type ActionResult } from "../core/result";
-import { breakBlockAt } from "../actions/blockBreaking";
+import { fellTree } from "../actions/gatherWood";
 import { findTrunk, isNaturalTree } from "../actions/forestry";
 import { goToPosition } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/pickup";
@@ -63,10 +63,7 @@ export async function clearAroundHome(): Promise<ActionResult> {
       for (const l of trunk) skip.add(l.position.toString());
       continue;
     }
-    for (const l of trunk) {
-      if (isCommandCancelled()) return fail("aborted", "stopped");
-      await breakBlockAt(l.position.x, l.position.y, l.position.z);
-    }
+    if (!(await fellTree(trunk))) return fail("aborted", "stopped");
     await takeDownScaffolding();
     await pickupNearbyItems(bot);
     felled++;
