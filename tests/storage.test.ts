@@ -202,7 +202,7 @@ test("half (owner): half of each valuable material stored, never below its worki
     "half",
   );
   const stored = Object.fromEntries(storage.tally(plan.map((d: any) => ({ name: d.stack.name, count: d.count }))));
-  expect(stored.oak_log).toBe(20); // half of 40 (reserve 8 kept anyway)
+  expect(stored.oak_log).toBe(20); // half of 40 (its 20-log wood stock kept anyway)
   expect(stored.coal).toBe(14); // 30 - 16 reserve = 14, under half
   expect(stored.raw_iron).toBe(3); // half
   expect(stored.white_wool).toBe(2); // half
@@ -210,4 +210,11 @@ test("half (owner): half of each valuable material stored, never below its worki
   expect(stored.cobblestone).toBe(8); // bulk: all but the 32 kept
   expect(stored.iron_pickaxe).toBeUndefined();
   expect(stored.bread).toBeUndefined();
+});
+
+test("half keeps its wood stock on it: 20 logs carried, only what's beyond that and over half is stored", () => {
+  const logs = (n: number) => Object.fromEntries(storage.tally(storage.chooseToStore([item("jungle_log", n)], "half").map((d: any) => ({ name: d.stack.name, count: d.count })))).jungle_log ?? 0;
+  expect(logs(20)).toBe(0); // its stock: nothing put away (it took 8 from its chests and put them straight back)
+  expect(logs(28)).toBe(8);
+  expect(logs(60)).toBe(30); // half
 });

@@ -84,6 +84,9 @@ function isKept(name: string): boolean {
  * at hand goes on: coal for torches, sticks, and logs for planks, sticks or a
  * crafting table. The rest of the stack is put away.
  */
+// Logs it keeps carrying when it puts half away (the wood stock milestone's 20)
+export const CARRIED_LOGS = 20;
+
 const WORKING_SUPPLY: Array<[(name: string) => boolean, number]> = [
   [(n) => n === "coal" || n === "charcoal", 16],
   [(n) => n === "stick", 16],
@@ -168,7 +171,10 @@ export function chooseToStore(stacks: Stack[], mode: StoreMode, wanted: Wanted[]
   // reserve stored, and of each valuable material (logs, coal, iron, wool...)
   // half, never below its working reserve. Gear, food, torches stay on it
   if (mode === "half") {
-    const reserve = [...WORKING_SUPPLY, ...BUILDING_SUPPLY].map(([matches, amount]) => ({ matches, left: amount }));
+    // Its wood stock stays on it (owner: at least 20 logs carried; game
+    // test: it took 8 logs from its chests for its stock and put them
+    // straight back, keeping only 8)
+    const reserve = [[(n: string) => catalog().isLog(n), CARRIED_LOGS] as const, ...WORKING_SUPPLY, ...BUILDING_SUPPLY].map(([matches, amount]) => ({ matches, left: amount }));
     const totals = new Map<string, number>();
     for (const s of stacks) totals.set(s.name, (totals.get(s.name) ?? 0) + s.count);
     const toStore = new Map<string, number>();
