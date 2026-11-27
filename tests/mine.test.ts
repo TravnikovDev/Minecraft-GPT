@@ -323,3 +323,13 @@ test("the mine's openings to the outside are found (a canyon), a cave that stays
   const found = outsideOpenings(open, look).map((p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`).sort();
   expect(found).toEqual(["6,10,1", "6,11,1", "7,10,1", "7,11,1", "8,10,1", "8,11,1"]);
 });
+
+test("every ore the tunnels uncovered is found, in walls and ceilings (owner: coal left in the ceiling)", async () => {
+  const { exposedOres } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  const open = [new Vec3(0, 10, 0), new Vec3(0, 11, 0), new Vec3(1, 10, 0), new Vec3(1, 11, 0)];
+  const names: Record<string, string> = { "0,12,0": "coal_ore", "1,11,1": "iron_ore", "2,10,0": "deepslate_copper_ore", "0,13,0": "coal_ore" };
+  const found = exposedOres(open, (p: { x: number; y: number; z: number }) => names[`${p.x},${p.y},${p.z}`] ?? "stone").map((p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`).sort();
+  // The ceiling coal, the wall iron, the copper ahead; the coal behind the ceiling one waits until it's uncovered
+  expect(found).toEqual(["0,12,0", "1,11,1", "2,10,0"]);
+});

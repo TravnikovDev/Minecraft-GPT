@@ -587,8 +587,11 @@ export function outsideOpenings(open: Vec3[], look: (p: Vec3) => SealLook, kept:
   return out;
 }
 
-// Ways in from outside sealed in one go, at most (the rest next time)
-const SEALS_PER_RUN = 48;
+// Ways in from outside sealed in one go, at most (the rest next time; owner:
+// 48 left a canyon half open)
+const SEALS_PER_RUN = 400;
+// How far from it the floors are gone over (the whole floor, its sleeves 50 long)
+const LOOK_AFTER_RANGE = 96;
 
 /**
  * Its mine's floors closed off from the outside (owner): every opening from
@@ -606,7 +609,7 @@ export async function sealMineFromOutside(): Promise<void> {
     open.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
   }
   // Only what's dug out already (a sleeve not dug that far isn't open yet)
-  const near = open.filter((c) => c.distanceTo(bot.entity.position) <= 64 && bot.blockAt(c)?.boundingBox === "empty");
+  const near = open.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && bot.blockAt(c)?.boundingBox === "empty");
   const look = (p: Vec3): SealLook => {
     const b = bot.blockAt(p);
     if (!b) return null;
@@ -618,7 +621,7 @@ export async function sealMineFromOutside(): Promise<void> {
   const { inOwnPassage } = await import("../core/movements");
   const openKeys = new Set(open.map((c) => c.toString()));
   const kept = (p: Vec3): boolean => inOwnPassage(p) && !openKeys.has(p.toString());
-  const holes = outsideOpenings(near, look, kept).slice(0, SEALS_PER_RUN);
+  const holes = outsideOpenings(near, look, kept, 6000).slice(0, SEALS_PER_RUN);
   if (holes.length === 0) return;
   report(`My mine is open to the outside in ${holes.length} place${holes.length === 1 ? "" : "s"} (a canyon or the like): blocking it with cobblestone.`);
   const { ensureBlock, STONE_FILLERS } = await import("../actions/digging");
@@ -630,6 +633,104 @@ export async function sealMineFromOutside(): Promise<void> {
     if (await ensureBlock(h, keepClear, STONE_FILLERS)) sealed++;
   }
   console.log(`Mine: sealed ${sealed} of ${holes.length} openings to the outside.`);
+}
+
+/** The dug-out cells of its floors (rooms, sleeves, pokeholes) within reach of a walk. */
+function dugFloorCells(): Vec3[] {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return [];
+  const out: Vec3[] = [];
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    const h = hubStep(l);
+    out.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
+  }
+  return out.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && bot.blockAt(c)?.boundingBox === "empty");
+}
+
+/** Ore blocks touching an open cell (`open`), nearest the first cell first. Pure over `nameAt`. */
+export function exposedOres(open: Vec3[], nameAt: (p: Vec3) => string | null): Vec3[] {
+  const seen = new Set<string>();
+  const out: Vec3[] = [];
+  for (const c of open) {
+    for (const d of DIRS6) {
+      const n = c.plus(d);
+      const k = n.toString();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (/_ore$/.test(nameAt(n) ?? "")) out.push(n);
+    }
+  }
+  return out;
+}
+
+/**
+ * Every ore its floors' tunnels uncovered, mined (owner: ore left in the
+ * walls and ceilings; only what was in sight within 6 blocks of where it
+ * stood got mined): each ore block touching a dug cell, walked to and
+ * broken, the ore behind it too as it comes into the open. How many.
+ */
+export async function mineExposedOres(): Promise<number> {
+  const { breakBlockAtResult } = await import("../actions/blockBreaking");
+  const { pickupNearbyItems } = await import("../actions/pickup");
+  let mined = 0;
+  for (let pass = 0; pass < 3 && !isCommandCancelled(); pass++) {
+    const open = dugFloorCells();
+    const openSet = new Set(open.map((c) => c.toString()));
+    const ores = exposedOres(open, (p) => bot.blockAt(p)?.name ?? null).sort((a, b) => a.distanceTo(bot.entity.position) - b.distanceTo(bot.entity.position));
+    if (ores.length === 0) break;
+    let got = 0;
+    for (const ore of ores) {
+      if (isCommandCancelled()) break;
+      if (!/_ore$/.test(bot.blockAt(ore)?.name ?? "")) continue;
+      // From the dug cell beside it
+      const from = DIRS6.map((d) => ore.plus(d)).find((c) => openSet.has(c.toString()));
+      if (from && bot.entity.position.distanceTo(from) > 4 && !(await goTo(new pf.goals.GoalNear(from.x, from.y, from.z, 1))).ok) continue;
+      const broken = await breakBlockAtResult(ore.x, ore.y, ore.z);
+      if (broken.ok) {
+        got++;
+        await pickupNearbyItems(bot, 4);
+      }
+    }
+    mined += got;
+    if (got === 0) break;
+  }
+  if (mined > 0) console.log(`Mine: mined ${mined} ore blocks the tunnels had uncovered.`);
+  return mined;
+}
+
+/** Blocks it left standing in its floors' tunnels (footholds a walk put down), taken out, the whole floor. */
+async function clearLeftovers(): Promise<number> {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return 0;
+  const { isOwnScaffold } = await import("../core/scaffold");
+  const { breakBlock } = await import("../core/primitives");
+  const cells: Vec3[] = [];
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    const h = hubStep(l);
+    cells.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
+  }
+  const left = cells.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && isOwnScaffold(c)).sort((a, b) => a.distanceTo(bot.entity.position) - b.distanceTo(bot.entity.position));
+  let cleared = 0;
+  for (const c of left) {
+    if (isCommandCancelled()) break;
+    if (bot.entity.position.distanceTo(c) > 4 && !(await goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 2))).ok) continue;
+    if ((await breakBlock(c)).ok) cleared++;
+  }
+  if (cleared > 0) console.log(`Mine: took ${cleared} block${cleared === 1 ? "" : "s"} I'd left standing out of my tunnels.`);
+  return cleared;
+}
+
+/**
+ * Its floors looked after on a trip (owner): every way in from outside
+ * blocked, the blocks it left in the tunnels taken out, every ore the
+ * tunnels uncovered mined.
+ */
+export async function lookAfterFloors(): Promise<void> {
+  await sealMineFromOutside();
+  if (isCommandCancelled()) return;
+  await clearLeftovers();
+  if (isCommandCancelled()) return;
+  await mineExposedOres();
 }
 
 /** Open sky straight over a cell (up to 40 blocks; leaves count as sky, a tree's). */
@@ -1109,7 +1210,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
   await lookAfterStairs(); // holes mended and dark stretches lit on the way down
-  await sealMineFromOutside(); // and any way in from outside (a canyon) blocked
+  await lookAfterFloors(); // ways in from outside blocked, leftovers out, uncovered ore mined
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
@@ -1255,7 +1356,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     // Ore dug out of the floor leaves holes in it: filled (owner); a way
     // out it dug into (a canyon) blocked
     await mendFloor(hub, arrive, level, side);
-    await sealMineFromOutside();
+    await lookAfterFloors();
   }
   // A heavy bag goes home with it (owner: it died in the mine carrying 1022 things)
   await haulHomeIfHeavy();
