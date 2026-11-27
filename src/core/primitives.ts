@@ -20,7 +20,7 @@ import { avoidStep, isNatural, isProtected, liquidBehind, setWalledIn, walledIn 
 import { isAnyReflexActive } from "./reflexes";
 import { placeKey, recentFailure } from "./failures";
 import { forbiddenAt, noteRevert } from "./forbidden";
-import { beginUse, takeoverCount, waitTurn, type Resource } from "./leases";
+import { beginUse, holderOf, takeoverCount, waitTurn, type Resource } from "./leases";
 import { currentSignal } from "./commandContext";
 import { isOwnBlock, placingOnPurpose } from "./scaffold";
 import { markSelfAction } from "./events";
@@ -57,6 +57,8 @@ export const WALK_NO_PROGRESS_MS = 8_000;
 // one spot: it placed the same scaffold block by a tree for over a minute
 // (fresh-world test) and the 8 s limit never came: 8 s of it at most
 const WORK_IN_PLACE_MS = 8_000;
+// A walk that hasn't got 1.5 blocks anywhere, nor dug or built, in this long ends
+export const WALK_NOWHERE_MS = 60_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const floor = (p: Pos): Vec3 => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
@@ -119,12 +121,25 @@ function walkWatchdog(explain: () => string = () => ""): { signal: AbortSignal; 
   let anchor = bot.entity.position.clone();
   let lastMoved = Date.now();
   let hopped = false;
+  // Where it last really got somewhere (a reflex holding it doesn't count):
+  // a walk that gets nowhere for a minute ends, whatever kept it "busy"
+  // (game test: "thinking longer" by a tree, 4.5 minutes, no stall noticed)
+  let lastGotSomewhere = Date.now();
+  let workedAt = 0;
   const timer = setInterval(() => {
     if (!bot.entity) return;
     const here = bot.entity.position;
     if (here.distanceTo(anchor) > 1.5) {
       anchor = here.clone();
       lastMoved = Date.now();
+      lastGotSomewhere = Date.now();
+    }
+    if (bot.pathfinder?.isMining?.() || bot.pathfinder?.isBuilding?.()) workedAt = Date.now();
+    if (Date.now() - lastGotSomewhere > WALK_NOWHERE_MS && Date.now() - workedAt > WORK_IN_PLACE_MS) {
+      const holders = (["movement", "hands"] as const).map((r) => `${r}: ${holderOf(r)?.name ?? "free"}`).join(", ");
+      console.log(`Walk got nowhere for ${WALK_NOWHERE_MS / 1000}s at ${here.floored()} (${holders}): ${explain()}`);
+      controller.abort(`no progress for ${WALK_NOWHERE_MS / 1000}s`);
+      return;
     }
     const working = Boolean(bot.pathfinder?.isMining?.() || bot.pathfinder?.isBuilding?.()) && Date.now() - lastMoved < WORK_IN_PLACE_MS;
     if (here.distanceTo(last) > 0.5 || isAnyReflexActive() || working) {

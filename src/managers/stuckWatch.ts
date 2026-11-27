@@ -41,6 +41,10 @@ function restart(): void {
   lastInventory = bot.inventory ? inventorySignature() : "";
 }
 
+// A reflex holding it in one spot longer than this no longer counts as progress
+const REFLEX_HOLD_MAX_MS = 90_000;
+let reflexSince: number | null = null;
+
 // A task waiting on purpose (by a blaze spawner, for the dragon to land)
 // says so: standing still then is not being stuck
 let holdUntil = 0;
@@ -60,7 +64,14 @@ function madeProgress(): boolean {
   // canyon's water, never seen as stuck)
   const moved = Math.hypot(p.x - lastPos.x, p.z - lastPos.z) > 1 || Math.abs(p.y - lastPos.y) > 3;
   const items = inventorySignature();
-  if (moved || items !== lastInventory || (isAnyReflexActive() && !isDrowningReflexActive())) {
+  // A reflex holding it counts as fine, but not for minutes on end in one
+  // spot (game test: 4.5 minutes by a tree and never seen as stuck)
+  const reflex = isAnyReflexActive() && !isDrowningReflexActive();
+  if (reflex) reflexSince ??= Date.now();
+  else reflexSince = null;
+  const reflexTooLong = reflexSince !== null && Date.now() - reflexSince > REFLEX_HOLD_MAX_MS;
+  if (moved || items !== lastInventory) reflexSince = reflex ? Date.now() : null;
+  if (moved || items !== lastInventory || (reflex && !reflexTooLong)) {
     lastPos = { x: p.x, y: p.y, z: p.z };
     lastInventory = items;
     return true;
