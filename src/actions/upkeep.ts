@@ -30,13 +30,22 @@ let eating = false;
 
 type Food = { name: string; foodPoints: number; saturation: number };
 
-/** The food to eat now: the most filling (or, hurt, the most saturating); junk only when starving. */
+/**
+ * The food to eat now: the most filling (or, hurt, the most saturating).
+ * Rotten flesh when there's nothing better (owner: rather than starve; it
+ * only makes it hungry for a while); the other junk only when starving.
+ */
 export function pickFood(items: { name: string }[], foods: Record<string, { foodPoints?: number; saturation?: number }>, starving: boolean, hurt: boolean): string | null {
+  const best = pickFrom(items, foods, starving, hurt, false);
+  return best ?? pickFrom(items, foods, starving, hurt, true);
+}
+
+function pickFrom(items: { name: string }[], foods: Record<string, { foodPoints?: number; saturation?: number }>, starving: boolean, hurt: boolean, fleshToo: boolean): string | null {
   const options: Food[] = [];
   for (const { name } of items) {
     const food = foods[name];
     if (!food || options.some((o) => o.name === name)) continue;
-    if (LAST_RESORT.has(name) && !starving) continue;
+    if (LAST_RESORT.has(name) && !starving && !(fleshToo && name === "rotten_flesh")) continue;
     options.push({ name, foodPoints: food.foodPoints ?? 0, saturation: food.saturation ?? 0 });
   }
   options.sort((a, b) => (hurt ? b.saturation - a.saturation : 0) || b.foodPoints - a.foodPoints || b.saturation - a.saturation);

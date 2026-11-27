@@ -14,7 +14,8 @@ import { currentDimension } from "../actions/perception";
 
 // Tool tiers (core/catalog): wooden 0, golden 1, stone 2, iron 3, diamond 4, netherite 5
 export const TIER = { wooden: 0, stone: 2, iron: 3, diamond: 4 } as const;
-const JUNK_FOOD = new Set(["rotten_flesh", "poisonous_potato", "spider_eye", "pufferfish"]);
+// (rotten flesh counts: it eats it rather than starve, owner)
+const JUNK_FOOD = new Set(["poisonous_potato", "spider_eye", "pufferfish"]);
 const TABLE_RANGE = 32;
 // Its own tables it walks back to for crafting (actions/crafting FAR_TABLE_RANGE)
 const REMEMBERED_TABLE_RANGE = 256;
@@ -28,6 +29,21 @@ export function carried(name: string): number {
 }
 
 /** The best tier of a tool kind it carries (-1: none). Durability isn't counted: a worn tool still counts until it breaks. */
+// Arrows it wants with its bow before it goes out at night
+const NIGHT_ARROWS = 16;
+
+/**
+ * Well equipped for the night (owner): a full set of armour worn, an iron
+ * sword or better, and a bow with arrows (creepers). Then night is like day.
+ */
+export function wellEquipped(): boolean {
+  if (!bot.inventory) return false;
+  const slots = (bot.inventory.slots ?? []) as unknown[];
+  const worn = [5, 6, 7, 8].every((slot) => slots[slot] != null);
+  const count = (name: string): number => bot.inventory.items().filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
+  return worn && toolTier("sword") >= TIER.iron && count("bow") > 0 && count("arrow") >= NIGHT_ARROWS;
+}
+
 export function toolTier(kind: "pickaxe" | "axe" | "sword" | "shovel" | "hoe"): number {
   const c = catalog();
   return Math.max(-1, ...bot.inventory.items().filter((i) => c.toolKind(i.name) === kind).map((i) => c.toolTier(i.name)));

@@ -321,3 +321,11 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Mobs hit it while it's busy → it fights back (the task pauses), then carries on
 - [ ] `stop` during a boat trip → it lands and picks up its boat before the next command
 - [ ] Craft at a table it can't reach → it walks the long way to it; it never places a second table within 50 blocks (owner's rule, replaces the old "uses its own table")
+
+## Owner's priorities (2026-11-27)
+
+- [ ] New world in a snowy/icy/desert/ocean biome: "This isn't a good place for my home (...)", it walks on (up to 500 blocks) and builds where the biome is good, with 24 logs and 3 animals near and a dry way down for its mine
+- [ ] Day one order: wooden tools, shelter, stone tools, 20 logs, chests (furnace, table), bed; then the mine; the first field after the mine starts; lit home and food stock never hold the mine up
+- [ ] Rotten flesh picked up and kept; eaten when there's nothing better
+- [ ] At dusk down in the mine it keeps working; with armour, an iron sword and a bow with 16 arrows it works outside at night too
+- [ ] A floor with one sleeve done and no iron for a pickaxe and sword: "on down to the next floor"

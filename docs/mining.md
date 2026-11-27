@@ -28,6 +28,7 @@ The **first floor 20 steps down**, then a floor every **10 blocks** deeper.
 - **Left and right sleeves** leave from the room's middle line.
 - The **back sleeve** runs along the room's left row, back beside the stairs; the **forward sleeve** along its right row.
 - Every sleeve is **50 blocks long and 3 high**. Dug in this order: forward, right, left, back.
+- **Iron first** (owner): once one sleeve of a floor is done, if it's still short of iron for an iron pickaxe and an iron sword, or has under 32 coal, it goes on down to the next floor instead of the floor's other sleeves. With enough, every floor is finished in order.
 - A **sign** on the room's right wall: "1st floor", "2nd floor", ...
 
 ## Pokeholes
@@ -61,6 +62,7 @@ With every way down blocked, or at the bottom, it digs side routes off its lowes
 - Ore underground comes from the mine only: "ore in the open" round its home means a face the sky lights (a ravine, a cliff), never a dark cave it would dig its own way down to.
 - Out of the mine by its own stairs, never a new way dug up through the rock: from a floor's tunnels it walks back to that floor's room first, then up the stairs; digging on that walk is too dear to choose. Beside the stairs in a cave, it opens a way in through their wall.
 - It goes down only with enough health and food.
+- A mine trip ends only for low food or a full bag; dusk doesn't pull it out (down in its mine it's home for the night).
 - **Closed to the outside**: where a floor's room, sleeve or pokehole (or the stairs) opens into open air that reaches the sky (a canyon, a ravine), the opening is blocked with cobblestone, at the start of every trip and after every stretch it digs. Caves that stay underground are left open.
 - Gravel or sand falling into its head is dug out at once (the suffocation reflex).
 - **Walled in** (no way anywhere for 2 minutes from one spot, e.g. a pocket shut by its own seals with the way back under water): for 5 minutes its walks may break the cobblestone and dirt it put down beside its own passages. Never its shelter's or mine's shell, never with water or lava behind.

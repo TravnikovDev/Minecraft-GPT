@@ -389,3 +389,13 @@ test("out of the mine from one of its floors: by that floor's room, never the st
   expect(floorAtHeight(rec, 43)).toBeNull();
   expect(floorAtHeight(rec, 60)).toBeNull();
 });
+
+test("iron depth (owner): one sleeve done and still short of iron for a pickaxe and a sword, or of 32 coal, it goes on down", async () => {
+  const { goDeeperEarly, IRON_TRIP_COAL } = await import(`${ROOT}/src/skills/mine.ts`);
+  const arms = (forward: number, blocked = false) => ({ forward: { dug: forward, blocked }, right: { dug: 0, blocked: false }, left: { dug: 0, blocked: false }, back: { dug: 0, blocked: false } });
+  expect(IRON_TRIP_COAL).toBe(32);
+  expect(goDeeperEarly(arms(20), 0, 5, 0)).toBe(false); // no sleeve done yet
+  expect(goDeeperEarly(arms(50), 2, 5, 40)).toBe(true); // a sleeve done, short of iron
+  expect(goDeeperEarly(arms(12, true), 5, 5, 10)).toBe(true); // a sleeve stopped, short of coal
+  expect(goDeeperEarly(arms(50), 5, 5, 32)).toBe(false); // enough: the floor is finished
+});

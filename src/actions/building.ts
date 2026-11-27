@@ -241,7 +241,7 @@ function underRoof(p: Vec3): boolean {
 }
 
 /** The first spot and direction where the whole shelter can be dug (natural ground, no water or lava). */
-function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3; dir: DirectionType } | null {
+export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: (exit: Vec3, dir: DirectionType) => boolean = () => true): { start: Vec3; dir: DirectionType } | null {
   const spots = [around];
   for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
   // Any spot it can dig (no water, lava or buildings) will do: missing walls,
@@ -261,6 +261,8 @@ function chooseSite(around: Vec3, room: RoomSize, depth: number): { start: Vec3;
     for (const dir of DIRECTIONS) {
       const plan = shelterPlan(start, dir, room, depth);
       if (!plan.cells.every((c) => tunnelBlocked(c) === null)) continue;
+      // (and, for a first home, a dry way down for its mine from the exit)
+      if (!accept(plan.exit, dir)) continue;
       const gaps = shellGaps(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
       if (!best || gaps < best.gaps) best = { start, dir, gaps };
     }
@@ -345,7 +347,17 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
   if (!site) {
     const base = getBaseLocation();
     const baseHere = base && bot.entity.position.distanceTo(new Vec3(base.x, base.y, base.z)) <= BASE_NEAR;
-    site = chooseSite(baseHere ? new Vec3(base.x, base.y, base.z).floored() : bot.entity.position.floored(), roomSize, tunnelDepth);
+    // Its own first home: a good place first (owner: not in the cold snow
+    // taiga; trees and animals near; a dry way down for its mine), up to 500
+    // blocks away. The owner's base (set base) is where the owner said.
+    if (!baseHere) {
+      const { findHomeArea, mineWayDry } = await import("../skills/homeSite");
+      const dry = (exit: Vec3, d: DirectionType): boolean => mineWayDry(exit, d);
+      await findHomeArea(() => chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry) !== null);
+      site = chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry);
+      if (!site) console.log("Shelter site: no spot here with a dry way down for my mine; the best I can dig instead.");
+    }
+    site ??= chooseSite(baseHere ? new Vec3(base.x, base.y, base.z).floored() : bot.entity.position.floored(), roomSize, tunnelDepth);
     if (!site) return fail("not_found", "no spot nearby with open sky and plain ground under it (water, lava or buildings everywhere)");
     await saveShelter(site.start, site.dir, roomSize, tunnelDepth, true);
   }

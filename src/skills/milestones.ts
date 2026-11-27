@@ -500,6 +500,17 @@ export const MILESTONES: Milestone[] = [
     done: () => (["axe", "shovel", "sword"] as const).every((k) => toolTier(k) >= TIER.stone) && pickaxesOfTier(TIER.stone) >= 2,
     achieve: () => getAll(["2 stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword"]),
   },
+  // Owner (2026-11-27): after stone tools, at least 20 logs on hand (planks,
+  // sticks, a table, chests, charcoal) before the shelter's furniture
+  {
+    id: "wood_stock",
+    title: "a stock of wood",
+    tier: 1,
+    supply: true,
+    requires: ["stone_tools"],
+    done: () => carriedOf(LOG_NAMES()) >= WOOD_STOCK,
+    achieve: () => acquire("logs", WOOD_STOCK, liveWorld),
+  },
   {
     id: "chests",
     title: "my shelter set up (chests, furnace, table)",
@@ -515,24 +526,7 @@ export const MILESTONES: Milestone[] = [
     requires: ["chests"],
     done: hasBed,
     achieve: getBed,
-  },  // Fields on its first day, once its shelter is finished: chests, furnace,
-  // table and a bed, a safe place to come back to (owner: "shelter finishing
-  // is top 1 priority"; the fields' stone hoe sent it digging its mine before
-  // it had chests or a bed). Wheat from the grass's seeds is a good source of
-  // food from the start; no bucket needed, water goes in their middles once
-  // it has one; torches all round them. By day
-  {
-    id: "farm",
-    title: "my fields",
-    tier: 1,
-    optional: true,
-    requires: ["shelter"],
-    // Waiting for seeds or sowing is "not yet": nothing to do now, no failure
-    done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
-    reached: () => myFarms().length >= FIELDS_WANTED,
-    achieve: makeFarm,
-  },
-  {
+  },  {
     id: "lit_home",
     title: "a lit home",
     // Day one (owner: it's critical): mobs kept coming at the shelter
@@ -541,6 +535,8 @@ export const MILESTONES: Milestone[] = [
     // any, charcoal from logs in its furnace; put back when a creeper knocks
     // them out
     tier: 1,
+    // Skippable when it can't be done now (owner, 2026-11-27): never holds up the mine
+    optional: true,
     requires: ["chests"],
     done: () => shelter() !== null && homeLit(),
     achieve: () => lightUpHome(daylight()),
@@ -552,6 +548,8 @@ export const MILESTONES: Milestone[] = [
     title: "a food stock",
     tier: 1,
     supply: true,
+    // Skippable (owner): it eats what it finds, rotten flesh too, rather than starve
+    optional: true,
     requires: ["chests"],
     done: () => foodPoints() >= foodTarget(),
     achieve: stockFood,
@@ -564,6 +562,21 @@ export const MILESTONES: Milestone[] = [
     requires: ["stone_tools", "chests"],
     done: () => myMine() !== null,
     achieve: digMine,
+  },
+  // Its first field, once the mine is started (owner, 2026-11-27: the
+  // shelter furnished and a bed come first; fields are never given up, but
+  // never hold up the mine either). Wheat from the grass's seeds is a good
+  // source of food; water goes in its middle once it has a bucket. By day
+  {
+    id: "farm",
+    title: "my first field",
+    tier: 2,
+    optional: true,
+    requires: ["shelter"],
+    // Waiting for seeds is "not yet": nothing to do now, no failure
+    done: () => myFarms().length >= 1 || nextFieldWaits((n) => owned([n])),
+    reached: () => myFarms().length >= 1,
+    achieve: makeFarm,
   },
   {
     id: "coal",
@@ -608,6 +621,18 @@ export const MILESTONES: Milestone[] = [
     done: () => cobblestoneOwned() < PAVE_AFTER || unpavedSteps().length === 0,
     reached: () => stairsPaved(),
     achieve: paveMineStairs,
+  },
+  // More fields, up to its 4 (owner: a low-priority job, after everything else)
+  {
+    id: "more_fields",
+    title: "more fields",
+    tier: 2,
+    optional: true,
+    idle: true,
+    requires: ["farm"],
+    done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
+    reached: () => myFarms().length >= FIELDS_WANTED,
+    achieve: makeFarm,
   },
   // Owner: the shelter's weak walls (dirt and sand blow out; stone holds
   // against a creeper) changed for smooth stone, a low-priority job, only
@@ -798,6 +823,9 @@ function cobblestoneOwned(): number {
 // Owner: the shelter gets smooth stone only, and only once there are two
 // stacks of coal for the furnace (smooth stone is cobblestone smelted twice)
 export const REINFORCE_COAL = 128;
+// Logs it keeps on hand after its stone tools (owner)
+export const WOOD_STOCK = 20;
+const LOG_NAMES = (): string[] => Object.keys(bot.registry.itemsByName).filter((n) => catalog().isLog(n));
 /** Ready to reinforce: coal enough, and smooth stone made (by the workshop, in the background). */
 const readyToReinforce = (): boolean => owned(["coal"]) >= REINFORCE_COAL && owned(["smooth_stone"]) > 0;
 // Each piece, the ingots it takes, and where it's worn

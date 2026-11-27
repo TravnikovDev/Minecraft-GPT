@@ -137,11 +137,13 @@ test("the most urgent holder wins: running out of air outranks a creeper", () =>
   expect(R.isAnyReflexActive()).toBe(false);
 });
 
-test("eating picks the most filling food, and junk only when starving", async () => {
+test("eating picks the most filling food; rotten flesh when there's nothing better (owner), other junk only when starving", async () => {
   const { pickFood } = await import(`${ROOT}/src/actions/upkeep.ts`);
   const foods = registry.foodsByName;
   const items = [{ name: "rotten_flesh" }, { name: "bread" }, { name: "cooked_beef" }];
   expect(pickFood(items, foods, false, false)).toBe("cooked_beef");
-  expect(pickFood([{ name: "rotten_flesh" }], foods, false, false)).toBeNull();
-  expect(pickFood([{ name: "rotten_flesh" }], foods, true, false)).toBe("rotten_flesh");
+  expect(pickFood([{ name: "rotten_flesh" }], foods, false, false)).toBe("rotten_flesh");
+  expect(pickFood([{ name: "rotten_flesh" }, { name: "bread" }], foods, false, false)).toBe("bread");
+  expect(pickFood([{ name: "spider_eye" }], foods, false, false)).toBeNull();
+  expect(pickFood([{ name: "spider_eye" }], foods, true, false)).toBe("spider_eye");
 });

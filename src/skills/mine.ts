@@ -1417,6 +1417,19 @@ export async function withScaffoldingTakenDown(job: () => Promise<ActionResult>)
   return result;
 }
 
+// Coal it wants before it stops going deeper early (torches, owner)
+export const IRON_TRIP_COAL = 32;
+
+/**
+ * True when a floor is done enough to go on down: a sleeve finished (or
+ * stopped) and still short of iron for its iron pickaxe and sword, or of
+ * coal (owner). Pure.
+ */
+export function goDeeperEarly(arms: Arms, ironHave: number, ironNeed: number, coalHave: number): boolean {
+  const oneDone = ARMS.some((a) => arms[a].dug >= ARM_LENGTH || arms[a].blocked);
+  return oneDone && (ironHave < ironNeed || coalHave < IRON_TRIP_COAL);
+}
+
 /** Carried count of these items. */
 const carried = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
@@ -1508,6 +1521,17 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const { start, direction: dir } = rec;
     let { level, arms } = rec;
     let arm = nextArm(arms);
+    // Owner (2026-11-27): one sleeve dug on this floor and still short of
+    // iron for a pickaxe and a sword (or 32 coal for torches): on down to the
+    // next floor (iron is scarce up high) rather than finishing every sleeve
+    if (arm && !rec.exhausted && !rec.deepest && level + 1 < MAX_LEVELS && stepAt(start, dir, hubStep(level + 1), rec.turns).y >= MIN_HUB_Y) {
+      const { owned } = await import("./milestones");
+      const ironNeed = (toolTier("pickaxe") < TIER.iron ? 3 : 0) + (toolTier("sword") < TIER.iron ? 2 : 0);
+      if (goDeeperEarly(arms, owned(["raw_iron", "iron_ingot"]), ironNeed, owned(["coal", "charcoal"]))) {
+        report(`A tunnel is done on this floor and I'm still short of iron for a pickaxe and a sword (or coal for torches): on down to the next floor.`);
+        arm = null;
+      }
+    }
     // All three tunnels at this hub done: 20 steps further down, a new hub
     if (!arm) {
       // As deep as it goes (just over bedrock, or every way down blocked):

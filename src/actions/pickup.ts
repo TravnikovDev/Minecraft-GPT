@@ -174,8 +174,9 @@ export async function collectDrops(
 }
 
 // Stone it digs through and never uses (and the junk mobs drop): what a
-// player throws out first when their pockets are full
-export const CLUTTER = /^(andesite|diorite|granite|tuff|calcite|dripstone_block|pointed_dripstone|gravel|rotten_flesh|poisonous_potato|dead_bush|spider_eye)$/;
+// player throws out first when their pockets are full. Not rotten flesh: it's
+// food when there's nothing else (owner)
+export const CLUTTER = /^(andesite|diorite|granite|tuff|calcite|dripstone_block|pointed_dripstone|gravel|poisonous_potato|dead_bush|spider_eye)$/;
 
 /** Drops the clutter it carries (never to be picked up again). True when a slot came free. */
 async function dropClutter(): Promise<boolean> {

@@ -88,11 +88,11 @@ const kit = () => [
   item("torch", 12),
   item("crafting_table", 1),
   item("white_bed", 1),
-  item("rotten_flesh", 2),
+  item("spider_eye", 2),
 ];
 
 test("resources: materials go, gear, food, torches, bed and crafting table stay", () => {
-  expect(names(storage.chooseToStore(kit(), "resources"))).toEqual(["64 cobblestone", "20 cobblestone", "15 raw_iron", "2 rotten_flesh"]);
+  expect(names(storage.chooseToStore(kit(), "resources"))).toEqual(["64 cobblestone", "20 cobblestone", "15 raw_iron", "2 spider_eye"]);
 });
 
 test("duplicates: the best tool and weapon of each kind stay, extra copies and smaller stacks go", () => {
@@ -109,8 +109,8 @@ test("named items, with or without a count, and categories", () => {
 test("store resources: they end up in the chest, the kit stays with the bot", async () => {
   inv = kit();
   const result = await storage.storeItems("resources");
-  expect(Object.fromEntries(result.stored)).toEqual({ cobblestone: 84, raw_iron: 15, rotten_flesh: 2 });
-  expect(Object.fromEntries(storage.tally(chestItems))).toEqual({ cobblestone: 84, raw_iron: 15, rotten_flesh: 2 });
+  expect(Object.fromEntries(result.stored)).toEqual({ cobblestone: 84, raw_iron: 15, spider_eye: 2 });
+  expect(Object.fromEntries(storage.tally(chestItems))).toEqual({ cobblestone: 84, raw_iron: 15, spider_eye: 2 });
   expect(inv.some((i) => i.name === "cobblestone")).toBe(false);
   expect(inv.some((i) => i.name === "iron_pickaxe")).toBe(true);
 });

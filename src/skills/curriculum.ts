@@ -23,7 +23,7 @@ import { setSheltered } from "../core/sheltered";
 import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, tier1Reached, type Milestone } from "./milestones";
-import { foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
+import { foodPoints, hasBed, shelter, TIER, toolTier, wellEquipped } from "./capabilities";
 import { fitForTheMine } from "./mine";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
@@ -136,8 +136,15 @@ const busyWith = (bucket: number): boolean => {
 };
 const isNight = (): boolean => {
   // From sunset to dawn, in the overworld only (the Nether and the End have
-  // no night: its shelter is in the overworld); one clock for all (review)
-  return !daylight();
+  // no night: its shelter is in the overworld); one clock for all (review).
+  // Well equipped (armour, an iron sword, a bow and arrows), night is like
+  // day for it (owner: its defence is good; mineflayer-pvp works well)
+  return !daylight() && !wellEquipped();
+};
+/** Down in its mine (under its home): already safe for the night. */
+const downInMine = (): boolean => {
+  const home = shelter();
+  return home !== null && !!bot.entity && bot.entity.position.y < home.y - 3;
 };
 
 /** Announces milestones reached for the first time. */
@@ -386,6 +393,9 @@ export async function considerNextStep(): Promise<void> {
   // The world's day (it moves on when someone sleeps; the age doesn't)
   const day = bot.time?.day ?? 0;
   const retryDue = nightRetryAt > 0 && Date.now() >= nightRetryAt;
+  // Dusk down in its mine: it's home already, the trip goes on (owner: only
+  // low food or a full bag end a mine trip, not the night)
+  if (isNight() && nightOf !== day && downInMine()) nightOf = day;
   if (isNight() && !bot.isSleeping && (nightOf !== day || retryDue) && !busyWith(Bucket.Upkeep)) {
     nightOf = day;
     nightRetryAt = 0;

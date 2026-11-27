@@ -122,7 +122,7 @@ const { makeRoom } = await import(`${ROOT}/src/actions/overflow.ts`);
 const { chooseToStore, itemValue, ROOM_SLOTS } = await import(`${ROOT}/src/actions/storage.ts`);
 
 test("less valuable means junk, bulk and ordinary materials; gems, ingots and gear stay", () => {
-  expect(itemValue("rotten_flesh")).toBe(0);
+  expect(itemValue("poisonous_potato")).toBe(0);
   expect(itemValue("cobblestone")).toBe(1);
   expect(itemValue("coal")).toBe(2);
   expect(itemValue("diamond")).toBe(3);
@@ -142,7 +142,7 @@ test("a working supply of coal, sticks, logs and building stone stays, and so do
 
 test("full with no chest: it makes one, places it and fills it with the cheap stuff", async () => {
   inv = [
-    item("rotten_flesh", 5),
+    item("poisonous_potato", 5),
     item("oak_log", 2),
     item("diamond", 3),
     item("iron_pickaxe", 1),
@@ -158,7 +158,7 @@ test("full with no chest: it makes one, places it and fills it with the cheap st
   expect(stored.has("cobblestone")).toBe(true);
   expect(chestItems.filter((i) => i.name === "cobblestone").length).toBe(20); // incl. the stack it set down and picked back up
   expect([...new Set(inv.map((i) => i.name))].sort()).toEqual(["bread", "diamond", "iron_ingot", "iron_pickaxe"]); // kept
-  expect(inv.some((i) => i.name === "rotten_flesh")).toBe(false); // junk out of the inventory (thrown, or swept into the chest)
+  expect(inv.some((i) => i.name === "poisonous_potato")).toBe(false); // junk out of the inventory (thrown, or swept into the chest)
   expect(said.some((m) => m.includes("new chest at 3, 64, 0"))).toBe(true);
 });
 

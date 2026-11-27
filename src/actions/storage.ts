@@ -37,7 +37,8 @@ export type Wanted = { name: string; count: number | null };
 const OTHER_GEAR = new Set(["bow", "crossbow", "shield", "trident", "fishing_rod", "shears", "flint_and_steel", "elytra", "spyglass", "bucket", "water_bucket", "lava_bucket", "cobblestone_stairs"]);
 const SUPPLIES = new Set(["torch", "crafting_table", "arrow", "spectral_arrow", "tipped_arrow"]);
 /** Things nobody needs to carry around (some count as food, but nobody eats them by choice). */
-const JUNK = new Set(["rotten_flesh", "poisonous_potato", "dead_bush", "spider_eye"]);
+// (not rotten flesh: food when there's nothing else, owner)
+const JUNK = new Set(["poisonous_potato", "dead_bush", "spider_eye"]);
 
 /** Tools, weapons and armor: one of each kind is what the bot works with. */
 export function gearKind(name: string): string | null {
