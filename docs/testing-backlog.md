@@ -336,3 +336,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Night with no stone tools yet but the stone and wood for them in its bag: the shelter's table goes in its spot, the tools are crafted inside, then the furnishing
 - [ ] Giant 2x2 trees (jungle, dark oak, big spruce) and jungle trees over 6 logs are never cut, for wood or for the clearing (the clearing counts as done with only those left); with no other tree near it goes further for wood
 - [ ] At night, not well equipped: no idle chores (taking down scaffolding, replanting, tidying); they wait for the morning
+- [ ] Bridge: after swimming twice into the river within 24 blocks of home ("Bridge: in the water near my home" in the log), by day after the mine: "Built a bridge over the river by my home (N blocks)", 2 wide, bank to bank, torches at the ends and every 6; walks use it; a hole in it is mended; a river over 12 wide: "too wide for a bridge"

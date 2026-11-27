@@ -55,7 +55,7 @@ export const BotProgressSchema = z.object({
 
 /** A remembered point of interest (memory schema v2). */
 export const PlaceSchema = z.object({
-  kind: z.enum(["base", "basement", "crafting_table", "furnace", "mine", "farm"]),
+  kind: z.enum(["base", "basement", "crafting_table", "furnace", "mine", "farm", "bridge"]),
   name: z.string().optional(),
   x: z.number(),
   y: z.number(),
@@ -127,6 +127,8 @@ export const MemorySchema = z.object({
   scaffolds: z.array(z.object({ x: z.number(), y: z.number(), z: z.number(), name: z.string().nullable() })).optional(),
   // Blocks its tunnels put into water or lava (dug through like stone, never taken down)
   plugs: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).optional(),
+  // Where it went into the water near its home (a bridge where it swims across often)
+  swims: z.array(z.object({ x: z.number(), y: z.number(), z: z.number(), at: z.number() })).optional(),
   // Phase 7. The diary code writes, one entry per game day (raw lines until
   // the planner summarises the day), and the day summaries that replace them
   diary: z

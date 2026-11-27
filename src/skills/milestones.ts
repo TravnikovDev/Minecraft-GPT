@@ -13,6 +13,7 @@ import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { acquire } from "./acquire";
 import { liveWorld } from "./world";
 import { clearAroundHome, homeCleared } from "./clearing";
+import { bridgeDone, buildBridge } from "./bridge";
 import { isCommandCancelled } from "../core/commandContext";
 import { bestWool, foodPoints, hasBed, RAW_FOOD, shelter, TIER, toolTier } from "./capabilities";
 import { buildShelter, chestInPlace, enterShelter, placeShelterTable, setupTheShelter, shelterIntact, shelterSlots } from "../actions/building";
@@ -691,6 +692,19 @@ export const MILESTONES: Milestone[] = [
     done: () => myFarms().length >= FIELDS_WANTED || nextFieldWaits((n) => owned([n])),
     reached: () => myFarms().length >= FIELDS_WANTED,
     achieve: makeFarm,
+  },
+  // Owner (2026-11-27): a bridge over the river by its home, where it swims
+  // across (twice or more) or its field is over the water; mended after a
+  // creeper. Low priority, by day (skills/bridge)
+  {
+    id: "bridge",
+    title: "a bridge over the river by my home",
+    tier: 2,
+    optional: true,
+    idle: true,
+    requires: ["mine"],
+    done: bridgeDone,
+    achieve: buildBridge,
   },
   // Owner: the shelter's weak walls (dirt and sand blow out; stone holds
   // against a creeper) changed for smooth stone, a low-priority job, only

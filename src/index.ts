@@ -144,6 +144,12 @@ onConnectionReady((currentBot) => {
   void import("./skills/mine")
     .then((m) => m.protectMine()) // and its mine stairs (lazy: skills load commands)
     .catch((error: unknown) => console.error("Couldn't protect my mine stairs:", error));
+  void import("./skills/bridge")
+    .then((m) => {
+      m.protectBridge(); // and its bridge's deck
+      everyWhileConnected(currentBot, 1_000, m.noteSwim); // where it swims near home (a bridge there)
+    })
+    .catch((error: unknown) => console.error("Couldn't set up my bridge:", error));
   void import("./skills/farm")
     .then((m) => m.protectFields()) // and its fields' ground
     .catch((error: unknown) => console.error("Couldn't protect my fields:", error));
