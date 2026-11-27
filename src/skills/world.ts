@@ -99,7 +99,7 @@ export const SOURCES: Source[] = [
       // An explicit count: a general hunt leaves two of each kind to breed
       // Loaded when used: the command modules reach back to the registry, which reaches here
       const { execute: hunt } = await import("../commands/Hunting");
-      await hunt({ maxDistance: 60, mobType: "sheep", count: Math.max(1, count), walkFar: null });
+      await hunt({ maxDistance: 60, mobType: "sheep", count: Math.max(1, count), upTo: null, walkFar: null });
       // Any colour counts (the bed takes whichever it has 3 of); wool it already had doesn't
       return allWool() > before ? ok() : fail("missing_items", "found no sheep");
     },

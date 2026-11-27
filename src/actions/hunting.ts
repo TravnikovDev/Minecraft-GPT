@@ -41,8 +41,9 @@ export function isGame(p: Prey, mobType: string | null): boolean {
  * Decides what to hunt from the animals found.
  * - No count from the owner: every kind it found, leaving KEEP_PER_KIND alive.
  * - A count ("kill 3 sheep"): up to that many, as the owner asked.
+ * - `upTo` (its food stock): at most that many, still leaving the pairs.
  */
-export function planHunt(found: Prey[], mobType: string | null, count: number | null): HuntPlan {
+export function planHunt(found: Prey[], mobType: string | null, count: number | null, upTo: number | null = null): HuntPlan {
   const seen = new Map<string, number>();
   for (const p of found) if (isGame(p, mobType)) seen.set(p.name, (seen.get(p.name) ?? 0) + 1);
 
@@ -53,7 +54,9 @@ export function planHunt(found: Prey[], mobType: string | null, count: number | 
     if (most > 0) take.set(name, most);
   }
   const available = [...take.values()].reduce((a, b) => a + b, 0);
-  return { seen, take, total: count === null ? available : Math.min(count, available), keepsPairs };
+  // `upTo`: no more than that, still leaving the pairs (its food stock)
+  const total = count !== null ? Math.min(count, available) : upTo !== null ? Math.min(upTo, available) : available;
+  return { seen, take, total, keepsPairs };
 }
 
 /** "3 cows, 2 sheep and 1 chicken". */

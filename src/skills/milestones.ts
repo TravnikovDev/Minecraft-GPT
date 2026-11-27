@@ -23,6 +23,7 @@ import { reinforceShelter, shelterWeakCells } from "./reinforce";
 import { dimensionNow } from "./endgame/state";
 import { goTo, knownBlock } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
+import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
 import { breakBlockAtResult } from "../actions/blockBreaking";
 import { placeBlockResult } from "../actions/blockPlacing";
@@ -80,10 +81,13 @@ const NEAR_HUNT = 32;
 // Carrying less than this: starving (apples from leaves are worth the trouble)
 // Starving with nothing near: how far it may walk for an animal (by day)
 const FAR_HUNT = 96;
-// Out of food (not starving yet): how far it may walk for one it knows of (by day)
-const RESTOCK_HUNT = 64;
-// Health it needs for that walk (hurt, it stays near home and heals)
-const HEALTHY_ENOUGH = 14;
+// Health it needs for a walk out to a herd by day (owner: cows and pigs 50
+// to 80 blocks off while it starved for an hour at home; at 14 it never
+// went, as starving kept its health down). Starving, it goes whatever its health.
+const WALK_HEALTH = 8;
+// Food points kept in its chests at home on top of what it carries (owner:
+// a reserve in the storages)
+export const STORE_RESERVE = 30;
 export const STARVING_FOOD = 6;
 // Once stocked, eating doesn't undo it: only below half does it go hunting
 // again (it announced the stock, ate while cooking, and reported "only 17")
@@ -130,7 +134,7 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
     if (short()) await pickBerries();
     if (short()) await cocoaAndCookies();
     if (short()) await wildFood();
-    if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
+    if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, upTo: null, walkFar: false });
     // Starving with nothing near (game test: it starved twice, no animal
     // within 32): by day the walk may go further, to animals out under the
     // sky up to FAR_HUNT away; dying of hunger is the bigger risk
@@ -140,12 +144,12 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
       // The one it would walk to (the nearest it would really take) within reach
       const near = knownAnimals().filter((p) => isGame(p, null))[0];
       const goFar = near !== undefined && near.distance <= FAR_HUNT;
-      if (goFar) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+      if (goFar) await huntTheHerd(true, hunt);
       // None known at all (game test: "0 in sight or earshot", starving):
       // it walks off to look, a few legs out, and hunts what it finds
       else {
         const { exploreFor, animalsInSight } = await import("./explore");
-        if (await exploreFor("animals", animalsInSight, 3)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, walkFar: true });
+        if (await exploreFor("animals", animalsInSight, 3)) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 3, upTo: null, walkFar: true });
       }
     }
     if (hasRawFood()) await cookTheMeat(cookFood);
@@ -177,18 +181,95 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   // out under the sky within RESTOCK_HUNT too (game test: pigs 47 blocks off,
   // the restock hunted only within 32, and it sat with no food, refusing
   // the mine)
-  if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: false });
-  if (short() && foodPoints() === 0 && !hasRawFood() && byDay() && !isCommandCancelled()) {
-    const { knownAnimals } = await import("../actions/hunting");
-    // The animal it would walk to (the nearest it would take) within reach,
-    // and only when it isn't hurt (game test: at 7 health it set off 79
-    // blocks for a cow and a skeleton shot it on the way)
-    const { isGame } = await import("../actions/hunting");
-    const target = knownAnimals().filter((p) => isGame(p, null))[0];
-    if (target && target.distance <= RESTOCK_HUNT && (bot.health ?? 20) >= HEALTHY_ENOUGH) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: 4, walkFar: true });
-  }
+  if (short()) await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: null, upTo: huntCount(await stockShortfall()), walkFar: false });
+  // The herds it knows of, by day: enough for its stock and the reserve at home
+  if ((short() || (await stockShortfall()) > 0) && !hasRawFood() && byDay() && !isCommandCancelled()) await huntTheHerd(emergency, hunt);
   if (hasRawFood()) await cookTheMeat(cookFood);
+  // What's over its carried stock goes in its chests at home: the reserve
+  await storeFoodReserve();
   return foodPoints() >= foodTarget() ? ok() : fail("missing_items", `only ${foodPoints()} food points ready to eat; nothing more near home today`);
+}
+
+/** Food points short of its carried stock and the reserve in its chests near home (as last seen). */
+async function stockShortfall(): Promise<number> {
+  const { storedNear } = await import("../actions/storage");
+  const foods = (bot.registry.foodsByName ?? {}) as Record<string, { foodPoints?: number }>;
+  const stored = READY_FOOD.reduce((n, name) => n + (foods[name]?.foodPoints ?? 2) * storedNear(name, 32), 0);
+  return Math.max(0, FOOD_STOCK + STORE_RESERVE - foodPoints() - stored);
+}
+
+/**
+ * Animals to take for `need` food points: about 6 a head once cooked (a cow
+ * or a pig 8 or more, a chicken or a sheep 6 or less), at least 3, at most
+ * 10 in one go. Pure.
+ */
+export function huntCount(need: number): number {
+  return Math.max(3, Math.min(10, Math.ceil(need / 6)));
+}
+
+/**
+ * Whether to walk out to the animals it knows of: by day, the nearest within
+ * FAR_HUNT, a herd (two or more together) unless it's starving (owner: not
+ * 100 blocks after one chicken), and fit enough for the walk (starving it
+ * goes anyway: hunger takes its health down too). Pure.
+ */
+export function walkToHerd(nearest: number | null, herd: number, health: number, starving: boolean): boolean {
+  if (nearest === null || nearest > FAR_HUNT) return false;
+  if (nearest > NEAR_HUNT && herd < 2 && !starving) return false;
+  return starving || health >= WALK_HEALTH;
+}
+
+/** Out to the herd it knows of, hunting enough for its stock and reserve (leaving a pair of each kind). */
+async function huntTheHerd(emergency: boolean, hunt: (args: Record<string, unknown>) => Promise<unknown>): Promise<void> {
+  const { knownAnimals, isGame } = await import("../actions/hunting");
+  const game = knownAnimals().filter((p) => isGame(p, null));
+  const first = game[0];
+  const at = first ? bot.entities[first.id]?.position : undefined;
+  const herd = at ? game.filter((p) => bot.entities[p.id]?.position && bot.entities[p.id]!.position.distanceTo(at) <= 16).length : 0;
+  const starving = emergency || (bot.food ?? 20) <= STARVING_FOOD;
+  if (!walkToHerd(first?.distance ?? null, herd, bot.health ?? 20, starving)) {
+    if (first) console.log(`Food: not walking to the ${first.name} ${Math.round(first.distance)} blocks off (${herd} there, health ${Math.round(bot.health ?? 0)}).`);
+    return;
+  }
+  const count = huntCount(await stockShortfall());
+  console.log(`Food: out to the ${herd > 1 ? "herd" : first!.name} ${Math.round(first!.distance)} blocks off for ${count} animals (a stock and a reserve at home).`);
+  await hunt({ maxDistance: NEAR_HUNT, mobType: null, count: null, upTo: count, walkFar: true });
+}
+
+/**
+ * Food over its carried stock put in its own chests at home (owner: a
+ * reserve in the storages; it takes from them when it runs short). The best
+ * food stays on it. Only at home, never raw meat (cooked first).
+ */
+export async function storeFoodReserve(): Promise<void> {
+  const foods = (bot.registry.foodsByName ?? {}) as Record<string, { foodPoints?: number }>;
+  const carried = READY_FOOD.map((name) => ({ name, count: carriedOf([name]), points: foods[name]?.foodPoints ?? 2 })).filter((f) => f.count > 0);
+  const keep = foodToKeep(carried, FOOD_STOCK);
+  const over = carried.reduce((n, f) => n + (f.count - (keep[f.name] ?? 0)), 0);
+  if (over === 0) return;
+  const home = shelterSlots();
+  const spot = home?.chests.find((c) => knownBlock(new Vec3(c.x, c.y, c.z))?.name.endsWith("chest")) ?? null;
+  if (!home || !spot) return;
+  if (!(await goTo(new pf.goals.GoalNear(spot.x, spot.y, spot.z, 2))).ok) return;
+  const { depositAt } = await import("../actions/storage");
+  const put = await depositAt(spot, (name) => name in keep, keep);
+  if (put.stored > 0) report(`Put ${put.stored} food in my chests at home as a reserve.`);
+  else if (put.problem) console.log(`Food: couldn't store the reserve: ${put.problem}.`);
+}
+
+/**
+ * How many of each food it keeps on it: the best first, until `points` of
+ * eating; the rest goes in its chests. Pure.
+ */
+export function foodToKeep(carried: Array<{ name: string; count: number; points: number }>, points: number): Record<string, number> {
+  const keep: Record<string, number> = {};
+  let left = points;
+  for (const f of [...carried].sort((a, b) => b.points - a.points)) {
+    const n = left > 0 ? Math.min(f.count, Math.ceil(left / f.points)) : 0;
+    keep[f.name] = n;
+    left -= n * f.points;
+  }
+  return keep;
 }
 
 // Its hunger bar this low (of 20) counts as hungry: it can't heal under 18,

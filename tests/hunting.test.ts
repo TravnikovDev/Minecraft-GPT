@@ -63,3 +63,11 @@ test("an animal in a cave is no food to go for; one in the open or under a tree 
   // Under a tree
   expect(skyAbove({ x: 0, y: 64, z: 0 }, (_x: number, y: number) => (y === 70 ? LEAVES : AIR))).toBe(true);
 });
+
+test("a food-stock hunt takes up to its number and still leaves a pair of each kind", () => {
+  const plan = planHunt([...herd("cow", 5), ...herd("pig", 2)], null, null, 2);
+  expect(plan.keepsPairs).toBe(true);
+  expect(plan.total).toBe(2); // 3 cows could go; it wants 2
+  expect(plan.take.get("pig")).toBeUndefined(); // the last 2 pigs stay
+  expect(planHunt(herd("cow", 4), null, null, 10).total).toBe(2); // never the breeding pair
+});

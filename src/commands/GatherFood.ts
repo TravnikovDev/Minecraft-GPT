@@ -43,7 +43,7 @@ export async function execute(args: any): Promise<void> {
   if (!enough() && !isCommandCancelled()) {
     const missing = target - foodCount();
     tellOwner(harvested > 0 ? `Still need ${missing} more food; going hunting.` : "No ripe crops nearby; going hunting.");
-    await hunt({ maxDistance: 64, mobType: null, count: Math.ceil(missing / 2), walkFar: null });
+    await hunt({ maxDistance: 64, mobType: null, count: Math.ceil(missing / 2), upTo: null, walkFar: null });
   }
 
   // Raw meat is poor food: cook it if there's a campfire or furnace around

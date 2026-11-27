@@ -32,6 +32,7 @@ export const parameters = z.object({
     .nullable()
     .describe("Minecraft ID of the animal to hunt, e.g. sheep, cow, pig, chicken. Null for all common game animals."),
   count: z.number().nullable().describe("How many animals, only when the owner says a number; null otherwise."),
+  upTo: z.number().nullable().describe("At most this many, still leaving two of each kind to breed (for a food stock); null otherwise."),
 });
 
 const KILL_TIMEOUT_MS = 30000;
@@ -68,7 +69,8 @@ function nextPrey(take: Map<string, number>, taken: Map<string, number>, mobType
 
 export async function execute(args: any): Promise<void> {
   console.log(`Executing Hunting with args:`, args);
-  const parsed = parameters.safeParse(args);
+  // (callers from before `upTo` leave it out: none)
+  const parsed = parameters.safeParse({ upTo: null, ...(args as object) });
   if (!parsed.success) {
     console.error(`Invalid parameters for Hunting.`);
     return;
@@ -81,7 +83,8 @@ export async function execute(args: any): Promise<void> {
   // 1. Look around and say what's there. None to take in sight, but the
   // server says some are about (up to 200 blocks): walk there until they are
   let found = lookForAnimals().filter((p) => p.distance <= maxDistance);
-  let plan = planHunt(found, mobType, count);
+  const upTo = parsed.data.upTo ?? null;
+  let plan = planHunt(found, mobType, count, upTo);
   if (plan.total === 0 && parsed.data.walkFar !== false) {
     const inView = new Set(found.map((p) => p.id));
     const far = knownAnimals().find((p) => isGame(p, mobType) && !inView.has(p.id));
@@ -94,7 +97,7 @@ export async function execute(args: any): Promise<void> {
       if (isCommandCancelled()) return;
       if (!arrived.ok) console.log(`Couldn't get to the ${far.name}: ${arrived.ok ? "" : arrived.detail}.`);
       found = lookForAnimals().filter((p) => p.distance <= maxDistance);
-      plan = planHunt(found, mobType, count);
+      plan = planHunt(found, mobType, count, upTo);
     }
   }
   if (plan.seen.size === 0) {
@@ -115,7 +118,7 @@ export async function execute(args: any): Promise<void> {
         command: BotCommands.Hunting,
         priority: 3,
         retryCount: 0,
-        args: { maxDistance, mobType, count: seenCount, walkFar: parsed.data.walkFar ?? null },
+        args: { maxDistance, mobType, count: seenCount, upTo: null, walkFar: parsed.data.walkFar ?? null },
       });
     });
     return;
@@ -166,7 +169,7 @@ export async function execute(args: any): Promise<void> {
         command: BotCommands.Hunting,
         priority: 3,
         retryCount: 0,
-        args: { maxDistance, mobType, count: null, walkFar: parsed.data.walkFar ?? null },
+        args: { maxDistance, mobType, count: null, upTo: null, walkFar: parsed.data.walkFar ?? null },
       });
     });
   } else if (more.total > 0) {
