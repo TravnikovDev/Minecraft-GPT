@@ -13,6 +13,7 @@ import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { isNatural, protectCells, setOwnPassages, whileGathering } from "../core/movements";
 import { goTo } from "../core/primitives";
+import { pathing } from "../core/plugins";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
@@ -199,6 +200,17 @@ export function nearestMineHub(pos: Pos): Vec3 | null {
 }
 
 /**
+ * The floor whose tunnels are at height `y` (feet within 2 of its room's
+ * floor, a dug floor only), or null on the stairs between floors.
+ */
+export function floorAtHeight(rec: { start: Pos; direction: DirectionType; stairs: number; level: number; turns: Turn[] }, y: number): number | null {
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    if (Math.abs(stepAt(rec.start, rec.direction, hubStep(l), rec.turns).y - Math.floor(y)) <= 2) return l;
+  }
+  return null;
+}
+
+/**
  * The step of its mine's stairs nearest `pos` (the way up from wherever it
  * is in its mine), or null without a mine. Pure over the record.
  */
@@ -241,7 +253,12 @@ export async function climbMineStairs(): Promise<boolean> {
   const here = bot.entity.position;
   // Only from down in its mine, near it
   if (here.y > rec.start.y - 3) return false;
-  const i = nearestStairStep(here, rec.start, rec.direction, rec.stairs, rec.turns);
+  // On one of its floors (in its tunnels), the way to the stairs is that
+  // floor's room, along its own tunnels (owner: from a sleeve's far end
+  // under the shelter it took the nearest step in a straight line, 30
+  // blocks up through solid rock, and dug its own shaft up to it)
+  const floorHere = floorAtHeight(rec, here.y);
+  const i = floorHere !== null ? hubStep(floorHere) : nearestStairStep(here, rec.start, rec.direction, rec.stairs, rec.turns);
   if (i === null) return false;
   // Near its stairs (an arm's length from a step), wherever they've got to
   // (review: deep levels are over 96 blocks from the top across)
@@ -257,7 +274,10 @@ export async function climbMineStairs(): Promise<boolean> {
   const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
   const walkSet = new Set(walk.map((c) => c.toString()));
   const onMyStairs = (): boolean => walkSet.has(bot.entity.position.floored().toString());
-  while (!(await goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
+  // Along its tunnels and up its stairs, never a new way dug: digging is
+  // made too dear to choose (only if there's no other way at all)
+  const walkNoDig = (g: InstanceType<typeof pf.goals.GoalNear>) => pathing.withRules({ digCost: 100 }, () => goTo(g));
+  while (!(await walkNoDig(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
     if (isCommandCancelled()) return false;
     // Off its stairs (in a cave beside them): a way in through their wall,
     // once; building itself up out there does nothing (game test: it
@@ -275,7 +295,7 @@ export async function climbMineStairs(): Promise<boolean> {
   for (let j = Math.max(0, i - 8); ; ) {
     if (isCommandCancelled()) return false;
     const s = standAt(stepAt(rec.start, rec.direction, j, rec.turns));
-    if (!(await goTo(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
+    if (!(await walkNoDig(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
       if (unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
       unsticks++;
       continue;

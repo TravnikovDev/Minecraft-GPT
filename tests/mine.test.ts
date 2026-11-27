@@ -374,3 +374,18 @@ test("caves (owner): a pokehole meeting a cave ends there plugged; a sleeve cros
   const none = caveAt("poke", col, east, across, 3, () => false);
   expect([none.stopBefore, none.around.length]).toEqual([false, 0]);
 });
+
+test("out of the mine from one of its floors: by that floor's room, never the step nearest in a straight line (owner: it dug its own shaft up)", async () => {
+  const { floorAtHeight, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+  const rec = { start: { x: -28, y: 68, z: 21 }, direction: "west", stairs: 40, level: 1, turns: [] };
+  const floor1 = stepAt(rec.start, "west", hubStep(0)).y;
+  const floor2 = stepAt(rec.start, "west", hubStep(1)).y;
+  expect([floor1, floor2]).toEqual([48, 38]);
+  // At the far end of a 2nd-floor sleeve (feet y 37 or 38): the 2nd floor
+  expect(floorAtHeight(rec, 38)).toBe(1);
+  expect(floorAtHeight(rec, 37.2)).toBe(1);
+  expect(floorAtHeight(rec, 48)).toBe(0);
+  // On the stairs between floors: none (the nearest step then)
+  expect(floorAtHeight(rec, 43)).toBeNull();
+  expect(floorAtHeight(rec, 60)).toBeNull();
+});
