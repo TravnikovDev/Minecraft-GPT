@@ -658,7 +658,10 @@ function dugFloorCells(): Vec3[] {
   return out.filter((c) => c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && bot.blockAt(c)?.boundingBox === "empty");
 }
 
-/** Ore blocks touching an open cell (`open`), nearest the first cell first. Pure over `nameAt`. */
+// Water or lava beside an ore: it's left (breaking it would let it in)
+const LIQUID_NAME = /\b(water|lava)\b/;
+
+/** Ore blocks touching an open cell (`open`), none with water or lava beside it. Pure over `nameAt`. */
 export function exposedOres(open: Vec3[], nameAt: (p: Vec3) => string | null): Vec3[] {
   const seen = new Set<string>();
   const out: Vec3[] = [];
@@ -668,7 +671,7 @@ export function exposedOres(open: Vec3[], nameAt: (p: Vec3) => string | null): V
       const k = n.toString();
       if (seen.has(k)) continue;
       seen.add(k);
-      if (/_ore$/.test(nameAt(n) ?? "")) out.push(n);
+      if (/_ore$/.test(nameAt(n) ?? "") && !LIQUID_NAME.test(DIRS6.map((e) => nameAt(n.plus(e)) ?? "").join(" "))) out.push(n);
     }
   }
   return out;

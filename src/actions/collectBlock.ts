@@ -14,7 +14,7 @@ import { ActionError, expectOk, wasStopped, type ActionResult } from "../core/re
 import { canSee, openFaces, type SightWorld } from "./sight";
 import { isCommandCancelled, reportProgress } from "../core/commandContext";
 import { forbiddenAt } from "../core/forbidden";
-import { isProtected, protectedBy } from "../core/movements";
+import { isProtected, liquidBehind, protectedBy } from "../core/movements";
 import { recordSighting } from "./perception";
 import { tunnelTo } from "./digging";
 import { makeRoom } from "./overflow";
@@ -109,7 +109,9 @@ export async function collectBlock(
     // fair game: mined, then the spot filled back (owner)
     // Ore in the mine's kept walls and steps is fair game; never in its
     // shelter's (a hole there and the shelter isn't whole: a repair, review)
-    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !forbiddenAt(b.position) && (!isProtected(b.position) || (c.isOre(b.name) && protectedBy(b.position) === "mine")));
+    // (and never a block with water or lava behind it: that's refused every
+    // time, game test: the same coal tried again and again)
+    let blocks = world.getNearestBlocks(blockTypes, range).filter((b) => !badTargets.has(b.position.toString()) && !liquidBehind(b.position, (x, y, z) => bot.blockAt(new Vec3(x, y, z))?.name ?? null) && !forbiddenAt(b.position) && (!isProtected(b.position) || (c.isOre(b.name) && protectedBy(b.position) === "mine")));
     for (const b of blocks.slice(0, 8)) recordSighting(b.name, b.position); // hints for later
 
     if (blocks.length === 0) {
