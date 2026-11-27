@@ -53,6 +53,7 @@ const fake: any = {
     return b;
   },
   findBlock: () => fake.blockAt(chestPos),
+  findBlocks: () => [chestPos],
   openContainer: async () => ({
     inventoryStart: chestSlots,
     containerItems: () => chestItems,
@@ -149,4 +150,48 @@ test("a chest placed near the bed touches the bed, never sits on it or where the
   const touches = bed.some((b) => Math.abs(b.x - first.x) + Math.abs(b.z - first.z) === 1 && b.y === first.y);
   expect(touches).toBe(true);
   expect(spots.some((s: any) => bed.some((b) => b.equals(s)) || s.equals(owner))).toBe(false);
+});
+
+test("a full chest: the rest goes in its next chest (owner: stuck with one chest though it has 3)", async () => {
+  const { updateMemory } = await import(`${ROOT}/src/managers/persistenceManager.ts`);
+  const second = new Vec3(8, 64, 0);
+  const secondItems: It[] = [];
+  const saved = { blockAt: fake.blockAt, openContainer: fake.openContainer, findBlocks: fake.findBlocks };
+  const isChest = (p: any) => [chestPos, second].some((c) => c.x === p.x && c.y === p.y && c.z === p.z);
+  fake.blockAt = (p: any) => {
+    const b = Block.fromStateId(registry.blocksByName[isChest(p) ? "chest" : p.y < 64 ? "grass_block" : "air"].defaultState, 0);
+    b.position = new Vec3(p.x, p.y, p.z);
+    return b;
+  };
+  fake.findBlocks = () => [chestPos, second];
+  fake.openContainer = async (block: any) => {
+    const items = block.position.x === second.x ? secondItems : chestItems;
+    const slots = block.position.x === second.x ? 27 : chestSlots;
+    return {
+      inventoryStart: slots,
+      containerItems: () => items,
+      close: () => {},
+      deposit: async (type: number, _m: unknown, count: number, nbt?: unknown) => move(inv, items, slots, type, count, nbt),
+      withdraw: async (type: number, _m: unknown, count: number, nbt?: unknown) => move(items, inv, INV_SLOTS, type, count, nbt),
+    };
+  };
+  try {
+    // Both remembered, the nearer one full (its last trip)
+    await updateMemory({ chests: [] });
+    inv = [item("cobblestone", 64), item("cobblestone", 64), item("granite", 30)];
+    chestSlots = 1;
+    const result = await storage.storeItems("all");
+    expect(Object.fromEntries(result.stored)).toEqual({ cobblestone: 128, granite: 30 });
+    expect(result.leftOver.size).toBe(0);
+    expect(Object.fromEntries(storage.tally(secondItems))).toEqual({ cobblestone: 64, granite: 30 });
+    expect(inv.length).toBe(0);
+  } finally {
+    Object.assign(fake, saved);
+  }
+});
+
+test("a double chest's two halves are one chest", () => {
+  expect(storage.sameChest({ x: -23, y: 68, z: 22 }, { x: -24, y: 68, z: 22 })).toBe(true);
+  expect(storage.sameChest({ x: -23, y: 68, z: 22 }, { x: -23, y: 68, z: 20 })).toBe(false);
+  expect(storage.sameChest({ x: -23, y: 68, z: 22 }, { x: -23, y: 69, z: 22 })).toBe(false);
 });

@@ -223,9 +223,12 @@ async function stillThere(c: KnownChest): Promise<Block | null> {
  * The chest to use: a remembered one (nearest first; for taking items, one
  * that had them), else the nearest chest or barrel it can see around.
  */
-export async function chooseChest(holding?: (contents: Record<string, number>) => boolean, ownOnly = false): Promise<Block | null> {
+export async function chooseChest(holding?: (contents: Record<string, number>) => boolean, ownOnly = false, skip: Vec3[] = []): Promise<Block | null> {
   const me = bot.entity.position;
+  // Chests already used this time (a full one), and the other half of a double chest
+  const skipped = (p: { x: number; y: number; z: number }): boolean => skip.some((q) => sameChest(q, p));
   const known = loadChests()
+    .filter((c) => !skipped(c))
     .filter((c) => (!ownOnly || ownChest(c)) && c.dimension === dimension() && me.distanceTo(new Vec3(c.x, c.y, c.z)) <= REMEMBERED_RANGE)
     // A chest never opened (contents unknown) can't be said to hold anything
     .filter((c) => !holding || (c.contents !== null && holding(c.contents)))
@@ -238,8 +241,21 @@ export async function chooseChest(holding?: (contents: Record<string, number>) =
   // whatever chest is around (architect review: it would open strange chests)
   if (holding) return null;
   const ids = [...STORAGE_BLOCKS].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
-  return bot.findBlock({ matching: ids, maxDistance: SEARCH_RADIUS });
+  if (skip.length === 0) return bot.findBlock({ matching: ids, maxDistance: SEARCH_RADIUS });
+  const spot = bot.findBlocks({ matching: ids, maxDistance: SEARCH_RADIUS, count: 32 }).find((p) => !skipped(p));
+  return spot ? bot.blockAt(spot) : null;
 }
+
+/**
+ * True when `a` and `b` are the same chest: the same block, or side by side
+ * on one level (a double chest's two halves, remembered one by one). Pure.
+ */
+export function sameChest(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): boolean {
+  return a.y === b.y && Math.abs(a.x - b.x) + Math.abs(a.z - b.z) <= 1;
+}
+
+// Chests it fills in one go before it gives up (each one full in turn)
+const MAX_CHESTS = 6;
 
 /** Walks to a chest, opens it, runs `use`, remembers what's inside, closes it. */
 export async function withChest<T>(block: Block, use: (open: OpenContainer) => Promise<T>): Promise<T> {
@@ -270,34 +286,56 @@ export type StoreResult = {
   problem?: string;
 } | null;
 
-/** Puts items in the nearest known chest. Returns what went in and what didn't fit (null: no chest). */
+/**
+ * Puts items in its chests, nearest first: what doesn't fit goes in the next
+ * one (owner: "why is he stuck with one chest? he has 3"; the nearest was
+ * full, and every night a dozen stacks of cobblestone stayed on it). Returns
+ * what went in and what didn't fit anywhere (null: no chest).
+ */
 export async function storeItems(mode: StoreMode, wanted: Wanted[] = [], keep: string[] = []): Promise<StoreResult> {
   const stacks: Stack[] = bot.inventory.items().map((i: Item) => ({ name: i.name, count: i.count, type: i.type, nbt: i.nbt }));
-  const plan = chooseToStore(stacks, mode, wanted, keep);
-  const chest = await chooseChest();
-  if (!chest) return null;
+  let todo = chooseToStore(stacks, mode, wanted, keep);
   const stored = new Map<string, number>();
-  const leftOver = new Map<string, number>();
-  if (plan.length === 0) return { stored, leftOver, chestAt: at(chest.position) };
-
-  try {
-    await withChest(chest, async (open) => {
-      for (const { stack, count } of plan) {
-        const item = bot.inventory.items().find((i) => i.type === stack.type && i.count >= 1 && (stack.nbt === undefined || i.nbt === stack.nbt));
-        const moved = item ? await depositInto(open, item, count) : null;
-        if (moved?.ok) stored.set(stack.name, (stored.get(stack.name) ?? 0) + moved.value);
-        const missed = count - (moved?.ok ? moved.value : 0);
-        if (missed > 0) {
-          if (moved && !moved.ok) console.log(`Couldn't put ${count} ${stack.name} in the chest: ${describeFailure(moved)}`);
-          leftOver.set(stack.name, (leftOver.get(stack.name) ?? 0) + missed);
+  let leftOver = new Map<string, number>();
+  const used: Vec3[] = [];
+  let first: Block | null = null;
+  let problem: string | undefined;
+  for (let n = 0; n < MAX_CHESTS; n++) {
+    if (n > 0 && todo.length === 0) break; // all in
+    const chest = await chooseChest(undefined, false, used);
+    if (!chest) break;
+    first ??= chest;
+    if (todo.length === 0) break;
+    used.push(chest.position);
+    const next: Deposit[] = [];
+    let stopped = false;
+    try {
+      await withChest(chest, async (open) => {
+        for (const { stack, count } of todo) {
+          if (stopped) {
+            next.push({ stack, count });
+            continue;
+          }
+          const item = bot.inventory.items().find((i) => i.type === stack.type && i.count >= 1 && (stack.nbt === undefined || i.nbt === stack.nbt));
+          const moved = item ? await depositInto(open, item, count) : null;
+          if (moved?.ok) stored.set(stack.name, (stored.get(stack.name) ?? 0) + moved.value);
+          const missed = count - (moved?.ok ? moved.value : 0);
+          // Not in this one (full): the next chest
+          if (missed > 0 && item) next.push({ stack, count: missed });
+          if (moved && !moved.ok && wasStopped(moved)) stopped = true;
         }
-        if (moved && !moved.ok && wasStopped(moved)) break;
-      }
-    });
-  } catch (error) {
-    return { stored, leftOver, chestAt: at(chest.position), problem: explain(error) };
+      });
+    } catch (error) {
+      problem = explain(error);
+      next.push(...todo.filter((d) => !next.includes(d)));
+    }
+    todo = next;
+    if (stopped) break;
   }
-  return { stored, leftOver, chestAt: at(chest.position) };
+  if (!first) return null;
+  leftOver = tally(todo.map((d) => ({ name: d.stack.name, count: d.count })));
+  if (leftOver.size > 0) console.log(`No room in my chests for ${[...leftOver].map(([name, k]) => `${k} ${pretty(name)}`).join(", ")}.`);
+  return { stored, leftOver, chestAt: at(first.position), ...(problem && stored.size === 0 ? { problem } : {}) };
 }
 
 /**
