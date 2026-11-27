@@ -41,6 +41,14 @@ Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into 
 - Damaged paths are mended **only under the feet** (the floor of the stairs, rooms and sleeves; not pokeholes); never walls or ceilings.
 - Every ore seen is mined at once, **once the stretch is secured**: its floor mended and any way out to the sky blocked first.
 
+## Caves its tunnels meet
+
+- A **pokehole** that meets a cave (ahead, beside, above or below) ends at that block; the opening is filled with cobblestone. It counts as a finished pokehole, and the sleeve goes on.
+- A **sleeve** crosses a short gap (under 7 blocks of cave) as a closed tube: floor, both walls and the roof built as it goes. At a big cave the sleeve ends at the cave's edge, its face plugged, and it's done.
+- Before plugging, the ore it can see in the cave within reach is mined from inside the tunnel; it never steps into the cave.
+- Every plug it puts in a cave's opening is remembered; each trip puts back any that were broken.
+- Caves are not sealed otherwise (only openings to the sky are).
+
 ## When it can't go deeper
 
 With every way down blocked, or at the bottom, it digs side routes off its lowest floor's sleeves: every 3 blocks, 10 long.
@@ -48,6 +56,7 @@ With every way down blocked, or at the bottom, it digs side routes off its lowes
 ## Safety rules that hold in the mine
 
 - Never break a block with water or lava at its sides or on top. Only the drowning reflex, digging up for air, may.
+- Lava ahead: the face is filled and the tunnel ends. Lava down in a gap: no bridge over it, the tunnel ends there.
 - Water or lava in the block a tunnel would dig next (a pool, a lake): its face is filled and that sleeve or pokehole ends there, marked blocked; never a tube plugged through the water. Water only in a wall beside it is plugged and the tunnel goes on. Water at the next stair step makes the stairs turn.
 - Ore underground comes from the mine only: "ore in the open" round its home means a face the sky lights (a ravine, a cliff), never a dark cave it would dig its own way down to.
 - Out of the mine by its own stairs, never a new way dug up through the rock. Beside the stairs in a cave, it opens a way in through their wall.

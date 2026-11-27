@@ -339,3 +339,38 @@ test("every ore the tunnels uncovered is found, in walls and ceilings (owner: co
   // The ceiling coal, the wall iron, the copper ahead; the coal behind the ceiling one waits until it's uncovered
   expect(found).toEqual(["0,12,0", "1,11,1", "2,10,0"]);
 });
+
+test("caves (owner): a pokehole meeting a cave ends there plugged; a sleeve crosses a short gap as a tube and ends at a big cave", async () => {
+  const { caveAt, BIG_CAVE } = await import(`${ROOT}/src/skills/mine.ts`);
+  const key = (p: any) => `${p.x},${p.y},${p.z}`;
+  const east = { x: 1, y: 0, z: 0 };
+  const across: any = [{ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 }];
+  const col = { x: 5, y: 40, z: 0 };
+  // A cave ahead (the next column is open air)
+  const caveCols = (from: number, to: number) => {
+    const s = new Set<string>();
+    for (let x = from; x <= to; x++) for (let y = 39; y <= 43; y++) for (let z = -3; z <= 3; z++) s.add(key({ x, y, z }));
+    return s;
+  };
+  const small = caveCols(5, 7); // 3 columns across
+  const big = caveCols(5, 30);
+  const openIn = (s: Set<string>) => (p: any) => s.has(key(p));
+  // Pokehole: stops at once, its face (3 high and the floor) to plug
+  const poke = caveAt("poke", col, east, across, 3, openIn(small));
+  expect(poke.stopBefore).toBe(true);
+  expect(poke.before.length).toBe(4);
+  // Sleeve, short gap: goes on (a tube); big cave: stops, face plugged
+  expect(caveAt("sleeve", col, east, across, 3, openIn(small)).stopBefore).toBe(false);
+  const sleeveBig = caveAt("sleeve", col, east, across, 3, openIn(big));
+  expect(sleeveBig.stopBefore).toBe(true);
+  expect(BIG_CAVE).toBe(7);
+  // After a column: cave beside or above. A pokehole stops, a sleeve plugs walls and roof and goes on
+  const beside = new Set([key({ x: 5, y: 41, z: 1 }), key({ x: 5, y: 43, z: 0 })]);
+  const p2 = caveAt("poke", col, east, across, 3, openIn(beside));
+  expect([p2.around.length, p2.stopAfter]).toEqual([2, true]);
+  const s2 = caveAt("sleeve", col, east, across, 3, openIn(beside));
+  expect([s2.around.length, s2.stopAfter]).toEqual([2, false]);
+  // Solid rock all round: nothing
+  const none = caveAt("poke", col, east, across, 3, () => false);
+  expect([none.stopBefore, none.around.length]).toEqual([false, 0]);
+});

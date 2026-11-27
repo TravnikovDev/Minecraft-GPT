@@ -49,7 +49,23 @@ export function inStaircase(p: Vec3, start: Vec3, direction: DirectionType, widt
 // "blocked": water, lava or something built (a real blocker); "dig_failed"
 // and "unloaded": a dig that may work next time (review: one failed dig must
 // never end a way down for good)
-export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool" | "dig_failed" | "unloaded";
+export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool" | "dig_failed" | "unloaded" | "cave";
+
+/**
+ * Checks a straight tunnel runs at each column (the mine's caves rules):
+ * `before` the column is dug, `after` it is; "stop" ends the tunnel there
+ * (`tunnelStopReason()` says "cave", `tunnelColumns()` how far it got).
+ */
+export type ColumnHooks = {
+  before?: (column: Vec3, i: number) => Promise<"go" | "stop">;
+  after?: (column: Vec3, i: number) => Promise<"go" | "stop">;
+};
+let columnsDug = 0;
+
+/** How many columns the last straight tunnel dug. */
+export function tunnelColumns(): number {
+  return columnsDug;
+}
 
 /**
  * Digs one block of a tunnel; false (stop the tunnel) when it has no tool
@@ -85,6 +101,20 @@ const FLOOR_FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate"
 async function floorUnder(step: Vec3, keepClear: (p: Vec3) => boolean, direction: DirectionType): Promise<boolean> {
   const floor = step.offset(0, -1, 0);
   const wasHole = isHoleBlock(bot.blockAt(floor));
+  // Lava down in the gap: no bridge over it, the tunnel ends here (owner)
+  const lavaDown = (): boolean => {
+    for (let d = 1; d <= 6; d++) {
+      const b = bot.blockAt(floor.offset(0, -d, 0));
+      if (b?.name === "lava") return true;
+      if (!b || b.boundingBox === "block") return false; // solid ground first
+    }
+    return false;
+  };
+  if (wasHole && lavaDown()) {
+    lastStop = "blocked";
+    console.log(`Tunnel stopped: lava under the gap at ${floor}; no bridge over it.`);
+    return false;
+  }
   if (await ensureBlock(floor, keepClear)) {
     if (wasHole && bot.blockAt(floor.offset(0, -1, 0))?.boundingBox === "empty") await wallIn(step, keepClear, direction);
     return true;
@@ -186,8 +216,10 @@ async function plugLiquids(pos: Vec3): Promise<boolean> {
 async function intoWater(pos: Vec3): Promise<boolean> {
   const name = bot.blockAt(pos)?.name ?? "";
   const liquid = name === "water" || name === "lava";
-  // (a plug spot dug out since is just air: no water there now)
-  if (!liquid && !(isPlug(pos) && bot.blockAt(pos)?.boundingBox === "block")) return false;
+  // (a plug spot dug out since is just air, and a plug with no water or lava
+  // against it any more, or one that filled a cave's opening, isn't water)
+  const liquidNext = (): boolean => SIDES.some((d) => /^(water|lava)$/.test(bot.blockAt(pos.plus(d))?.name ?? ""));
+  if (!liquid && !(isPlug(pos) && bot.blockAt(pos)?.boundingBox === "block" && liquidNext())) return false;
   if (liquid) await plugLiquids(pos);
   lastStop = "blocked";
   const what = liquid ? name : "water";
@@ -471,8 +503,10 @@ export async function digStraightTunnel(
   length: number,
   startPosition: Vec3,
   width = 3,
-  height = 2
+  height = 2,
+  hooks: ColumnHooks = {}
 ): Promise<boolean> {
+  columnsDug = 0;
   const offsetX = direction === "east" ? 1 : direction === "west" ? -1 : 0;
   const offsetZ = direction === "south" ? 1 : direction === "north" ? -1 : 0;
   // Sideways is across the tunnel: along Z for an east/west tunnel, along X for north/south
@@ -497,6 +531,10 @@ export async function digStraightTunnel(
     if (!bot.entity.position.floored().equals(stand)) {
       await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z)));
     }
+    if (hooks.before && (await hooks.before(position, i)) === "stop") {
+      lastStop = "cave";
+      return false;
+    }
     // Dig out a tunnel `height` high (2: a walkway; 3: a pokehole), `width` wide
     for (let y = 0; y < height; y++) {
       for (let x = -half; x <= width - 1 - half; x++) {
@@ -515,6 +553,11 @@ export async function digStraightTunnel(
     // On the outer column's wall, at the top of the 2-high tunnel
     const outer = width - 1 - half;
     await torchStep(position.offset(side.x * outer, 1, side.z * outer), direction);
+    columnsDug = i;
+    if (hooks.after && (await hooks.after(position, i)) === "stop") {
+      lastStop = "cave";
+      return false;
+    }
   }
   return true;
 }

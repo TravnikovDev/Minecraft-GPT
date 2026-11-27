@@ -18,7 +18,7 @@ import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
 import { addPlace, getPlaces } from "../managers/persistenceManager";
 import { currentDimension } from "../actions/perception";
-import { digDiagonalTunnel, digStraightTunnel, tunnelStopReason, type DirectionType } from "../actions/digging";
+import { digDiagonalTunnel, digStraightTunnel, ensureBlock, tunnelColumns, tunnelStopReason, type ColumnHooks, type DirectionType } from "../actions/digging";
 import { collectBlock } from "../actions/collectBlock";
 import { shelterSlots } from "../actions/building";
 import { foodPoints, shelter, TIER, toolTier } from "./capabilities";
@@ -139,7 +139,7 @@ const stairsToFirstFloor = (): number => firstFloorAt + 1;
 // Stairs blocked (water, lava) this deep or deeper: the mine just ends there
 const SHALLOWEST_MINE = 3;
 
-type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean; sidesDone: number; roomsDone: number; sideFrom: number };
+type MineRecord = { start: Pos; direction: DirectionType; stairs: number; branches: number; bottom: Vec3 | null; level: number; arms: Arms; deepest: boolean; turns: Turn[]; tried: Record<string, DirectionType[]>; seals: Pos[]; exhausted: boolean; sidesDone: number; roomsDone: number; sideFrom: number; cavePlugs: Pos[] };
 
 /**
  * True for a block that has fallen into (or grown into) a step's walking
@@ -379,7 +379,7 @@ function mineRecord(): MineRecord | null {
     firstFloorAt = MINE_DEPTH;
     return null;
   }
-  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number; sideFrom?: number };
+  const d = (mine.details ?? {}) as { direction?: DirectionType; stairs?: number; depth?: number; branches?: number; endsAt?: Pos; done?: boolean; level?: number; arms?: Arms; deepest?: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; cavePlugs?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number; sideFrom?: number };
   if (!d.direction) return null;
   // Its first floor where it was dug (10 before the owner's 20)
   firstFloorAt = d.depth ?? MINE_DEPTH;
@@ -400,6 +400,7 @@ function mineRecord(): MineRecord | null {
     turns: d.turns ?? [],
     tried: d.tried ?? {},
     seals: d.seals ?? [],
+    cavePlugs: d.cavePlugs ?? [],
     exhausted: d.exhausted ?? false,
     sidesDone: d.sidesDone ?? 0,
     roomsDone: d.roomsDone ?? -1,
@@ -729,6 +730,147 @@ async function digOutFallen(base: Vec3, way: DirectionType, dug: number): Promis
   return dugOut;
 }
 
+// --- Caves its tunnels run into (owner) ---------------------------------------
+// A pokehole that meets a cave ends there, the opening plugged; a sleeve
+// crosses a short gap as a closed tube (floor, walls, roof) and ends at a big
+// cave, its face plugged. Ore it can see from the opening is mined first, from
+// inside the tunnel. Each plug is remembered and put back if it's broken.
+const CAVE_FILL = ["cobblestone", "cobbled_deepslate", "dirt"];
+// Open columns ahead that make a cave "big": a sleeve ends there instead of crossing
+export const BIG_CAVE = 7;
+
+/**
+ * What a cave means for a tunnel at one column. `open(c)`: open cave air at
+ * c (not its own dug tunnels, not water, lava or a torch). Pure.
+ * - before the column is dug: "go" (no cave, or a sleeve's short gap),
+ *   or "plug" (the face) and stop;
+ * - after: the open blocks round it to plug, and whether the tunnel stops.
+ */
+export function caveAt(
+  kind: "poke" | "sleeve",
+  col: Pos,
+  ahead: Pos,
+  across: [Pos, Pos],
+  height: number,
+  open: (c: Pos) => boolean
+): { before: Pos[]; stopBefore: boolean; around: Pos[]; stopAfter: boolean } {
+  const at = (c: Pos, dx: number, dy: number, dz: number): Pos => ({ x: c.x + dx, y: c.y + dy, z: c.z + dz });
+  const column = (c: Pos): Pos[] => Array.from({ length: height }, (_, y) => at(c, 0, y, 0));
+  const face = [...column(col), at(col, 0, -1, 0)].filter(open);
+  let stopBefore = face.length > 0;
+  if (stopBefore && kind === "sleeve") {
+    // A short gap is crossed as a tube: how many columns of cave from here
+    let gap = 0;
+    for (let c = col; gap < BIG_CAVE && [...column(c), at(c, 0, -1, 0)].some(open); c = at(c, ahead.x, 0, ahead.z)) gap++;
+    stopBefore = gap >= BIG_CAVE;
+  }
+  const around: Pos[] = [];
+  for (const side of across) for (let y = 0; y < height; y++) around.push(at(col, side.x, y, side.z));
+  around.push(at(col, 0, height, 0));
+  const holes = around.filter(open);
+  return { before: stopBefore ? face : [], stopBefore, around: holes, stopAfter: holes.length > 0 && kind === "poke" };
+}
+
+/** The checks a sleeve or pokehole runs at each column for caves. */
+function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number): ColumnHooks {
+  const rec = mineRecord();
+  const dugCells = new Set<string>();
+  if (rec) {
+    for (const c of floorsAsDug(rec)) dugCells.add(c.toString());
+    for (const c of mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk) dugCells.add(c.toString());
+  }
+  const open = (p: Pos): boolean => {
+    const c = new Vec3(p.x, p.y, p.z);
+    const b = bot.blockAt(c);
+    return b !== null && b.boundingBox === "empty" && !/water|lava|torch/.test(b.name) && !dugCells.has(c.toString());
+  };
+  const ahead = STEP[way];
+  const across: [Pos, Pos] = [STEP[RIGHT[way]], STEP[LEFT[way]]];
+  const what = kind === "poke" ? "pokehole" : "sleeve";
+  return {
+    before: async (col) => {
+      const cave = caveAt(kind, col, ahead, across, height, open);
+      if (!cave.stopBefore) return "go";
+      await oreFromTheOpening();
+      await plugCave(cave.before, `my ${what} meets ${kind === "sleeve" ? "a big cave" : "a cave"} at ${col}`);
+      return "stop";
+    },
+    after: async (col) => {
+      const cave = caveAt(kind, col, ahead, across, height, open);
+      if (cave.around.length === 0) return "go";
+      await oreFromTheOpening();
+      await plugCave(cave.around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
+      return cave.stopAfter ? "stop" : "go";
+    },
+  };
+}
+
+/**
+ * Ore it can see from where it stands, within reach, mined without stepping
+ * out of its tunnel (owner: before plugging a cave, the ore in it it can see).
+ */
+async function oreFromTheOpening(): Promise<number> {
+  const ids = Object.values(bot.registry.blocksByName).filter((b) => /_ore$/.test(b.name)).map((b) => b.id);
+  const eyes = bot.entity.position.offset(0, 1.62, 0);
+  const near = bot
+    .findBlocks({ matching: ids, maxDistance: 5, count: 16 })
+    .map((p) => bot.blockAt(p))
+    .filter((b): b is NonNullable<typeof b> => b !== null && b.position.offset(0.5, 0.5, 0.5).distanceTo(eyes) <= 4.5 && bot.canSeeBlock(b));
+  if (near.length === 0) return 0;
+  const { breakBlock } = await import("../core/primitives");
+  const { pickupNearbyItems } = await import("../actions/pickup");
+  let got = 0;
+  for (const b of near) {
+    if (isCommandCancelled()) break;
+    if ((await breakBlock(b.position)).ok) got++;
+  }
+  if (got > 0) {
+    await pickupNearbyItems(bot, 3);
+    console.log(`Mine: mined ${got} ore I could see in the cave from my tunnel.`);
+  }
+  return got;
+}
+
+/** Fills a cave's openings with cobblestone and remembers each plug (put back if it's broken). */
+async function plugCave(cells: Pos[], why: string): Promise<number> {
+  let plugged = 0;
+  const placed: Pos[] = [];
+  for (const p of cells) {
+    if (isCommandCancelled()) break;
+    const c = new Vec3(p.x, p.y, p.z);
+    if (await ensureBlock(c, () => false, CAVE_FILL)) {
+      plugged++;
+      placed.push({ x: c.x, y: c.y, z: c.z });
+    }
+  }
+  console.log(`Mine: ${why}; plugged ${plugged} of ${cells.length} openings.`);
+  const rec = mineRecord();
+  if (rec && placed.length > 0) {
+    await saveMine(rec.start, rec.direction, rec.stairs, rec.branches, rec.bottom, { level: rec.level, arms: rec.arms, deepest: rec.deepest, cavePlugs: [...rec.cavePlugs, ...placed] });
+  }
+  return plugged;
+}
+
+/** Its cave plugs near it put back where they've been broken (a creeper, a player). */
+async function recheckCavePlugs(): Promise<number> {
+  const rec = mineRecord();
+  if (!rec || rec.cavePlugs.length === 0 || !bot.entity) return 0;
+  const broken = rec.cavePlugs
+    .map((p) => new Vec3(p.x, p.y, p.z))
+    .filter((c) => {
+      const b = bot.blockAt(c);
+      return c.distanceTo(bot.entity.position) <= LOOK_AFTER_RANGE && b !== null && b.boundingBox === "empty" && !/water|lava/.test(b.name);
+    });
+  let put = 0;
+  for (const c of broken) {
+    if (isCommandCancelled()) break;
+    if (bot.entity.position.distanceTo(c) > 4 && !(await goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 3))).ok) continue;
+    if (await ensureBlock(c, () => false, CAVE_FILL)) put++;
+  }
+  if (put > 0) console.log(`Mine: put back ${put} broken cave plug${put === 1 ? "" : "s"}.`);
+  return put;
+}
+
 /** How many blocks of a sleeve from `base` going `way` are open and dry at its feet (as far as it was dug). */
 function openRun(base: Vec3, way: DirectionType): number {
   let k = 0;
@@ -839,6 +981,8 @@ async function clearLeftovers(): Promise<number> {
  * tunnels uncovered mined.
  */
 export async function lookAfterFloors(): Promise<void> {
+  await recheckCavePlugs();
+  if (isCommandCancelled()) return;
   await sealMineFromOutside();
   if (isCommandCancelled()) return;
   await clearLeftovers();
@@ -931,7 +1075,7 @@ export async function lookAfterStairs(): Promise<void> {
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
 }
 
-async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number }): Promise<void> {
+async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; cavePlugs?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number }): Promise<void> {
   const endsAt = bottom ?? mineBottom(start, direction);
   const rec0 = mineRecord();
   const keep = {
@@ -940,6 +1084,7 @@ async function saveMine(start: Pos, direction: DirectionType, stairs: number, br
     turns: levels?.turns ?? rec0?.turns ?? [],
     tried: levels?.tried ?? rec0?.tried ?? {},
     seals: levels?.seals ?? rec0?.seals ?? [],
+    cavePlugs: levels?.cavePlugs ?? rec0?.cavePlugs ?? [],
     exhausted: levels?.exhausted ?? rec0?.exhausted ?? false,
     sidesDone: levels?.sidesDone ?? rec0?.sidesDone ?? 0,
     roomsDone: levels?.roomsDone ?? rec0?.roomsDone ?? -1,
@@ -1440,17 +1585,20 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       continue;
     }
     const length = Math.min(CHUNK, ARM_LENGTH - arms[arm].dug);
-    const dug = await digStraightTunnel(way, length, end, 1, SLEEVE_HEIGHT);
+    const dug = await digStraightTunnel(way, length, end, 1, SLEEVE_HEIGHT, caveHooks("sleeve", way, SLEEVE_HEIGHT));
     const stop = dug ? null : tunnelStopReason();
+    // A big cave ahead: the sleeve ends at it (its face plugged), as far as it got
+    const got = dug ? length : stop === "cave" ? tunnelColumns() : 0;
     // Pokeholes off the stretch just dug: 1 wide, 3 high, 5 long, every 3, both sides (owner)
-    if (dug) {
-      for (let k = arms[arm].dug + 1; k <= arms[arm].dug + length; k++) {
+    if (got > 0) {
+      for (let k = arms[arm].dug + 1; k <= arms[arm].dug + got; k++) {
         if (k % POKE_EVERY !== 0 || isCommandCancelled()) continue;
         const cell = base.plus(STEP[way].scaled(k));
         for (const sd of POKE_SIDES) {
           const across = sd === 1 ? RIGHT[way] : LEFT[way];
           if (!(await goToStep(cell)).ok) break;
-          await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT);
+          // A cave met on the way: the pokehole ends there, plugged (a finished pokehole)
+          await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT, caveHooks("poke", across, POKE_HEIGHT));
           if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
           if (hurtInTheMine()) return leaveHurt();
         }
@@ -1466,7 +1614,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       console.log(`Mine: out of blocks to build with; took ${got} stone from the walls.`);
       if (got > 0) continue;
     }
-    arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug, blocked: true } };
+    arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug + got, blocked: true } };
     // A tunnel stopped by water, lava or something built: new stairs never
     // turn that way from this hub (owner: they'd dig into the same water)
     let tried = rec.tried;
@@ -1474,7 +1622,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       const h = String(hubStep(level));
       tried = { ...rec.tried, [h]: [...new Set([...(rec.tried[h] ?? []), way])] };
     }
-    const what = stop === "drop" ? "a drop I couldn't build a floor over" : stop === "no_filler" ? "a hole I had nothing to fill" : "water, lava or something it mustn't dig";
+    const what = stop === "cave" ? "a big cave (its way in plugged)" : stop === "drop" ? "a drop I couldn't build a floor over" : stop === "no_filler" ? "a hole I had nothing to fill" : "water, lava or something it mustn't dig";
     if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
