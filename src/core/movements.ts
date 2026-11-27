@@ -115,11 +115,12 @@ export function nearOwnPassage(p: { x: number; y: number; z: number }): boolean 
 
 /**
  * True for a block that walls its mine's tunnels in (a wall, floor or
- * ceiling cell right next to a tunnel cell, not one itself): no walk ever
- * breaks it. Owner: the sleeves are 1 wide and 3 high, the pokeholes 5 long,
- * 1 wide, 3 high, and the walks (to drops, to ore, to the next block) cut
- * their own shortcuts into the walls and ceilings between them: "a mess".
- * Only the tunnel digger cuts the mine.
+ * ceiling cell right next to a tunnel cell, not one itself): no walk breaks
+ * it, except while it gathers ore it saw (owner: the sleeves are 1 wide and
+ * 3 high, the pokeholes 5 long, 1 wide, 3 high, and the walks cut their own
+ * shortcuts into the walls and ceilings between them, "a mess"; but "if the
+ * bot sees resources he must gather them", and a sleeve floor broken on the
+ * way is mended, see skills/mine).
  */
 export function wallsMine(p: { x: number; y: number; z: number }): boolean {
   const cells = ownPassages.get("mine");
@@ -132,6 +133,19 @@ export function wallsMine(p: { x: number; y: number; z: number }): boolean {
     if (cells.has(`${x + dx},${y + dy},${z + dz}`)) return true;
   }
   return false;
+}
+
+// Gathering ore it saw: its walks may cut through the mine's walls to it
+let gathering = 0;
+
+/** Runs `fn` (getting ore it saw in its mine) with the mine's walls open to its walks. */
+export async function whileGathering<T>(fn: () => Promise<T>): Promise<T> {
+  gathering++;
+  try {
+    return await fn();
+  } finally {
+    gathering--;
+  }
 }
 
 /** The cells of its own passages (shelter, mine stairs): stalls there are never held against them. */
@@ -336,7 +350,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   // Its mine's walls, floors and ceilings: never cut by a walk (walled in by
   // its own seals, its cobblestone and dirt there may go: see walledIn)
   const mineShell = (block: { position?: { x: number; y: number; z: number }; name?: string }): number =>
-    block.position && wallsMine(block.position) && !(walledIn() && WALL_FILLERS.has(block.name ?? "")) ? 10_000 : 0;
+    block.position && gathering === 0 && wallsMine(block.position) && !(walledIn() && WALL_FILLERS.has(block.name ?? "")) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
   // Never a block with water or lava behind it (owner: its own way dug
   // through a flooded dripstone cave let the water in, and it nearly drowned)

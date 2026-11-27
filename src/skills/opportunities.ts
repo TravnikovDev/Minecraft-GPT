@@ -24,7 +24,7 @@ import { collectBlock } from "../actions/collectBlock";
 import { isCommandCancelled } from "../core/commandContext";
 import { fitForTheMine } from "./mine";
 import { foodPoints, shelter } from "./capabilities";
-import { inOwnPassage } from "../core/movements";
+import { inOwnPassage, whileGathering } from "../core/movements";
 import { daylight } from "../core/daylight";
 import { underRoof } from "../actions/placement";
 import { skyAbove } from "../actions/hunting";
@@ -173,9 +173,14 @@ function oreTask(ore: Block, kind: string, first: boolean, valuable = first): Ta
       if (!allowedNow(ore) || !fitForTheMine(bot.health, foodPoints()).ok) return;
       chatter(`There's ${kind} ore over there; mining it.`, "opportunity");
       // Where it saw it: the task may have waited, and the bot moved on
-      const near = await goTo(new pf.goals.GoalNear(ore.position.x, ore.position.y, ore.position.z, 3));
-      const got = near.ok ? await collectBlock(ore.name, 8, LOOK_RANGE + 4, { seenOnly: true }) : 0;
+      // Gathering: its walks may cut through its mine's walls to the ore
+      // (owner), and the sleeves' floor is mended after
+      const got = await whileGathering(async () => {
+        const near = await goTo(new pf.goals.GoalNear(ore.position.x, ore.position.y, ore.position.z, 3));
+        return near.ok ? await collectBlock(ore.name, 8, LOOK_RANGE + 4, { seenOnly: true }) : 0;
+      });
       if (got === 0) failed.set(keyOf(ore), Date.now() + FAILED_FOR_MS);
+      if (underground() && !isCommandCancelled()) await (await import("./mine")).mendMineFloors();
       // Its scaffolding from getting there comes down again
       const { takeDownScaffolding } = await import("../actions/scaffolding");
       if (!isCommandCancelled()) await takeDownScaffolding(true);

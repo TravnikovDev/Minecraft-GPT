@@ -63,6 +63,11 @@ test("floors (owner's plan): the room ahead of the stairs' end, sleeves off its 
   // Left and right from the middle line
   expect(has(1, 40, -2) && has(1, 40, 2)).toBe(true);
   expect([0, 1, 2, 3, 10].map(floorName)).toEqual(["1st floor", "2nd floor", "3rd floor", "4th floor", "11th floor"]);
+  // What's mended (owner: the sleeves' floor, never the pokeholes'): no pokes
+  const mended = floorCells(hub, "east", 0, true, undefined, false);
+  const inMended = (x: number, y: number, z: number) => mended.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
+  expect(inMended(3, 40, 1) && inMended(1, 40, 0)).toBe(true);
+  expect(inMended(5, 40, 6) || inMended(5, 40, -4)).toBe(false);
 });
 
 test("floors: at the stairs' bottom, then every 10 blocks deeper; the stairs cross each room flat (owner)", async () => {

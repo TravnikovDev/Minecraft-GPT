@@ -11,7 +11,7 @@
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
-import { isNatural, protectCells, setOwnPassages } from "../core/movements";
+import { isNatural, protectCells, setOwnPassages, whileGathering } from "../core/movements";
 import { goTo } from "../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
@@ -478,7 +478,7 @@ export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, l
  * four sleeves (2 high, ARM_LENGTH long) and their pokeholes (1 wide,
  * POKE_HEIGHT high, POKE_LENGTH long, every POKE_EVERY blocks). Pure.
  */
-export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side = true, dugTo?: Partial<Record<ArmName, number>>): Vec3[] {
+export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side = true, dugTo?: Partial<Record<ArmName, number>>, pokes = true): Vec3[] {
   const out: Vec3[] = [];
   const R = STEP[RIGHT[arrive]];
   const F = STEP[arrive];
@@ -491,7 +491,7 @@ export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side =
     for (let k = 1; k <= last; k++) {
       const cell = base.plus(way.scaled(k));
       for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) out.push(cell.offset(0, dy, 0));
-      if (k % POKE_EVERY !== 0) continue;
+      if (!pokes || k % POKE_EVERY !== 0) continue;
       for (const sd of POKE_SIDES) {
         for (let p = 1; p <= POKE_LENGTH; p++) for (let dy = 0; dy < POKE_HEIGHT; dy++) out.push(cell.plus(across.scaled(sd * p)).offset(0, dy, 0));
       }
@@ -751,6 +751,10 @@ export function exposedOres(open: Vec3[], nameAt: (p: Vec3) => string | null): V
  * broken, the ore behind it too as it comes into the open. How many.
  */
 export async function mineExposedOres(): Promise<number> {
+  return whileGathering(() => mineExposedOresNow());
+}
+
+async function mineExposedOresNow(): Promise<number> {
   const { breakBlockAtResult } = await import("../actions/blockBreaking");
   const { pickupNearbyItems } = await import("../actions/pickup");
   let mined = 0;
@@ -1464,10 +1468,23 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
  * down excepted. Best effort.
  */
 const MEND_RANGE = 8;
+/** The room's and sleeves' floor mended on every floor of its mine near it (after gathering ore out of a tunnel, owner). */
+export async function mendMineFloors(): Promise<void> {
+  const rec = mineRecord();
+  if (!rec) return;
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    if (isCommandCancelled()) return;
+    const h = hubStep(l);
+    await mendFloor(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom));
+  }
+}
+
 async function mendFloor(hub: Vec3, arrive: DirectionType, level: number, side: boolean): Promise<void> {
   const rec = mineRecord();
   // As far as it has dug (never the plan beyond: a planned sleeve over a lake)
-  const dugTo = rec && level === rec.level ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug])) : undefined;
+  const dugTo = rec && level === rec.level
+    ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug]))
+    : Object.fromEntries(ARMS.map((a) => [a, openRun(sleeveBase(hub, arrive, a), armDirection(a, arrive))]));
   const open = floorCells(hub, arrive, level, side, dugTo);
   const openSet = new Set(open.map((c) => c.toString()));
   const stairs = rec ? new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString())) : new Set<string>();
@@ -1486,7 +1503,9 @@ async function mendFloor(hub: Vec3, arrive: DirectionType, level: number, side: 
     if ((await breakBlock(c)).ok) cleared++;
   }
   if (cleared > 0) console.log(`Mine: took ${cleared} block${cleared === 1 ? "" : "s"} I'd left standing out of the ${floorName(level)}'s tunnels.`);
-  for (const c of open) {
+  // The room's and the sleeves' floor only (owner: pokeholes aren't
+  // restored, nor any roof)
+  for (const c of floorCells(hub, arrive, level, side, dugTo, false)) {
     if (c.y !== hub.y || isCommandCancelled()) continue;
     const under = c.offset(0, -1, 0);
     if (keepClear(under) || under.distanceTo(here) > MEND_RANGE) continue;
@@ -1745,10 +1764,14 @@ const STRIP_ORES = ["diamond", "emerald", "raw_gold", "raw_iron", "redstone", "l
  */
 async function mineOresInSight(wants: OreWant[]): Promise<void> {
   const before = new Map(wants.map((w) => [w.item, carried(w.counts)]));
-  for (const item of STRIP_ORES) {
-    if (isCommandCancelled()) return;
-    await collectBlock(item, 16, ORE_REACH, { seenOnly: true });
-  }
+  // Ore it sees is gathered, its walks cutting through the walls to it; the
+  // sleeve's floor is mended after (owner)
+  await whileGathering(async () => {
+    for (const item of STRIP_ORES) {
+      if (isCommandCancelled()) return;
+      await collectBlock(item, 16, ORE_REACH, { seenOnly: true });
+    }
+  });
   for (const w of wants) {
     if (carried(w.counts) > (before.get(w.item) ?? 0)) chatter(`Found ${w.item.replace(/_/g, " ")}: ${carried(w.counts)} of ${w.enough}.`, "mining");
   }

@@ -34,11 +34,11 @@ The **first floor 20 steps down**, then a floor every **10 blocks** deeper.
 
 Along every sleeve, every **3 blocks**, a pokehole **1 wide, 3 high, 5 long, on both sides**.
 
-Only the tunnel digger cuts the mine. Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into the last block it dug and digs the next column from there. No walk (to a drop, to ore, to the next block) ever breaks a wall, floor or ceiling block of the mine's tunnels, so nothing is cut between pokeholes.
+Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into the last block it dug and digs the next column from there. No ordinary walk breaks a wall, floor or ceiling block of the mine's tunnels. Only gathering ore it sees may dig through the walls to the ore; afterwards the sleeves' and room's floor is mended, a block per hole. Pokeholes and roofs are never restored.
 
 ## Looking after it
 
-- Damaged paths are mended **only under the feet** (the floor of the stairs, rooms, sleeves and pokeholes); never walls or ceilings.
+- Damaged paths are mended **only under the feet** (the floor of the stairs, rooms and sleeves; not pokeholes); never walls or ceilings.
 - Every ore seen is mined at once, **once the stretch is secured**: its floor mended and any way out to the sky blocked first.
 
 ## When it can't go deeper
