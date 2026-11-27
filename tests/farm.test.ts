@@ -108,6 +108,14 @@ test("the flat surface is the whole field and its fence ring; its own farmland, 
   // Its fence post on the ring isn't a bump to dig out
   const post = (x: number, y: number, z: number): L => (x === 3 && z === 1 && y === 64 ? { name: "oak_fence", solid: true } : ground(63)(x, y));
   expect(columnWork(mid, 3, 1, 2, post)).toEqual({ x: 3, z: 1, bumps: [], swap: false, fill: 0 });
+  // A post left a block too high (over a bump since dug out), or sunk in a dip: taken down and set level
+  const high = (x: number, y: number, z: number): L => (x === 3 && z === 1 && y === 65 ? { name: "oak_fence", solid: true } : ground(63)(x, y));
+  expect(columnWork(mid, 3, 1, 2, high)).toEqual({ x: 3, z: 1, bumps: [2], swap: false, fill: 0 });
+  const sunk = (x: number, y: number, z: number): L => (x === 3 && z === 1 && y === 63 ? { name: "oak_fence", solid: true } : ground(63)(x, y));
+  expect(columnWork(mid, 3, 1, 2, sunk)).toEqual({ x: 3, z: 1, bumps: [], swap: true, fill: 0 });
+  // A post inside the sown part: taken down
+  const inside = (x: number, y: number, z: number): L => (x === 1 && z === 1 && y === 64 ? { name: "oak_fence", solid: true } : ground(63)(x, y));
+  expect(columnWork(mid, 1, 1, 2, inside)?.bumps).toEqual([1]);
   // The middle's water stays
   const water = (x: number, y: number, z: number): L => (x === 0 && z === 0 && y === 63 ? { name: "water", solid: false } : ground(63)(x, y));
   expect(levelCost(mid, 3, water, () => false, 2)).toBe(0);

@@ -202,7 +202,12 @@ export function columnWork(middle: P3, x: number, z: number, planted: number, lo
     const c = look(x, y + dy, z);
     if (!c) return null;
     if (/_log$/.test(c.name)) return null;
-    if (c.solid && !ON_FIELD.test(c.name)) {
+    // Its fence stays only where it belongs: on the ring, right on the flat
+    // ground. A post left over from before the levelling (floating over a
+    // dug-out bump, or one too high) is taken down and put up again level
+    // (game test: the fence went up and down round the field)
+    const fenceInPlace = ON_FIELD.test(c.name) && ring > planted && dy === 1;
+    if (c.solid && !fenceInPlace) {
       if (dy > MAX_BUMP) return null;
       bumps.push(dy);
     }
@@ -218,6 +223,8 @@ export function columnWork(middle: P3, x: number, z: number, planted: number, lo
   if (!g) return null;
   const done = { x, z, bumps, swap: false, fill: 0 };
   if (ring === 0 && g.name === "water") return done;
+  // A post sunk in a dip (put up before the levelling): out, dirt in
+  if (ON_FIELD.test(g.name)) return { ...done, swap: true };
   if (ring > planted ? g.solid : DIRT.test(g.name)) return done;
   // Stone, sand or snow in the ground: swapped for dirt
   if (g.solid) return { ...done, swap: true };
@@ -346,6 +353,7 @@ async function levelPlot(middle: P3, reserve: number): Promise<number> {
     if (!(await goTo(new pf.goals.GoalNear(middle.x, middle.y + 1, middle.z, 3))).ok) return 0;
     const { collectBlock } = await import("../actions/collectBlock");
     for (const ground of ["dirt", "grass_block"]) if (count("dirt") < need) await collectBlock(ground, need - count("dirt"), 20, { seenOnly: true });
+    if (count("dirt") < need) console.log(`Farm: only ${count("dirt")} dirt of the ${need} the field at ${middle.x}, ${middle.z} needs; the rest next time.`);
   }
   const { breakBlock } = await import("../core/primitives");
   const { placeBlockResult } = await import("../actions/blockPlacing");
@@ -629,7 +637,10 @@ export async function tendFarm(): Promise<number> {
     if (mended > 0) chatter(`Mended my field at ${farm.x}, ${farm.z}: ${mended} block${mended === 1 ? "" : "s"} put right.`, "farm");
     const { harvestCrops } = await import("../actions/farming");
     harvested += await harvestCrops({ maxDistance: farm.half + 2, point: field });
-    // Bare farmland sown again, and the plot grown outward with the seeds the harvest gave
+    // Bare farmland sown again, and the plot grown outward with the seeds the
+    // harvest gave; none left and the field bare: seeds from the grass round
+    // about (game test: a field stood as grass, nothing sown, for an hour)
+    if (!SEEDS.some((s) => count(s) > 0) && bareCells(farm) > 0 && (bot.food ?? 20) > 6) await getSeeds();
     const seed = SEEDS.find((s) => count(s) > 0);
     if (seed) await sowPlot(farm, seed, farm.half);
     // Every cell of it sown and seeds over: a ring wider (owner: 5x5, then 7x7, then 9x9)
