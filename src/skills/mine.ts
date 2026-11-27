@@ -71,56 +71,39 @@ export function armDirection(arm: ArmName, dir: DirectionType): DirectionType {
   return arm === "forward" ? dir : arm === "right" ? RIGHT[dir] : arm === "left" ? LEFT[dir] : RIGHT[RIGHT[dir]];
 }
 
-// Pokeholes off each sleeve (owner): every 4 blocks, 1 wide, 3 high, 5 long
-export const POKE_EVERY = 4;
+// The floor plan (owner's drawing): the stairs end in the middle of the
+// room's back side; the room, 3 by 3, lies ahead of them, flat; the left and
+// right sleeves leave from its middle line, the back sleeve runs along its
+// left row beside the stairs, the forward sleeve along its right row; a
+// pokehole every 3 blocks, 5 long, both sides of every sleeve; every tunnel,
+// pokehole and the room 3 high; the stairs 5 high (room for stair blocks)
+export const POKE_EVERY = 3;
 export const POKE_LENGTH = 5;
 export const POKE_HEIGHT = 3;
-// The floor's room: 3 by 3 round the stairs, 3 high
+export const SLEEVE_HEIGHT = 3;
 export const ROOM_HEIGHT = 3;
 
-/**
- * The room's columns across the stairs' way (0 the stairs' own column, +1 to
- * their right). `side`: the room beside the stairs, the stairs along its
- * left column (owner: not in the middle, so one runs freely from sleeve to
- * sleeve); otherwise the older room round the stairs. Pure.
- */
-export const roomColumns = (side: boolean): number[] => (side ? [0, 1, 2] : [-1, 0, 1]);
+/** The room's cells as [across (+1 the stairs' right), along (0 the stairs' end)]. Pure. */
+export const ROOM_CELLS: ReadonlyArray<readonly [number, number]> = [-1, 0, 1].flatMap((a) => [0, 1, 2].map((b) => [a, b] as const));
 
 /**
- * Where a sleeve leaves a floor's room, across the stairs' way (0 the
- * stairs' column, +1 to their right). Left and right leave from the middle
- * of the room's sides; forward and back alternate floor by floor between
- * two columns off the stairs (owner). Beside the stairs (`side`): left from
- * the stairs' landing, right from the right column, forward and back from
- * the middle column on odd floors and the right one on even ones. The older
- * room round the stairs: left and right from the middle, forward and back
- * from the left column, then the right. Pure.
+ * Where a sleeve starts, in the room, as [across, along] from the hub (the
+ * stairs' end): its first cell is the next one its way. Left and right from
+ * the room's middle line; back along its left row, forward along its right
+ * row. Pure.
  */
-export function sleeveColumn(arm: ArmName, level: number, side = true): number {
-  if (side) {
-    if (arm === "left") return 0;
-    if (arm === "right") return 2;
-    return level % 2 === 0 ? 1 : 2;
-  }
-  if (arm === "left" || arm === "right") return 0;
-  return level % 2 === 0 ? -1 : 1;
+export function sleeveStart(arm: ArmName): readonly [number, number] {
+  return arm === "left" ? [-1, 1] : arm === "right" ? [1, 1] : arm === "back" ? [-1, 0] : [1, 2];
 }
 
-/**
- * The cells of a sleeve's pokeholes from its cell `k` (k a multiple of
- * POKE_EVERY): both sides for left and right, only the outer side for
- * forward and back (the inner side runs over the stairs). Columns as unit
- * steps across the sleeve: +1 its right, -1 its left. Pure.
- */
-export function pokeSides(arm: ArmName, level: number, side = true): Array<1 | -1> {
-  if (arm === "left" || arm === "right") return [1, -1];
-  // Beside the stairs: always away from them (their right)
-  if (side) return [arm === "forward" ? 1 : -1];
-  const col = sleeveColumn(arm, level, false);
-  // Forward: its right is the stairs' right; back: its right is the stairs' left
-  const outer = arm === "forward" ? col : -col;
-  return [outer as 1 | -1];
+/** A sleeve's start cell for a hub (the stairs' end) the stairs arrive at going `arrive`. Pure. */
+export function sleeveBase(hub: Vec3, arrive: DirectionType, arm: ArmName): Vec3 {
+  const [a, b] = sleeveStart(arm);
+  return hub.plus(STEP[RIGHT[arrive]].scaled(a)).plus(STEP[arrive].scaled(b));
 }
+
+/** Pokeholes off every sleeve, both sides (+1 its right, -1 its left). Pure. */
+export const POKE_SIDES: ReadonlyArray<1 | -1> = [1, -1];
 
 /** "1st floor", "2nd floor"... for a level (0 is the 1st). Pure. */
 export function floorName(level: number): string {
@@ -129,12 +112,27 @@ export function floorName(level: number): string {
   return `${n}${tail} floor`;
 }
 
-/** The stair step a hub sits on: the first at the bottom of the stairs, each next one LEVEL_STEP deeper. Pure. */
-export const hubStep = (level: number): number => firstFloorAt + level * LEVEL_STEP;
+// The stairs cross each floor's room flat (its middle and its front side),
+// then go on down: these steps are flat
+export const FLAT_STEPS = 2;
+const STEPS_PER_FLOOR = LEVEL_STEP + FLAT_STEPS;
+
+/** The stair step a hub sits on (the stairs' end at a floor): the first at the bottom of the stairs, each next floor LEVEL_STEP deeper. Pure. */
+export const hubStep = (level: number): number => firstFloorAt + level * STEPS_PER_FLOOR;
+
+/** True for a step that crosses a floor's room flat (the two after each hub). Pure. */
+export function isFlatStep(i: number): boolean {
+  if (i <= firstFloorAt) return false;
+  const past = (i - firstFloorAt) % STEPS_PER_FLOOR;
+  return past >= 1 && past <= FLAT_STEPS;
+}
 
 // The stairs' open cells above each step: the step and 3 more, 4 high (owner:
 // 3 was too low, a player hit their head on the way up)
-export const STAIR_HEADROOM = 3;
+export const STAIR_HEADROOM = 4;
+
+/** How many cells over a step's own one are dug: the stairs 5 high, their flat part across a room 3 (its ceiling). Pure. */
+export const stepHeadroom = (i: number): number => (isFlatStep(i) ? ROOM_HEIGHT - 1 : STAIR_HEADROOM);
 
 // Stairs are steps 0..the first floor: the exit cell, then one down per step
 const stairsToFirstFloor = (): number => firstFloorAt + 1;
@@ -175,7 +173,7 @@ function blockedStepCells(feet: Vec3): Vec3[] {
   const out: Vec3[] = [];
   for (let j = Math.max(1, i - 2); j <= i; j++) {
     const s = stepAt(rec.start, rec.direction, j, rec.turns);
-    for (let dy = 0; dy < STAIR_HEADROOM; dy++) {
+    for (let dy = 0; dy < stepHeadroom(j); dy++) {
       const c = s.offset(0, dy, 0);
       if (fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c)) out.push(c);
     }
@@ -364,10 +362,9 @@ export function mineArmStarts(): Vec3[] {
     const arrive = dirAt(rec.direction, hubStep(level), rec.turns);
     const R = STEP[RIGHT[arrive]];
     // The floor's room and where its four sleeves leave it
-    const side = roomBeside(level, rec.sideFrom);
-    for (const a of roomColumns(side)) for (let b = -1; b <= 1; b++) for (const dy of [0, 1]) out.push(hub.plus(R.scaled(a)).plus(STEP[arrive].scaled(b)).offset(0, dy, 0));
+    for (const [a, b] of ROOM_CELLS) for (const dy of [0, 1]) out.push(hub.plus(R.scaled(a)).plus(STEP[arrive].scaled(b)).offset(0, dy, 0));
     for (const arm of ARMS) {
-      const cell = hub.plus(R.scaled(sleeveColumn(arm, level, side))).plus(STEP[armDirection(arm, arrive)].scaled(2));
+      const cell = sleeveBase(hub, arrive, arm).plus(STEP[armDirection(arm, arrive)].scaled(2));
       out.push(cell, cell.offset(0, 1, 0));
     }
   }
@@ -455,7 +452,7 @@ export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, l
   const tunnels = hubTunnelCells(start, dir, stairs, level, turns, sideFrom);
   for (let i = 0; i < stairs; i++) {
     const s = stepAt(start, dir, i, turns);
-    for (let dy = 0; dy <= STAIR_HEADROOM; dy++) walk.push(s.offset(0, dy, 0));
+    for (let dy = 0; dy <= stepHeadroom(i); dy++) walk.push(s.offset(0, dy, 0));
     keep.push(...stepShell(start, dir, i, level, turns).filter((c) => !tunnels.has(c.toString())));
   }
   return { keep, walk };
@@ -481,21 +478,21 @@ export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, l
  * four sleeves (2 high, ARM_LENGTH long) and their pokeholes (1 wide,
  * POKE_HEIGHT high, POKE_LENGTH long, every POKE_EVERY blocks). Pure.
  */
-export function floorCells(hub: Vec3, arrive: DirectionType, level: number, side = true): Vec3[] {
+export function floorCells(hub: Vec3, arrive: DirectionType, _level = 0, _side = true): Vec3[] {
   const out: Vec3[] = [];
   const R = STEP[RIGHT[arrive]];
   const F = STEP[arrive];
-  for (const a of roomColumns(side)) for (let b = -1; b <= 1; b++) for (let dy = 0; dy < ROOM_HEIGHT; dy++) out.push(hub.plus(R.scaled(a)).plus(F.scaled(b)).offset(0, dy, 0));
+  for (const [a, b] of ROOM_CELLS) for (let dy = 0; dy < ROOM_HEIGHT; dy++) out.push(hub.plus(R.scaled(a)).plus(F.scaled(b)).offset(0, dy, 0));
   for (const arm of ARMS) {
     const way = STEP[armDirection(arm, arrive)];
     const across = STEP[RIGHT[armDirection(arm, arrive)]];
-    const base = hub.plus(R.scaled(sleeveColumn(arm, level, side)));
+    const base = sleeveBase(hub, arrive, arm);
     for (let k = 1; k <= ARM_LENGTH; k++) {
       const cell = base.plus(way.scaled(k));
-      out.push(cell, cell.offset(0, 1, 0));
+      for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) out.push(cell.offset(0, dy, 0));
       if (k % POKE_EVERY !== 0) continue;
-      for (const s of pokeSides(arm, level, side)) {
-        for (let p = 1; p <= POKE_LENGTH; p++) for (let dy = 0; dy < POKE_HEIGHT; dy++) out.push(cell.plus(across.scaled(s * p)).offset(0, dy, 0));
+      for (const sd of POKE_SIDES) {
+        for (let p = 1; p <= POKE_LENGTH; p++) for (let dy = 0; dy < POKE_HEIGHT; dy++) out.push(cell.plus(across.scaled(sd * p)).offset(0, dy, 0));
       }
     }
   }
@@ -515,7 +512,7 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number, tur
   const way = dirAt(dir, i, turns);
   const cells = [s.offset(0, -1, 0), s.offset(0, STAIR_HEADROOM + 1, 0)];
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
-  if (hubs.has(i)) return cells;
+  if (hubs.has(i) || isFlatStep(i)) return cells;
   for (const side of [STEP[armDirection("right", way)], STEP[armDirection("left", way)]]) {
     for (let dy = -1; dy <= STAIR_HEADROOM; dy++) cells.push(s.plus(side).offset(0, dy, 0));
   }
@@ -801,15 +798,16 @@ export async function lookAfterStairs(): Promise<void> {
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return;
     const s = stepAt(rec.start, rec.direction, i, rec.turns);
-    const holes = stepShell(rec.start, rec.direction, i, rec.level, rec.turns).filter((c) => !tunnels.has(c.toString()) && isHoleBlock(bot.blockAt(c)));
+    // Only its floor (owner: paths mended under the feet only, never above)
+    const holes = [s.offset(0, -1, 0)].filter((c) => !tunnels.has(c.toString()) && isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     // Stairs dug before they were made a block higher: the top cell dug out now
-    const low = bot.blockAt(s.offset(0, STAIR_HEADROOM, 0));
-    const raise = low !== null && low.boundingBox === "block" && !low.name.includes("torch");
+    const low = bot.blockAt(s.offset(0, stepHeadroom(i), 0));
+    const raise = low !== null && low.boundingBox === "block" && !low.name.includes("torch") && !low.name.endsWith("_sign");
     // Gravel or sand fallen into the step (or anything else filling it):
     // walks won't dig a block with gravel over it, so it stood on the step
     // above for five minutes (game test; the owner dug it out by hand)
-    const fallen = Array.from({ length: STAIR_HEADROOM }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c));
+    const fallen = Array.from({ length: stepHeadroom(i) }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c));
     if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
@@ -835,7 +833,7 @@ export async function lookAfterStairs(): Promise<void> {
     for (const hole of holes) if (await ensureBlock(hole, (p) => inWalk(p) || tunnels.has(p.toString()))) filled++;
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
-      if ((await breakBlock(s.offset(0, STAIR_HEADROOM, 0))).ok) raised++;
+      if ((await breakBlock(s.offset(0, stepHeadroom(i), 0))).ok) raised++;
     }
     if (torch) {
       const placed = await lightSpot(s.offset(0, 1, 0), dirAt(rec.direction, i, rec.turns));
@@ -902,9 +900,8 @@ export function dirAt(dir: DirectionType, i: number, turns: Turn[] = []): Direct
 
 /** Step `i` of stairs from `start` going `dir`, turning where `turns` say. Pure. */
 export function stepAt(start: Pos, dir: DirectionType, i: number, turns: Turn[] = []): Vec3 {
-  if (turns.length === 0) return new Vec3(start.x, start.y, start.z).plus(STEP[dir].scaled(i)).offset(0, -i, 0);
   let p = new Vec3(start.x, start.y, start.z);
-  for (let k = 1; k <= i; k++) p = p.plus(STEP[dirAt(dir, k, turns)]).offset(0, -1, 0);
+  for (let k = 1; k <= i; k++) p = p.plus(STEP[dirAt(dir, k, turns)]).offset(0, isFlatStep(k) ? 0 : -1, 0);
   return p;
 }
 
@@ -956,7 +953,7 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
       console.log(`Mine: ${i} of ${stairsToFirstFloor()} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
       return ok();
     }
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: stepHeadroom(i) }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
       // Stopped (the owner, something more urgent): carry on from this step next time
       if (isCommandCancelled() || why === null) {
@@ -1002,8 +999,9 @@ export function stepsToPave(stairs: number): number[] {
   // Every step below the doorway, hubs too (owner: a flat hub between paved
   // steps is a step and a half up, which no one can walk; game test). The
   // bottom step is paved from its forward tunnel, the rest from the step below
+  // (the flat part across each floor's room is floor, not stairs)
   const steps: number[] = [];
-  for (let i = 1; i < stairs; i++) steps.push(i);
+  for (let i = 1; i < stairs; i++) if (!isFlatStep(i)) steps.push(i);
   return steps;
 }
 
@@ -1330,10 +1328,9 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       if (isCommandCancelled()) return fail("aborted", "stopped");
       await saveMine(start, dir, Math.max(recNow.stairs, hubStep(level) + 1), recNow.branches, recNow.bottom, { level, arms, deepest: recNow.deepest, roomsDone: level });
     }
-    // The floor's sleeves go by the way its stairs came in; forward and back
-    // leave from a side column, alternating floor by floor (owner)
+    // The floor's sleeves go by the way its stairs came in (owner's plan)
     const way = armDirection(arm, arrive);
-    const base = hub.plus(STEP[RIGHT[arrive]].scaled(sleeveColumn(arm, level, side)));
+    const base = sleeveBase(hub, arrive, arm);
     const end = base.plus(STEP[way].scaled(arms[arm].dug));
     const there = await goToStep(end);
     if (!there.ok) {
@@ -1353,21 +1350,19 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       continue;
     }
     const length = Math.min(CHUNK, ARM_LENGTH - arms[arm].dug);
-    const dug = await digStraightTunnel(way, length, end, 1);
+    const dug = await digStraightTunnel(way, length, end, 1, SLEEVE_HEIGHT);
     const stop = dug ? null : tunnelStopReason();
-    // Pokeholes off the stretch just dug: 1 wide, 3 high, 5 long, every 4 (owner)
+    // Pokeholes off the stretch just dug: 1 wide, 3 high, 5 long, every 3, both sides (owner)
     if (dug) {
       for (let k = arms[arm].dug + 1; k <= arms[arm].dug + length; k++) {
         if (k % POKE_EVERY !== 0 || isCommandCancelled()) continue;
         const cell = base.plus(STEP[way].scaled(k));
-        for (const s of pokeSides(arm, level, side)) {
-          const across = s === 1 ? RIGHT[way] : LEFT[way];
+        for (const sd of POKE_SIDES) {
+          const across = sd === 1 ? RIGHT[way] : LEFT[way];
           if (!(await goToStep(cell)).ok) break;
           await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT);
           if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
-          // Every ore seen from the pokehole, and its floor mended after (owner)
-          await mineOresInSight(wants);
-          await mendFloor(hub, arrive, level, side);
+          if (hurtInTheMine()) return leaveHurt();
         }
       }
     }
@@ -1393,11 +1388,14 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
-    await mineOresInSight(wants);
-    // Ore dug out of the floor leaves holes in it: filled (owner); a way
-    // out it dug into (a canyon) blocked
+    // The stretch secured first (owner: every ore seen mined at once, but
+    // only once the area is secured): its floor mended, a way out to the sky
+    // blocked; then the ore it uncovered and the ore in sight
     await mendFloor(hub, arrive, level, side);
     await lookAfterFloors();
+    if (hurtInTheMine()) return leaveHurt();
+    await mineOresInSight(wants);
+    await mendFloor(hub, arrive, level, side);
   }
   // A heavy bag goes home with it (owner: it died in the mine carrying 1022 things)
   await haulHomeIfHeavy();
@@ -1448,16 +1446,15 @@ async function mendFloor(hub: Vec3, arrive: DirectionType, level: number, side: 
  * "2nd floor"... Best effort: a block it can't dig or a sign it can't make
  * doesn't stop the mining.
  */
-async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number, side: boolean): Promise<void> {
+async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number, _side = true): Promise<void> {
   if (!(await goToStep(hub)).ok) return;
   const R = STEP[RIGHT[arrive]];
   const F = STEP[arrive];
   const { breakBlock } = await import("../core/primitives");
   const { ensureBlock } = await import("../actions/digging");
   const room: Vec3[] = [];
-  // Beside the stairs: their own column is the stairs (the step coming in
-  // behind, the landing, the step going on down in front), left as it is
-  for (const a of roomColumns(side)) for (let b = -1; b <= 1; b++) if (!side || a !== 0) room.push(hub.plus(R.scaled(a)).plus(F.scaled(b)));
+  // Ahead of the stairs' end, 3 by 3 (owner's plan); the stairs cross it flat
+  for (const [a, b] of ROOM_CELLS) room.push(hub.plus(R.scaled(a)).plus(F.scaled(b)));
   const inRoom = (p: Vec3): boolean => room.some((c) => c.x === p.x && c.z === p.z && p.y >= c.y && p.y < c.y + ROOM_HEIGHT);
   let dug = 0;
   for (const c of room) {
@@ -1468,13 +1465,11 @@ async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number, sid
       if (!b || b.boundingBox !== "block" || b.name.endsWith("_stairs")) continue;
       if ((await breakBlock(cell)).ok) dug++;
     }
-    // Its floor (the stairs on down, in front of the middle, stay open)
-    const isStairsDown = c.equals(hub.plus(F));
-    if (!isStairsDown) await ensureBlock(c.offset(0, -1, 0), inRoom);
+    // Its floor (the stairs go on down beyond its front side)
+    await ensureBlock(c.offset(0, -1, 0), inRoom);
   }
   console.log(`Mine: the ${floorName(level)}'s room dug (${dug} blocks).`);
-  // Its sign, on the wall left of the way in at eye height (beside the
-  // stairs: on the room's right wall, by the back corner)
+  // Its sign on the room's right wall by the back corner, at eye height
   const planks = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
   const sign = planks ? `${planks.name.replace(/_planks$/, "")}_sign` : "oak_sign";
   if (!bot.inventory.items().some((i) => i.name.endsWith("_sign"))) {
@@ -1484,9 +1479,9 @@ async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number, sid
   }
   const have = bot.inventory.items().find((i) => i.name.endsWith("_sign"))?.name;
   if (!have) return;
-  const spot = side ? hub.plus(R.scaled(2)).minus(F).offset(0, 1, 0) : hub.minus(R).minus(F).offset(0, 1, 0);
+  const spot = hub.plus(R).offset(0, 1, 0);
   const { placeBlockResult } = await import("../actions/blockPlacing");
-  const placed = await placeBlockResult(have, spot.x, spot.y, spot.z, side ? RIGHT[arrive] : LEFT[arrive]);
+  const placed = await placeBlockResult(have, spot.x, spot.y, spot.z, RIGHT[arrive]);
   if (!placed.ok) return;
   const { writeSign } = await import("../core/primitives");
   const wrote = await writeSign(spot, floorName(level));
@@ -1666,7 +1661,7 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
     // through a flooded cave and it kept ending up under water)
     const liquid = stepLiquid(stepAt(start, dir, i, rec.turns));
     if (liquid) return fail("refused", `${liquid} at the next step`);
-    if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: STAIR_HEADROOM }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: stepHeadroom(i) }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();
       if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");

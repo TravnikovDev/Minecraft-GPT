@@ -4,49 +4,40 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 
 ## The stairs
 
-- A diagonal staircase down from the shelter's back wall: one block forward and one down per step, 4 blocks of headroom.
+- A diagonal staircase down from the shelter's back wall: one block forward and one down per step, **5 blocks high** (room for stair blocks).
 - Every step is a closed tube: floor, both side walls and a roof are kept solid. Where the stairs cross a cave, the gaps are filled with dirt or cobblestone on the way down.
-- Once there are 200 cobblestone, the steps get cobblestone stair blocks. They're made at home, one per bare step plus 10%.
-- Blocked going down (water or lava at the next step, something built, a drop it can't floor), the stairs **turn**:
-  1. back at the floor they came down from, the old way down is capped with 4 blocks in the tunnel floor;
-  2. new stairs go down to the **right** of the way the stairs came in;
-  3. if those are blocked too, to the **left**;
-  4. if both are blocked, the same one floor higher, and so on up.
-- A direction whose sleeve at that floor already hit water or lava is never tried for new stairs.
+- Once there are 200 cobblestone, the steps get cobblestone stair blocks (made at home, one per bare step plus 10%). The flat part across a floor's room gets none.
+- Blocked going down (water or lava at the next step, something built, a drop it can't floor), the stairs **turn**: right, then left, from the floor they came down from, then one floor higher.
 - The stairs go down to just over bedrock: no floor below y -54.
 
-## Floors
+## Floors (owner's plan)
 
-The **first floor 20 steps down** (at 10 the tunnels kept running into canyons and caves open to the sky), then a floor every **10 steps** deeper. A mine dug before keeps its first floor where it was. Each floor has:
-
-- a **room**, 3 by 3 and 3 high, with a solid floor, **beside the stairs**: the stairs run along its left column (the step coming in at the back, the landing in the middle, the step going on down at the front). The middle and right columns are flat, so you can run freely from one sleeve to another;
-- a **sign** on the room's right wall by the back corner: "1st floor", "2nd floor", ...;
-- **four sleeves**, each 50 blocks long, 1 wide and 2 high:
+The **first floor 20 steps down**, then a floor every **10 blocks** deeper.
 
 ```
-odd floors (1st, 3rd...)               even floors (2nd, 4th...)
-[   ][   ][ F ][   ][   ]              [   ][   ][   ][ F ][   ]
-[   ][ S↓][ X ][ X ][   ]              [   ][ S↓][ X ][ X ][   ]
-[ L ][ S ][ X ][ X ][ R ]              [ L ][ S ][ X ][ X ][ R ]
-[   ][ S↑][ X ][ X ][   ]              [   ][ S↑][ X ][ X ][   ]
-[   ][   ][ B ][   ][   ]              [   ][   ][   ][ B ][   ]
-S: the stairs (↑ the step coming in, ↓ the step going on down)
+            L                       L: left sleeve,  R: right sleeve
+            L                       B: back sleeve,  F: forward sleeve
+ B B B B B [x][x][x]                S: the stairs coming in (5 high)
+ S S S S S [s][x][x]   ...          s: the stairs' end, in the middle of
+           [x][x][x] F F F F F         the room's back side
+                R                   [x]: the room, 3 by 3, 3 high, flat
+                R
 ```
 
-- Left and right sleeves always leave from the middle row: left from the stairs' landing, right from the room's right column.
-- Forward and back sleeves alternate: from the middle column on odd floors, from the right column on even floors.
-- They're dug in this order: forward, right, left, back.
-- The floors dug before this layout (the room round the stairs) keep their old shape.
-- The rooms, sleeves and pokeholes are the bot's own passages: walks never put a block down in them, and blocks left standing there are taken out when the floor is mended.
+- The **room** is 3 by 3, 3 high, ahead of the stairs' end; the stairs end in the middle of its back side, so its middle stays free to run from sleeve to sleeve. The stairs to the next floor go on from its front side, after crossing it flat.
+- **Left and right sleeves** leave from the room's middle line.
+- The **back sleeve** runs along the room's left row, back beside the stairs; the **forward sleeve** along its right row.
+- Every sleeve is **50 blocks long and 3 high**. Dug in this order: forward, right, left, back.
+- A **sign** on the room's right wall: "1st floor", "2nd floor", ...
 
 ## Pokeholes
 
-Along every sleeve, every **4 blocks**, a pokehole **1 wide, 3 high, 5 long**:
+Along every sleeve, every **3 blocks**, a pokehole **1 wide, 3 high, 5 long, on both sides**.
 
-- off the left and right sleeves, on both sides;
-- off the forward and back sleeves, only on the side away from the stairs.
+## Looking after it
 
-Every ore seen from a fresh sleeve or pokehole is mined (strip mining). Holes that ore leaves in the floor under the room, the sleeves and the pokeholes are filled again with dirt or cobblestone. The stairs going on down are left open.
+- Damaged paths are mended **only under the feet** (the floor of the stairs, rooms, sleeves and pokeholes); never walls or ceilings.
+- Every ore seen is mined at once, **once the stretch is secured**: its floor mended and any way out to the sky blocked first.
 
 ## When it can't go deeper
 

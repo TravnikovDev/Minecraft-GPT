@@ -37,83 +37,80 @@ test("right and left are the stairs' right and left; back is behind", () => {
   expect(["forward", "right", "left", "back"].map((a) => armDirection(a, "east"))).toEqual(["east", "south", "north", "west"]);
 });
 
-test("floors (owner, older room round the stairs): left and right sleeves from the middle; forward and back from the left column on odd floors, the right on even", async () => {
-  const { sleeveColumn, pokeSides, floorName } = await import(`${ROOT}/src/skills/mine.ts`);
-  expect([sleeveColumn("left", 0, false), sleeveColumn("right", 1, false)]).toEqual([0, 0]);
-  expect([sleeveColumn("forward", 0, false), sleeveColumn("back", 0, false)]).toEqual([-1, -1]); // 1st floor: left column
-  expect([sleeveColumn("forward", 1, false), sleeveColumn("back", 1, false)]).toEqual([1, 1]); // 2nd floor: right column
-  // Pokeholes both sides off left and right; only the outer side off forward and back (the stairs are inside)
-  expect(pokeSides("left", 0, false)).toEqual([1, -1]);
-  expect(pokeSides("forward", 0, false)).toEqual([-1]);
-  expect(pokeSides("back", 0, false)).toEqual([1]);
+test("floors (owner's plan): the room ahead of the stairs' end, sleeves off its middle line and its side rows, pokes every 3 both sides", async () => {
+  const { ROOM_CELLS, sleeveStart, sleeveBase, POKE_SIDES, POKE_EVERY, POKE_LENGTH, SLEEVE_HEIGHT, ROOM_HEIGHT, floorCells, floorName, STAIR_HEADROOM } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  // 3 by 3, from the stairs' end (along 0) forward (along 2), across -1..1
+  expect(ROOM_CELLS.length).toBe(9);
+  expect(ROOM_CELLS.every(([a, b]: number[]) => Math.abs(a) <= 1 && b >= 0 && b <= 2)).toBe(true);
+  // Left and right from the middle line; back along the left row, forward along the right row
+  expect([sleeveStart("left"), sleeveStart("right"), sleeveStart("back"), sleeveStart("forward")]).toEqual([[-1, 1], [1, 1], [-1, 0], [1, 2]]);
+  expect([POKE_SIDES, POKE_EVERY, POKE_LENGTH, SLEEVE_HEIGHT, ROOM_HEIGHT, STAIR_HEADROOM + 1]).toEqual([[1, -1], 3, 5, 3, 3, 5]);
+  // Arriving east at (0, 40, 0): right is south (+z)
+  const hub = new Vec3(0, 40, 0);
+  expect(sleeveBase(hub, "east", "forward").toArray()).toEqual([2, 40, 1]);
+  expect(sleeveBase(hub, "east", "back").toArray()).toEqual([0, 40, -1]);
+  const cells = floorCells(hub, "east");
+  const has = (x: number, y: number, z: number) => cells.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
+  // The room, 3 high; nothing behind the stairs' end on its own line (that's the stairs)
+  expect(has(1, 40, 0) && has(1, 42, 0) && !has(1, 43, 0)).toBe(true);
+  expect(has(-1, 40, 0)).toBe(false);
+  // Forward sleeve on the right row, 3 high; its first poke 3 along, 5 each side
+  expect(has(3, 40, 1) && has(3, 42, 1)).toBe(true);
+  expect(has(5, 40, 6) && has(5, 40, -4)).toBe(true);
+  // Back sleeve on the left row, back past the stairs; a poke 3 back
+  expect(has(-1, 40, -1) && has(-3, 40, -6)).toBe(true);
+  // Left and right from the middle line
+  expect(has(1, 40, -2) && has(1, 40, 2)).toBe(true);
   expect([0, 1, 2, 3, 10].map(floorName)).toEqual(["1st floor", "2nd floor", "3rd floor", "4th floor", "11th floor"]);
 });
 
-test("floors (owner): the room beside the stairs, not round them, so the middle is free to run from sleeve to sleeve", async () => {
-  const { sleeveColumn, pokeSides, roomColumns, floorCells, roomBeside } = await import(`${ROOT}/src/skills/mine.ts`);
-  // The stairs along the room's left column; the middle and right columns flat
-  expect(roomColumns(true)).toEqual([0, 1, 2]);
-  // Left from the stairs' landing, right from the right column (both the middle row)
-  expect([sleeveColumn("left", 1), sleeveColumn("right", 1)]).toEqual([0, 2]);
-  // Forward and back alternate between the middle and the right column
-  expect([sleeveColumn("forward", 0), sleeveColumn("back", 0)]).toEqual([1, 1]);
-  expect([sleeveColumn("forward", 1), sleeveColumn("back", 1)]).toEqual([2, 2]);
-  // Pokeholes off forward and back only away from the stairs (their right)
-  expect([pokeSides("forward", 1), pokeSides("back", 1)]).toEqual([[1], [-1]]);
-  // The floors dug before keep the older room: the first floor here was
-  expect([roomBeside(0, 1), roomBeside(1, 1)]).toEqual([false, true]);
-  // No room cell in the stairs' own column but the landing, the step in and the step down
-  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
-  const hub = new Vec3(0, 40, 0);
-  const cells = floorCells(hub, "south", 1);
-  const has = (x: number, y: number, z: number) => cells.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
-  // South: right is west (-x). The room spans x 0..-2, z -1..1
-  expect(has(-1, 40, 0) && has(-2, 40, 1) && has(-2, 40, -1)).toBe(true);
-  // Nothing on the stairs' left but the left sleeve leaving the landing (east, +x)
-  expect(has(1, 40, 0)).toBe(true);
-  expect(has(1, 40, 1) || has(1, 40, -1)).toBe(false);
+test("floors: at the stairs' bottom, then every 10 blocks deeper; the stairs cross each room flat (owner)", async () => {
+  const { stepAt, isFlatStep, FLAT_STEPS } = await import(`${ROOT}/src/skills/mine.ts`);
+  const start = { x: 0, y: 64, z: 0 };
+  expect(hubStep(0)).toBe(MINE_DEPTH);
+  expect(hubStep(1)).toBe(MINE_DEPTH + LEVEL_STEP + FLAT_STEPS);
+  expect(stepAt(start, "south", hubStep(1)).y).toBe(stepAt(start, "south", hubStep(0)).y - LEVEL_STEP);
+  // The two after the stairs' end are flat (the room's middle and front), then down again
+  const h = hubStep(0);
+  expect([isFlatStep(h), isFlatStep(h + 1), isFlatStep(h + 2), isFlatStep(h + 3)]).toEqual([false, true, true, false]);
+  expect([h, h + 1, h + 2, h + 3].map((i) => stepAt(start, "south", i).y)).toEqual([64 - h, 64 - h, 64 - h, 63 - h]);
 });
 
-test("floors: at the stairs' bottom, then every 10 steps deeper (owner)", () => {
-  expect([0, 1, 2].map(hubStep)).toEqual([MINE_DEPTH, MINE_DEPTH + LEVEL_STEP, MINE_DEPTH + 2 * LEVEL_STEP]);
-});
-
-test("paving: every step below the doorway, hubs and the bottom step too", () => {
-  // Owner: a flat hub between paved steps is a step and a half up, which no one can walk
-  // Stairs down to the first hub (steps 0..10): steps 1..10 (10 is the hub, paved from its forward tunnel)
-  expect(stepsToPave(11)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  // Dug on to the second hub (steps 0..30): both hubs paved, the doorway's step never
-  const deep = stepsToPave(31);
-  expect(deep).not.toContain(0);
-  expect(deep).toContain(10);
-  expect(deep).toContain(30);
-  expect(deep.length).toBe(30);
-});
-
-test("the stairs' floors and side walls are kept; hubs stay open to the sides; the doorway is the shelter's", () => {
-  // Stairs south from (0, 64, 0): step i stands at (0, 64 - i, i)
+test("paving: every step below the doorway, hubs and the bottom step too, never the flat part across a room", () => {
   const H = MINE_DEPTH;
-  const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", H + 2, 0);
+  expect(stepsToPave(H + 1)).toEqual(Array.from({ length: H }, (_, i) => i + 1));
+  const deep = stepsToPave(hubStep(1) + 1);
+  expect(deep).not.toContain(0);
+  expect(deep).toContain(H);
+  expect(deep).toContain(hubStep(1));
+  expect(deep).not.toContain(H + 1);
+  expect(deep).not.toContain(H + 2);
+});
+
+test("the stairs' floors and side walls are kept; hubs and the room stay open; the doorway is the shelter's", () => {
+  // Stairs south from (0, 64, 0): step i stands at (0, 64 - i, i) down to the first floor
+  const H = MINE_DEPTH;
+  const { keep, walk } = mineStairCells({ x: 0, y: 64, z: 0 }, "south", H + 6, 0);
   const has = (cells: Array<{ x: number; y: number; z: number }>, x: number, y: number, z: number): boolean => cells.some((c) => c.x === x && c.y === y && c.z === z);
-  // Step 5: floor under it, walls east and west from floor to the top of its 4-high space
+  // Step 5: floor under it, walls east and west from floor to the top of its 5-high space, roof over
   expect(has(keep, 0, 58, 5)).toBe(true);
-  for (const dy of [-1, 0, 1, 2, 3]) {
+  for (const dy of [-1, 0, 1, 2, 3, 4]) {
     expect(has(keep, 1, 59 + dy, 5)).toBe(true);
     expect(has(keep, -1, 59 + dy, 5)).toBe(true);
   }
-  // The roof over each step, all the way down (owner: sealed off from
-  // caves); past the hub it sits above the 2-high forward tunnel, not in it
-  expect(has(keep, 0, 63, 5)).toBe(true);
-  expect(has(keep, 0, 64 - (H + 1) + 4, H + 1)).toBe(true);
-  expect(has(keep, 0, 64 - H, H + 1) || has(keep, 0, 65 - H, H + 1)).toBe(false); // the tunnel's own space
-  // Never the step's own cells (it walks there) nor the doorway
+  expect(has(keep, 0, 64, 5)).toBe(true);
+  // Never the step's own cells nor the doorway
   expect(has(keep, 0, 59, 5)).toBe(false);
   expect(has(keep, 0, 63, 0)).toBe(false);
-  // The hub (the first floor's step): floor kept, sides open for the right and left tunnels
+  // The hub (the stairs' end): floor kept, sides open (the room)
   expect(has(keep, 0, 63 - H, H)).toBe(true);
   expect(has(keep, 1, 64 - H, H)).toBe(false);
-  expect(has(walk, 0, 59, 5)).toBe(true);
-  expect(has(walk, 0, 62, 5)).toBe(true); // 4 high (owner: 3 was too low)
+  // On down past the room (step H+3, a block lower): its east wall kept;
+  // its west side is the forward sleeve (south: right is west), open
+  expect(has(keep, 1, 63 - H, H + 3)).toBe(true);
+  expect(has(keep, -1, 64 - H, H + 3)).toBe(false);
+  expect(has(walk, 0, 59, 5) && has(walk, 0, 63, 5)).toBe(true); // 5 high (owner)
 });
 
 test("the ground over its home is protected up to over the surface, its own open cells never", async () => {
@@ -199,7 +196,9 @@ test("the way up from down in its mine starts at the nearest step of its stairs"
   // Stairs south from (0, 64, 0): step i at (0, 64 - i, i)
   expect(nearestStairStep({ x: 0, y: 44, z: 20 }, { x: 0, y: 64, z: 0 }, "south", 40)).toBe(20);
   // In a side tunnel off step 30, 10 blocks out
-  expect(nearestStairStep({ x: 10, y: 34, z: 30 }, { x: 0, y: 64, z: 0 }, "south", 40)).toBe(30);
+  const { stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+  const s30 = stepAt({ x: 0, y: 64, z: 0 }, "south", 30);
+  expect(nearestStairStep({ x: 10, y: s30.y, z: 30 }, { x: 0, y: 64, z: 0 }, "south", 40)).toBe(30);
   // No stairs: none
   expect(nearestStairStep({ x: 0, y: 0, z: 0 }, { x: 0, y: 64, z: 0 }, "south", 0)).toBeNull();
 });
@@ -215,14 +214,15 @@ test("paving: every bare step and 10% spare, at least one (owner)", async () => 
 test("stairs that turn at a hub go the new way from there (owner: blocked, turn at the crossroad)", async () => {
   const { stepAt, dirAt, hubStep } = await import(`${ROOT}/src/skills/mine.ts`);
   const start = { x: 0, y: 64, z: 0 };
-  const h = hubStep(1); // 30
+  const h = hubStep(1);
   const turns = [{ at: h, dir: "east" as const }];
-  // Up to the hub: straight south and down
-  expect(stepAt(start, "south", h, turns).toArray()).toEqual([0, 64 - h, h]);
+  // Up to the hub: straight south and down (flat across the first floor's room)
+  const y = 64 - (h - 2);
+  expect(stepAt(start, "south", h, turns).toArray()).toEqual([0, y, h]);
   expect(dirAt("south", h, turns)).toBe("south");
-  // After it: east and down
+  // After it: east (flat two, then down)
   expect(dirAt("south", h + 1, turns)).toBe("east");
-  expect(stepAt(start, "south", h + 3, turns).toArray()).toEqual([3, 64 - h - 3, h]);
+  expect(stepAt(start, "south", h + 3, turns).toArray()).toEqual([3, y - 1, h]);
 });
 
 test("blocked stairs: right, then left from the same crossroad, then one crossroad higher (owner)", async () => {
@@ -260,8 +260,8 @@ test("one turn: the steps after it have side walls along the way the stairs came
   const start = { x: 0, y: 64, z: 0 };
   const h = hubStep(0);
   const turns = [{ at: h, dir: "east" as const }];
-  const { keep } = mineStairCells(start, "south", h + 3, 0, turns);
-  const s = stepAt(start, "south", h + 2, turns);
+  const { keep } = mineStairCells(start, "south", h + 5, 0, turns);
+  const s = stepAt(start, "south", h + 4, turns);
   const has = (x: number, y: number, z: number) => keep.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
   // Going east: its side walls are north and south of it
   expect(has(s.x, s.y, s.z - 1) && has(s.x, s.y, s.z + 1)).toBe(true);
@@ -277,21 +277,20 @@ test("no way deeper: side routes every 3 blocks off each tunnel, both sides (own
   expect(r.length).toBe(4 * Math.floor(ARM_LENGTH / 3) * 2);
 });
 
-test("the stairs are roofed all the way down, but never where a hub's tunnel runs over them (owner: seal them off from caves)", async () => {
-  const { mineStairCells, hubStep, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+test("the stairs are roofed all the way down, but never where a floor's room or tunnels are (owner: seal them off from caves)", async () => {
+  const { mineStairCells, hubStep, stepAt, STAIR_HEADROOM } = await import(`${ROOT}/src/skills/mine.ts`);
   const start = { x: 0, y: 64, z: 0 };
   const h = hubStep(0);
-  // (the older room round the stairs: sideFrom past every floor)
-  const { keep } = mineStairCells(start, "south", h + 12, 0, [], Infinity);
+  const { keep } = mineStairCells(start, "south", h + 12, 0);
   const has = (p: { x: number; y: number; z: number }) => keep.some((c: { x: number; y: number; z: number }) => c.x === p.x && c.y === p.y && c.z === p.z);
-  // Deep below the hub: roofed
+  // Deep below the room: roofed over its 5-high space
   const deep = stepAt(start, "south", h + 10);
-  expect(has(deep.offset(0, 4, 0))).toBe(true);
-  // The floor's room (3 by 3, 3 high round the stairs) is never part of the shell
+  expect(has(deep.offset(0, STAIR_HEADROOM + 1, 0))).toBe(true);
+  // The floor's room (3 by 3 ahead of the stairs' end) is never part of the shell
   const hub = stepAt(start, "south", h);
-  for (const [dx, dz] of [[1, 0], [-1, 0], [1, 1], [-1, -1]]) expect(has(hub.offset(dx, 1, dz))).toBe(false);
-  // The forward sleeve leaves from the left column (1st floor): its space isn't shell either
-  expect(has(hub.offset(1, 0, 3)) || has(hub.offset(1, 1, 3))).toBe(false); // south: left is east (+x)
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [1, 2], [-1, 2]]) expect(has(hub.offset(dx, 1, dz))).toBe(false);
+  // The forward sleeve (right row: west, -x) isn't shell either
+  expect(has(hub.offset(-1, 0, 3)) || has(hub.offset(-1, 1, 3))).toBe(false);
 });
 
 test("water or lava at the next step stops the stairs (they turn: owner)", async () => {
