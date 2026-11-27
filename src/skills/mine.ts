@@ -103,9 +103,21 @@ export function sleeveStart(arm: ArmName): readonly [number, number] {
 // the forward sleeve's row; the stairs go on down from the middle)
 export const TABLE_CELL: readonly [number, number] = [-1, 2];
 
+// And its furnace (owner: "we could add a furnace"): the back-right corner,
+// beside the stairs' end, under the floor's sign, also on no way through
+export const FURNACE_CELL: readonly [number, number] = [1, 0];
+
+/** A room cell [across, along] for a hub the stairs arrive at going `arrive`. Pure. */
+const roomCell = (hub: Vec3, arrive: DirectionType, [a, b]: readonly [number, number]): Vec3 => hub.plus(STEP[RIGHT[arrive]].scaled(a)).plus(STEP[arrive].scaled(b));
+
 /** Where a floor's crafting table stands, for a hub the stairs arrive at going `arrive`. Pure. */
 export function floorTableSpot(hub: Vec3, arrive: DirectionType): Vec3 {
-  return hub.plus(STEP[RIGHT[arrive]].scaled(TABLE_CELL[0])).plus(STEP[arrive].scaled(TABLE_CELL[1]));
+  return roomCell(hub, arrive, TABLE_CELL);
+}
+
+/** Where a floor's furnace stands. Pure. */
+export function floorFurnaceSpot(hub: Vec3, arrive: DirectionType): Vec3 {
+  return roomCell(hub, arrive, FURNACE_CELL);
 }
 
 /** A sleeve's start cell for a hub (the stairs' end) the stairs arrive at going `arrive`. Pure. */
@@ -1640,10 +1652,10 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       if (isCommandCancelled()) return fail("aborted", "stopped");
       await saveMine(start, dir, Math.max(recNow.stairs, hubStep(level) + 1), recNow.branches, recNow.bottom, { level, arms, deepest: recNow.deepest, roomsDone: level });
     }
-    // Its crafting table in the room's corner (once a trip per floor)
-    if (!tablesSeen.has(level)) {
-      tablesSeen.add(level);
-      await ensureFloorTable(hub, arrive, level);
+    // Its crafting table and furnace in the room's corners (once a trip per floor)
+    if (!furnishedSeen.has(level)) {
+      furnishedSeen.add(level);
+      await furnishFloor(hub, arrive, level);
       if (isCommandCancelled()) return fail("aborted", "stopped");
     }
     // The floor's sleeves go by the way its stairs came in (owner's plan)
@@ -1830,36 +1842,41 @@ async function digFloorRoom(hub: Vec3, arrive: DirectionType, level: number, _si
   if (wrote.ok) chatter(`The ${floorName(level)} of my mine has its room and its sign.`, "mining");
 }
 
-// Floors whose table it looked at since it connected (a table it couldn't put
-// in isn't tried again on every tunnel)
-const tablesSeen = new Set<number>();
+// Floors whose table and furnace it looked at since it connected (one it
+// couldn't put in isn't tried again on every tunnel)
+const furnishedSeen = new Set<number>();
 
 /**
- * The floor's crafting table in its room's corner (owner: a crafting table
- * on every floor). Made from what it carries if it has none. Best effort:
- * no table doesn't stop the mining.
+ * The floor's crafting table and furnace in its room's corners (owner: a
+ * crafting table on every floor, and a furnace): it crafts and smelts down
+ * there instead of going home. Made from what it carries if it has none.
+ * Best effort: none doesn't stop the mining.
  */
-async function ensureFloorTable(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
-  const spot = floorTableSpot(hub, arrive);
-  const there = bot.blockAt(spot);
-  if (!there || there.name === "crafting_table") return;
-  // Something else it or the owner put there: left alone
-  if (there.boundingBox === "block" && !isNatural(there.name)) return;
-  if (!bot.inventory.items().some((i) => i.name === "crafting_table")) {
-    const { acquire } = await import("./acquire");
-    const { liveWorld } = await import("./world");
-    const made = await acquire("crafting_table", 1, liveWorld);
-    if (!made.ok) {
-      console.log(`Mine: no crafting table for the ${floorName(level)} (${made.detail ?? made.reason}).`);
-      return;
+async function furnishFloor(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
+  const put: string[] = [];
+  for (const [item, spot] of [["crafting_table", floorTableSpot(hub, arrive)], ["furnace", floorFurnaceSpot(hub, arrive)]] as const) {
+    if (isCommandCancelled()) return;
+    const there = bot.blockAt(spot);
+    if (!there || there.name === item) continue;
+    // Something else it or the owner put there: left alone
+    if (there.boundingBox === "block" && !isNatural(there.name)) continue;
+    if (!bot.inventory.items().some((i) => i.name === item)) {
+      const { acquire } = await import("./acquire");
+      const { liveWorld } = await import("./world");
+      const made = await acquire(item, 1, liveWorld);
+      if (!made.ok) {
+        console.log(`Mine: no ${item.replace(/_/g, " ")} for the ${floorName(level)} (${made.detail ?? made.reason}).`);
+        continue;
+      }
     }
+    const { placeBlockResult } = await import("../actions/blockPlacing");
+    const placed = await placeBlockResult(item, spot.x, spot.y, spot.z, "bottom");
+    if (!placed.ok) continue;
+    const { saveCraftingTableLocation, saveFurnaceLocation } = await import("../managers/persistenceManager");
+    await (item === "crafting_table" ? saveCraftingTableLocation(spot) : saveFurnaceLocation(spot));
+    put.push(item === "crafting_table" ? "a crafting table" : "a furnace");
   }
-  const { placeBlockResult } = await import("../actions/blockPlacing");
-  const placed = await placeBlockResult("crafting_table", spot.x, spot.y, spot.z, "bottom");
-  if (!placed.ok) return;
-  const { saveCraftingTableLocation } = await import("../managers/persistenceManager");
-  await saveCraftingTableLocation(spot);
-  chatter(`Put a crafting table in the ${floorName(level)}'s room of my mine.`, "mining");
+  if (put.length > 0) chatter(`Put ${put.join(" and ")} in the ${floorName(level)}'s room of my mine.`, "mining");
 }
 
 // Side routes off the lowest level's tunnels (owner): every 3 blocks, 10 long

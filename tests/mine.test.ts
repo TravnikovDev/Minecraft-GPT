@@ -424,3 +424,15 @@ test("every floor's crafting table stands in its room's front-left corner, on no
   // Arriving south: right is west, so across -1 is east; 2 along is 2 south
   expect(floorTableSpot(new Vec3(0, 20, 0), "south")).toEqual(new Vec3(1, 20, 2));
 });
+
+test("every floor's furnace stands in its room's back-right corner, away from the table and every way through", async () => {
+  const { ROOM_CELLS, TABLE_CELL, FURNACE_CELL, sleeveStart, floorFurnaceSpot } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  expect(ROOM_CELLS.some(([a, b]: number[]) => a === FURNACE_CELL[0] && b === FURNACE_CELL[1])).toBe(true);
+  expect(FURNACE_CELL).not.toEqual(TABLE_CELL);
+  for (const arm of ["left", "right", "back", "forward"]) expect(sleeveStart(arm)).not.toEqual(FURNACE_CELL);
+  expect(FURNACE_CELL[0]).not.toBe(0); // not the stairs' middle line
+  expect(FURNACE_CELL[1]).not.toBe(1); // not the sleeves' middle line
+  // Arriving south: across +1 is west, along 0 is the stairs' end row
+  expect(floorFurnaceSpot(new Vec3(0, 20, 0), "south")).toEqual(new Vec3(-1, 20, 0));
+});
