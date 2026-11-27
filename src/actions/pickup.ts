@@ -124,6 +124,9 @@ async function waitGone(item: Entity, ms: number): Promise<boolean> {
   return !bot.entities[item.id];
 }
 
+// How close a drop is to be fetched with ordinary walking (a block dug if need be)
+const NEAR_DROP = 3;
+
 /**
  * Picks up the items lying within `radius`, nearest first, each one confirmed
  * by the game before moving on. Returns how many item stacks it picked up.
@@ -150,7 +153,14 @@ export async function collectDrops(
     // Picking up never digs its own way round (game test: a drop at head
     // height in its mine, and the walk to it cut a new path through the rock
     // beside the tunnel): digging only when there's no other way
-    const walked = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1)));
+    // A drop right beside it (ore it just mined out of a tunnel wall, in the
+    // 1-high hole it left) is a block's dig away at most: the usual cost
+    // (game test: with digging that dear, working out the way timed out and
+    // it gave up on every raw copper, 20 seconds each, "no progress")
+    const near = p.distanceTo(bot.entity.position) <= NEAR_DROP;
+    const walked = near
+      ? await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1))
+      : await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1)));
     if (!walked.ok) {
       if (wasStopped(walked) || isCommandCancelled() || !keepGoing()) break; // stopped, or real work started
       if (!bot.entities[item.id]) {
