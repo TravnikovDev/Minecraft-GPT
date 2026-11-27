@@ -57,6 +57,8 @@ export type TunnelStop = "blocked" | "drop" | "no_filler" | "no_tool" | "dig_fai
  * pickaxe wore out deep in its mine (fresh-world test).
  */
 async function digTunnelBlock(p: Vec3): Promise<boolean> {
+  // A torch already lighting the tunnel (one it put up on an earlier trip): left up
+  if (/torch$/.test(bot.blockAt(p)?.name ?? "")) return true;
   const dug = await breakBlockAtResult(p.x, p.y, p.z);
   if (dug.ok) return true;
   // No tool: the planner makes one; anything else it couldn't dig (out of

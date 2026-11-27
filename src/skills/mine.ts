@@ -701,6 +701,34 @@ function floorsAsDug(rec: MineRecord): Vec3[] {
   return out;
 }
 
+const FALLS = /^(gravel|sand|red_sand|suspicious_gravel|suspicious_sand)$/;
+
+/**
+ * Gravel and sand fallen into a sleeve's own cells (from `base`, `dug`
+ * blocks going `way`), dug out nearest first, each column from the top.
+ * How many it dug.
+ */
+async function digOutFallen(base: Vec3, way: DirectionType, dug: number): Promise<number> {
+  const fallen: Vec3[] = [];
+  for (let k = 1; k <= dug; k++) for (let dy = SLEEVE_HEIGHT - 1; dy >= 0; dy--) {
+    const c = base.plus(STEP[way].scaled(k)).offset(0, dy, 0);
+    if (FALLS.test(bot.blockAt(c)?.name ?? "")) fallen.push(c);
+  }
+  if (fallen.length === 0) return 0;
+  const here = bot.entity.position;
+  // Nearest column first; in a column, the top first (what's under it stays put)
+  fallen.sort((a, b) => Math.round(a.distanceTo(here)) - Math.round(b.distanceTo(here)) || b.y - a.y);
+  const { breakBlockAtResult } = await import("../actions/blockBreaking");
+  let dugOut = 0;
+  for (const c of fallen.slice(0, 24)) {
+    if (isCommandCancelled()) break;
+    if (!FALLS.test(bot.blockAt(c)?.name ?? "")) continue;
+    if ((await breakBlockAtResult(c.x, c.y, c.z)).ok) dugOut++;
+  }
+  if (dugOut > 0) console.log(`Mine: dug ${dugOut} block${dugOut === 1 ? "" : "s"} of gravel or sand out of my tunnel.`);
+  return dugOut;
+}
+
 /** How many blocks of a sleeve from `base` going `way` are open and dry at its feet (as far as it was dug). */
 function openRun(base: Vec3, way: DirectionType): number {
   let k = 0;
@@ -1390,7 +1418,11 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const way = armDirection(arm, arrive);
     const base = sleeveBase(hub, arrive, arm);
     const end = base.plus(STEP[way].scaled(arms[arm].dug));
-    const there = await goToStep(end);
+    let there = await goToStep(end);
+    // Gravel or sand fallen into the tunnel: dug out (a walk can't dig a block
+    // with gravel over it, game test: a 2-high gravel fall at the forward
+    // sleeve's end, and the whole tunnel was given up as done), then again
+    if (!there.ok && !isCommandCancelled() && (await digOutFallen(base, way, arms[arm].dug)) > 0) there = await goToStep(end);
     if (!there.ok) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       // Can it get to the hub? Then this tunnel's end is what's out of reach:
