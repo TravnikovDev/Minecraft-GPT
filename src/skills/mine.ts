@@ -652,7 +652,7 @@ export async function sealMineFromOutside(): Promise<void> {
   const until = Date.now() + SEAL_TIME_MS;
   let sealed = 0;
   for (const h of holes) {
-    if (isCommandCancelled() || Date.now() > until) break;
+    if (isCommandCancelled() || Date.now() > until || hurtInTheMine()) break;
     const from = inside(h);
     if (!from) continue;
     if (bot.entity.position.distanceTo(h) > 4 && !(await goToStep(from)).ok) continue;
@@ -710,7 +710,7 @@ export async function mineExposedOres(): Promise<number> {
     if (ores.length === 0) break;
     let got = 0;
     for (const ore of ores) {
-      if (isCommandCancelled()) break;
+      if (isCommandCancelled() || hurtInTheMine()) break;
       if (!/_ore$/.test(bot.blockAt(ore)?.name ?? "")) continue;
       // From the dug cell beside it
       const from = DIRS6.map((d) => ore.plus(d)).find((c) => openSet.has(c.toString()));
@@ -1179,6 +1179,14 @@ export const IRON: OreWant = { item: "raw_iron", enough: 10, counts: ["raw_iron"
 
 // Before a trip down, like a player: not badly hurt, and food to eat down there
 const MIN_HEALTH_TO_GO_DOWN = 12;
+// Health under which a trip in progress is ended and it climbs out
+const LEAVE_HURT_UNDER = 10;
+const hurtInTheMine = (): boolean => (bot.health ?? 20) < LEAVE_HURT_UNDER;
+async function leaveHurt(): Promise<ActionResult> {
+  report(`I'm hurt (health ${Math.round(bot.health ?? 0)} of 20): out of the mine to heal.`);
+  await upFromTheMine();
+  return fail("refused", `I'm hurt (health ${Math.round(bot.health ?? 0)} of 20); healing before I go down the mine`);
+}
 const MIN_FOOD_TO_GO_DOWN = 6;
 
 /**
@@ -1244,6 +1252,9 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
+    // Hurt down there: the trip ends and it goes up (game test: at 7 health,
+    // skeletons and a zombie round it, it ate and dug on, and died)
+    if (hurtInTheMine()) return leaveHurt();
     const rec = mineRecord()!;
     const { start, direction: dir } = rec;
     let { level, arms } = rec;
