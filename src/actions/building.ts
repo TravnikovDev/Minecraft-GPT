@@ -910,10 +910,22 @@ export async function setupTheShelter(): Promise<ActionResult> {
   ];
   const done = (step: { item: string; spot: Pos | null | undefined }): boolean =>
     !step.spot || (step.item === "chest" ? chestInPlace(step.spot, stand, dir) : knownBlock(step.spot)?.name === step.item);
+
+  // The shelter's own table first, in its spot: then everything else is
+  // crafted at it, inside (game test, at night: it walked out to its table
+  // on the surface and made 6 chests from all 48 of its planks, with none
+  // left for the shelter's table, and the night's work stopped there)
+  if (slots.table && knownBlock(slots.table)?.name !== "crafting_table") {
+    const table = await carry("crafting_table", 1);
+    if (!table.ok) return table;
+    const placed = await placeFromRow("crafting_table", slots.table, stand, dir);
+    if (!placed.ok) return placed;
+    await saveCraftingTableLocation(slots.table);
+  }
   const todo = steps.filter((step) => !done(step));
 
   // Prepare resources first: each trip to a table is a trip out of the shelter
-  for (const item of ["chest", "furnace", "crafting_table"]) {
+  for (const item of ["crafting_table", "furnace", "chest"]) {
     const n = todo.filter((t) => t.item === item && knownBlock(t.spot!)?.name !== item).length;
     if (n === 0) continue;
     const got = await carry(item, n);
