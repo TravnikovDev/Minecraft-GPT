@@ -399,3 +399,16 @@ test("iron depth (owner): one sleeve done and still short of iron for a pickaxe 
   expect(goDeeperEarly(arms(12, true), 5, 5, 10)).toBe(true); // a sleeve stopped, short of coal
   expect(goDeeperEarly(arms(50), 5, 5, 32)).toBe(false); // enough: the floor is finished
 });
+
+test("near the surface the stairs are lower, ground kept over them (game test: the first step's top was the grass)", async () => {
+  const { stepHeadroom, STAIR_HEADROOM } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { capUnderSurface } = await import(`${ROOT}/src/skills/mine.ts`);
+  // No shelter known: the full height
+  expect(stepHeadroom(1, 91)).toBe(STAIR_HEADROOM);
+  expect(stepHeadroom(5)).toBe(STAIR_HEADROOM);
+  // The new world: surface feet at y 96, the room at 92; step 1's feet at 91
+  expect(capUnderSurface(4, 96, 91)).toBe(2); // 3 high: top 93, roof 94, grass 95 kept
+  expect(capUnderSurface(4, 96, 90)).toBe(3);
+  expect(capUnderSurface(4, 96, 89)).toBe(4); // deep enough: the full 5 high
+  expect(capUnderSurface(4, 96, 93)).toBe(2); // never under 3 high
+});

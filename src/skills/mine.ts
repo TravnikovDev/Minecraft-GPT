@@ -133,7 +133,25 @@ export function isFlatStep(i: number): boolean {
 export const STAIR_HEADROOM = 4;
 
 /** How many cells over a step's own one are dug: the stairs 5 high, their flat part across a room 3 (its ceiling). Pure. */
-export const stepHeadroom = (i: number): number => (isFlatStep(i) ? ROOM_HEIGHT - 1 : STAIR_HEADROOM);
+// Near the surface the steps are lower, so ground stays over them: the top of
+// a step at least this far under the surface's feet level (game test: the
+// first step outside the back door had its top in the grass, and the stairs
+// opened a hole to the sky from the top down)
+const UNDER_SURFACE = 3;
+/**
+ * How high above its feet a step is dug (4: 5 high; flat steps 3 high), and
+ * lower near the surface (never under 2: 3 high). `feetY`: the step's feet
+ * level; without it, the full height.
+ */
+export const stepHeadroom = (i: number, feetY?: number): number => {
+  const full = isFlatStep(i) ? ROOM_HEIGHT - 1 : STAIR_HEADROOM;
+  if (feetY === undefined) return full;
+  const surface = (shelter()?.details?.["start"] as Pos | undefined)?.y;
+  return surface === undefined ? full : capUnderSurface(full, surface, feetY);
+};
+
+/** A step's height kept under the surface (`surfaceY`: the surface's feet level), never under 2. Pure. */
+export const capUnderSurface = (full: number, surfaceY: number, feetY: number): number => Math.max(2, Math.min(full, surfaceY - UNDER_SURFACE - feetY));
 
 // Stairs are steps 0..the first floor: the exit cell, then one down per step
 const stairsToFirstFloor = (): number => firstFloorAt + 1;
@@ -174,7 +192,7 @@ function blockedStepCells(feet: Vec3): Vec3[] {
   const out: Vec3[] = [];
   for (let j = Math.max(1, i - 2); j <= i; j++) {
     const s = stepAt(rec.start, rec.direction, j, rec.turns);
-    for (let dy = 0; dy < stepHeadroom(j); dy++) {
+    for (let dy = 0; dy < stepHeadroom(j, s.y); dy++) {
       const c = s.offset(0, dy, 0);
       if (fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c)) out.push(c);
     }
@@ -473,7 +491,7 @@ export function mineStairCells(start: Pos, dir: DirectionType, stairs: number, l
   const tunnels = hubTunnelCells(start, dir, stairs, level, turns, sideFrom);
   for (let i = 0; i < stairs; i++) {
     const s = stepAt(start, dir, i, turns);
-    for (let dy = 0; dy <= stepHeadroom(i); dy++) walk.push(s.offset(0, dy, 0));
+    for (let dy = 0; dy <= stepHeadroom(i, s.y); dy++) walk.push(s.offset(0, dy, 0));
     keep.push(...stepShell(start, dir, i, level, turns).filter((c) => !tunnels.has(c.toString())));
   }
   return { keep, walk };
@@ -533,6 +551,9 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number, tur
   const s = stepAt(start, dir, i, turns);
   const way = dirAt(dir, i, turns);
   const cells = [s.offset(0, -1, 0), s.offset(0, STAIR_HEADROOM + 1, 0)];
+  // A step lowered near the surface: its real roof (the ground over it) too
+  const low = stepHeadroom(i, s.y);
+  if (low < STAIR_HEADROOM) cells.push(s.offset(0, low + 1, 0));
   const hubs = new Set(Array.from({ length: level + 1 }, (_, l) => hubStep(l)));
   if (hubs.has(i) || isFlatStep(i)) return cells;
   for (const side of [STEP[armDirection("right", way)], STEP[armDirection("left", way)]]) {
@@ -1052,12 +1073,12 @@ export async function lookAfterStairs(): Promise<void> {
     const holes = [s.offset(0, -1, 0)].filter((c) => !tunnels.has(c.toString()) && isHoleBlock(bot.blockAt(c)));
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     // Stairs dug before they were made a block higher: the top cell dug out now
-    const low = bot.blockAt(s.offset(0, stepHeadroom(i), 0));
+    const low = bot.blockAt(s.offset(0, stepHeadroom(i, s.y), 0));
     const raise = low !== null && low.boundingBox === "block" && !low.name.includes("torch") && !low.name.endsWith("_sign");
     // Gravel or sand fallen into the step (or anything else filling it):
     // walks won't dig a block with gravel over it, so it stood on the step
     // above for five minutes (game test; the owner dug it out by hand)
-    const fallen = Array.from({ length: stepHeadroom(i) }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c));
+    const fallen = Array.from({ length: stepHeadroom(i, s.y) }, (_, dy) => s.offset(0, dy, 0)).filter((c) => fillsStep(bot.blockAt(c)) && !holdsBackLiquid(c));
     if (holes.length === 0 && !torch && !raise && fallen.length === 0) continue;
     // A hole in this step's own floor, or the step filled: worked on from the step above
     const floorHole = holes.some((h) => h.equals(s.offset(0, -1, 0)));
@@ -1083,7 +1104,7 @@ export async function lookAfterStairs(): Promise<void> {
     for (const hole of holes) if (await ensureBlock(hole, (p) => inWalk(p) || tunnels.has(p.toString()))) filled++;
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
-      if ((await breakBlock(s.offset(0, stepHeadroom(i), 0))).ok) raised++;
+      if ((await breakBlock(s.offset(0, stepHeadroom(i, s.y), 0))).ok) raised++;
     }
     if (torch) {
       const placed = await lightSpot(s.offset(0, 1, 0), dirAt(rec.direction, i, rec.turns));
@@ -1204,7 +1225,7 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
       console.log(`Mine: ${i} of ${stairsToFirstFloor()} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
       return ok();
     }
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: stepHeadroom(i) }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: stepHeadroom(i, stepAt(start, dir, i).y) }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
       // Stopped (the owner, something more urgent): carry on from this step next time
       if (isCommandCancelled() || why === null) {
@@ -1960,7 +1981,7 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
     // through a flooded cave and it kept ending up under water)
     const liquid = stepLiquid(stepAt(start, dir, i, rec.turns));
     if (liquid) return fail("refused", `${liquid} at the next step`);
-    if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: stepHeadroom(i) }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
+    if (!(await digDiagonalTunnel(dirAt(dir, i, rec.turns), 0, { width: 1, height: stepHeadroom(i, stepAt(start, dir, i, rec.turns).y) }, stepAt(start, dir, i, rec.turns), MINE_NAME, undefined, { save: false }))) {
       if (isCommandCancelled()) return fail("aborted", "stopped");
       const why = tunnelStopReason();
       if (why === "no_tool") return fail("no_tool", "my pickaxe wore out digging the stairs");

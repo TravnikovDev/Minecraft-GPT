@@ -4,7 +4,7 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 
 ## The stairs
 
-- A diagonal staircase down from the shelter's back wall: one block forward and one down per step, **5 blocks high** (room for stair blocks).
+- A diagonal staircase down from the shelter's back wall: one block forward and one down per step, **5 blocks high** (room for stair blocks). Near the surface the steps are lower (down to 3 high), so at least two blocks of ground stay over them; the stairs never open to the sky.
 - Every step is a closed tube: floor, both side walls and a roof are kept solid. Where the stairs cross a cave, the gaps are filled with dirt or cobblestone on the way down.
 - Once there are 200 cobblestone, the steps get cobblestone stair blocks (made at home, one per bare step plus 10%). The flat part across a floor's room gets none.
 - Blocked going down (water or lava at the next step, something built, a drop it can't floor), the stairs **turn**: right, then left, from the floor they came down from, then one floor higher.
