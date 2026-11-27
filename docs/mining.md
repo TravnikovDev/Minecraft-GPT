@@ -5,7 +5,9 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 ## The stairs
 
 - A diagonal staircase down from the shelter's back wall: one block forward and one down per step, **5 blocks high** (room for stair blocks). Near the surface the steps are lower (down to 3 high), so at least two blocks of ground stay over them; the stairs never open to the sky.
-- Every step is a closed tube: floor, both side walls and a roof are kept solid. Where the stairs cross a cave, the gaps are filled with dirt or cobblestone on the way down.
+- Every step is a closed tube: floor, both side walls (the full 5 high) and a roof are kept solid. Where the stairs cross a cave, the gaps are filled with dirt or cobblestone: a cave under a new step gets its floor before the step is dug, and each new step is closed in before the next.
+- **The stairs come first** (owner: "the most important thing in this mine"): every trip starts by checking every step's floor, walls and roof and filling what's open (cobblestone from its chests when it's at home, stone from the walls round it when it's down there). Stairs still open after a second go: no mining below them that trip.
+- Into the mine from up top: in by the shelter and down its own stairs, never a shaft dug down from the grass.
 - Once there are 200 cobblestone, the steps get cobblestone stair blocks (made at home, one per bare step plus 10%). The flat part across a floor's room gets none.
 - Blocked going down (water or lava at the next step, something built, a drop it can't floor), the stairs **turn**: right, then left, from the floor they came down from, then one floor higher.
 - The stairs go down to just over bedrock: no floor below y -54.
@@ -40,7 +42,7 @@ Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into 
 
 ## Looking after it
 
-- Damaged paths are mended **only under the feet** (the floor of the stairs, rooms and sleeves; not pokeholes); never walls or ceilings.
+- Damaged rooms and sleeves are mended **only under the feet** (not pokeholes; never their walls or ceilings). The stairs are the exception: their whole tube is kept, walls and roof included.
 - Every ore seen is mined at once, **once the stretch is secured**: its floor mended and any way out to the sky blocked first.
 
 ## Caves its tunnels meet

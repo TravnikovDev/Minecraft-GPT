@@ -436,3 +436,26 @@ test("every floor's furnace stands in its room's back-right corner, away from th
   // Arriving south: across +1 is west, along 0 is the stairs' end row
   expect(floorFurnaceSpot(new Vec3(0, 20, 0), "south")).toEqual(new Vec3(-1, 20, 0));
 });
+
+test("a step over a cavern: its floor, both walls the full height and its roof are all holes to fill, floor first, roof last (owner: the stairs must be whole)", async () => {
+  const { shellHoles, mineStairCells, hubTunnelCells, STAIR_HEADROOM } = await import(`${ROOT}/src/skills/mine.ts`);
+  const rec = { start: { x: 0, y: 60, z: 0 }, direction: "south", stairs: 12, level: 0, turns: [] };
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, 0);
+  const walkSet = new Set(walk.map((c: any) => c.toString()));
+  const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, 0);
+  const AIR = { name: "air", boundingBox: "empty" };
+  const STONE = { name: "stone", boundingBox: "block" };
+  // Solid rock: nothing to fill
+  expect(shellHoles(rec, 5, walkSet, tunnels, () => STONE)).toEqual([]);
+  // A cavern round step 5: everything round it open
+  const holes = shellHoles(rec, 5, walkSet, tunnels, () => AIR);
+  const step = { x: 0, y: 55, z: 5 };
+  expect(holes[0]).toMatchObject({ x: 0, y: step.y - 1, z: 5 }); // the floor first
+  expect(holes[holes.length - 1].y).toBeGreaterThan(step.y + STAIR_HEADROOM); // the roof last
+  // Both side walls, from beside the floor to the top of the headroom
+  for (const x of [-1, 1]) for (let dy = -1; dy <= STAIR_HEADROOM; dy++) expect(holes.some((h: any) => h.x === x && h.y === step.y + dy && h.z === 5)).toBe(true);
+  // Never its own walking space
+  for (const h of holes) expect(walkSet.has(h.toString())).toBe(false);
+  // A torch or a sign on the wall isn't a hole
+  expect(shellHoles(rec, 5, walkSet, tunnels, () => ({ name: "wall_torch", boundingBox: "empty" }))).toEqual([]);
+});

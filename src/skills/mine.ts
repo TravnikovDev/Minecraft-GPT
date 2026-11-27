@@ -1079,13 +1079,16 @@ const STAIR_TORCH_EVERY = 6;
  * them), and a torch wherever a stretch is dark. Best effort: a hole it can't
  * fill or a torch it can't make doesn't stop the trip.
  */
-export async function lookAfterStairs(): Promise<void> {
+export async function lookAfterStairs(): Promise<number> {
   const rec = mineRecord();
-  if (!rec) return;
-  const { isHoleBlock, ensureBlock, lightSpot } = await import("../actions/digging");
+  if (!rec) return 0;
+  const { ensureBlock, lightSpot } = await import("../actions/digging");
   const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
   const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
   const walkSet = new Set(walk.map((c) => c.toString()));
+  // Enough to build with for every hole first (it came down with 7
+  // cobblestone and left a cavern's worth of steps open)
+  await stockStairsFillers(allShellHoles(rec, walkSet, tunnels).length);
   const inWalk = (p: Vec3): boolean => walkSet.has(p.toString());
   const torchIds = ["torch", "wall_torch"].map((n) => bot.registry.blocksByName[n]?.id).filter((id): id is number => id !== undefined);
   const darkAt = (s: Vec3): boolean => bot.findBlocks({ matching: torchIds, point: s, maxDistance: 5, count: 1 }).length === 0;
@@ -1095,10 +1098,13 @@ export async function lookAfterStairs(): Promise<void> {
   let cleared = 0;
   let noTorch = "";
   for (let i = 1; i < rec.stairs; i++) {
-    if (isCommandCancelled()) return;
+    if (isCommandCancelled()) return allShellHoles(rec, walkSet, tunnels).length;
     const s = stepAt(rec.start, rec.direction, i, rec.turns);
-    // Only its floor (owner: paths mended under the feet only, never above)
-    const holes = [s.offset(0, -1, 0)].filter((c) => !tunnels.has(c.toString()) && isHoleBlock(bot.blockAt(c)));
+    // The whole step: its floor, both walls the full height and its roof
+    // (owner: the stairs between the floors must be whole, walls and all, so
+    // no skeleton shoots in from a cave; it went on mining with steps blown
+    // out over a cavern)
+    const holes = shellHoles(rec, i, walkSet, tunnels);
     const torch = !noTorch && i % STAIR_TORCH_EVERY === 0 && darkAt(s);
     // Stairs dug before they were made a block higher: the top cell dug out now
     const low = bot.blockAt(s.offset(0, stepHeadroom(i, s.y), 0));
@@ -1129,7 +1135,12 @@ export async function lookAfterStairs(): Promise<void> {
       // Now stand on it for the rest (holes, torches)
       if (!(await goToStep(s)).ok) continue;
     }
-    for (const hole of holes) if (await ensureBlock(hole, (p) => inWalk(p) || tunnels.has(p.toString()))) filled++;
+    const keepClear = (p: Vec3): boolean => inWalk(p) || tunnels.has(p.toString());
+    // Its floor from the step above, then the rest standing on it
+    const floor = s.offset(0, -1, 0);
+    for (const hole of holes.filter((h) => h.equals(floor))) if (await ensureBlock(hole, keepClear)) filled++;
+    if (floorHole && holes.length > 1 && !(await goToStep(s)).ok) continue;
+    for (const hole of holes.filter((h) => !h.equals(floor))) if (await ensureBlock(hole, keepClear)) filled++;
     if (raise) {
       const { breakBlock } = await import("../core/primitives");
       if ((await breakBlock(s.offset(0, stepHeadroom(i, s.y), 0))).ok) raised++;
@@ -1142,6 +1153,83 @@ export async function lookAfterStairs(): Promise<void> {
   }
   if (filled + lit + raised + cleared > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up, ${raised} steps made a block higher, ${cleared} fallen blocks dug out.`);
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
+  const left = allShellHoles(rec, walkSet, tunnels);
+  if (left.length > 0) console.log(`Mine: my stairs still have ${left.length} open blocks of floor, wall or roof (first at ${left[0]}).`);
+  return left.length;
+}
+
+/** A step just dug: its open floor, walls and roof filled (fillers stocked first). */
+async function mendNewStep(i: number): Promise<void> {
+  const rec0 = mineRecord();
+  if (!rec0 || isCommandCancelled()) return;
+  const rec = { ...rec0, stairs: Math.max(rec0.stairs, i + 1) };
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
+  const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
+  const walkSet = new Set(walk.map((c) => c.toString()));
+  const holes = shellHoles(rec, i, walkSet, tunnels);
+  if (holes.length === 0) return;
+  await stockStairsFillers(holes.length);
+  const { ensureBlock } = await import("../actions/digging");
+  let filled = 0;
+  for (const h of holes) {
+    if (isCommandCancelled()) return;
+    if (await ensureBlock(h, (p) => walkSet.has(p.toString()) || tunnels.has(p.toString()))) filled++;
+  }
+  console.log(`Mine: step ${i} closed in (${filled} of ${holes.length} open blocks of floor, wall or roof filled).`);
+}
+
+type StairsRec = { start: Pos; direction: DirectionType; stairs: number; level: number; turns: Turn[] };
+
+/**
+ * A step's floor, side walls and roof that are open (air, a cave, water),
+ * floor first, the walls bottom up, the roof last (each next to one already
+ * there). Never its own walking space or a floor's tunnels; what isn't
+ * loaded doesn't count.
+ */
+export function shellHoles(rec: StairsRec, i: number, walk: Set<string>, tunnels: Set<string>, at: (p: Vec3) => { name: string; boundingBox: string } | null = (p) => bot.blockAt(p)): Vec3[] {
+  return stepShell(rec.start, rec.direction, i, rec.level, rec.turns)
+    .filter((c) => !walk.has(c.toString()) && !tunnels.has(c.toString()) && isOpenForStairs(at(c)))
+    .sort((a, b) => a.y - b.y);
+}
+
+const isOpenForStairs = (b: { name: string; boundingBox: string } | null): boolean =>
+  b !== null && (b.boundingBox === "empty" || b.name === "water" || b.name === "lava") && !/torch|sign|ladder|door/.test(b.name);
+
+/** Every open block of its stairs' shell, top step down. */
+function allShellHoles(rec: StairsRec, walk: Set<string>, tunnels: Set<string>): Vec3[] {
+  const out: Vec3[] = [];
+  for (let i = 1; i < rec.stairs; i++) out.push(...shellHoles(rec, i, walk, tunnels));
+  return out;
+}
+
+// Blocks it carries beyond the holes it's about to fill (supports over a cave)
+const STAIRS_FILLER_SPARE = 16;
+
+/**
+ * Enough to build with for `holes` blocks of its stairs: from its chests
+ * when it's at home (room made first), else stone from the walls round it
+ * (never its stairs' or shelter's: collecting skips what's protected).
+ */
+async function stockStairsFillers(holes: number): Promise<void> {
+  if (holes === 0) return;
+  const FILL = ["cobblestone", "cobbled_deepslate", "dirt", "coarse_dirt", "netherrack"];
+  const have = (): number => bot.inventory.items().filter((i) => FILL.includes(i.name)).reduce((n, i) => n + i.count, 0);
+  const want = holes + STAIRS_FILLER_SPARE;
+  if (have() >= holes) return;
+  const rec = mineRecord();
+  const upTop = rec !== null && bot.entity.position.y > rec.start.y - 3;
+  if (upTop) {
+    const { storedNear, takeItems } = await import("../actions/storage");
+    if (storedNear("cobblestone") > 0) {
+      const { makeRoom } = await import("../actions/overflow");
+      await makeRoom("take cobblestone for my stairs", ["cobblestone"]);
+      await takeItems([{ name: "cobblestone", count: want - have() }], true);
+    }
+  }
+  if (have() < holes) {
+    const got = await collectBlock("stone", want - have(), ORE_REACH, { seenOnly: true });
+    console.log(`Mine: ${holes} open blocks in my stairs; took ${got} stone to build them with.`);
+  }
 }
 
 async function saveMine(start: Pos, direction: DirectionType, stairs: number, branches: number, bottom: Vec3 | null, levels?: { level: number; arms: Arms; deepest: boolean; turns?: Turn[]; tried?: Record<string, DirectionType[]>; seals?: Pos[]; cavePlugs?: Pos[]; exhausted?: boolean; sidesDone?: number; roomsDone?: number }): Promise<void> {
@@ -1583,7 +1671,14 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   if (still().length === 0) return ok();
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
-  await lookAfterStairs(); // holes mended and dark stretches lit on the way down
+  // Its stairs whole first, floor, walls and roof (owner: "the stairs must be
+  // ensured as hell; the most important thing in this mine"): a second go
+  // after getting more to build with, then no mining below open stairs
+  if ((await lookAfterStairs()) > 0) {
+    const open = await lookAfterStairs();
+    if (isCommandCancelled()) return fail("aborted", "stopped");
+    if (open > 0) return fail("refused", `my mine's stairs aren't whole yet (${open} open blocks of floor, wall or roof); no mining below them till they are`);
+  }
   await lookAfterFloors(); // ways in from outside blocked, leftovers out, uncovered ore mined
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
@@ -2087,6 +2182,10 @@ async function digStairsTo(rec: MineRecord, to: number): Promise<ActionResult> {
       return fail("unreachable", "the stairs stopped (I'll try again)");
     }
     await saveMine(start, dir, i + 1, rec.branches, rec.bottom);
+    // This step's floor, walls and roof whole before the next one (game
+    // test: ten steps dug down through a cavern, the walls left for later,
+    // and a creeper and a zombie came in)
+    await mendNewStep(i);
   }
   // The new steps' walls and roof whole (game test: the second step ran
   // through a tunnel it had dug up to the grass, and the mine stayed open
