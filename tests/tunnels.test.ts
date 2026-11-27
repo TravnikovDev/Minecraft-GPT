@@ -295,10 +295,29 @@ test("a pool ahead: the tunnel fills its face and ends there, never digging into
 });
 
 test("water in a wall only: plugged, and the tunnel digs on past it", async () => {
+  await persistence.updateMemory({ plugs: [] }); // the pool test's plugs are elsewhere in this fake world
   changed.set(key({ x: 3, y: 51, z: 1 }), "water"); // beside the 3rd block
   items = [{ name: "dirt", count: 16 }];
   fake.entity.position = new Vec3(0.5, 50, 0.5);
   expect(await digging.digStraightTunnel("east", 6, new Vec3(0, 50, 0), 1, 3)).toBe(true);
   expect(blockAt({ x: 3, y: 51, z: 1 }).name).toBe("dirt");
   expect(dug).toContain(key({ x: 6, y: 50, z: 0 }));
+});
+
+test("a pokehole is dug from inside itself: only its own 15 blocks, every walk to a block it already dug (owner: pokeholes became chaos)", async () => {
+  const walks: string[] = [];
+  fake.pathfinder.goto = async (g: any) => {
+    walks.push(key({ x: g.x, y: g.y, z: g.z }));
+    fake.entity.position = new Vec3(g.x + 0.5, g.y, g.z + 0.5);
+  };
+  fake.entity.position = new Vec3(0.5, 50, 0.5);
+  expect(await digging.digStraightTunnel("south", 5, new Vec3(0, 50, 0), 1, 3)).toBe(true);
+  const own = new Set<string>();
+  for (let z = 1; z <= 5; z++) for (let y = 50; y <= 52; y++) own.add(key({ x: 0, y, z }));
+  expect(new Set(dug)).toEqual(own);
+  for (const w of walks) {
+    const [x, y, z] = w.split(",").map(Number);
+    expect([x, y]).toEqual([0, 50]); // on its own floor line
+    expect(z! >= 0 && z! <= 4).toBe(true); // the start or a block already dug
+  }
 });

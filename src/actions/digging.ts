@@ -12,6 +12,7 @@ import { isOwnBlock } from "../core/scaffold";
 import { catalog } from "../core/catalog";
 import { isCommandCancelled } from "../core/commandContext";
 import { goTo } from "../core/primitives";
+import { pathing } from "../core/plugins";
 import { describeFailure, expectOk } from "../core/result";
 
 export type DirectionType = "north" | "south" | "west" | "east";
@@ -485,6 +486,15 @@ export async function digStraightTunnel(
 
   for (let i = 1; i <= length; i++) {
     const position = startPosition.offset(offsetX * i, 0, offsetZ * i);
+    // From inside its own tunnel, like a miner: into the last block it dug
+    // (the start for the first), then the next column from there. Owner:
+    // pokeholes became chaos; a walk to "anywhere within 2" of the next block
+    // dug its own way to a spot in the wall or the ceiling between them.
+    // Digging costs so much on this walk that the open tunnel always wins.
+    const stand = startPosition.offset(offsetX * (i - 1), 0, offsetZ * (i - 1));
+    if (!bot.entity.position.floored().equals(stand)) {
+      await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z)));
+    }
     // Dig out a tunnel `height` high (2: a walkway; 3: a pokehole), `width` wide
     for (let y = 0; y < height; y++) {
       for (let x = -half; x <= width - 1 - half; x++) {
