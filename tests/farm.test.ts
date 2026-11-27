@@ -134,3 +134,33 @@ test("a fence all round the field's ground, a gate on the side facing home (owne
   expect(posts.every((p: { x: number; z: number }) => Math.max(Math.abs(p.x), Math.abs(p.z)) === 4)).toBe(true);
   expect(fenceRing({ x: 0, y: 63, z: 0 }, 2, { x: 1, z: -30 }).gate).toEqual({ x: 0, z: -3 }); // home is north
 });
+
+test("the path round a field's fence: banks and tall grass above the field dug out, built things and a neighbour's fence left, dips kept (owner: the bank outside stood as high as the fence)", async () => {
+  const { columnWork } = await import(`${ROOT}/src/skills/farm.ts`);
+  const middle = { x: 0, y: 63, z: 0 };
+  // Planted up to ring 3: the fence on ring 4, the path on ring 5
+  const world = (above: Record<number, { name: string; solid: boolean }>) => (_x: number, y: number) => above[y - 63] ?? (y <= 63 ? { name: "dirt", solid: true } : { name: "air", solid: false });
+  // A grass bank two high with tall grass on it, on the path
+  const bank = world({ 1: { name: "dirt", solid: true }, 2: { name: "grass_block", solid: true }, 3: { name: "tall_grass", solid: false } });
+  expect(columnWork(middle, 5, 0, 3, bank)?.bumps).toEqual([1, 2, 3]);
+  // The owner's wall there: left alone
+  expect(columnWork(middle, 5, 0, 3, world({ 1: { name: "stone_bricks", solid: true } }))?.bumps).toEqual([]);
+  // A neighbour field's fence on the path: left standing
+  expect(columnWork(middle, 5, 0, 3, world({ 1: { name: "oak_fence", solid: true } }))?.bumps).toEqual([]);
+  // A dip outside: no filling (lower ground is no way in)
+  const dip = (_x: number, y: number) => (y <= 61 ? { name: "dirt", solid: true } : { name: "air", solid: false });
+  expect(columnWork(middle, 5, 0, 3, dip)).toEqual({ x: 5, z: 0, bumps: [], swap: false, fill: 0 });
+  // A trunk on the path: can't be cleared
+  expect(columnWork(middle, 5, 0, 3, world({ 1: { name: "jungle_log", solid: true } }))).toBeNull();
+});
+
+test("a field's gate faces along the way in: east or west on an east or west side, north or south on the others (owner: it stood sideways)", async () => {
+  const { gateFacing, fenceRing } = await import(`${ROOT}/src/skills/farm.ts`);
+  const middle = { x: 0, y: 63, z: 0 };
+  const east = fenceRing(middle, 3, { x: 30, z: 2 }).gate;
+  expect(east).toEqual({ x: 4, z: 0 });
+  expect(gateFacing(middle, east)).toEqual(["east", "west"]);
+  const north = fenceRing(middle, 3, { x: 1, z: -30 }).gate;
+  expect(north).toEqual({ x: 0, z: -4 });
+  expect(gateFacing(middle, north)).toEqual(["north", "south"]);
+});

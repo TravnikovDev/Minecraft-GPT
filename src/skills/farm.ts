@@ -228,6 +228,10 @@ export type ColumnWork = { x: number; z: number; bumps: number[]; swap: boolean;
 export function columnWork(middle: P3, x: number, z: number, planted: number, look: (x: number, y: number, z: number) => LevelCell, maxDip = MAX_DIP): ColumnWork | null {
   const y = middle.y;
   const ring = Math.max(Math.abs(x - middle.x), Math.abs(z - middle.z));
+  // The ring outside its fence: a path round it, never higher than the
+  // field (owner: the bank outside stood as high as the fence's top, so
+  // mobs walked over it; "clear one more block round the fence")
+  if (ring > planted + 1) return pathWork(x, y, z, look);
   const bumps: number[] = [];
   // Above the ground: a bump dug out (leaves too); higher is a hill; a trunk stays
   for (let dy = 1; dy <= MAX_BUMP + 1; dy++) {
@@ -263,6 +267,32 @@ export function columnWork(middle: P3, x: number, z: number, planted: number, lo
   // A dip: filled up from the first solid block below
   for (let d = 1; d <= maxDip; d++) if (look(x, y - d, z)?.solid) return { ...done, fill: d };
   return null;
+}
+
+// Natural ground and plants a path round a field is cleared of (never
+// something built: a fence, a wall, the owner's things)
+const PATH_BUMP = /^(dirt|coarse_dirt|rooted_dirt|grass_block|podzol|mycelium|mud|clay|sand|red_sand|gravel|stone|andesite|diorite|granite|tuff|deepslate|snow_block|snow|[a-z_]+_leaves)$/;
+
+/**
+ * The path round a field's fence: natural ground or plants above the
+ * field's level dug out, up to MAX_BUMP high (a dip stays: lower ground
+ * outside is no way in). Something built there is left alone. Null over a
+ * hill or a trunk. Pure over `look`.
+ */
+function pathWork(x: number, y: number, z: number, look: (x: number, y: number, z: number) => LevelCell): ColumnWork | null {
+  const bumps: number[] = [];
+  for (let dy = 1; dy <= MAX_BUMP + 1; dy++) {
+    const c = look(x, y + dy, z);
+    if (!c) return null;
+    if (/_log$/.test(c.name)) return null;
+    if (ON_FIELD.test(c.name)) break; // a neighbour field's fence: left standing
+    const plant = CLEARABLE.test(c.name);
+    if ((c.solid && PATH_BUMP.test(c.name)) || plant) {
+      if (dy > MAX_BUMP) return null;
+      bumps.push(dy);
+    }
+  }
+  return { x, z, bumps, swap: false, fill: 0 };
 }
 
 /** Blocks a column's work moves. */
@@ -355,7 +385,8 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
  * filled, like its shelter's walls). How many blocks it moved.
  */
 async function levelPlot(middle: P3, reserve: number): Promise<number> {
-  const area = reserve + 1;
+  // The ground kept for it, the fence's ring and the path round the fence
+  const area = reserve + 2;
   const kept = (p: P3): boolean => {
     const by = protectedBy(p);
     return (by !== null && by !== "farm") || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null;
@@ -414,7 +445,7 @@ async function levelPlot(middle: P3, reserve: number): Promise<number> {
   const { pickupNearbyItems } = await import("../actions/pickup");
   await pickupNearbyItems(bot, 6);
   const left = work().length;
-  if (moved > 0) console.log(`Farm: levelled the field at ${middle.x}, ${middle.z} and its fence ring (${moved} blocks moved${left > 0 ? `, ${left} spots left` : ""}).`);
+  if (moved > 0) console.log(`Farm: levelled the field at ${middle.x}, ${middle.z}, its fence ring and the path round it (${moved} blocks moved${left > 0 ? `, ${left} spots left` : ""}).`);
   return moved;
 }
 
@@ -576,6 +607,15 @@ export function fenceRing(middle: P3, reserve: number, home: { x: number; z: num
   return { posts: posts.filter((p) => p.x !== gate.x || p.z !== gate.z), gate };
 }
 
+/**
+ * The ways a field's gate may face: along the way in through its side (a
+ * gate on the east or west side faces east or west, so it lines up with
+ * the fence running north-south). Pure.
+ */
+export function gateFacing(middle: { x: number; z: number }, gate: { x: number; z: number }): string[] {
+  return gate.x !== middle.x ? ["east", "west"] : ["north", "south"];
+}
+
 /** The wood it builds fences from: the planks it carries most of ("spruce"), or null. */
 function fenceWood(): string | null {
   const planks = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
@@ -626,7 +666,26 @@ async function fenceField(middle: P3, reserve: number): Promise<number> {
     if ((await placeBlockResult(name, at.x, at.y, at.z, "bottom")).ok) placed++;
   };
   for (const c of missing) await put(fence, c);
-  if (gateCell && !/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "")) await put(gateName, gateCell);
+  if (gateCell) {
+    // The gate turned across the way in (owner: it stood sideways in the
+    // fence): one facing the wrong way taken out and put back, placed while
+    // the bot stands in line with the way in, looking along it
+    const want = gateFacing(middle, gate);
+    const now = knownBlock(gateCell);
+    if (now && /_fence_gate$/.test(now.name) && !want.includes(String(now.getProperties()["facing"]))) {
+      await goTo(new pf.goals.GoalNear(gateCell.x, gateCell.y, gateCell.z, 3));
+      if ((await breakBlock(gateCell)).ok) {
+        const { pickupNearbyItems } = await import("../actions/pickup");
+        await pickupNearbyItems(bot, 4);
+      }
+    }
+    if (!/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "") && count(gateName) > 0 && !isCommandCancelled()) {
+      const out = { x: Math.sign(gate.x - middle.x), z: Math.sign(gate.z - middle.z) };
+      const stand = new Vec3(gateCell.x + out.x * 2, gateCell.y, gateCell.z + out.z * 2);
+      await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
+      await put(gateName, gateCell);
+    }
+  }
   if (placed > 0) console.log(`Farm: ${placed} fence posts and gate round the field at ${middle.x}, ${middle.z}.`);
   return placed + (await lightFarm(middle, reserve));
 }
@@ -637,6 +696,22 @@ async function fenceField(middle: P3, reserve: number): Promise<number> {
  * tended. How many it placed.
  */
 async function lightFarm(middle: P3, half = FARM_HALF): Promise<number> {
+  // Torches made for the spots still dark (owner: "the torches please";
+  // with none on it, its field stayed dark)
+  const dark = torchSpots(middle, half).filter((spot) => {
+    const post = postCell(spot.x, spot.z, spot.y);
+    if (!post) return false;
+    const at = /_fence$/.test(knownBlock(post)?.name ?? "") ? post.offset(0, 1, 0) : post;
+    return knownBlock(at)?.name !== "torch";
+  }).length;
+  // (from coal or torches it has, at hand or in its chests; never a trip to its mine for them)
+  const { storedNear } = await import("../actions/storage");
+  const fuel = ["coal", "charcoal", "torch"].some((n) => count(n) > 0 || storedNear(n) > 0);
+  if (dark > count("torch") && fuel) {
+    const { acquire } = await import("./acquire");
+    const { liveWorld } = await import("./world");
+    await acquire("torch", dark, liveWorld);
+  }
   if (count("torch") === 0) return 0;
   const { placeBlockResult } = await import("../actions/blockPlacing");
   let placed = 0;
