@@ -625,7 +625,10 @@ export async function sealMineFromOutside(): Promise<void> {
   const kept = (p: Vec3): boolean => inOwnPassage(p) && !openKeys.has(p.toString());
   const holes = outsideOpenings(near, look, kept, 6000).slice(0, SEALS_PER_RUN);
   if (holes.length === 0) return;
-  report(`My mine is open to the outside in ${holes.length} place${holes.length === 1 ? "" : "s"} (a canyon or the like): blocking it with cobblestone.`);
+  // Said once as running commentary (the newest replaces it), never a report
+  // to the owner after every stretch (owner: chat full of these)
+  console.log(`Mine: open to the outside in ${holes.length} place${holes.length === 1 ? "" : "s"}; blocking with cobblestone.`);
+  chatter(`Blocking where my mine opens to the outside (${holes.length}).`, "sealing");
   const { ensureBlock, STONE_FILLERS } = await import("../actions/digging");
   const keepClear = (p: Vec3): boolean => openKeys.has(p.toString());
   // From inside its mine, never out in the canyon (game test: it walked out
