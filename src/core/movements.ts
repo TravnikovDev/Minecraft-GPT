@@ -297,7 +297,11 @@ export function safeMovements(bot: Bot): pf.Movements {
   // Never a block with water or lava behind it (owner: its own way dug
   // through a flooded dripstone cave let the water in, and it nearly drowned)
   const look = (x: number, y: number, z: number): string | null => bot.blockAt(new Vec3(x, y, z))?.name ?? null;
-  const floods = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && liquidBehind(block.position, look) ? 10_000 : 0);
+  // Nor a block with water under it: dug out, it drops in (game test: a walk
+  // to copper dug through its tunnel's floor over a flooded pocket, and it
+  // fell into a one-block water shaft)
+  const waterUnder = (p: { x: number; y: number; z: number }): boolean => LIQUID.test(look(p.x, p.y - 1, p.z) ?? "");
+  const floods = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && (liquidBehind(block.position, look) || waterUnder(block.position)) ? 10_000 : 0);
   moves.exclusionAreasBreak = [keepOut, floods] as unknown as typeof moves.exclusionAreasBreak;
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)
