@@ -12,7 +12,7 @@ import type { AcquireWorld, Source } from "./acquire";
 import { carried, hasTableAccess, TIER, toolTier } from "./capabilities";
 import { storedNear } from "../actions/storage";
 import { pickaxeFor, smeltedFrom, STANDS_IN_FOR } from "./techTree";
-import { daylight } from "../core/daylight";
+import { workingTime } from "../core/daylight";
 
 /** True when every recipe for the item needs a crafting table (3x3). */
 function needsTable(item: string): boolean {
@@ -54,7 +54,7 @@ export const SOURCES: Source[] = [
     run: async (_m, count) => {
       // Trees are out in the open: not after sunset (night work, a torch or
       // a shield made at home, mustn't walk it out to a forest: review)
-      if (!daylight()) {
+      if (!workingTime()) {
         return fail("refused", "it's night; the trees wait for the morning");
       }
       const before = carried("logs");

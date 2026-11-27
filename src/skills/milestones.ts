@@ -30,7 +30,7 @@ import { catalog } from "../core/catalog";
 import { breakBlockAtResult } from "../actions/blockBreaking";
 import { placeBlockResult } from "../actions/blockPlacing";
 import { pickupNearbyItems } from "../actions/pickup";
-import { daylight } from "../core/daylight";
+import { daylight, workingTime } from "../core/daylight";
 
 export type Milestone = {
   id: string;
@@ -598,7 +598,7 @@ export const MILESTONES: Milestone[] = [
     optional: true,
     requires: ["chests"],
     done: () => shelter() !== null && homeLit(),
-    achieve: () => lightUpHome(daylight()),
+    achieve: () => lightUpHome(workingTime()),
     reached: () => shelter() !== null && homeLitSeen(0),
   },
 
@@ -724,7 +724,7 @@ export const MILESTONES: Milestone[] = [
     requires: ["mine"],
     done: () => shelter() !== null && (!readyToReinforce() || (shelterSeen() && shelterWeakCells().length === 0)),
     reached: () => shelter() !== null && shelterSeen() && shelterWeakCells().length === 0,
-    achieve: () => reinforceShelter(daylight()),
+    achieve: () => reinforceShelter(workingTime()),
   },
   {
     id: "iron",
@@ -789,7 +789,7 @@ export const MILESTONES: Milestone[] = [
       if (!made.ok) return made;
       // Filled where there's water in sight (by day: at night that may be
       // out in the open); an empty one is filled later
-      if (!daylight()) return ok();
+      if (!workingTime()) return ok();
       const { fillWater } = await import("./endgame/portal");
       const filled = await fillWater();
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
@@ -832,7 +832,7 @@ export const MILESTONES: Milestone[] = [
     idle: true,
     requires: ["lit_home"],
     done: () => shelter() === null || homeLit(1),
-    achieve: () => lightUpHome(daylight(), 1),
+    achieve: () => lightUpHome(workingTime(), 1),
     reached: () => shelter() !== null && homeLitSeen(1),
   },
   {
@@ -851,7 +851,7 @@ export const MILESTONES: Milestone[] = [
     idle: true,
     requires: ["lit_home_2"],
     done: () => shelter() === null || homeLit(2),
-    achieve: () => lightUpHome(daylight(), 2),
+    achieve: () => lightUpHome(workingTime(), 2),
     reached: () => shelter() !== null && homeLitSeen(2),
   },
   {

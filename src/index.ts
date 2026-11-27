@@ -2,6 +2,8 @@
 // Entry point: loads data, registers the bot's behavior on the Body (the
 // connection owner in core/body.ts), connects, and runs the command loop.
 
+import { attackedTonight, daylight, noteAttacked } from "./core/daylight";
+import { catalog } from "./core/catalog";
 import mineflayer from "mineflayer";
 
 // Every log line carries the time, so slow spots in a game test can be measured
@@ -184,6 +186,13 @@ on("bot:damaged", ({ amount, health }) => {
   const block = bot.blockAt(bot.entity.position)?.name ?? "?";
   const line = `Took ${amount.toFixed(1)} damage (health ${health.toFixed(1)}) at ${bot.entity.position.floored()} in ${block}, ${near}, falling ${bot.entity.velocity.y.toFixed(2)}`;
   console.log(line);
+  // Hurt by a mob (or its arrow) at night: work's over for the night, off
+  // to its shelter (owner, 2026-11-28; core/daylight)
+  const attacker = bot.nearestEntity((e) => e !== bot.entity && e.position.distanceTo(bot.entity.position) < 10 && (e.name === "arrow" || catalog().isHostile(e.name ?? "")));
+  if (attacker && !daylight() && !attackedTonight()) {
+    noteAttacked();
+    console.log(`Attacked at night (${attacker.name}): off to my shelter for the rest of the night.`);
+  }
   recentDamage.push(line);
   if (recentDamage.length > 4) recentDamage.shift();
 });

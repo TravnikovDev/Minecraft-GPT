@@ -30,6 +30,26 @@ export function daylight(): boolean {
   return t === undefined || !inOverworld() || isDaylight(t);
 }
 
+// Owner (2026-11-28): it works on through the night as by day, until a
+// mob attacks it; then it runs to its shelter for the rest of that night.
+// The night it was attacked (the world's day counter; a night is in one day)
+let attackedOn: number | null = null;
+
+/** A mob attacked it: if it's night, that night is over for work outside. */
+export function noteAttacked(): void {
+  if (!daylight()) attackedOn = bot.time?.day ?? 0;
+}
+
+/** True at night once a mob has attacked it tonight: time to be in its shelter. */
+export function attackedTonight(): boolean {
+  return !daylight() && attackedOn === (bot.time?.day ?? 0);
+}
+
+/** Working hours: by day, and at night until a mob has attacked it. */
+export function workingTime(): boolean {
+  return !attackedTonight();
+}
+
 /** Hostile mobs are out in the open now (always, in the Nether and the End). */
 export function mobsOut(): boolean {
   return !inOverworld() || isMobTime(bot.time?.timeOfDay ?? 0);

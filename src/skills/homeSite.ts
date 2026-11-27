@@ -14,7 +14,7 @@
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
-import { daylight } from "../core/daylight";
+import { workingTime } from "../core/daylight";
 import { goTo } from "../core/primitives";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter, report } from "../core/narrator";
@@ -113,7 +113,7 @@ export async function findHomeArea(dryMine: () => boolean): Promise<void> {
   let walked = 0;
   let d = 0;
   let sinceBetter = 0;
-  while (walked < SEARCH_MAX && daylight() && !isCommandCancelled()) {
+  while (walked < SEARCH_MAX && workingTime() && !isCommandCancelled()) {
     const [sx, sz] = STEPS[ORDER[d % ORDER.length]!]!;
     const from = bot.entity.position.clone();
     const to = from.offset(sx * LEG, 0, sz * LEG);
@@ -142,7 +142,7 @@ export async function findHomeArea(dryMine: () => boolean): Promise<void> {
   }
   // Not perfect anywhere it looked: the best it saw (near enough at dusk)
   const far = bot.entity.position.distanceTo(best.pos);
-  if (far > 6 && (daylight() || far <= 64)) await goTo(new pf.goals.GoalNear(Math.floor(best.pos.x), Math.floor(best.pos.y), Math.floor(best.pos.z), 4));
+  if (far > 6 && (workingTime() || far <= 64)) await goTo(new pf.goals.GoalNear(Math.floor(best.pos.x), Math.floor(best.pos.y), Math.floor(best.pos.z), 4));
   const settled = checkArea(dryMine);
   chatter(areaGood(settled) ? "Settling here for my home." : `Settling here for my home, the best I saw (${areaIssues(settled) || "fine"}).`, "home");
 }

@@ -13,7 +13,7 @@
 import { bot } from "../core/body";
 import { Bucket, currentTask, pendingTasks, propose, type TaskSpec } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
-import { daylight } from "../core/daylight";
+import { workingTime } from "../core/daylight";
 import { report } from "../core/narrator";
 import { describeFailure } from "../core/result";
 import { foodPoints, shelter } from "./capabilities";
@@ -108,7 +108,7 @@ export async function considerFood(): Promise<void> {
   if ((bot.food ?? 20) > STARVING_BAR + 4) toldOwner = false;
   if (Date.now() < nextTryAt || onIt()) return;
   const { autonomyOn } = await import("./curriculum");
-  const need = foodNeed(bot.food ?? 20, foodPoints(), daylight(), autonomyOn());
+  const need = foodNeed(bot.food ?? 20, foodPoints(), workingTime(), autonomyOn());
   if (need) {
     propose(foodTask(need));
     return;
@@ -116,7 +116,7 @@ export async function considerFood(): Promise<void> {
   // Ripe fields by day: harvested, whatever food it carries; only while it's
   // up top (review: the harvest pulled it out of its mine every 20 minutes,
   // 2 minutes of climbing each; ripe wheat waits for the trip home)
-  if (autonomyOn() && daylight() && upTop() && Date.now() >= nextHarvestAt) {
+  if (autonomyOn() && workingTime() && upTop() && Date.now() >= nextHarvestAt) {
     nextHarvestAt = Date.now() + HARVEST_EVERY_MS;
     const { farmRipe, RIPE_ENOUGH } = await import("./farm");
     if (farmRipe() >= RIPE_ENOUGH) propose(harvestTask());

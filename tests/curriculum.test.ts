@@ -160,16 +160,26 @@ test("stop keeps it quiet: no milestone while the owner's stop holds", async () 
   expect(runs).toEqual([]);
 });
 
-test("night: it goes to its shelter (digging one first), once per night, and comes out at dawn", async () => {
+test("night: it works on until a mob attacks it; then it goes to its shelter (digging one first), once per night, and comes out at dawn (owner)", async () => {
   await P.updateMemory({ autonomy: { on: true, since: Date.now() } });
+  const D = await import(`${ROOT}/src/core/daylight.ts`);
   fake.time = { timeOfDay: 14000, age: 24000 * 3 + 14000 };
+  // Dark, nothing has attacked it: its milestones go on
+  await C.considerNextStep();
+  await sleep(50);
+  expect(A.currentTask()?.name).not.toBe("night: going to my shelter");
+  await idle();
+  expect(shelterLog).toEqual([]);
+  // A mob attacks it: off to its shelter
+  D.noteAttacked();
   await C.considerNextStep();
   await sleep(50);
   expect(A.currentTask()?.name).toBe("night: going to my shelter");
   expect(shelterLog).toEqual(["build", "enter"]);
+  const before = runs.length;
   await C.considerNextStep(); // the same night: not again
   expect(A.pendingTasks().length).toBe(0);
-  expect(runs).toEqual([]); // no milestones in the dark
+  expect(runs.length).toBe(before); // no more milestones out there tonight
   fake.time = { timeOfDay: 0, age: 24000 * 4 };
   await idle();
   expect(shelterLog).toEqual(["build", "enter", "leave"]);

@@ -15,7 +15,7 @@ import { goTo } from "../core/primitives";
 import { forbiddenAt } from "../core/forbidden";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter } from "../core/narrator";
-import { daylight } from "../core/daylight";
+import { workingTime } from "../core/daylight";
 
 // How far round the top of its stairs it looks, and how far up and down
 export const SURFACE_RANGE = 32;
@@ -59,7 +59,7 @@ export function openToSky(at: P3, look: (p: P3) => { name: string; skyLight?: nu
  */
 export async function surfaceOresFirst(item: string, count: number): Promise<number> {
   // By day only: from sunset on it.s evening (game test: out for coal as the night began)
-  if (count <= 0 || !bot.entity || !daylight()) return 0;
+  if (count <= 0 || !bot.entity || !workingTime()) return 0;
   const { shelterLayout } = await import("../actions/building");
   const home = shelterLayout()?.start;
   if (!home) return 0;

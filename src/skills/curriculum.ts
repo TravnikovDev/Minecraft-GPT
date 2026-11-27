@@ -23,12 +23,12 @@ import { setSheltered } from "../core/sheltered";
 import { describeFailure, fail } from "../core/result";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { MILESTONES, milestoneHere, nextMilestone, noteReached, smeltIronAndMakePickaxe, STARVING_FOOD, stoneToolsFromBag, tier1Reached, type Milestone } from "./milestones";
-import { foodPoints, hasBed, shelter, TIER, toolTier, wellEquipped } from "./capabilities";
+import { foodPoints, hasBed, shelter, TIER, toolTier } from "./capabilities";
 import { Vec3 } from "vec3";
 import { fitForTheMine } from "./mine";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
-import { daylight } from "../core/daylight";
+import { attackedTonight } from "../core/daylight";
 
 // A milestone that failed waits a little (10 minutes left it idle in a field)
 const BLOCKED_FOR_MS = 2 * 60_000;
@@ -136,16 +136,10 @@ const busyWith = (bucket: number): boolean => {
   return (running !== null && running.bucket <= bucket) || pendingTasks().some((t) => t.bucket <= bucket);
 };
 const isNight = (): boolean => {
-  // From sunset to dawn, in the overworld only (the Nether and the End have
-  // no night: its shelter is in the overworld); one clock for all (review).
-  // Well equipped (armour, an iron sword, a bow and arrows), night is like
-  // day for it (owner: its defence is good; mineflayer-pvp works well)
-  return !daylight() && !wellEquipped();
-};
-/** Down in its mine (under its home): already safe for the night. */
-const downInMine = (): boolean => {
-  const home = shelter();
-  return home !== null && !!bot.entity && bot.entity.position.y < home.y - 3;
+  // Night for it is a night a mob has attacked it (owner, 2026-11-28: it
+  // works on at night until it's attacked; then it runs to its shelter).
+  // In the overworld only (the Nether and the End have no night).
+  return attackedTonight();
 };
 
 /** Announces milestones reached for the first time. */
@@ -395,9 +389,7 @@ export async function considerNextStep(): Promise<void> {
   // The world's day (it moves on when someone sleeps; the age doesn't)
   const day = bot.time?.day ?? 0;
   const retryDue = nightRetryAt > 0 && Date.now() >= nightRetryAt;
-  // Dusk down in its mine: it's home already, the trip goes on (owner: only
-  // low food or a full bag end a mine trip, not the night)
-  if (isNight() && nightOf !== day && downInMine()) nightOf = day;
+  // Attacked at night, in its mine too: up and into its shelter (owner)
   if (isNight() && !bot.isSleeping && (nightOf !== day || retryDue) && !busyWith(Bucket.Upkeep)) {
     nightOf = day;
     nightRetryAt = 0;

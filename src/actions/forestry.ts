@@ -18,7 +18,7 @@ import { asBackgroundJob, collectDrops, isIdle, mayWanderTo, noRealWork } from "
 import { placeBlock } from "./blockPlacing";
 import { tellOwner } from "../managers/ownerDialog";
 import { getMemory } from "../managers/persistenceManager";
-import { daylight } from "../core/daylight";
+import { workingTime } from "../core/daylight";
 
 type BlockAt = (pos: Vec3) => Block | null;
 
@@ -173,7 +173,7 @@ export function firstDayUnderway(): boolean {
  */
 export async function replantWhenIdle(): Promise<void> {
   // Stumps are out in the open: not after dark (it went out at night to replant a birch)
-  if (felled.length === 0 || !isIdle() || firstDayUnderway() || !daylight()) return;
+  if (felled.length === 0 || !isIdle() || firstDayUnderway() || !workingTime()) return;
   const now = Date.now();
   for (let i = felled.length - 1; i >= 0; i--) {
     if (now - felled[i].at <= FORGET_AFTER_MS) continue;

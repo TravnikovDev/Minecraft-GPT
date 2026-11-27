@@ -226,11 +226,9 @@ function leftForLackOfRoom(radius: number, leave: (e: Entity) => boolean): Entit
  * down its scaffolding at dusk it was out among the mobs, and a creeper got it).
  */
 export async function asBackgroundJob(name: string, job: () => Promise<void>): Promise<boolean> {
-  const { daylight } = await import("../core/daylight");
-  if (!daylight()) {
-    const { wellEquipped } = await import("../skills/capabilities");
-    if (!wellEquipped()) return false;
-  }
+  // Not once a mob has attacked it tonight (owner: then it's off to its shelter)
+  const { workingTime } = await import("../core/daylight");
+  if (!workingTime()) return false;
   return runChore(name, job);
 }
 

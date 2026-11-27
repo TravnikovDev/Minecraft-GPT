@@ -509,8 +509,8 @@ export async function makeFarm(): Promise<ActionResult> {
   const { shelterLayout } = await import("../actions/building");
   const home = shelterLayout()?.start;
   if (!home) return fail("not_found", "no shelter to farm next to yet");
-  const { daylight } = await import("../core/daylight");
-  if (!daylight()) return fail("refused", "fields are made by day");
+  const { workingTime } = await import("../core/daylight");
+  if (!workingTime()) return fail("refused", "a mob attacked me tonight; fields wait for the morning");
   // The next field only once the ones it has are sown all over, and with the
   // seeds for a whole new one (owner: one field full, then the next from
   // its seeds)

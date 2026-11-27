@@ -99,19 +99,23 @@ test("code knows when it runs for a chore", async () => {
   expect(inside).toBe(true);
 });
 
-test("no idle chores at night unless it's well equipped: they wait for the morning", async () => {
+test("idle chores go on at night until a mob attacks it; then they wait for the morning (owner)", async () => {
   const { asBackgroundJob } = await import(`${ROOT}/src/actions/pickup.ts`);
+  const D = await import(`${ROOT}/src/core/daylight.ts`);
   fake.game = { dimension: "overworld" };
-  fake.time = { timeOfDay: 18000, age: 18000 }; // midnight
+  fake.time = { timeOfDay: 18000, age: 18000, day: 7 }; // midnight
   try {
-    let ran = false;
-    expect(await asBackgroundJob("taking down scaffolding", async () => void (ran = true))).toBe(false);
-    expect(ran).toBe(false);
+    let ran = 0;
+    expect(await asBackgroundJob("taking down scaffolding", async () => void ran++)).toBe(true);
+    expect(ran).toBe(1);
+    D.noteAttacked();
+    expect(await asBackgroundJob("taking down scaffolding", async () => void ran++)).toBe(false);
+    expect(ran).toBe(1);
     expect(isChoreRunning()).toBe(false);
-    // By day it runs
-    fake.time = { timeOfDay: 1000, age: 1000 };
-    expect(await asBackgroundJob("taking down scaffolding", async () => void (ran = true))).toBe(true);
-    expect(ran).toBe(true);
+    // The next night it's free to work again
+    fake.time = { timeOfDay: 18000, age: 42000, day: 8 };
+    expect(await asBackgroundJob("taking down scaffolding", async () => void ran++)).toBe(true);
+    expect(ran).toBe(2);
   } finally {
     delete fake.time;
     delete fake.game;
