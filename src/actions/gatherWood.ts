@@ -137,6 +137,11 @@ export async function gatherWood(
   }
 }
 
+/** Waits (up to 1.5 s) until it stands on the ground again. */
+async function landed(): Promise<void> {
+  for (let t = 0; t < 30 && bot.entity && !bot.entity.onGround; t++) await new Promise((r) => setTimeout(r, 50));
+}
+
 // A trunk this tall or more is felled from its top
 const TOP_DOWN_FROM = 3;
 
@@ -166,6 +171,9 @@ export async function fellTree(trunk: Block[]): Promise<boolean> {
     if (onTop.ok) {
       for (let i = trunk.length - 1; i >= 0; i--) {
         if (isCommandCancelled()) return false;
+        // Landed first: digging in the air is 5 times slower (game test:
+        // every log took 4 seconds with a stone axe, started mid-drop)
+        await landed();
         const p = trunk[i]!.position;
         // The log under its feet (each break waits for the server; it drops onto the next)
         await breakBlockAt(p.x, p.y, p.z);
