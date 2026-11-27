@@ -94,6 +94,11 @@ const isOwnPassage = (key: string): boolean => {
   return false;
 };
 
+/** True for a cell of its own passages (shelter, mine stairs and floors). */
+export function inOwnPassage(p: { x: number; y: number; z: number }): boolean {
+  return isOwnPassage(`${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`);
+}
+
 /**
  * True for a cell of its own passages (shelter stairs, doorways and room,
  * mine stairs) or right next to one: nothing it places goes there (owner:

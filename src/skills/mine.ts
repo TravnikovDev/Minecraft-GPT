@@ -512,6 +512,119 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number, tur
   return cells;
 }
 
+/** A cell as the outside check sees it (null: not loaded). */
+export type SealLook = { solid: boolean; liquid: boolean; sky: boolean } | null;
+const DIRS6 = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, -1, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
+
+/**
+ * Where its mine opens to the outside (owner: a canyon cut into the first
+ * floor let the night's mobs in): the open cells right outside the mine's
+ * own space (`open`) from which open air reaches the sky (searched up to
+ * `limit` cells; a cave that goes nowhere near the sky stays open, owner).
+ * `kept`: its other passages (the shelter), never searched through. Pure
+ * over `look`.
+ */
+export function outsideOpenings(open: Vec3[], look: (p: Vec3) => SealLook, kept: (p: Vec3) => boolean = () => false, limit = 1500): Vec3[] {
+  const key = (p: Vec3): string => `${p.x},${p.y},${p.z}`;
+  const openSet = new Set(open.map(key));
+  const passable = (p: Vec3): boolean => {
+    if (openSet.has(key(p)) || kept(p)) return false;
+    const c = look(p);
+    return c !== null && !c.solid && !c.liquid;
+  };
+  const reachesSky = new Map<string, boolean>();
+  const seen = new Set<string>();
+  const out: Vec3[] = [];
+  for (const c of open) {
+    for (const d of DIRS6) {
+      const n = c.plus(d);
+      const k = key(n);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (!passable(n)) continue;
+      let sky = reachesSky.get(k);
+      if (sky === undefined) {
+        sky = false;
+        const region = new Set([k]);
+        const queue = [n];
+        for (let i = 0; i < queue.length && region.size <= limit; i++) {
+          const p = queue[i]!;
+          if (look(p)?.sky) {
+            sky = true;
+            break;
+          }
+          for (const e of DIRS6) {
+            const q = p.plus(e);
+            const kq = key(q);
+            if (!region.has(kq) && passable(q)) {
+              region.add(kq);
+              queue.push(q);
+            }
+          }
+        }
+        for (const r of region) reachesSky.set(r, sky);
+      }
+      if (sky) out.push(n);
+    }
+  }
+  return out;
+}
+
+// Ways in from outside sealed in one go, at most (the rest next time)
+const SEALS_PER_RUN = 48;
+
+/**
+ * Its mine's floors closed off from the outside (owner): every opening from
+ * a floor's room, sleeves and pokeholes, or its stairs, into open air that
+ * reaches the sky (a canyon, a ravine) blocked with cobblestone. Caves that
+ * stay underground are left open. Only the floors near it (loaded).
+ */
+export async function sealMineFromOutside(): Promise<void> {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return;
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
+  const open: Vec3[] = [...walk];
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    const h = hubStep(l);
+    open.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, roomBeside(l, rec.sideFrom)));
+  }
+  // Only what's dug out already (a sleeve not dug that far isn't open yet)
+  const near = open.filter((c) => c.distanceTo(bot.entity.position) <= 64 && bot.blockAt(c)?.boundingBox === "empty");
+  const look = (p: Vec3): SealLook => {
+    const b = bot.blockAt(p);
+    if (!b) return null;
+    const liquid = b.name === "water" || b.name === "lava";
+    const sky = !liquid && b.boundingBox === "empty" && ((b as unknown as { skyLight?: number }).skyLight === 15 || seesSkyCheap(p));
+    return { solid: b.boundingBox === "block", liquid, sky };
+  };
+  // The shelter's own space (its stairs lead out): never searched or sealed
+  const { inOwnPassage } = await import("../core/movements");
+  const openKeys = new Set(open.map((c) => c.toString()));
+  const kept = (p: Vec3): boolean => inOwnPassage(p) && !openKeys.has(p.toString());
+  const holes = outsideOpenings(near, look, kept).slice(0, SEALS_PER_RUN);
+  if (holes.length === 0) return;
+  report(`My mine is open to the outside in ${holes.length} place${holes.length === 1 ? "" : "s"} (a canyon or the like): blocking it with cobblestone.`);
+  const { ensureBlock, STONE_FILLERS } = await import("../actions/digging");
+  const keepClear = (p: Vec3): boolean => openKeys.has(p.toString());
+  let sealed = 0;
+  for (const h of holes) {
+    if (isCommandCancelled()) break;
+    if (!(await goTo(new pf.goals.GoalNear(h.x, h.y, h.z, 3))).ok) continue;
+    if (await ensureBlock(h, keepClear, STONE_FILLERS)) sealed++;
+  }
+  console.log(`Mine: sealed ${sealed} of ${holes.length} openings to the outside.`);
+}
+
+/** Open sky straight over a cell (up to 40 blocks; leaves count as sky, a tree's). */
+function seesSkyCheap(p: Vec3): boolean {
+  for (let dy = 1; dy <= 40; dy++) {
+    const b = bot.blockAt(p.offset(0, dy, 0));
+    if (!b) return true;
+    if (b.boundingBox === "block" && !b.name.endsWith("_leaves")) return false;
+  }
+  return true;
+}
+
 // A torch on the stairs every this many steps (owner: a skeleton in its dark
 // stairs shot it at its own door)
 const STAIR_TORCH_EVERY = 6;
@@ -979,6 +1092,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
   const stillNames = (): string => still().map((w) => w.item.replace(/_/g, " ")).join(" or ");
 
   await lookAfterStairs(); // holes mended and dark stretches lit on the way down
+  await sealMineFromOutside(); // and any way in from outside (a canyon) blocked
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
@@ -1121,8 +1235,10 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
     await mineOresInSight(wants);
-    // Ore dug out of the floor leaves holes in it: filled (owner)
+    // Ore dug out of the floor leaves holes in it: filled (owner); a way
+    // out it dug into (a canyon) blocked
     await mendFloor(hub, arrive, level, side);
+    await sealMineFromOutside();
   }
   return still().length === 0 ? ok() : fail("missing_items", `not enough ${stillNames()} yet (I'll mine on next time)`);
 }

@@ -302,3 +302,24 @@ test("water or lava at the next step stops the stairs (they turn: owner)", async
   expect(liquidAtStep(s, at(0, 9, 0, "water"))).toBe("water"); // under its floor
   expect(liquidAtStep(s, at(2, 10, 0, "water"))).toBeNull(); // two blocks off: fine
 });
+
+test("the mine's openings to the outside are found (a canyon), a cave that stays underground isn't (owner)", async () => {
+  const { outsideOpenings } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  // A sleeve along x at y 10..11, z 0
+  const open = [];
+  for (let x = 0; x < 10; x++) open.push(new Vec3(x, 10, 0), new Vec3(x, 11, 0));
+  const inOpen = (p: { x: number; y: number; z: number }) => p.z === 0 && p.x >= 0 && p.x < 10 && (p.y === 10 || p.y === 11);
+  // A canyon at z = 1 for x 6..8, open up to the sky from y 10
+  const canyon = (p: { x: number; y: number; z: number }) => p.z === 1 && p.x >= 6 && p.x <= 8 && p.y >= 10;
+  // A closed cave at z = -1 for x 1..2, y 10..11
+  const cave = (p: { x: number; y: number; z: number }) => p.z === -1 && p.x >= 1 && p.x <= 2 && p.y >= 10 && p.y <= 11;
+  const look = (p: { x: number; y: number; z: number }) => {
+    if (inOpen(p)) return { solid: false, liquid: false, sky: false };
+    if (canyon(p)) return { solid: false, liquid: false, sky: p.y >= 20 };
+    if (cave(p)) return { solid: false, liquid: false, sky: false };
+    return { solid: true, liquid: false, sky: false };
+  };
+  const found = outsideOpenings(open, look).map((p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`).sort();
+  expect(found).toEqual(["6,10,1", "6,11,1", "7,10,1", "7,11,1", "8,10,1", "8,11,1"]);
+});

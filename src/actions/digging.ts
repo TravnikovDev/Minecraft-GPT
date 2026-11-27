@@ -548,6 +548,13 @@ export async function digRoom(
 
 /** Leaves rot away and sand falls: never a floor, wall or roof to rely on. */
 const isWeak = (name: string): boolean => name.endsWith("_leaves");
+// What holes are filled with: dirt first, then stone; never planks (stone and
+// wood are for tools; the shelter burned its cobblestone on floors and
+// couldn't make stone tools)
+const FILLERS = ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"];
+// Sealing a way in from outside: stone first (owner: blocked with cobblestone)
+export const STONE_FILLERS = ["cobblestone", "cobbled_deepslate", "stone", "andesite", "diorite", "granite", "tuff", "dirt", "coarse_dirt"];
+
 export const isHoleBlock = (b: { name: string; boundingBox: string } | null): boolean =>
   b !== null && (b.boundingBox === "empty" || b.name === "water" || b.name === "lava" || isWeak(b.name));
 const isSolidBlock = (b: { name: string; boundingBox: string } | null): boolean =>
@@ -608,13 +615,11 @@ export function supportChain(position: Vec3, blockAt: (p: Vec3) => { name: strin
  * @param position The block that must be solid (a floor, wall or roof cell).
  * @param keepClear Cells that must stay open (walking space): no support there.
  */
-export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolean = () => false): Promise<boolean> {
+export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolean = () => false, fillers: string[] = FILLERS): Promise<boolean> {
   const here = bot.blockAt(position);
   if (!here) return false;
   if (!isHoleBlock(here)) return true;
-  // Dirt first, then stone; never planks (stone and wood are for tools; the
-  // shelter burned its cobblestone on floors and couldn't make stone tools)
-  const filler = (): string | null => ["dirt", "coarse_dirt", "cobblestone", "cobbled_deepslate", "netherrack"].find((name) => getItemCount(name) > 0) ?? null;
+  const filler = (): string | null => fillers.find((name) => getItemCount(name) > 0) ?? null;
   if (!filler()) {
     console.log(`I have nothing to fill the hole at ${position} with; leaving it.`);
     return false;

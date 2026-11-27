@@ -44,6 +44,7 @@ import { registerOwnerUpdates } from "./actions/ownerUpdates";
 import { registerCreeperReflex } from "./actions/creeperReflex";
 import { registerDrowningReflex } from "./actions/drowningReflex";
 import { registerLavaReflex } from "./actions/lavaReflex";
+import { registerSuffocationReflex } from "./actions/suffocationReflex";
 import { checkProgress, resetStuckWatch } from "./managers/stuckWatch";
 import { needsRecoveryAfterRestart, recordDeath, takeRecoveryPending } from "./actions/recovery";
 import { BotCommands } from "./commands/types";
@@ -106,6 +107,7 @@ onConnectionReady((currentBot) => {
   registerCreeperReflex(); // creepers are handled on reflex, whatever the bot is doing
   registerDrowningReflex(); // and so is running out of air underwater
   registerLavaReflex(); // and touching lava
+  registerSuffocationReflex(); // and gravel or sand fallen into its head
   registerDoorOpener(); // opens doors on the way and closes them behind
   clearSolidDoors(); // doors that wouldn't open last connection may open now
   clearScaffolds(); // scaffolding from before may have been changed since

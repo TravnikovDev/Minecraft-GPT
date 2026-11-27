@@ -58,3 +58,5 @@ With every way down blocked, or at the bottom, it digs side routes off its lowes
 - Water in a sleeve is plugged; water at the next stair step makes the stairs turn.
 - Out of the mine by its own stairs, never a new way dug up through the rock. Beside the stairs in a cave, it opens a way in through their wall.
 - It goes down only with enough health and food.
+- **Closed to the outside**: where a floor's room, sleeve or pokehole (or the stairs) opens into open air that reaches the sky (a canyon, a ravine), the opening is blocked with cobblestone, at the start of every trip and after every stretch it digs. Caves that stay underground are left open.
+- Gravel or sand falling into its head is dug out at once (the suffocation reflex).
