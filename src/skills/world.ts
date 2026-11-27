@@ -36,7 +36,14 @@ export const SOURCES: Source[] = [
     run: async (m, count) => {
       const before = carried(m);
       const { takeItems } = await import("../actions/storage");
-      await takeItems([{ name: m, count }], true);
+      const { makeRoom } = await import("../actions/overflow");
+      // A full bag makes room first (cheap stuff into the chests, clutter
+      // out), never off to the trees instead (game test: 19 of its 20 logs,
+      // its bag full, "no room" at the chest twice, and it went out to cut
+      // a tree with its chests full of logs)
+      await makeRoom(`take ${m.replace(/_/g, " ")} from my chests`, [m]);
+      const took = await takeItems([{ name: m, count }], true);
+      if (took?.full && (await makeRoom(`take ${m.replace(/_/g, " ")} from my chests`, [m]))) await takeItems([{ name: m, count: count - (carried(m) - before) }], true);
       return got(before, carried(m), `${m.replace(/_/g, " ")} in my chests`);
     },
   },

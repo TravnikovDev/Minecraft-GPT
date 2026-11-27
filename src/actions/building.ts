@@ -760,6 +760,13 @@ async function walkHome(room: { x: number; y: number; z: number; details?: Recor
   return goTo(new pf.goals.GoalBlock(room.x, room.y, room.z));
 }
 
+/** Walks into its shelter's room by the top of its stairs (no doors shut): the way down to its mine too. */
+export async function walkIntoShelter(): Promise<ActionResult> {
+  const room = shelterPlace(false);
+  if (!room) return fail("not_found", "no shelter");
+  return walkHome(room);
+}
+
 /** Goes into the shelter (to the stand cell) and shuts the door, or closes the doorway with blocks. */
 export async function enterShelter(): Promise<ActionResult> {
   const room = shelterPlace(false);

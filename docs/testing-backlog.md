@@ -339,3 +339,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Bridge: after swimming twice into the river within 24 blocks of home ("Bridge: in the water near my home" in the log), by day after the mine: "Built a bridge over the river by my home (N blocks)", 2 wide, bank to bank, torches at the ends and every 6; walks use it; a hole in it is mended; a river over 12 wide: "too wide for a bridge"
 - [ ] Every mine floor's room gets a crafting table in its front-left corner and a furnace in its back-right corner ("Put a crafting table and a furnace in the 1st floor's room of my mine"), old floors too; crafting and smelting underground use them
 - [ ] Mine stairs dug over a cave: "Cave under the step at …: its floor put in first" before the step is dug; the bot never falls in, even with a mob coming up
+- [ ] A mine trip that starts up top ("Down to my mine by its stairs: to step N"): in by the shelter and down its stairs, never a shaft dug down from the grass
+- [ ] Its bag full and something it needs in its chests: it makes room (cheap stuff into the chests) and takes it, never off to the trees or the rock instead

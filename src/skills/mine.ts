@@ -1214,11 +1214,36 @@ function standAt(cell: Vec3): Vec3 {
   return bot.blockAt(cell)?.name.endsWith("_stairs") ? cell.offset(0, 1, 0) : cell;
 }
 
-/** Walks to stand at a step, a hub or a tunnel's end (paved or not). */
-const goToStep = (cell: Vec3): Promise<ActionResult> => {
+/** Walks to stand at a step, a hub or a tunnel's end (paved or not); from up top, down its stairs first. */
+const goToStep = async (cell: Vec3): Promise<ActionResult> => {
+  await downIntoTheMine(cell);
   const at = standAt(cell);
   return goTo(new pf.goals.GoalBlock(at.x, at.y, at.z));
 };
+
+/**
+ * From up top to somewhere down in its mine: in by its shelter and down its
+ * own stairs to that floor's room (or the step nearest), never a new way dug
+ * down through the ground (game test: the coal trip, starting from the trees
+ * it had cut, dug a shaft straight down from the grass to its mine). Best
+ * effort; nothing when it's down there already or isn't going down.
+ */
+export async function downIntoTheMine(target: Pos): Promise<void> {
+  const rec = mineRecord();
+  if (!rec || rec.stairs < 2 || !bot.entity) return;
+  const top = rec.start.y - 3;
+  if (bot.entity.position.y <= top || target.y > top) return;
+  const floor = floorAtHeight(rec, target.y);
+  const i = floor !== null ? hubStep(floor) : nearestStairStep(target, rec.start, rec.direction, rec.stairs, rec.turns);
+  if (i === null) return;
+  console.log(`Down to my mine by its stairs: to step ${i}.`);
+  const { walkIntoShelter } = await import("../actions/building");
+  const home = await walkIntoShelter();
+  if (!home.ok || isCommandCancelled()) return;
+  const step = standAt(stepAt(rec.start, rec.direction, i, rec.turns));
+  // Down its stairs: digging made too dear to choose (only with no other way)
+  await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(step.x, step.y, step.z, 1)));
+}
 
 /**
  * Digs the stairs down from the shelter's exit, a step at a time, remembering
