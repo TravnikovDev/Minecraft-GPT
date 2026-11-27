@@ -148,3 +148,27 @@ test("walled in, its walks break through its own cobblestone by its passages, ne
   setOwnPassages([], "mine");
   for (const k of ["-55,49,2", "-60,49,2", "-55,50,2"]) world.delete(k);
 });
+
+test("no walk cuts its mine's walls, floors or ceilings; only the tunnel digger cuts the mine (owner: a mess on the 2nd floor)", async () => {
+  const { setWalledIn } = await import(`${ROOT}/src/core/movements.ts`);
+  // A pokehole: 1 wide, 3 high, along z
+  const cells: any[] = [];
+  for (let z = 1; z <= 5; z++) for (let y = 38; y <= 40; y++) cells.push({ x: -76, y, z });
+  setOwnPassages(cells, "mine");
+  const at = (name: string, x: number, y: number, z: number) => {
+    const b = Block.fromStateId(registry.blocksByName[name].defaultState, 0);
+    b.position = new Vec3(x, y, z);
+    return b;
+  };
+  expect(moves.exclusionBreak(at("stone", -75, 39, 3))).toBeGreaterThanOrEqual(10_000); // a side wall
+  expect(moves.exclusionBreak(at("stone", -76, 41, 3))).toBeGreaterThanOrEqual(10_000); // the ceiling
+  expect(moves.exclusionBreak(at("stone", -76, 37, 3))).toBeGreaterThanOrEqual(10_000); // the floor
+  expect(moves.exclusionBreak(at("stone", -76, 39, 3))).toBe(0); // its own cell (a block fallen in)
+  expect(moves.exclusionBreak(at("stone", -73, 39, 3))).toBe(0); // rock away from the mine
+  // Walled in: its own cobblestone in a wall may go, never stone
+  setWalledIn(60_000);
+  expect(moves.exclusionBreak(at("cobblestone", -75, 39, 3))).toBe(0);
+  expect(moves.exclusionBreak(at("stone", -75, 39, 3))).toBeGreaterThanOrEqual(10_000);
+  setWalledIn(0);
+  setOwnPassages([], "mine");
+});

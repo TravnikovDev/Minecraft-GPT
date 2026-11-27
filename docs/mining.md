@@ -34,7 +34,7 @@ The **first floor 20 steps down**, then a floor every **10 blocks** deeper.
 
 Along every sleeve, every **3 blocks**, a pokehole **1 wide, 3 high, 5 long, on both sides**.
 
-Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into the last block it dug and digs the next column from there, so nothing is cut into the walls or ceiling between pokeholes.
+Only the tunnel digger cuts the mine. Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into the last block it dug and digs the next column from there. No walk (to a drop, to ore, to the next block) ever breaks a wall, floor or ceiling block of the mine's tunnels, so nothing is cut between pokeholes.
 
 ## Looking after it
 

@@ -113,6 +113,27 @@ export function nearOwnPassage(p: { x: number; y: number; z: number }): boolean 
   return false;
 }
 
+/**
+ * True for a block that walls its mine's tunnels in (a wall, floor or
+ * ceiling cell right next to a tunnel cell, not one itself): no walk ever
+ * breaks it. Owner: the sleeves are 1 wide and 3 high, the pokeholes 5 long,
+ * 1 wide, 3 high, and the walks (to drops, to ore, to the next block) cut
+ * their own shortcuts into the walls and ceilings between them: "a mess".
+ * Only the tunnel digger cuts the mine.
+ */
+export function wallsMine(p: { x: number; y: number; z: number }): boolean {
+  const cells = ownPassages.get("mine");
+  if (!cells || cells.size === 0) return false;
+  const x = Math.floor(p.x);
+  const y = Math.floor(p.y);
+  const z = Math.floor(p.z);
+  if (cells.has(`${x},${y},${z}`)) return false;
+  for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {
+    if (cells.has(`${x + dx},${y + dy},${z + dz}`)) return true;
+  }
+  return false;
+}
+
 /** The cells of its own passages (shelter, mine stairs): stalls there are never held against them. */
 export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>, owner = "shelter"): void {
   ownPassages.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
@@ -312,6 +333,10 @@ export function safeMovements(bot: Bot): pf.Movements {
   // stood there trapped, game test; a step dug in it is mended when tended)
   const keepOut = (block: { position?: { x: number; y: number; z: number } }): number =>
     block.position && (forbiddenAt(block.position) || (isProtected(block.position) && protectedBy(block.position) !== "farm")) ? 10_000 : 0;
+  // Its mine's walls, floors and ceilings: never cut by a walk (walled in by
+  // its own seals, its cobblestone and dirt there may go: see walledIn)
+  const mineShell = (block: { position?: { x: number; y: number; z: number }; name?: string }): number =>
+    block.position && wallsMine(block.position) && !(walledIn() && WALL_FILLERS.has(block.name ?? "")) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
   // Never a block with water or lava behind it (owner: its own way dug
   // through a flooded dripstone cave let the water in, and it nearly drowned)
@@ -321,7 +346,7 @@ export function safeMovements(bot: Bot): pf.Movements {
   // fell into a one-block water shaft)
   const waterUnder = (p: { x: number; y: number; z: number }): boolean => LIQUID.test(look(p.x, p.y - 1, p.z) ?? "");
   const floods = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && (liquidBehind(block.position, look) || waterUnder(block.position)) ? 10_000 : 0);
-  moves.exclusionAreasBreak = [keepOut, floods] as unknown as typeof moves.exclusionAreasBreak;
+  moves.exclusionAreasBreak = [keepOut, floods, mineShell] as unknown as typeof moves.exclusionAreasBreak;
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)
   const ownSpace = (block: { position?: { x: number; y: number; z: number } }): number =>

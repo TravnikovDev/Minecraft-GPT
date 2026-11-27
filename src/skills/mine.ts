@@ -687,10 +687,29 @@ function floorsAsDug(rec: MineRecord): Vec3[] {
   const out: Vec3[] = [];
   for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
     const h = hubStep(l);
-    const dugTo = l === rec.level ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug])) : undefined;
-    out.push(...floorCells(stepAt(rec.start, rec.direction, h, rec.turns), dirAt(rec.direction, h, rec.turns), l, true, dugTo));
+    const hub = stepAt(rec.start, rec.direction, h, rec.turns);
+    const arrive = dirAt(rec.direction, h, rec.turns);
+    // This floor's record, or (a floor above, its record gone) as far as each
+    // sleeve's open, dry floor really runs (game test: the first floor's
+    // planned right sleeve ran through a lake and a cave, and every sealing
+    // pass walked out there)
+    const dugTo = l === rec.level
+      ? Object.fromEntries(ARMS.map((a) => [a, rec.arms[a].dug]))
+      : Object.fromEntries(ARMS.map((a) => [a, openRun(sleeveBase(hub, arrive, a), armDirection(a, arrive))]));
+    out.push(...floorCells(hub, arrive, l, true, dugTo));
   }
   return out;
+}
+
+/** How many blocks of a sleeve from `base` going `way` are open and dry at its feet (as far as it was dug). */
+function openRun(base: Vec3, way: DirectionType): number {
+  let k = 0;
+  while (k < ARM_LENGTH) {
+    const b = bot.blockAt(base.plus(STEP[way].scaled(k + 1)));
+    if (!b || b.boundingBox !== "empty" || /water|lava/.test(b.name)) break;
+    k++;
+  }
+  return k;
 }
 
 /** Open, dry (no water or lava) and within reach of a walk. */
