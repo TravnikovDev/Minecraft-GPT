@@ -1693,9 +1693,13 @@ export async function lookAfterStairs(): Promise<number> {
   let raised = 0;
   let cleared = 0;
   let noTorch = "";
+  let mined = 0;
   for (let i = 1; i < rec.stairs; i++) {
     if (isCommandCancelled()) return allShellHoles(rec, walkSet, tunnels).length;
     const s = stepAt(rec.start, rec.direction, i, rec.turns);
+    // Ore in the step's walls, floor or roof mined first, with the vein
+    // behind it: the holes it leaves are walled up just below with the rest
+    mined += await mineStepOre(rec, i, s);
     // The whole step: its floor, both walls the full height and its roof
     // (owner: the stairs between the floors must be whole, walls and all, so
     // no skeleton shoots in from a cave; it went on mining with steps blown
@@ -1747,11 +1751,49 @@ export async function lookAfterStairs(): Promise<number> {
       else noTorch = placed; // no torches or coal: not again this trip
     }
   }
+  if (mined > 0) console.log(`Mine: mined ${mined} ore from my stairs' walls.`);
   if (filled + lit + raised + cleared > 0) console.log(`Mine: looked after my stairs: ${filled} holes filled, ${lit} torches put up, ${raised} steps made a block higher, ${cleared} fallen blocks dug out.`);
   if (noTorch) console.log(`Mine: my stairs stay dark in places (${noTorch}).`);
   const left = allShellHoles(rec, walkSet, tunnels);
   if (left.length > 0) console.log(`Mine: my stairs still have ${left.length} open blocks of floor, wall or roof (first at ${left[0]}).`);
   return left.length;
+}
+
+/**
+ * The ore in a step's floor, walls and roof (and the vein behind, as far as
+ * it reaches), mined standing on the step, or on the one above for ore in
+ * its floor. Copper past its cap and ore its pickaxe can't break stay.
+ * Nothing mines the stairs' shell otherwise: the floors' ore pass looks only
+ * along the floors' tunnels. How many blocks.
+ */
+async function mineStepOre(rec: MineRecord, i: number, s: Vec3): Promise<number> {
+  const cells = Array.from({ length: stepHeadroom(i, s.y) + 1 }, (_, dy) => s.offset(0, dy, 0));
+  const nameAt = (p: Vec3): string | null => bot.blockAt(p)?.name ?? null;
+  const pick = bestPickaxe();
+  const wanted = (p: Vec3): boolean => {
+    const name = nameAt(p) ?? "";
+    return /_ore$/.test(name) && pick !== null && catalog().canHarvest(name, pick) && !oreCapped(name);
+  };
+  const seen = exposedOres(cells, nameAt).filter(wanted);
+  if (seen.length === 0 || isCommandCancelled() || hurtInTheMine()) return 0;
+  const floor = s.offset(0, -1, 0);
+  const stand = i > 1 && seen.some((o) => o.equals(floor)) ? stepAt(rec.start, rec.direction, i - 1, rec.turns) : s;
+  if (!(await goToStep(stand)).ok) return 0;
+  const { breakBlock } = await import("../core/primitives");
+  let got = 0;
+  for (const o of veinFrom(cells, nameAt, (p) => withinReach(p), VEIN_MAX).filter(wanted)) {
+    if (isCommandCancelled() || hurtInTheMine() || bot.inventory.emptySlotCount() === 0) break;
+    if ((await breakBlock(o)).ok) {
+      got++;
+      minedOre.add(o.toString());
+    }
+  }
+  if (got > 0) {
+    const { pickupNearbyItems } = await import("../actions/pickup");
+    await pickupNearbyItems(bot, 4);
+    if (!stand.equals(s)) await goToStep(s);
+  }
+  return got;
 }
 
 /** A step just dug: its open floor, walls and roof filled (fillers stocked first). */
