@@ -544,7 +544,11 @@ function mineRecord(): MineRecord | null {
   firstFloorAt = d.depth ?? MINE_DEPTH;
   // Older records (one dig of steps 0..10, saved when done) are finished
   const stairs = d.stairs ?? (d.depth === 10 ? 11 : 0);
-  const done = d.done ?? stairs >= stairsToFirstFloor();
+  let done = d.done ?? stairs >= stairsToFirstFloor();
+  // Ended above the first floor by water, lava or a drop with a way to turn
+  // still untried there (older records): open again, the stairs turn aside
+  const untouched = !d.arms || Object.values(d.arms).every((a) => !a || a.dug === 0);
+  if (done && stairs < stairsToFirstFloor() && (d.level ?? 0) === 0 && untouched && earlyTurn(d.direction, d.turns ?? [], d.tried ?? {}, stairs) !== null) done = false;
   return {
     start: { x: mine.x, y: mine.y, z: mine.z },
     direction: d.direction,
@@ -1799,6 +1803,9 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
   const start = rec?.start ?? slots.exit;
   const dir = rec?.direction ?? slots.direction;
   const from = rec?.stairs ?? 0;
+  // Turned aside from water, lava or a drop above the first floor (earlyTurn)
+  let turns = rec?.turns ?? [];
+  let tried = rec?.tried ?? {};
   // From inside the shelter, never from the grass above it (that dug a hole
   // to the sky through the roof over the exit)
   const inside = await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
@@ -1811,7 +1818,8 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
       console.log(`Mine: ${i} of ${stairsToFirstFloor()} stairs, enough cobblestone for stone tools; the rest with a stone pickaxe.`);
       return ok();
     }
-    if (!(await digDiagonalTunnel(dir, 0, { width: 1, height: stepHeadroom(i, stepAt(start, dir, i).y) }, stepAt(start, dir, i), MINE_NAME, undefined, { save: false }))) {
+    const step = stepAt(start, dir, i, turns);
+    if (!(await digDiagonalTunnel(dirAt(dir, i, turns), 0, { width: 1, height: stepHeadroom(i, step.y) }, step, MINE_NAME, undefined, { save: false }))) {
       const why = tunnelStopReason();
       // Stopped (the owner, something more urgent): carry on from this step next time
       if (isCommandCancelled() || why === null) {
@@ -1833,18 +1841,65 @@ async function digMineSteps(woodUntilCobblestone: number): Promise<ActionResult>
         await saveMine(start, dir, i, 0, null);
         return fail("missing_items", "nothing to build my mine stairs' floor with over a cave (dirt or cobblestone)");
       }
+      // Water, lava or a drop before the first floor: that step closed off,
+      // the stairs go on to one side from the step before (owner, 2026-11-28:
+      // the stairs hit water at step 6 and the mine counted as done there)
+      const side = earlyTurn(dir, turns, tried, i);
+      if (side) {
+        const was = dirAt(dir, i, turns.filter((t) => t.at < i - 1));
+        const closed = await closeOffStep(step, i);
+        turns = [...turns.filter((t) => t.at < i - 1), { at: i - 1, dir: side }];
+        tried = { ...tried, [String(i - 1)]: [...new Set([...(tried[String(i - 1)] ?? []), was, side])] };
+        await saveMine(start, dir, i, 0, null, { level: 0, arms: freshArms(), deepest: false, turns, tried });
+        report(`My mine's stairs hit ${why === "drop" ? "a drop" : "water or lava"} at step ${i}; I closed that step off${closed ? "" : " as best I could"} and they go on to the ${side === RIGHT[was] ? "right" : "left"} from step ${i - 1}.`);
+        i--; // the same step again, the new way
+        continue;
+      }
       if (i - 1 >= SHALLOWEST_MINE) {
-        // Water, lava or a drop it can't floor below: a mine this deep is still a mine
+        // Water, lava or a drop it can't floor below, both ways tried: a mine this deep is still a mine
         console.log(`Mine: stairs stopped at step ${i} (${why ?? "stopped"}); the mine ends ${i - 1} levels down.`);
-        await saveMine(start, dir, i, 0, stepAt(start, dir, i - 1));
+        await saveMine(start, dir, i, 0, stepAt(start, dir, i - 1, turns));
         return ok();
       }
       await saveMine(start, dir, i, 0, null);
       return fail("refused", why === "drop" ? "my mine's stairs reach a drop near the top that I can't build a floor over" : "the mine's stairs hit lava, water or something built near the top");
     }
-    await saveMine(start, dir, i + 1, 0, i + 1 >= stairsToFirstFloor() ? stepAt(start, dir, firstFloorAt) : null);
+    await saveMine(start, dir, i + 1, 0, i + 1 >= stairsToFirstFloor() ? stepAt(start, dir, firstFloorAt, turns) : null);
   }
   return myMine() ? ok() : fail("error", "the mine wasn't remembered");
+}
+
+/**
+ * The way its stairs turn when step `i`, above the first floor, is blocked
+ * (water, lava, a drop): to the right or the left of where they were going,
+ * from step i-1, whichever wasn't tried there yet; null when both were (or
+ * at the doorway's first step, which can't turn). Pure.
+ */
+export function earlyTurn(dir: DirectionType, turns: Turn[], tried: Record<string, DirectionType[]>, i: number): DirectionType | null {
+  const at = i - 1;
+  if (at < 1) return null;
+  // The way they went before any turn there (a first turn there is replaced)
+  const was = dirAt(dir, i, turns.filter((t) => t.at < at));
+  const done = tried[String(at)] ?? [];
+  return [RIGHT[was], LEFT[was]].find((d) => !done.includes(d)) ?? null;
+}
+
+/**
+ * A blocked step's open cells filled (standing on the step before), so the
+ * turned stairs leave no hole toward the water or the drop. True when all of
+ * them are solid now.
+ */
+async function closeOffStep(step: Vec3, i: number): Promise<boolean> {
+  const { ensureBlock } = await import("../actions/digging");
+  let all = true;
+  for (let dy = stepHeadroom(i, step.y); dy >= 0; dy--) {
+    if (isCommandCancelled()) return false;
+    const cell = step.offset(0, dy, 0);
+    const b = bot.blockAt(cell);
+    if (!b || b.boundingBox !== "empty" || /water|lava/.test(b.name)) continue;
+    if (!(await ensureBlock(cell))) all = false;
+  }
+  return all;
 }
 
 /**

@@ -561,3 +561,18 @@ test("a floor's furnace or table never stays in its stairs: turned through the r
   expect(moved.toString()).toBe(new Vec3(hub.x, hub.y, hub.z + 2).toString());
   expect(turned(moved)).toBe(false);
 });
+
+test("stairs blocked above the first floor turn aside from the step before, right then left (owner: the stairs hit water at step 6 and the mine counted as done)", async () => {
+  const { earlyTurn, stepAt } = await import(`${ROOT}/src/skills/mine.ts`);
+  // Going north, blocked at step 6: right (east) from step 5 first, then left (west)
+  expect(earlyTurn("north", [], {}, 6)).toBe("east");
+  expect(earlyTurn("north", [{ at: 5, dir: "east" }], { "5": ["north", "east"] }, 6)).toBe("west");
+  expect(earlyTurn("north", [{ at: 5, dir: "west" }], { "5": ["north", "east", "west"] }, 6)).toBeNull();
+  // Never at the doorway's first step
+  expect(earlyTurn("north", [], {}, 1)).toBeNull();
+  // The turned stairs: step 6 is beside step 5, one down, to the east
+  const start = { x: 0, y: 64, z: 0 };
+  const s5 = stepAt(start, "north", 5, [{ at: 5, dir: "east" }]);
+  const s6 = stepAt(start, "north", 6, [{ at: 5, dir: "east" }]);
+  expect([s6.x - s5.x, s6.y - s5.y, s6.z - s5.z]).toEqual([1, -1, 0]);
+});
