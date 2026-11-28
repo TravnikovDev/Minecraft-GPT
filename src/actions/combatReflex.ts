@@ -48,9 +48,24 @@ const ARCHER_RANGE = 16;
 // from a skeleton 4 blocks away, barely moved, took four arrows and died)
 const ARCHER_CHARGE = 8;
 
-/** True for an archer close enough to charge rather than run from (not one it gave up on reaching). */
+// Mobs faster than it: running from one only gets it bitten in the back
+// (game test: backing off from a spider in a cave, a cave spider bit it from
+// 4 health to 0 and it never hit back), so one this close is fought
+export const FAST = new Set(["spider", "cave_spider", "silverfish", "endermite"]);
+const FAST_CHARGE = 4;
+
+/** True for an archer (or a fast mob) close enough to fight rather than run from (not one it gave up on reaching). */
 function chargeArcher(e: Entity | null): boolean {
-  return !!e && ARCHERS.has(e.name ?? "") && distanceTo(e) <= ARCHER_CHARGE && (ignored.get(e.id) ?? 0) <= Date.now();
+  if (!e || (ignored.get(e.id) ?? 0) > Date.now()) return false;
+  if (FAST.has(e.name ?? "")) return distanceTo(e) <= FAST_CHARGE;
+  return ARCHERS.has(e.name ?? "") && distanceTo(e) <= ARCHER_CHARGE;
+}
+
+/** The nearest mob right on it (any kind it may fight), or null: cornered. */
+function rightOnMe(): Entity | null {
+  return getPriorityTargets(CORNERED_RANGE + 0.5)
+    .filter((e) => isAlive(e) && !FLYING.has(e.name ?? "") && canFight(e))
+    .sort((a, b) => distanceTo(a) - distanceTo(b))[0] ?? null;
 }
 
 let fleeing: Entity | null = null; // the mob it's running from
@@ -215,9 +230,18 @@ function tick(): void {
       return;
     }
     if (Date.now() - fleeStartedAt > MAX_FLEE_MS) return stopRetreat("can't get away, standing my ground");
-    if (distanceTo(threat) <= CORNERED_RANGE) {
-      stopRetreat(`cornered by ${threat.name}`);
-      engage(threat);
+    // Cornered by whatever is right on it, not only the one it runs from
+    const onMe = rightOnMe() ?? (distanceTo(threat) <= CORNERED_RANGE ? threat : null);
+    if (onMe) {
+      stopRetreat(`cornered by ${onMe.name}`);
+      engage(onMe);
+      return;
+    }
+    // A fast mob close by: no running from it
+    const fast = nearestThreat(FAST_CHARGE);
+    if (fast && FAST.has(fast.name ?? "") && chargeArcher(fast)) {
+      stopRetreat(`fighting the ${fast.name} (it's faster than me)`);
+      engage(fast);
       return;
     }
     retreat(threat); // the nearest one may have changed
