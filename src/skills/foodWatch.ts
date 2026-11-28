@@ -108,7 +108,11 @@ export async function considerFood(): Promise<void> {
   if ((bot.food ?? 20) > STARVING_BAR + 4) toldOwner = false;
   if (Date.now() < nextTryAt || onIt()) return;
   const { autonomyOn } = await import("./curriculum");
-  const need = foodNeed(bot.food ?? 20, foodPoints(), workingTime(), autonomyOn());
+  // Food it left cooking in a furnace counts for a restock (not when starving)
+  const { cookingFoodPoints } = await import("../actions/cooking");
+  const points = foodPoints();
+  const need = foodNeed(bot.food ?? 20, points, workingTime(), autonomyOn());
+  if (need === "restock" && foodNeed(bot.food ?? 20, points + cookingFoodPoints(), true, true) === null) return;
   if (need) {
     propose(foodTask(need));
     return;

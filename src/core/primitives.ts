@@ -391,6 +391,14 @@ function noteWalk(result: ActionResult): boolean {
 }
 
 export async function goTo(goal: Goal, options: { timeoutMs?: number; climbedDown?: boolean; thoughtLonger?: boolean } = {}): Promise<ActionResult> {
+  // In bed with somewhere to go: up first (game test: its new bed's
+  // milestone put it to sleep in the evening, and the next task walked 60 s
+  // on the spot, the server pulling it back into the bed 147 times)
+  if (bot.isSleeping) {
+    console.log("In bed with somewhere to go: getting up first.");
+    const up = await wakeUp();
+    if (!up.ok) return up;
+  }
   let result = await walkTo(goal, options);
   if (noteWalk(result)) result = await walkTo(goal, options);
   if (!result.ok && result.reason === "unreachable" && !options.thoughtLonger && /too? long to decide/i.test(result.detail ?? "")) {
@@ -828,6 +836,15 @@ export async function sleepIn(bed: Block): Promise<ActionResult> {
   // "it's not night", "monsters nearby", "occupied": the server's answer is the detail
   if (!done.ok) return done.reason === "error" ? fail("refused", done.detail) : done;
   if (!(await until(() => bot.isSleeping, CONFIRM_MS))) return fail("refused", "not asleep");
+  return ok();
+}
+
+/** Gets out of bed and checks it's up. */
+export async function wakeUp(): Promise<ActionResult> {
+  if (!bot.isSleeping) return ok();
+  const done = await guarded("getting out of bed", async () => bot.wake(), { timeoutMs: USE_TIMEOUT_MS });
+  if (!done.ok) return done;
+  if (!(await until(() => !bot.isSleeping, CONFIRM_MS))) return fail("refused", "still in bed");
   return ok();
 }
 

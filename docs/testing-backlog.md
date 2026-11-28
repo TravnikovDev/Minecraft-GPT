@@ -355,3 +355,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] A zombie on it while a creeper is 5+ blocks off: the fight goes on (no "stepping aside" every half second); cave openings plugged only standing in its own tunnel beside each ("plugged N of M from inside"), never while hurt or with mobs near
 - [ ] The day plan's coal step makes charcoal in a coal drought too; sealing cave openings stocks filler blocks first
 - [ ] Ore uncovered by a sleeve or pokehole column is mined at once ("Mine: mined N ore my tunnel uncovered"), the vein behind it too, floor holes filled; diamond/gold with only a stone pickaxe: "needs a better pickaxe … waits"
+- [ ] Restocking food (not hungry): "Cooking: left N beef cooking in the furnace; back for it after my next job", it walks off at once; after its next task "checking the furnace I left cooking" takes it out ("took N done items"); hungry, it still waits for the food
+- [ ] Its new bed in the evening: it lies down to set the spawn point and gets straight back up while it's working time; any walk while in bed: "In bed with somewhere to go: getting up first"

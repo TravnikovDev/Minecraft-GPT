@@ -162,8 +162,13 @@ export async function stockFood(options: { emergency?: boolean } = {}): Promise<
   const { pickBerries } = await import("../commands/StarterKit");
   const { execute: hunt } = await import("../commands/Hunting");
   const { cookFood } = await import("../actions/cooking");
-  const short = (): boolean => foodPoints() < FOOD_STOCK && !isCommandCancelled();
+  const { collectFromOvens, cookingFoodPoints } = await import("../actions/cooking");
+  // Food it left cooking counts, unless it's hungry now (then it's taken out first)
+  const short = (): boolean => foodPoints() + (hungryNow() ? 0 : cookingFoodPoints()) < FOOD_STOCK && !isCommandCancelled();
   const byDay = daylight;
+  // What's done in a furnace it left cooking comes out first (all of what's
+  // ready when hungry)
+  await collectFromOvens(hungryNow());
   // Owner: a stock of cooked food, and hunting isn't a way to keep one (it
   // walked 100-plus blocks after single sheep and chickens, through caves,
   // and died). Lasting sources first, in this order:
@@ -410,7 +415,11 @@ export async function foodFromChests(): Promise<void> {
  * furnace of its own only without one at home, and never without fuel (80
  * blocks out it made a table and a furnace, then had nothing to burn).
  */
-async function cookTheMeat(cookFood: () => Promise<number | null>): Promise<void> {
+async function cookTheMeat(cookIt: (only: string | null, limit: number, leave: boolean) => Promise<number | null>): Promise<void> {
+  // Not hungry: the furnace is loaded and left, and it gets on with its
+  // restock (owner: not standing by the furnace); hungry, it waits for the food
+  const leave = !hungryNow();
+  const cookFood = (): Promise<number | null> => cookIt(null, 64, leave);
   if ((await cookFood()) !== null) return;
   const { carriesFuel } = await import("../actions/cooking");
   const home = shelterSlots()?.furnace;
@@ -479,6 +488,9 @@ async function getBed(): Promise<ActionResult> {
   }
   const { execute: sleep } = await import("../commands/Sleep");
   await sleep({ newBed: false }); // its new bed is the nearest: uses it (by day too), so the spawn point is set
+  // Lying in it to set the spawn point in the evening: back up while it's
+  // working time (owner: it works at night until it's attacked)
+  if (bot.isSleeping && workingTime()) await (await import("../core/primitives")).wakeUp();
   return hasBed() ? ok() : fail("refused", "the bed didn't take (the server said no)");
 }
 

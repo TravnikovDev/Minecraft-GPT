@@ -413,6 +413,13 @@ export async function considerNextStep(): Promise<void> {
     propose(pickupTask());
     return;
   }
+  // A furnace it loaded and left is done: emptied now, its task over (owner:
+  // "load the furnace, go do another action, and after it is finished check
+  // the furnace")
+  if (!isNight() && (await import("../actions/cooking")).ovenToCheck()) {
+    propose(ovenTask());
+    return;
+  }
   // At home between tasks: half of what it gathered in its chests (owner: it
   // came home with logs and more and kept it all on it)
   if (Date.now() >= nextStoreAt && nearHome() && (await import("../actions/storage")).toStoreNow("half", await keepOnMe()) >= STORE_AT_LEAST) {
@@ -456,6 +463,17 @@ function pickupTask(): TaskSpec {
     run: async () => {
       const { collectDrops } = await import("../actions/pickup");
       await collectDrops(PICKUP_RADIUS, { onlyVisible: true });
+    },
+  };
+}
+
+/** Taking the done food out of the furnaces it left cooking (its own life, bucket 5). */
+function ovenTask(): TaskSpec {
+  return {
+    name: "checking the furnace I left cooking",
+    bucket: Bucket.Self,
+    run: async () => {
+      await (await import("../actions/cooking")).collectFromOvens();
     },
   };
 }

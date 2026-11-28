@@ -71,10 +71,11 @@ export async function homeChores(): Promise<ActionResult> {
     console.log(`Home: stair blocks failed: ${(error as Error).message}`);
   }
 
-  // Raw meat in the furnace
+  // Raw meat in the furnace, loaded and left: the chores below go on while
+  // it cooks (owner: not standing by the furnace), collected between tasks
   const { cookFood, rawFoodInInventory } = await import("../actions/cooking");
   if (rawFoodInInventory().length > 0) {
-    const cooked = await cookFood();
+    const cooked = await cookFood(null, 64, true);
     if (cooked !== null && cooked > 0) report(`Cooked ${cooked} food.`);
     else if (cooked === null) problems.push("no furnace or fuel to cook my raw food");
   }
