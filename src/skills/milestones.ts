@@ -910,8 +910,9 @@ export const MILESTONES: Milestone[] = [
     // armour first (review: the plan could send it after diamonds without them)
     requires: ["iron_pickaxe", "shield", "bucket", "iron_armor"],
     // Deep in the mine: its hubs go 20 steps deeper each time all three tunnels are done
-    done: () => carriedOf(["diamond"]) >= DIAMONDS || toolTier("pickaxe") >= TIER.diamond,
-    achieve: () => branchMine([{ item: "diamond", enough: DIAMONDS, counts: ["diamond"] }], 20),
+    // Diamonds in its chests count (it puts half its valuables away at home)
+    done: () => owned(["diamond"]) >= DIAMONDS || toolTier("pickaxe") >= TIER.diamond,
+    achieve: () => mineDiamonds(DIAMONDS),
   },
   {
     id: "diamond_pickaxe",
@@ -919,7 +920,41 @@ export const MILESTONES: Milestone[] = [
     tier: 3,
     requires: ["diamonds"],
     done: () => toolTier("pickaxe") >= TIER.diamond,
-    achieve: () => makeDiamondPickaxe(),
+    achieve: () => makeDiamondGear("diamond_pickaxe"),
+  },
+  // The diamond gear after the pickaxe, in the order a player makes it: the
+  // sword, then the armour, the chestplate first (it stops the most damage).
+  // The Nether waits for the sword and the chestplate, the End for the rest
+  {
+    id: "diamond_sword",
+    title: "a diamond sword",
+    tier: 3,
+    requires: ["diamond_pickaxe"],
+    done: () => toolTier("sword") >= TIER.diamond,
+    achieve: () => makeDiamondGear("diamond_sword"),
+  },
+  {
+    id: "diamond_chestplate",
+    title: "a diamond chestplate",
+    tier: 3,
+    requires: ["diamond_sword"],
+    done: () => owns("diamond_chestplate"),
+    achieve: () => makeDiamondGear("diamond_chestplate"),
+  },
+  {
+    id: "diamond_armor",
+    title: "diamond armour",
+    tier: 3,
+    requires: ["diamond_chestplate"],
+    done: () => DIAMOND_GEAR.every(([piece]) => owns(piece)),
+    achieve: async () => {
+      for (const [piece] of DIAMOND_GEAR) {
+        if (owns(piece)) continue;
+        const made = await makeDiamondGear(piece);
+        if (!made.ok) return made;
+      }
+      return ok();
+    },
   },
   // Phase 9: the Nether and the End (skills/endgame)
   ...ENDGAME_MILESTONES,
@@ -927,30 +962,97 @@ export const MILESTONES: Milestone[] = [
 
 const DIAMONDS = 3;
 
-/** True when it carries the diamonds for a diamond pickaxe and has none yet. Pure. */
-export function diamondPickaxeDue(diamonds: number, pickaxeTier: number): boolean {
-  return diamonds >= DIAMONDS && pickaxeTier < TIER.diamond;
+/**
+ * Its diamond gear in the order it's made, with what each takes: the pickaxe
+ * (obsidian for the Nether portal), the sword, then the armour, the
+ * chestplate first. 29 diamonds in all.
+ */
+export const DIAMOND_GEAR: Array<[string, number]> = [
+  ["diamond_pickaxe", 3],
+  ["diamond_sword", 2],
+  ["diamond_chestplate", 8],
+  ["diamond_leggings", 7],
+  ["diamond_helmet", 5],
+  ["diamond_boots", 4],
+];
+const DIAMOND_SLOTS: Record<string, "head" | "torso" | "legs" | "feet"> = {
+  diamond_chestplate: "torso",
+  diamond_leggings: "legs",
+  diamond_helmet: "head",
+  diamond_boots: "feet",
+};
+
+/** The next diamond piece it doesn't have, with its cost, or null when it has them all. Pure. */
+export function nextDiamondPiece(has: (item: string) => boolean): [string, number] | null {
+  return DIAMOND_GEAR.find(([piece]) => !has(piece)) ?? null;
 }
 
-/** True when it carries the wood for the pickaxe's 2 sticks (sticks, planks or a log). Pure. */
+/** The diamonds the pieces it hasn't made yet still take. Pure. */
+export function diamondsStillWanted(has: (item: string) => boolean): number {
+  return DIAMOND_GEAR.filter(([piece]) => !has(piece)).reduce((n, [, cost]) => n + cost, 0);
+}
+
+/** True when it carries the wood for a tool's 2 sticks (sticks, planks or a log). Pure. */
 export function sticksCarried(items: Array<{ name: string; count: number }>): boolean {
   const n = (re: RegExp): number => items.filter((i) => re.test(i.name)).reduce((c, i) => c + i.count, 0);
   return n(/^stick$/) >= 2 || n(/_planks$/) >= 2 || n(/(_log|_stem|_wood|_hyphae)$/) >= 1;
 }
 
+/** True when it carries everything for this diamond piece (the diamonds, and the wood for a tool's sticks). Pure. */
+export function diamondPieceCarried(piece: string, cost: number, items: Array<{ name: string; count: number }>): boolean {
+  const diamonds = items.filter((i) => i.name === "diamond").reduce((n, i) => n + i.count, 0);
+  return diamonds >= cost && (piece in DIAMOND_SLOTS || sticksCarried(items));
+}
+
+/** The diamond piece it can make now with the diamonds it owns (bag and chests), or null. */
+export function diamondPieceDue(): [string, number] | null {
+  const next = nextDiamondPiece(owns);
+  return next && owned(["diamond"]) >= next[1] ? next : null;
+}
+
 /**
- * A diamond pickaxe, as soon as it has the diamonds: at the nearest crafting
- * table (a floor of its mine has one) when it carries the wood for the
- * sticks, else at home, where its chests have wood.
+ * Mines diamonds until it owns `total` (bag and chests): a mining trip for
+ * the ones its chests don't hold.
  */
-export async function makeDiamondPickaxe(): Promise<ActionResult> {
-  if (toolTier("pickaxe") >= TIER.diamond) return ok();
-  if (carriedOf(["diamond"]) < DIAMONDS) return fail("missing_items", `I need ${DIAMONDS} diamonds for a diamond pickaxe`);
-  if (sticksCarried(bot.inventory.items())) console.log("Diamond pickaxe: everything for it is in my bag; at the nearest crafting table.");
-  else await enterShelter(); // its table and the wood in its chests
-  const made = await acquire("diamond_pickaxe", 1, liveWorld);
-  if (made.ok) report("Made a diamond pickaxe!");
-  return made;
+async function mineDiamonds(total: number): Promise<ActionResult> {
+  const inChests = owned(["diamond"]) - carriedOf(["diamond"]);
+  return branchMine([{ item: "diamond", enough: Math.max(1, total - inChests), counts: ["diamond"] }], 20);
+}
+
+/**
+ * A diamond piece: the diamonds mined first if it owns too few (bag and
+ * chests); made at the nearest crafting table when it carries everything
+ * for it (a floor of its mine has one), else at home, where its chests have
+ * the diamonds and the wood; armour is put on at once.
+ */
+export async function makeDiamondGear(piece: string): Promise<ActionResult> {
+  const cost = DIAMOND_GEAR.find(([p]) => p === piece)?.[1];
+  if (cost === undefined) return fail("not_found", `no diamond piece called ${piece}`);
+  if (owns(piece)) return ok();
+  if (owned(["diamond"]) < cost) {
+    const mined = await mineDiamonds(cost);
+    if (!mined.ok && owned(["diamond"]) < cost) return mined;
+  }
+  const what = piece.replace(/_/g, " ");
+  if (diamondPieceCarried(piece, cost, bot.inventory.items())) {
+    console.log(`Diamond gear: everything for a ${what} is in my bag; at the nearest crafting table.`);
+  } else {
+    await enterShelter(); // its table, and its chests with the diamonds and wood
+    const short = cost - carriedOf(["diamond"]);
+    if (short > 0) {
+      const { takeItems } = await import("../actions/storage");
+      await takeItems([{ name: "diamond", count: short }], true);
+    }
+  }
+  const made = await acquire(piece, 1, liveWorld);
+  if (!made.ok) return made;
+  const slot = DIAMOND_SLOTS[piece];
+  if (slot) {
+    const { equipItem } = await import("../core/primitives");
+    await equipItem(piece, slot);
+  }
+  report(`Made a ${what}!`);
+  return ok();
 }
 const TORCHES = 16;
 const TORCHES_LOW = 8;

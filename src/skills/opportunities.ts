@@ -24,8 +24,8 @@ import { mayWanderTo } from "../actions/pickup";
 import { collectBlock } from "../actions/collectBlock";
 import { isCommandCancelled } from "../core/commandContext";
 import { fitForTheMine } from "./mine";
-import { foodPoints, shelter, toolTier } from "./capabilities";
-import { diamondPickaxeDue } from "./milestones";
+import { foodPoints, shelter } from "./capabilities";
+import { diamondPieceDue } from "./milestones";
 import { inOwnPassage, whileGathering } from "../core/movements";
 import { daylight } from "../core/daylight";
 import { underRoof } from "../actions/placement";
@@ -142,8 +142,8 @@ export function considerOpportunities(): void {
   if (!bot.entity || areChoresMuted()) return;
   const running = currentTask();
   if (running && running.bucket < Bucket.Self) return; // the owner's command, a threat, upkeep: not now
-  // Its first diamonds become a diamond pickaxe at once, before anything else
-  if (diamondPickaxeNow()) return;
+  // Diamonds enough for its next diamond piece: made at once, before anything else
+  if (diamondGearNow()) return;
   // Not off after ore hurt or without food, like a mining trip (game test: at
   // 0 food it followed iron and diamonds down to y -44, burned in lava with
   // nothing to heal with, and died with 514 items)
@@ -164,32 +164,37 @@ export function considerOpportunities(): void {
 const CUT_IN_GAP_MS = 3 * 60_000;
 let lastCutIn = 0;
 
-const PICKAXE_TASK = "making a diamond pickaxe";
-// After a try that didn't make one (no table, no wood), the next waits this long
-const PICKAXE_RETRY_MS = 5 * 60_000;
-let pickaxeTriedAt = 0;
+const GEAR_TASK_PREFIX = "making a diamond ";
+// After a try that didn't make the piece (no table, no wood), the next waits this long
+const GEAR_RETRY_MS = 5 * 60_000;
+let gearTriedAt = 0;
 
 /**
- * Carrying the diamonds for a diamond pickaxe and none yet: making it cuts in
- * ahead of whatever it's doing (that carries on afterwards), at the nearest
- * crafting table. True when it proposed it.
+ * Owning the diamonds (bag and chests) for its next diamond piece (the
+ * pickaxe, the sword, then the armour): making it cuts in ahead of whatever
+ * it's doing (that carries on afterwards), at the nearest crafting table, or
+ * at home when the diamonds or the wood are in its chests. True when it
+ * proposed it.
  */
-function diamondPickaxeNow(): boolean {
-  const diamonds = bot.inventory.items().filter((i) => i.name === "diamond").reduce((n, i) => n + i.count, 0);
-  if (!diamondPickaxeDue(diamonds, toolTier("pickaxe")) || Date.now() - pickaxeTriedAt < PICKAXE_RETRY_MS) return false;
-  const onIt = (name: string): boolean => name === PICKAXE_TASK || name.endsWith("a diamond pickaxe");
+function diamondGearNow(): boolean {
+  if (Date.now() - gearTriedAt < GEAR_RETRY_MS) return false;
+  const due = diamondPieceDue();
+  if (!due) return false;
+  const [piece] = due;
+  const what = piece.replace(/_/g, " ");
+  const onIt = (name: string): boolean => name.startsWith(GEAR_TASK_PREFIX) || name.endsWith(what) || /diamond (armour|sword|chestplate|pickaxe)$/.test(name);
   if ((currentTask() && onIt(currentTask()!.name)) || pendingTasks().some((t) => onIt(t.name))) return false;
-  pickaxeTriedAt = Date.now();
-  console.log("Diamond pickaxe: I have the diamonds; making it now, then back to what I was doing.");
+  gearTriedAt = Date.now();
+  console.log(`Diamond gear: I have the diamonds for a ${what}; making it now, then back to what I was doing.`);
   propose(
     {
-      name: PICKAXE_TASK,
+      name: `making a ${what}`,
       bucket: Bucket.Self,
       interrupts: true,
       run: async () => {
-        const { makeDiamondPickaxe } = await import("./milestones");
-        const made = await makeDiamondPickaxe();
-        if (!made.ok) console.log(`Diamond pickaxe: not yet (${made.detail ?? made.reason}).`);
+        const { makeDiamondGear } = await import("./milestones");
+        const made = await makeDiamondGear(piece);
+        if (!made.ok) console.log(`Diamond gear: no ${what} yet (${made.detail ?? made.reason}).`);
       },
     },
     { front: true }

@@ -253,12 +253,14 @@ test("a blocked first-day milestone holds the mine back until the day is done", 
 });
 
 test("every item the milestones plan for is a real 1.20.4 item", () => {
-  const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "cobblestone_stairs"];
+  const names = ["wooden_pickaxe", "wooden_axe", "wooden_shovel", "wooden_sword", "stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "furnace", "white_wool", "white_bed", "chest", "crafting_table", "raw_iron", "iron_ingot", "iron_pickaxe", "iron_sword", "iron_axe", "iron_shovel", "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots", "diamond", "diamond_pickaxe", "diamond_sword", "diamond_chestplate", "diamond_leggings", "diamond_helmet", "diamond_boots", "cobblestone_stairs"];
   for (const n of names) expect(registry.itemsByName[n]).toBeDefined();
   expect(REAL.map((m) => m.id)).toEqual([
     "wooden_tools", "shelter", "stone_tools", "chests", "bed", "clearing", "wood_stock", "lit_home", "food", "mine", "farm", "coal", "torches", "paved_stairs", "more_fields", "bridge", "stone_shelter", "iron", "iron_pickaxe",
     // First iron goes to a sword and to safety: a shield, a water bucket, armour, then the other tools
     "iron_sword", "shield", "bucket", "iron_armor", "lit_home_2", "iron_tools", "lit_home_3", "diamonds", "diamond_pickaxe",
+    // The diamond gear before the Nether and the End
+    "diamond_sword", "diamond_chestplate", "diamond_armor",
     // Phase 9: the Nether and the End
     "flint_and_steel", "nether_portal", "nether", "fortress", "blaze_rods", "ender_pearls", "ender_eyes", "stronghold", "end_portal", "the_end", "dragon", "home_again",
   ]);
@@ -532,15 +534,4 @@ test("an iron job is all in its bag (then the nearest furnace and table, not hom
   // A shield: 6 planks and 1 iron
   expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_planks", 5)])).toBe(false);
   expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_log", 2)])).toBe(true);
-});
-
-test("its first 3 diamonds: a diamond pickaxe at once; at the nearest table when it carries the wood for the sticks", () => {
-  expect(M.diamondPickaxeDue(3, 3)).toBe(true); // an iron pickaxe and 3 diamonds
-  expect(M.diamondPickaxeDue(2, 3)).toBe(false);
-  expect(M.diamondPickaxeDue(5, 4)).toBe(false); // a diamond pickaxe already
-  const it = (name: string, count: number) => ({ name, count });
-  expect(M.sticksCarried([it("stick", 2)])).toBe(true);
-  expect(M.sticksCarried([it("oak_planks", 2)])).toBe(true);
-  expect(M.sticksCarried([it("acacia_log", 1)])).toBe(true);
-  expect(M.sticksCarried([it("stick", 1), it("cobblestone", 64)])).toBe(false); // home for wood
 });

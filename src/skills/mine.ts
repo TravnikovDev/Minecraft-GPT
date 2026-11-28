@@ -2348,6 +2348,15 @@ export function goDeeperEarly(arms: Arms, ironHave: number, ironNeed: number, co
   return oneDone && (ironHave < ironNeed || coalHave < IRON_TRIP_COAL);
 }
 
+// Diamonds are most common deep down (around y -58): a diamond trip on a
+// floor above this goes on down once a tunnel there is done
+export const DIAMOND_FLOOR_Y = -40;
+
+/** True when a diamond trip goes on down from this floor (hub at `hubY`): a tunnel done, and the floor above DIAMOND_FLOOR_Y. Pure. */
+export function diamondsDeeper(arms: Arms, hubY: number): boolean {
+  return hubY > DIAMOND_FLOOR_Y && ARMS.some((a) => sleeveFinished(arms[a]) && pokesTodo(arms[a]).length === 0);
+}
+
 /** Carried count of these items. */
 const carried = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
 
@@ -2493,8 +2502,12 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     if (arm && !rec.exhausted && !rec.deepest && level + 1 < MAX_LEVELS && stepAt(start, dir, hubStep(level + 1), rec.turns).y >= MIN_HUB_Y) {
       const { owned } = await import("./milestones");
       const ironNeed = (toolTier("pickaxe") < TIER.iron ? 3 : 0) + (toolTier("sword") < TIER.iron ? 2 : 0);
+      const hubY = stepAt(start, dir, hubStep(level), rec.turns).y;
       if (goDeeperEarly(arms, owned(["raw_iron", "iron_ingot"]), ironNeed, owned(["coal", "charcoal"]))) {
         report(`A tunnel is done on this floor and I'm still short of iron for a pickaxe and a sword (or coal for torches): on down to the next floor.`);
+        arm = null;
+      } else if (wants.some((w) => w.item === "diamond") && diamondsDeeper(arms, hubY)) {
+        report(`A tunnel is done on this floor and diamonds lie deeper: on down to the next floor.`);
         arm = null;
       }
     }

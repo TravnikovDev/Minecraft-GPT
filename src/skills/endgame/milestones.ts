@@ -62,7 +62,8 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     title: "a trip to the Nether",
     tier: 4,
     dimension: "any",
-    requires: ["nether_portal", "shield"],
+    // Blazes and piglins hit hard: the diamond sword and chestplate first
+    requires: ["nether_portal", "shield", "diamond_sword", "diamond_chestplate"],
     done: () => Boolean(endgame().netherVisited),
     achieve: () => goToDimension("the_nether"),
   },
@@ -137,7 +138,8 @@ export const ENDGAME_MILESTONES: Milestone[] = [
     title: "a trip to the End",
     tier: 5,
     dimension: "any",
-    requires: ["end_portal"],
+    // The dragon and the endermen: full diamond armour first
+    requires: ["end_portal", "diamond_armor"],
     done: () => Boolean(endgame().endVisited),
     achieve: async () => (await import("./stronghold")).enterEnd(),
   },
