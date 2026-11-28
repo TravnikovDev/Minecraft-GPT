@@ -212,6 +212,21 @@ export function planningOn(autonomy: boolean): boolean {
  */
 export const stopsRunningStep = (trigger: Trigger): boolean => trigger === "owner asked";
 
+// A note with this share of its words already in the narrative says nothing new
+const REPEAT_SHARE = 0.6;
+
+/**
+ * True when the note to the owner only says the narrative again: most of its
+ * words (four letters and up) are in the narrative already. Pure.
+ */
+export function repeatsNarrative(message: string, narrative: string): boolean {
+  const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  const said = new Set(words(narrative));
+  const mine = words(message);
+  if (mine.length === 0) return true; // nothing in it at all
+  return mine.filter((w) => said.has(w)).length / mine.length >= REPEAT_SHARE;
+}
+
 // A new connection starts a new generation: a call still in flight from the
 // old one is let finish, but its answer is dropped (it must not save a plan
 // or cancel a task in the new session, or end the new session's hold)
@@ -328,7 +343,9 @@ async function makePlan(trigger: Trigger, ownerRequest: string | null, mine: num
       report(describePlan(stored));
       if (ownerOnline()) sharedPlanId = id; // the owner heard it
     }
-    if (plan.ownerMessage) report(plan.ownerMessage);
+    // Its extra note is said only when it adds something: the model tends to
+    // write the plan's own line again in other words
+    if (plan.ownerMessage && !repeatsNarrative(plan.ownerMessage, plan.narrative)) report(plan.ownerMessage);
     return true;
   } catch (error) {
     if (!stale()) lastFailureAt = Date.now();

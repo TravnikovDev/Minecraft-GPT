@@ -172,6 +172,19 @@ export async function markStep(planId: number, index: number, status: PlanStep["
   await savePlan({ ...plan, steps });
 }
 
+/**
+ * A step of an earlier plan finished just now, after a newer plan was made
+ * (the running step is let finish): when the newer plan's next step is that
+ * same step, with the same arguments, it's done already and isn't run again.
+ * True when it marked one.
+ */
+export async function markDoneIfNext(goal: string, args: Record<string, unknown>): Promise<boolean> {
+  const next = nextStep();
+  if (!next || next.step.goal !== goal || JSON.stringify(next.step.args) !== JSON.stringify(args)) return false;
+  await markStep(next.planId, next.index, "done");
+  return true;
+}
+
 /** The plan as one chat line: "Today: coal, then iron tools (2 of 4 done)." */
 export function describePlan(plan: StoredPlan | null = currentPlan()): string {
   if (!plan) return "I don't have a plan yet.";

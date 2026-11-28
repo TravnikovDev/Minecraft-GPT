@@ -11,8 +11,8 @@ const { withFailure, blockedGapMs, failureLine, failureKey, isWait, noteFailure,
 const { planningAllowance, planningSpent, PLAN_SHARE } = await import(`${ROOT}/src/planner/cost.ts`);
 const { setMilestoneAside } = await import(`${ROOT}/src/planner/names.ts`);
 const { lessonsDue, cleanLessons, MAX_LESSONS, LESSONS_EVERY_DAYS, FIRST_LESSONS_AFTER_DAYS, LessonsSchema } = await import(`${ROOT}/src/planner/lessons.ts`);
-const { validateSteps } = await import(`${ROOT}/src/planner/plan.ts`);
-const { hourlyRoom, PLANS_PER_HOUR, stopsRunningStep } = await import(`${ROOT}/src/planner/planner.ts`);
+const { validateSteps, savePlan, currentPlan, markDoneIfNext } = await import(`${ROOT}/src/planner/plan.ts`);
+const { hourlyRoom, PLANS_PER_HOUR, stopsRunningStep, repeatsNarrative } = await import(`${ROOT}/src/planner/planner.ts`);
 const { describeGiveUp } = await import(`${ROOT}/src/managers/stuckWatch.ts`);
 const { GOALS, goalNamed, worksInTheMine, needsDaylight, deepOreBehind } = await import(`${ROOT}/src/planner/goals.ts`);
 const { zodResponsesFunction } = await import("openai/helpers/zod");
@@ -141,6 +141,24 @@ test("lessons: first once three days are summarised, then every game week", () =
   expect(lessonsDue(3 + LESSONS_EVERY_DAYS, 3, 30)).toBe(true);
   // Written under older instructions: again at the next dusk, not in a week
   expect(lessonsDue(4, 3, 30, false)).toBe(true);
+});
+
+test("the note to the owner is said only when it adds something to the plan's own line", () => {
+  const narrative = "I found a cave full of coal, so I'll stock up on torches and then go down for iron.";
+  expect(repeatsNarrative("I found a cave full of coal!", narrative)).toBe(true);
+  expect(repeatsNarrative("Found coal in a cave; torches first, then iron.", narrative)).toBe(true);
+  expect(repeatsNarrative("A creeper blew a hole in the north wall of the shelter.", narrative)).toBe(false);
+  expect(repeatsNarrative("", narrative)).toBe(true);
+});
+
+test("a step that finished under a newer plan isn't run again as that plan's first step", async () => {
+  const step = (goal: string, args: Record<string, unknown>) => ({ goal, args, why: "", status: "pending" as const });
+  await savePlan({ id: 7, madeAt: 7, day: 3, narrative: "new", steps: [step("restAndRepair", {}), step("gatherWood", { count: 8 })] });
+  expect(await markDoneIfNext("gatherWood", { count: 8 })).toBe(false); // not the next step
+  expect(await markDoneIfNext("restAndRepair", {})).toBe(true);
+  expect(currentPlan()?.steps.map((s: any) => s.status)).toEqual(["done", "pending"]);
+  expect(await markDoneIfNext("gatherWood", { count: 16 })).toBe(false); // another count is another step
+  expect(await markDoneIfNext("gatherWood", { count: 8 })).toBe(true);
 });
 
 test("only the owner's request stops the step that's running; its own plans let it finish", () => {

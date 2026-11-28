@@ -16,7 +16,7 @@ import { note } from "./diary";
 import { failureKey, isWait, noteFailure, noteProgress } from "./failures";
 import { goalNamed, policy, worksInTheMine } from "./goals";
 import { PLAN_PREFIX, stepAllowedNow } from "./names";
-import { currentPlan, currentPlanId, markStep, stepStatusAfter } from "./plan";
+import { currentPlan, currentPlanId, markDoneIfNext, markStep, stepStatusAfter } from "./plan";
 
 // A give-up by the stuck watcher this recent is this step's
 const GIVE_UP_FRESH_MS = 30_000;
@@ -98,6 +98,9 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
       if (status === "done") {
         noteProgress();
         await note(`Done from my ${replaced ? "earlier " : ""}plan: ${what}.`);
+        // The newer plan was made while this ran, so it may start with this
+        // very step: done already, not run a second time
+        if (replaced) await markDoneIfNext(step.goal, step.args);
       }
       if (status === "failed") {
         // A wait (hurt, hungry, refused at night) is no failure of the job:

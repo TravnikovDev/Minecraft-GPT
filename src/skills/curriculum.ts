@@ -569,11 +569,14 @@ async function planStepProposed(): Promise<boolean> {
 async function planAtDusk(): Promise<void> {
   const { planningOn, planDay, duskDue, sharePlanIfQuiet } = await import("../planner/planner");
   if (!planningOn(autonomyOn())) return;
-  sharePlanIfQuiet(); // the owner online but quiet: tell them the plan once
   // Asked for all through dusk until a call really starts (planDay marks the
   // day then): a plan in flight or made a moment ago must not cost the day
-  // its dusk plan, and the weekly lessons with it (review)
-  if (duskDue()) void planDay("dusk");
+  // its dusk plan, and the weekly lessons with it
+  if (duskDue()) {
+    void planDay("dusk");
+    return; // the plan about to be replaced isn't told first
+  }
+  sharePlanIfQuiet(); // online but quiet: the plan is told once
 }
 
 // At night a plan step runs only under ground, and only once it's home (the
