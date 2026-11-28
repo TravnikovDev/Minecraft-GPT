@@ -839,7 +839,7 @@ export const MILESTONES: Milestone[] = [
       // out in the open); an empty one is filled later
       if (!workingTime()) return ok();
       const { fillWater } = await import("./endgame/portal");
-      const filled = await fillWater();
+      const filled = await fillWater(true); // out in the open: never dug down to water under ground
       if (!filled.ok) console.log(`Bucket: not filled yet (${describeFailure(filled)}).`);
       return ok();
     },

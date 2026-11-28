@@ -10,7 +10,7 @@ import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { chatter, report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
 import { catalog } from "../core/catalog";
-import { isNatural, isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
+import { inOwnPassage, isNatural, isWoodenDoor, protectCells, setNoDig, setOwnPassages } from "../core/movements";
 import { forbiddenAt } from "../core/forbidden";
 import { forgetDoor, markDoor } from "../core/scaffold";
 import { currentDimension } from "./perception";
@@ -899,6 +899,52 @@ export function protectShelter(): void {
   const seal = new Set(cellsOf(room, "seal").map(cellKey));
   protectCells([...plan.shell.filter((p) => !seal.has(cellKey(p))), ...overburden(plan.cells, plan.shell, start.y + 3)]);
   setOwnPassages(plan.cells);
+  // And the ground beside its tunnel and room, a few blocks either side, up
+  // to over the surface: never dug by a walk; the way in is its door (game
+  // test: the bucket milestone dug a shaft from the grass by its entrance
+  // down to water, and its trips home from the mine came up it after)
+  void import("../skills/mine")
+    .then(({ mineGroundBand }) => setNoDig(mineGroundBand(plan.cells, start.y + 3), "shelter"))
+    .catch((error: unknown) => console.error("Couldn't keep the ground round my shelter:", error));
+}
+
+/**
+ * The holes in the ground beside its shelter (the no-dig band, up to the
+ * surface it was dug from, `top`): open cells, lowest first, to fill so no
+ * way in but its door is left. Water and lava aren't holes. Pure.
+ */
+export function shelterGroundHoles(band: Pos[], top: number, nameAt: (p: Pos) => string | null): Pos[] {
+  return band
+    .filter((p) => p.y <= top && /^(air|cave_air)$/.test(nameAt(p) ?? ""))
+    .sort((a, b) => a.y - b.y);
+}
+
+// Holes filled at a time (a cave beside its room may be big)
+const GROUND_MENDS = 48;
+
+/** Fills the holes in the ground beside its shelter (a shaft a walk dug). How many it filled. */
+export async function mendShelterGround(): Promise<number> {
+  const room = shelterPlace(false);
+  const start = room?.details?.["start"] as Pos | undefined;
+  const dir = room?.details?.["direction"] as DirectionType | undefined;
+  if (!room || !start || !dir || !bot.entity) return 0;
+  const plan = shelterPlan(start, dir, (room.details?.["room"] as RoomSize | undefined) ?? DEFAULT_ROOM, (room.details?.["depth"] as number | undefined) ?? DEFAULT_DEPTH);
+  const { mineGroundBand } = await import("../skills/mine");
+  // Never its own passages (its mine's first steps run beside the room)
+  const band = mineGroundBand(plan.cells, start.y - 1).filter((p) => !inOwnPassage(p));
+  const holes = shelterGroundHoles(band, start.y - 1, (p) => bot.blockAt(new Vec3(p.x, p.y, p.z))?.name ?? null).slice(0, GROUND_MENDS);
+  if (holes.length === 0) return 0;
+  const { ensureBlock } = await import("./digging");
+  const open = new Set(plan.cells.map(cellKey));
+  let filled = 0;
+  for (const h of holes) {
+    if (isCommandCancelled()) break;
+    const c = new Vec3(h.x, h.y, h.z);
+    if (bot.entity.position.distanceTo(c) > 4 && !(await goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 3))).ok) continue;
+    if (await ensureBlock(c, (p) => open.has(cellKey(p)), ["dirt", "cobblestone", "cobbled_deepslate"])) filled++;
+  }
+  if (filled > 0) console.log(`Home: filled ${filled} hole${filled === 1 ? "" : "s"} in the ground beside my shelter.`);
+  return filled;
 }
 
 /**

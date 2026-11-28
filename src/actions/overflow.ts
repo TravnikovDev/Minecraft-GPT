@@ -80,7 +80,15 @@ export async function makeRoom(why: string, keep: string[] = []): Promise<boolea
   busy = true;
   try {
     let made: string | null = null;
-    if (!(await chooseChest())) {
+    const chest = await chooseChest();
+    // Its chests at home and it down in its mine: up its own stairs first,
+    // never the walk's own way up (game test: from the 4th floor it came up
+    // a shaft dug from the grass, and in by the front door)
+    if (chest && chest.position.y > bot.entity.position.y + 3) {
+      const { upFromTheMine } = await import("../skills/mine");
+      await upFromTheMine();
+    }
+    if (!chest) {
       tellOwner("My inventory is full, so I'm making a chest to put things in.");
       made = await makeChest();
       if (!made) {

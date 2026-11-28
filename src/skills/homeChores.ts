@@ -89,6 +89,15 @@ export async function homeChores(): Promise<ActionResult> {
   }
   if (isCommandCancelled()) return fail("aborted", "stopped");
 
+  // A hole dug into the ground beside its shelter (a shaft from the grass)
+  // filled: the only way in is its door
+  try {
+    await (await import("../actions/building")).mendShelterGround();
+  } catch (error) {
+    console.log(`Home: mending the ground failed: ${(error as Error).message}`);
+  }
+  if (isCommandCancelled()) return fail("aborted", "stopped");
+
   // Leather from its hunts becomes armour for the slots it has nothing in
   const { makeLeatherArmor } = await import("./leatherArmor");
   const leather = await makeLeatherArmor();

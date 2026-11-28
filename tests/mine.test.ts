@@ -600,3 +600,18 @@ test("its pokeholes' planned cells are its own, never a cave (game test: a pass 
   expect(pokes.has("(84, 19, -88)")).toBe(false); // the room
   expect(pokes.has("(91, 19, -87)")).toBe(false); // between pokeholes: a cave there is still a cave
 });
+
+test("the ground beside its shelter: a shaft dug from the grass is a hole to fill, lowest first; water and its passages aren't", async () => {
+  const { shelterGroundHoles } = await import(`${ROOT}/src/actions/building.ts`);
+  const { mineGroundBand: band } = await import(`${ROOT}/src/skills/mine.ts`);
+  // The shelter's entrance: a step down from the grass (surface y 62) at x 83
+  const open = [{ x: 83, y: 63, z: -32 }, { x: 83, y: 62, z: -33 }, { x: 83, y: 61, z: -34 }];
+  const shaft = new Set(["86,62,-33", "86,61,-33", "86,60,-33"]);
+  const holes = shelterGroundHoles(band(open, 62), 62, (p: { x: number; y: number; z: number }) =>
+    shaft.has(`${p.x},${p.y},${p.z}`) ? "air" : p.x === 80 && p.y === 61 ? "water" : "dirt"
+  );
+  // As deep as the entrance goes beside it (its lowest step here is y 61), lowest first
+  expect(holes.map((h: { x: number; y: number; z: number }) => `${h.x},${h.y},${h.z}`)).toEqual(["86,61,-33", "86,62,-33"]);
+  // Nothing over the surface is filled
+  expect(shelterGroundHoles(band(open, 65), 62, () => "air").every((h: { y: number }) => h.y <= 62)).toBe(true);
+});

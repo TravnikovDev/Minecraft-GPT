@@ -16,6 +16,7 @@ import { equipItem, goTo, useBlock, useHeldItemToward } from "../../core/primiti
 import { describeFailure, fail, ok, type ActionResult } from "../../core/result";
 import { report } from "../../core/narrator";
 import { portalFrame, type Axis, type P3 } from "./geometry";
+import { skyAbove } from "../../actions/hunting";
 import { count, endgame, noteEndgame } from "./state";
 
 const OBSIDIAN = 10;
@@ -32,14 +33,22 @@ export function portalStands(): boolean {
   return b === null || b.name === "nether_portal";
 }
 
-/** Fills its empty bucket from a water source in sight. */
-export async function fillWater(): Promise<ActionResult> {
+/**
+ * Fills its empty bucket from a water source in sight; `openSky`: only one
+ * out under the open sky (a river, a pond), never water under ground (game
+ * test: the bucket milestone walked to water 8 blocks under its shelter and
+ * dug a shaft down to it from the grass by its door).
+ */
+export async function fillWater(openSky = false): Promise<ActionResult> {
   if (count("water_bucket") > 0) return ok();
   if (count("bucket") === 0) return fail("missing_items", "I have no bucket");
   const id = bot.registry.blocksByName["water"]?.id;
   const spots = id === undefined ? [] : bot.findBlocks({ matching: id, maxDistance: 48, count: 64 });
-  const source = spots.map((p) => bot.blockAt(p)).find((b) => b && Number(b.getProperties()["level"] ?? 0) === 0);
-  if (!source) return fail("not_found", "I see no water to fill my bucket with");
+  const look = (x: number, y: number, z: number): Block | null => bot.blockAt(new Vec3(x, y, z));
+  const source = spots
+    .map((p) => bot.blockAt(p))
+    .find((b) => b && Number(b.getProperties()["level"] ?? 0) === 0 && (!openSky || skyAbove(b.position, look, 64)));
+  if (!source) return fail("not_found", openSky ? "I see no water out in the open to fill my bucket with" : "I see no water to fill my bucket with");
   await goTo(new pf.goals.GoalNear(source.position.x, source.position.y, source.position.z, 2));
   const held = await equipItem("bucket");
   if (!held.ok) return held;
