@@ -408,6 +408,8 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
       const { findHomeArea, mineWayDry } = await import("../skills/homeSite");
       const dry = (exit: Vec3, d: DirectionType): boolean => mineWayDry(exit, d);
       await findHomeArea(() => chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry) !== null);
+      // Called away mid-search (the owner's "come here"): no site picked where it happens to be
+      if (isCommandCancelled()) return fail("aborted", "stopped");
       // The spot whose mine reaches the most ore (owner: "it must be the result of deep analysis")
       const { oresAround, oreValue } = await import("../skills/siteOres");
       const ores = oresAround(bot.entity.position.floored());
