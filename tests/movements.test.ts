@@ -165,10 +165,12 @@ test("no walk cuts its mine's walls, floors or ceilings; only the tunnel digger 
   expect(moves.exclusionBreak(at("stone", -76, 37, 3))).toBeGreaterThanOrEqual(10_000); // the floor
   expect(moves.exclusionBreak(at("stone", -76, 39, 3))).toBe(0); // its own cell (a block fallen in)
   expect(moves.exclusionBreak(at("stone", -73, 39, 3))).toBe(0); // rock away from the mine
-  // Walled in: its own cobblestone in a wall may go, never stone
+  // Walled in: its mine's walls may go, its own cobblestone and the stone
+  // (game test: stuck on its own bridge in a cave crossing its mine's plan,
+  // every block round it walled a tunnel and it had no move at all)
   setWalledIn(60_000);
   expect(moves.exclusionBreak(at("cobblestone", -75, 39, 3))).toBe(0);
-  expect(moves.exclusionBreak(at("stone", -75, 39, 3))).toBeGreaterThanOrEqual(10_000);
+  expect(moves.exclusionBreak(at("stone", -75, 39, 3))).toBe(0);
   setWalledIn(0);
   // Gathering ore it saw: its walks may cut through to it (owner)
   const { whileGathering } = await import(`${ROOT}/src/core/movements.ts`);

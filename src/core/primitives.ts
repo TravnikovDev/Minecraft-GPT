@@ -378,7 +378,11 @@ function noteWalk(result: ActionResult): boolean {
     if (moved) noPathSince = null;
     return false;
   }
-  if (result.reason !== "unreachable" || !/no path/i.test(result.detail ?? "") || walledIn()) return false;
+  // No path, or a walk that stalls on the spot every time (game test: on its
+  // own cobblestone bridge in a cave by its mine, "path partial, 0 moves",
+  // every walk timed out for 5 minutes and none ever said "no path")
+  const noWay = (result.reason === "unreachable" && /no path/i.test(result.detail ?? "")) || (result.reason === "timeout" && /no progress/i.test(result.detail ?? ""));
+  if (!noWay || walledIn()) return false;
   if (moved) {
     noPathSince = { at: Date.now(), pos: here.clone() };
     return false;
@@ -386,7 +390,7 @@ function noteWalk(result: ActionResult): boolean {
   if (Date.now() - noPathSince!.at < WALLED_IN_AFTER_MS) return false;
   noPathSince = null;
   setWalledIn(WALLED_IN_FOR_MS);
-  console.log(`Walled in at ${here.floored()}: no way anywhere for ${WALLED_IN_AFTER_MS / 60_000} minutes; breaking through my own cobblestone and dirt to get out.`);
+  console.log(`Walled in at ${here.floored()}: no way anywhere for ${WALLED_IN_AFTER_MS / 60_000} minutes; breaking through my own cobblestone and dirt, and my mine's walls, to get out.`);
   return true;
 }
 

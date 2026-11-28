@@ -990,6 +990,30 @@ async function sealPokeCaves(cells?: Vec3[], alsoOwn: Vec3[] = []): Promise<numb
   return plugged;
 }
 
+/**
+ * A floor's room sealed off from a cave it opened into (game test: the 1st
+ * floor's room had a big cave beside it; only its sleeves were ever sealed,
+ * so walks to the sleeves went out through the room into the cave, and it
+ * got stuck there on its own bridge). How many openings it plugged.
+ */
+async function sealRoomCaves(hub: Vec3, arrive: DirectionType, level: number): Promise<number> {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return 0;
+  const R = STEP[RIGHT[arrive]];
+  const F = STEP[arrive];
+  const room: Vec3[] = [];
+  for (const [a, b] of ROOM_CELLS) for (let dy = 0; dy < ROOM_HEIGHT; dy++) room.push(hub.plus(R.scaled(a)).plus(F.scaled(b)).offset(0, dy, 0));
+  const open = (p: Pos): boolean => {
+    const b = bot.blockAt(new Vec3(p.x, p.y, p.z));
+    return b !== null && b.boundingBox === "empty" && !/water|lava|torch/.test(b.name);
+  };
+  const own = new Set<string>([...floorsAsDug(rec), ...mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk, ...room].map((c) => c.toString()));
+  for (const k of minedOre) own.add(k);
+  const holes = caveOpenings(room, own, open);
+  if (holes.length === 0) return 0;
+  return plugFromInside(holes, room, `my ${floorName(level)}'s room opens into a cave (${holes.length} openings)`);
+}
+
 // Health under this, or a hostile mob this near: no more sealing this time
 const SEAL_HEALTH = 14;
 const SEAL_MOB_RANGE = 12;
@@ -2198,6 +2222,8 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     if (!furnishedSeen.has(level)) {
       furnishedSeen.add(level);
       await furnishFloor(hub, arrive, level);
+      if (isCommandCancelled()) return fail("aborted", "stopped");
+      await sealRoomCaves(hub, arrive, level);
       if (isCommandCancelled()) return fail("aborted", "stopped");
     }
     // The floor's sleeves go by the way its stairs came in (owner's plan)

@@ -375,8 +375,10 @@ export function safeMovements(bot: Bot): pf.Movements {
     block.position && (forbiddenAt(block.position) || (isProtected(block.position) && protectedBy(block.position) !== "farm")) ? 10_000 : 0;
   // Its mine's walls, floors and ceilings: never cut by a walk (walled in by
   // its own seals, its cobblestone and dirt there may go: see walledIn)
+  // (walled in, its mine's walls open too: in a cave crossing its mine's
+  // plan, every block round it walled some tunnel and it had no move at all)
   const mineShell = (block: { position?: { x: number; y: number; z: number }; name?: string }): number =>
-    block.position && gathering === 0 && wallsMine(block.position) && !(walledIn() && WALL_FILLERS.has(block.name ?? "")) ? 10_000 : 0;
+    block.position && gathering === 0 && !walledIn() && wallsMine(block.position) ? 10_000 : 0;
   moves.exclusionAreasStep = [stuckStep, submergedStep(bot)] as unknown as typeof moves.exclusionAreasStep;
   // Never a block with water or lava behind it (owner: its own way dug
   // through a flooded dripstone cave let the water in, and it nearly drowned)

@@ -362,3 +362,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] A new home site: "mine way not clear" where its mine's diagonal down to the 2nd floor has a cave (open cells with ground over them) in or beside it, like water or lava; it walks on to look
 - [ ] Stairs running into an open cave: "Cave through the step at …: its floor built first" (with supports, from the step above), then walls and roof; it never steps into the open step first; a support never goes where it stands
 - [ ] Stairs turned at a floor toward its furnace or table: the furnace/table it dug out goes back in the room's forward middle, never into the new stairs
+- [ ] A floor's room beside a cave: "my 1st floor's room opens into a cave (N openings); plugged …" on the trip's first visit to that floor
+- [ ] Stuck where every walk stalls on the spot ("path partial, 0 moves") for 2 minutes: "Walled in at …; breaking through my own cobblestone and dirt, and my mine's walls, to get out", and it gets out
