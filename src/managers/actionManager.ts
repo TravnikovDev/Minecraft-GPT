@@ -41,6 +41,9 @@ const LONG_RUNNING_LIMITS: Partial<Record<BotCommands, number>> = {
   [BotCommands.Harvest]: 10 * 60_000,
   [BotCommands.GatherFood]: 15 * 60_000,
   [BotCommands.Cook]: 15 * 60_000,
+  // Back for its things after a death: a long walk, maybe a dig down to a
+  // cave, four tries; cut off at five minutes it lost them
+  [BotCommands.RecoverItems]: 30 * 60_000,
 };
 
 // Walking somewhere: cut off, it just walks there again from where it is
