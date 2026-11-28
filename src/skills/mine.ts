@@ -918,9 +918,64 @@ async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
     return b !== null && b.boundingBox === "empty" && !/water|lava|torch/.test(b.name);
   };
   const near = (p: Pos): boolean => bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= LOOK_AFTER_RANGE;
-  const holes = caveOpenings((cells ?? pokeCellsAsDug(rec, open)).filter(near), own, open);
+  const pokes = (cells ?? pokeCellsAsDug(rec, open)).filter(near);
+  const holes = caveOpenings(pokes, own, open);
   if (holes.length === 0) return 0;
-  return plugCave(holes, `my pokeholes open into a cave (${holes.length} openings)`);
+  return plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
+}
+
+// Health under this, or a hostile mob this near: no more sealing this time
+const SEAL_HEALTH = 14;
+const SEAL_MOB_RANGE = 12;
+
+/**
+ * Plugs cave openings standing in its own tunnel beside each one, never out
+ * in the cave (game test: sealing a mineshaft cavern's openings it walked
+ * out among the mobs and a zombie killed it); stops while hurt or with a
+ * hostile mob near. Each plug is remembered (put back if broken). How many.
+ */
+async function plugFromInside(holes: Pos[], ownCells: Vec3[], why: string): Promise<number> {
+  const { getPriorityTargets } = await import("../actions/combat");
+  const columns = new Map<string, number>(); // (x,z) of its cells -> their floor y
+  for (const c of ownCells) {
+    const k = `${c.x},${c.z}`;
+    columns.set(k, Math.min(columns.get(k) ?? c.y, c.y));
+  }
+  const placed: Pos[] = [];
+  let skipped = 0;
+  const sorted = [...holes].sort((a, b) => bot.entity.position.distanceTo(new Vec3(a.x, a.y, a.z)) - bot.entity.position.distanceTo(new Vec3(b.x, b.y, b.z)));
+  for (const h of sorted) {
+    if (isCommandCancelled()) break;
+    if ((bot.health ?? 20) < SEAL_HEALTH || getPriorityTargets(SEAL_MOB_RANGE).length > 0) {
+      console.log("Mine: mobs near or hurt; the rest of the cave openings wait.");
+      break;
+    }
+    const hole = new Vec3(h.x, h.y, h.z);
+    // A column of its own tunnel beside the opening, to stand in
+    // (never the column right over or under it: over a hole in the floor it'd fall in)
+    const stand = SIX.filter((d) => d.y === 0).map((d) => ({ x: h.x + d.x, z: h.z + d.z }))
+      .map((p) => (columns.has(`${p.x},${p.z}`) ? new Vec3(p.x, columns.get(`${p.x},${p.z}`)!, p.z) : null))
+      .find((p): p is Vec3 => p !== null) ?? null;
+    if (!stand) {
+      skipped++;
+      continue;
+    }
+    if (!bot.entity.position.floored().equals(stand) && !(await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z)))).ok) {
+      skipped++;
+      continue;
+    }
+    if (bot.entity.position.offset(0, 1.62, 0).distanceTo(hole.offset(0.5, 0.5, 0.5)) > 4.5) {
+      skipped++;
+      continue;
+    }
+    if (await ensureBlock(hole, () => false, CAVE_FILL)) placed.push({ x: hole.x, y: hole.y, z: hole.z });
+  }
+  console.log(`Mine: ${why}; plugged ${placed.length} of ${holes.length} from inside${skipped ? ` (${skipped} out of reach from my tunnels)` : ""}.`);
+  const rec = mineRecord();
+  if (rec && placed.length > 0) {
+    await saveMine(rec.start, rec.direction, rec.stairs, rec.branches, rec.bottom, { level: rec.level, arms: rec.arms, deepest: rec.deepest, cavePlugs: [...rec.cavePlugs, ...placed] });
+  }
+  return placed.length;
 }
 
 const FALLS = /^(gravel|sand|red_sand|suspicious_gravel|suspicious_sand)$/;

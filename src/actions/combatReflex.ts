@@ -48,6 +48,9 @@ const ARCHER_RANGE = 16;
 // from a skeleton 4 blocks away, barely moved, took four arrows and died)
 const ARCHER_CHARGE = 8;
 
+// A creeper this close: the creeper reflex keeps the body, whatever else is about
+const CREEPER_TOO_CLOSE = 5;
+
 // Mobs faster than it: running from one only gets it bitten in the back
 // (game test: backing off from a spider in a cave, a cave spider bit it from
 // 4 health to 0 and it never hit back), so one this close is fought
@@ -212,7 +215,14 @@ function nearestThreat(range: number): Entity | null {
 function tick(): void {
   if (!bot.entity || !(bot.health > 0)) return;
   if (bot.vehicle) return; // no melee from a boat (and rowing owns movement)
-  if (isCreeperReflexActive() || isDrowningReflexActive() || isLavaReflexActive()) {
+  // The creeper reflex has the body, unless something is right on it and
+  // the creeper isn't close (game test: a creeper 10 blocks off kept the
+  // creeper reflex on, the fight stepped aside every half second, and a
+  // zombie biting it from under a block away killed it)
+  const creeper = bot.nearestEntity((e) => e.name === "creeper" && isAlive(e));
+  const creeperClose = creeper !== null && distanceTo(creeper) <= CREEPER_TOO_CLOSE;
+  const onMeNow = isCreeperReflexActive() && !creeperClose ? rightOnMe() : null;
+  if ((isCreeperReflexActive() && !onMeNow) || isDrowningReflexActive() || isLavaReflexActive()) {
     finish("stepping aside for another reflex");
     stopRetreat("stepping aside for another reflex");
     return;
