@@ -1,6 +1,7 @@
 // A bridge over the river by its home (owner, 2026-11-27): the narrowest
 // straight crossing near where it swims, bank to bank, 2 wide, at the banks'
-// height, no wider than 12 blocks of water; torches at the ends and every 6.
+// height, no wider than 48 blocks of water (owner: it's supposed to want a
+// bridge; 12 left a 13-wide river swum every day); torches at the ends and every 6.
 import { expect, test } from "bun:test";
 const ROOT = `${import.meta.dir}/..`;
 const { planCrossing, deckCells, torchCells, MAX_SPAN } = await import(`${ROOT}/src/skills/bridge.ts`);
@@ -49,10 +50,11 @@ test("the narrowest place near where it swims is chosen", () => {
   expect(planCrossing({ x: 12, y: 63, z: -20 }, river(8, { narrowAt: 5, narrowWidth: 3 }))!.span).toBe(8);
 });
 
-test("too wide (over 12 blocks of water) or a far bank 2 blocks higher: no bridge", () => {
-  expect(MAX_SPAN).toBe(12);
+test("wide rivers get a bridge too (up to 48 blocks of water); a far bank 2 blocks higher doesn't", () => {
+  expect(MAX_SPAN).toBe(48);
   expect(planCrossing({ x: 12, y: 63, z: 0 }, river(12))!.span).toBe(12);
-  expect(planCrossing({ x: 12, y: 63, z: 0 }, river(13))).toBeNull();
+  expect(planCrossing({ x: 12, y: 63, z: 0 }, river(13))!.span).toBe(13);
+  expect(planCrossing({ x: 12, y: 63, z: 0 }, river(30))!.span).toBe(30);
   expect(planCrossing({ x: 12, y: 63, z: 0 }, river(5, { bankY: 64 }))).toBeNull();
   // A bank one higher is fine: the deck stays at the lower bank's height
   expect(planCrossing({ x: 12, y: 63, z: 0 }, river(5, { bankY: 63 }))!.start.y).toBe(62);

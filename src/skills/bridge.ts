@@ -26,7 +26,9 @@ import pf from "mineflayer-pathfinder";
 // Owner's choices (the concept he picked)
 export const HOME_RADIUS = 24;
 export const SWIMS_WANTED = 2;
-export const MAX_SPAN = 12;
+// (owner, 2026-11-28: "it doesn't want to build a bridge? It's supposed to
+// want": 12 left a 13-wide river swum across every day; wide rivers too)
+export const MAX_SPAN = 48;
 export const TORCH_EVERY = 6;
 // How far round where it swam it looks for the narrowest crossing
 const SEARCH = 12;
@@ -259,7 +261,7 @@ export async function buildBridge(): Promise<ActionResult> {
     plan = planCrossing(centre, (p) => knownBlock(p));
     if (!plan) {
       noCrossingAt = swims.length;
-      chatter(`The river by my home is too wide for a bridge here (over ${MAX_SPAN} blocks); I'll keep swimming.`, "bridge");
+      chatter(`I found no place to bridge the water by my home (no banks across it within ${MAX_SPAN} blocks); I'll keep swimming for now.`, "bridge");
       return ok();
     }
     await addPlace({ kind: "bridge", name: "bridge", ...plan.start, details: { plan } });

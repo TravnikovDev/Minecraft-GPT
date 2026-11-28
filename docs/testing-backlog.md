@@ -370,3 +370,5 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] "Go live your life" in the 30 seconds after it joins: "Okay, I'll look after myself! … I'm living my own life." and its next milestone starts at once; the progress list never shows "a clearing round my home" done before it has a home
 - [ ] Mine stairs blocked above the 1st floor (water, lava, a drop): "My mine's stairs hit … at step N; I closed that step off and they go on to the right from step N-1", then left if that's blocked too; a mine that ended shallow before this opens again and turns
 - [ ] A new field with a river or lake near home: "Farm: a spot by water at …: N of its 80 cells kept moist by it", the field right by the water (its own water hole still goes in once it has a bucket)
+- [ ] A river up to 48 wide by home, swum twice: it builds the 2-wide bridge across it (cobblestone gathered for it), no "keep swimming"
+- [ ] Mine trips never walk to a floor its stairs don't reach yet ("that part of my mine isn't dug yet"); no tunnel dug down from the grass to it

@@ -1753,6 +1753,14 @@ function standAt(cell: Vec3): Vec3 {
 
 /** Walks to stand at a step, a hub or a tunnel's end (paved or not); from up top, down its stairs first. */
 const goToStep = async (cell: Vec3): Promise<ActionResult> => {
+  // Never to a part of its mine that isn't dug yet: the walk would dig its
+  // own way down from the grass (game test: its stairs ended at step 6, the
+  // coal trip walked to where the 1st floor's room would be, 15 below, and
+  // dug a winding tunnel down to it from outside)
+  const rec = mineRecord();
+  if (rec && rec.stairs > 0 && cell.y < stepAt(rec.start, rec.direction, rec.stairs - 1, rec.turns).y - 2) {
+    return fail("refused", `that part of my mine isn't dug yet (its stairs end at step ${rec.stairs - 1})`);
+  }
   await downIntoTheMine(cell);
   const at = standAt(cell);
   return goTo(new pf.goals.GoalBlock(at.x, at.y, at.z));
