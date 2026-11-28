@@ -354,3 +354,4 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] No way home up its broken stairs: "putting them back as planned, from step N up", each step cleared and closed in, up to the shelter; pokeholes open to a cave: "my pokeholes open into a cave … plugged" (tips and floors too)
 - [ ] A zombie on it while a creeper is 5+ blocks off: the fight goes on (no "stepping aside" every half second); cave openings plugged only standing in its own tunnel beside each ("plugged N of M from inside"), never while hurt or with mobs near
 - [ ] The day plan's coal step makes charcoal in a coal drought too; sealing cave openings stocks filler blocks first
+- [ ] Ore uncovered by a sleeve or pokehole column is mined at once ("Mine: mined N ore my tunnel uncovered"), the vein behind it too, floor holes filled; diamond/gold with only a stone pickaxe: "needs a better pickaxe … waits"

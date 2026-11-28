@@ -8,12 +8,13 @@
 // deeper to a new hub, and it starts over. Progress is remembered with the
 // mine, so the next trip carries on where the last one stopped.
 
+import { catalog } from "../core/catalog";
 import { oreCapped } from "./oreCaps";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
 import { isNatural, protectCells, setOwnPassages, whileGathering } from "../core/movements";
-import { goTo } from "../core/primitives";
+import { goTo, withinReach } from "../core/primitives";
 import { pathing } from "../core/plugins";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
@@ -929,6 +930,7 @@ async function sealPokeCaves(cells?: Vec3[], alsoOwn: Vec3[] = []): Promise<numb
   // got (game test: right after digging one, its record didn't have that
   // stretch yet, and it filled the new pokehole itself with cobblestone)
   for (const c of [...(cells ?? pokeCellsAsDug(rec, open)), ...alsoOwn]) own.add(c.toString());
+  for (const k of minedOre) own.add(k);
   const holes = caveOpenings(pokes, own, open);
   if (holes.length === 0) return 0;
   const plugged = await plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
@@ -1086,13 +1088,107 @@ function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number):
       return "stop";
     },
     after: async (col) => {
+      // The column just dug is its own (never a cave opening)
+      const column = Array.from({ length: height }, (_, dy) => new Vec3(col.x, col.y + dy, col.z));
+      for (const c of column) dugCells.add(c.toString());
+      // A cave beside it plugged first, then the ore the column uncovered
+      // mined at once, standing where it is (owner: "a real player would
+      // mine this out immediately"; architect review: per column, cave
+      // first, ore holes counted as its own so they're never "a cave")
       const cave = caveAt(kind, col, ahead, across, height, open);
-      if (cave.around.length === 0) return "go";
-      await oreFromTheOpening();
-      await plugCave(cave.around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
-      return cave.stopAfter ? "stop" : "go";
+      if (cave.around.length > 0) {
+        await oreFromTheOpening();
+        await plugCave(cave.around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
+      }
+      await mineOreAround(column, dugCells);
+      return cave.around.length > 0 && cave.stopAfter ? "stop" : "go";
     },
   };
+}
+
+// Ore cells it has mined out of its own tunnels' walls, floor and roof: its
+// own holes, never cave openings to seal (architect review)
+const minedOre = new Set<string>();
+// Ore blocks of one vein it follows from a tunnel, at most
+export const VEIN_MAX = 8;
+
+/**
+ * The ore a tunnel's cells uncovered: ore face-adjacent to them, and the
+ * vein behind it (ore touching ore), only what `inReach`, at most `max`,
+ * nearest the tunnel first. Pure over `nameAt` and `inReach`.
+ */
+export function veinFrom(cells: Vec3[], nameAt: (p: Vec3) => string | null, inReach: (p: Vec3) => boolean, max = VEIN_MAX): Vec3[] {
+  const queue = exposedOres(cells, nameAt).filter(inReach);
+  const seen = new Set(queue.map((p) => p.toString()));
+  const own = new Set(cells.map((p) => p.toString()));
+  const out: Vec3[] = [];
+  while (queue.length > 0 && out.length < max) {
+    const p = queue.shift()!;
+    out.push(p);
+    for (const d of SIX) {
+      const n = p.offset(d.x, d.y, d.z);
+      const k = n.toString();
+      if (seen.has(k) || own.has(k)) continue;
+      seen.add(k);
+      if (/_ore$/.test(nameAt(n) ?? "") && inReach(n)) queue.push(n);
+    }
+  }
+  return out;
+}
+
+/** The best pickaxe it carries, or null. */
+function bestPickaxe(): string | null {
+  const c = catalog();
+  return bot.inventory.items().filter((i) => c.toolKind(i.name) === "pickaxe").sort((a, b) => c.toolTier(b.name) - c.toolTier(a.name))[0]?.name ?? null;
+}
+
+// Ore it said it had to leave for a better pickaxe (said once a trip, not every column)
+let leftSaid = new Set<string>();
+
+/**
+ * The ore the tunnel cells `cells` just uncovered mined at once, standing
+ * where it is (no walking, no walls opened to the pathfinder): only ore its
+ * pickaxe harvests (the rest is left for a better one and said so), never
+ * with a full bag; a hole in its floor filled straight away. Each mined
+ * cell is added to `own`. How many it mined.
+ */
+async function mineOreAround(cells: Vec3[], own: Set<string>): Promise<number> {
+  const nameAt = (p: Vec3): string | null => bot.blockAt(p)?.name ?? null;
+  const ores = veinFrom(cells, nameAt, (p) => withinReach(p));
+  if (ores.length === 0) return 0;
+  const { breakBlock } = await import("../core/primitives");
+  const { ensureBlock } = await import("../actions/digging");
+  const pickaxe = bestPickaxe();
+  const floorY = Math.min(...cells.map((c) => c.y));
+  const left = new Set<string>();
+  let got = 0;
+  for (const o of ores) {
+    if (isCommandCancelled() || hurtInTheMine()) break;
+    const name = nameAt(o) ?? "";
+    if (!/_ore$/.test(name) || oreCapped(name)) continue;
+    if (!pickaxe || !catalog().canHarvest(name, pickaxe)) {
+      left.add(name.replace(/^deepslate_/, "").replace(/_ore$/, ""));
+      continue;
+    }
+    if (bot.inventory.emptySlotCount() === 0) break; // the trip's own pass and the haul home deal with it
+    if (!(await breakBlock(o)).ok) continue;
+    got++;
+    own.add(o.toString());
+    minedOre.add(o.toString());
+    // Ore in its floor: the hole filled at once (the next step would drop into it)
+    if (o.y === floorY - 1 && cells.some((c) => c.x === o.x && c.z === o.z)) await ensureBlock(o, () => false, CAVE_FILL);
+  }
+  if (got > 0) {
+    const { pickupNearbyItems } = await import("../actions/pickup");
+    await pickupNearbyItems(bot, 4);
+    console.log(`Mine: mined ${got} ore my tunnel uncovered.`);
+  }
+  const fresh = [...left].filter((k) => !leftSaid.has(k));
+  if (fresh.length > 0) {
+    for (const k of fresh) leftSaid.add(k);
+    chatter(`Found ${fresh.join(" and ")} ore in my tunnel; it needs a better pickaxe than mine, so it waits for one.`, "mining");
+  }
+  return got;
 }
 
 /**
@@ -1234,6 +1330,9 @@ async function mineExposedOresNow(): Promise<number> {
       if (!/_ore$/.test(bot.blockAt(ore)?.name ?? "")) continue;
       // Plenty of it already: left in the wall (owner: no more copper past 64)
       if (oreCapped(bot.blockAt(ore)?.name ?? "")) continue;
+      // One its pickaxe can't mine: left for a better one (no walking to it for nothing)
+      const pick = bestPickaxe();
+      if (!pick || !catalog().canHarvest(bot.blockAt(ore)?.name ?? "", pick)) continue;
       // From the dug cell beside it
       const from = DIRS6.map((d) => ore.plus(d)).find((c) => openSet.has(c.toString()));
       if (from && bot.entity.position.distanceTo(from) > 4 && !(await goTo(new pf.goals.GoalNear(from.x, from.y, from.z, 1))).ok) continue;
@@ -1950,6 +2049,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     if (open > 0) return fail("refused", `my mine's stairs aren't whole yet (${open} open blocks of floor, wall or roof); no mining below them till they are`);
   }
   await lookAfterFloors(); // ways in from outside blocked, leftovers out, uncovered ore mined
+  leftSaid = new Set(); // ore it can't mine yet: said again on this trip
   let refilled = false; // once a trip: stone from the walls when it has nothing to build with
   for (let chunk = 0; chunk < tripChunks && still().length > 0; chunk++) {
     if (isCommandCancelled()) return fail("aborted", "stopped");
@@ -2101,7 +2201,12 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
           const sleeveCells: Vec3[] = [];
           for (let q = 1; q <= arms[arm].dug + got; q++) for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) sleeveCells.push(base.plus(STEP[way].scaled(q)).offset(0, dy, 0));
           await sealPokeCaves(pokeCells, sleeveCells);
-          if (hurtInTheMine()) return leaveHurt();
+          if (hurtInTheMine()) {
+            // This stretch kept in its record first (architect review: it
+            // was lost, and the ore pass with it)
+            await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms: { ...arms, [arm]: { dug: arms[arm].dug + got, blocked: false } }, deepest: rec.deepest });
+            return leaveHurt();
+          }
         }
       }
     }

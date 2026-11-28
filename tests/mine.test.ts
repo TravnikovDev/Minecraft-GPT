@@ -479,3 +479,32 @@ test("a pokehole open into a cavern: its tip, and its floor over the cave, are o
   // In solid rock: nothing to seal
   expect(caveOpenings(poke, own, (p: any) => own.has(key(p)))).toEqual([]);
 });
+
+test("the ore a tunnel column uncovers, and the vein behind it, within reach, at most 8 (owner: a real player mines it at once)", async () => {
+  const { veinFrom, VEIN_MAX } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = require(`${ROOT}/node_modules/vec3`);
+  const key = (p: any) => `${p.x},${p.y},${p.z}`;
+  // A pokehole column at (0, 10..12, 0)
+  const column = [0, 1, 2].map((dy) => new Vec3(0, 10 + dy, 0));
+  const ores = new Map<string, string>([
+    [key({ x: 0, y: 9, z: 0 }), "deepslate_gold_ore"], // in its floor
+    [key({ x: 0, y: 8, z: 0 }), "deepslate_gold_ore"], // the vein goes on down
+    [key({ x: 1, y: 11, z: 0 }), "deepslate_diamond_ore"], // in its wall
+    [key({ x: 2, y: 11, z: 0 }), "deepslate_diamond_ore"], // behind it
+    [key({ x: 9, y: 11, z: 0 }), "deepslate_diamond_ore"], // far off, not touching
+  ]);
+  const nameAt = (p: any) => ores.get(key(p)) ?? "deepslate";
+  const all = veinFrom(column, nameAt, () => true).map(key);
+  expect(all).toContain(key({ x: 0, y: 9, z: 0 }));
+  expect(all).toContain(key({ x: 0, y: 8, z: 0 }));
+  expect(all).toContain(key({ x: 1, y: 11, z: 0 }));
+  expect(all).toContain(key({ x: 2, y: 11, z: 0 }));
+  expect(all).not.toContain(key({ x: 9, y: 11, z: 0 }));
+  expect(all.length).toBe(4);
+  // Out of reach: left
+  const near = veinFrom(column, nameAt, (p: any) => p.x <= 1).map(key);
+  expect(near).not.toContain(key({ x: 2, y: 11, z: 0 }));
+  // A big vein: at most VEIN_MAX
+  const big = (p: any) => (p.x >= 1 ? "iron_ore" : "stone");
+  expect(veinFrom(column, big, () => true).length).toBe(VEIN_MAX);
+});

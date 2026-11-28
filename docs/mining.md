@@ -48,6 +48,7 @@ Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into 
 
 ## Caves its tunnels meet
 
+- **Ore is mined as it's uncovered**: after each column of a sleeve or pokehole is dug, every ore block touching it (walls, floor, roof) and the vein behind it (up to 8, within reach) is mined standing in the tunnel; a hole in the floor is filled at once. Ore its pickaxe can't mine (diamond or gold with a stone one) is left and said so; the trip's own pass takes it once it has a better pickaxe.
 - A **pokehole** that meets a cave (ahead, beside, above or below) ends at that block; the opening is filled with cobblestone. It counts as a finished pokehole, and the sleeve goes on. Its tip and floor are checked too once it's dug (the tip used to be left open), and every trip seals any pokehole found open to a cave.
 - A **sleeve** crosses a short gap (under 7 blocks of cave) as a closed tube: floor, both walls and the roof built as it goes. At a big cave the sleeve ends at the cave's edge, its face plugged, and it's done.
 - Before plugging, the ore it can see in the cave within reach is mined from inside the tunnel; it never steps into the cave.
