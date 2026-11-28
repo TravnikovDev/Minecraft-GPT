@@ -9,7 +9,7 @@
 // the furnaces it left cooking are remembered (leftOvens) and a visit between
 // its tasks takes out what's done (collectFromOvens).
 
-import { pickFuel } from "./fuel";
+import { oldWoodenTool, pickFuel } from "./fuel";
 import type { Block } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { bot } from "../core/body";
@@ -304,6 +304,13 @@ async function cookInOven(oven: Block, foods: string[], limit: number, leave = f
       if (cooked >= limit || isCommandCancelled()) break;
       const n = Math.min(count(food), limit - cooked, 64);
       if (n === 0) continue;
+      // Left to cook: an old wooden tool it has a better one of burns first
+      // (one item's worth; more fuel goes in when it comes back for the rest)
+      const oldTool = leaveIt && !window.fuelItem() ? oldWoodenTool(bot.inventory.items()) : null;
+      if (oldTool) {
+        const burned = await windowStep(`burning my old ${oldTool.replace(/_/g, " ")}`, () => window.putFuel(bot.registry.itemsByName[oldTool]!.id, null, 1));
+        if (burned.ok) console.log(`Cooking: burning my old ${oldTool.replace(/_/g, " ")} as fuel.`);
+      }
       if (!window.fuelItem()) {
         const fuel = pickFuel(n, food);
         if (!fuel) {

@@ -57,8 +57,19 @@ export async function homeChores(): Promise<ActionResult> {
   }
   if (isCommandCancelled()) return fail("aborted", "stopped");
 
+  // Gear it doesn't work with in the chests first: of each tool kind the
+  // best and a stone fallback stay, armour no better than what it wears goes
+  // (old wooden tools stay for the furnace to burn)
+  const { spareGear, storeItems } = await import("../actions/storage");
+  const worn = bot.inventory.slots.slice(5, 9).filter((i): i is NonNullable<typeof i> => i !== null).map((i) => i.name);
+  const spare = spareGear(bot.inventory.items(), worn);
+  if (spare.length > 0) {
+    const put = await storeItems("items", spare);
+    if (put?.problem) problems.push(`couldn't put my spare tools away (${put.problem})`);
+    else console.log(`Home: put my spare gear away (${spare.map((w) => `${w.count} ${w.name.replace(/_/g, " ")}`).join(", ")}).`);
+  }
+  if (isCommandCancelled()) return fail("aborted", "stopped");
   // Cheap stuff and half of the valuable things in the chests (it keeps its working supply)
-  const { storeItems } = await import("../actions/storage");
   const stored = await storeItems("half");
   if (stored?.problem) problems.push(`couldn't put things away (${stored.problem})`);
   if (isCommandCancelled()) return fail("aborted", "stopped");

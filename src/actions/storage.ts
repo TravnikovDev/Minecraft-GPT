@@ -50,6 +50,48 @@ export function gearKind(name: string): string | null {
   return OTHER_GEAR.has(name) ? name : null;
 }
 
+const TOOL_KINDS = ["pickaxe", "axe", "shovel", "sword", "hoe"];
+
+/**
+ * The gear it carries but doesn't work with, to put in its chests: of each
+ * tool kind the best stays, and one stone one as a fallback (while its best
+ * pickaxe is below iron, `sparePickaxes` in all for its mine); armour no
+ * better than what it wears (`worn`) goes. Wooden tools with a better one of
+ * their kind aren't stored: they're burned as furnace fuel. Pure over the catalog.
+ */
+export function spareGear(items: Array<{ name: string; count: number }>, worn: string[] = [], sparePickaxes = 3): Wanted[] {
+  const c = catalog();
+  const stone = c.toolTier("stone_pickaxe");
+  const iron = c.toolTier("iron_pickaxe");
+  const out = new Map<string, number>();
+  const add = (name: string): void => {
+    out.set(name, (out.get(name) ?? 0) + 1);
+  };
+  for (const kind of TOOL_KINDS) {
+    const tools = items.filter((i) => c.toolKind(i.name) === kind).flatMap((i) => Array.from({ length: i.count }, () => i.name));
+    if (tools.length <= 1) continue;
+    tools.sort((a, b) => c.toolTier(b) - c.toolTier(a));
+    const best = c.toolTier(tools[0]!);
+    const keep: string[] = [tools[0]!];
+    if (kind === "pickaxe" && best < iron) {
+      for (const t of tools.slice(1)) if (keep.length < sparePickaxes && !t.startsWith("wooden_")) keep.push(t);
+    } else if (best > stone) {
+      const fallback = tools.slice(1).find((t) => c.toolTier(t) === stone);
+      if (fallback) keep.push(fallback);
+    }
+    const rest = [...tools];
+    for (const k of keep) rest.splice(rest.indexOf(k), 1);
+    for (const t of rest) if (!(t.startsWith("wooden_") && best > c.toolTier(t))) add(t);
+  }
+  for (const i of items) {
+    const slot = c.armorSlot(i.name);
+    if (!slot) continue;
+    const on = worn.find((w) => c.armorSlot(w) === slot);
+    if (on && c.armorTier(on) >= c.armorTier(i.name)) for (let k = 0; k < i.count; k++) add(i.name);
+  }
+  return [...out].map(([name, count]) => ({ name, count }));
+}
+
 /** Better gear ranks higher: material tier (netherite > diamond > iron...). */
 function gearRank(name: string): number {
   const c = catalog();

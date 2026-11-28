@@ -36,6 +36,20 @@ export function isFuelKind(name: string, kind: keyof typeof SMELTS_PER): boolean
   return name === kind;
 }
 
+/**
+ * A wooden tool it has a better one of the same kind of (an old axe, a
+ * pickaxe...), or null: burned as furnace fuel, one at a time (tools don't
+ * stack; each smelts one item). Pure over the catalog.
+ */
+export function oldWoodenTool(items: Array<{ name: string }>): string | null {
+  const c = catalog();
+  for (const i of items) {
+    const kind = i.name.startsWith("wooden_") ? c.toolKind(i.name) : null;
+    if (kind && items.some((o) => c.toolKind(o.name) === kind && c.toolTier(o.name) > c.toolTier(i.name))) return i.name;
+  }
+  return null;
+}
+
 /** The live counts of its wood. */
 export function woodNow(): WoodCounts {
   const items = bot.inventory.items();

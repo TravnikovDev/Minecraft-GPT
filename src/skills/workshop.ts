@@ -242,15 +242,22 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
   if (fuelNeeded > 0 && storedNear(fuelName, 32) > 0 && spare(fuelName) < fuelNeeded) await fetchSpare(fuelName, fuelNeeded);
   if (!planksName && spare("coal") === 0 && spare("charcoal") > 0) fuelName = "charcoal";
   if (fuelNeeded > 0 && planksName && spare(fuelName) < fuelNeeded) await makePlanks(fuelNeeded - spare(fuelName));
-  if (fuelNeeded > 0 && spare(fuelName) === 0) return ok(done.concat("no spare fuel").join("; "));
+  const { oldWoodenTool } = await import("../actions/fuel");
+  const oldTool = oldWoodenTool(bot.inventory.items());
+  if (fuelNeeded > 0 && spare(fuelName) === 0 && !oldTool) return ok(done.concat("no spare fuel").join("; "));
   if (isCommandCancelled()) return fail("aborted", "stopped");
   window = await openHome(furnace);
   if (!window) return fail("unreachable", "can't get to my furnace");
   try {
     if (window.inputItem()) return ok(done.concat("the furnace is busy now").join("; "));
     if (!window.fuelItem()) {
-      const put = await windowStep("fuelling", () => window!.putFuel(bot.registry.itemsByName[fuelName]!.id, null, Math.min(spare(fuelName), Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL)))));
+      // An old wooden tool it has a better one of burns first (one item's
+      // worth; the rest of the batch gets coal when it comes back for it)
+      const put = oldTool
+        ? await windowStep(`burning my old ${oldTool.replace(/_/g, " ")}`, () => window!.putFuel(bot.registry.itemsByName[oldTool]!.id, null, 1))
+        : await windowStep("fuelling", () => window!.putFuel(bot.registry.itemsByName[fuelName]!.id, null, Math.min(spare(fuelName), Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL)))));
       if (!put.ok) return put;
+      if (oldTool) console.log(`Workshop: burning my old ${oldTool.replace(/_/g, " ")} as fuel.`);
     }
     const loaded = await windowStep(`putting ${job.input} in`, () => window!.putInput(bot.registry.itemsByName[job.input]!.id, null, Math.min(n, spare(job.input))));
     if (!loaded.ok) return loaded;
