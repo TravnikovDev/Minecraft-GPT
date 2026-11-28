@@ -60,13 +60,42 @@ export function mineBottom(exit: Pos, dir: DirectionType): Vec3 {
 // Four sleeves from each floor (owner): forward, right, left and back
 export const ARMS = ["forward", "right", "left", "back"] as const;
 export type ArmName = (typeof ARMS)[number];
-export type Arm = { dug: number; blocked: boolean };
+// pokedTo: its pokeholes are dug off every column up to here (an arm from
+// before pokeholes waited for the whole sleeve: up to `dug`); pokesLeft: the
+// columns past pokedTo up to here still want theirs (dug from the far end back)
+export type Arm = { dug: number; blocked: boolean; pokedTo?: number; pokesLeft?: number };
 export type Arms = Record<ArmName, Arm>;
 const freshArms = (): Arms => ({ forward: { dug: 0, blocked: false }, right: { dug: 0, blocked: false }, left: { dug: 0, blocked: false }, back: { dug: 0, blocked: false } });
 
 /** The tunnel to dig next at this hub (forward, then right, then left), or null when all three are done. Pure. */
 export function nextArm(arms: Arms): ArmName | null {
-  return ARMS.find((a) => !arms[a].blocked && arms[a].dug < ARM_LENGTH) ?? null;
+  return ARMS.find((a) => !sleeveFinished(arms[a]) || pokesTodo(arms[a]).length > 0) ?? null;
+}
+
+/** True when a sleeve is as long as it gets (its full length, or stopped). Pure. */
+export const sleeveFinished = (a: Arm): boolean => a.blocked || a.dug >= ARM_LENGTH;
+
+/**
+ * The sleeve's columns that still want their pokeholes, far end first
+ * (owner, 2026-11-28: the whole sleeve first, then the pokeholes; from the
+ * far end back it ends by the room, for the next sleeve). Pure.
+ */
+export function pokesTodo(a: Arm): number[] {
+  const from = a.pokedTo ?? a.dug;
+  const out: number[] = [];
+  for (let k = a.pokesLeft ?? from; k > from; k--) if (k % POKE_EVERY === 0) out.push(k);
+  return out;
+}
+
+/** The arm after a stretch of its sleeve (to `dug`): the new columns' pokeholes wait. Pure. */
+export function armAfterStretch(a: Arm, dug: number, blocked: boolean): Arm {
+  return { dug, blocked, pokedTo: a.pokedTo ?? a.dug, pokesLeft: dug };
+}
+
+/** The arm once column `k`'s pokeholes are dug (all done: as far as its sleeve). Pure. */
+export function armPokedAt(a: Arm, k: number): Arm {
+  const next = { ...a, pokesLeft: k - 1 };
+  return pokesTodo(next).length === 0 ? { ...a, pokedTo: a.dug, pokesLeft: a.dug } : next;
 }
 
 /** Which way an arm goes from the hub. Pure. */
@@ -2192,7 +2221,7 @@ export const IRON_TRIP_COAL = 32;
  * coal (owner). Pure.
  */
 export function goDeeperEarly(arms: Arms, ironHave: number, ironNeed: number, coalHave: number): boolean {
-  const oneDone = ARMS.some((a) => arms[a].dug >= ARM_LENGTH || arms[a].blocked);
+  const oneDone = ARMS.some((a) => sleeveFinished(arms[a]) && pokesTodo(arms[a]).length === 0);
   return oneDone && (ironHave < ironNeed || coalHave < IRON_TRIP_COAL);
 }
 
@@ -2233,6 +2262,38 @@ export function fitForTheMine(health: number, food: number): ActionResult {
  * CHUNK blocks at a time): the hub's forward, right and left tunnels in
  * turn, deeper when all three are done, and the ores they uncover.
  */
+// Sleeve columns whose pokeholes it digs in one pass (then the ore and the floor)
+const POKES_PER_PASS = 2;
+
+/**
+ * Both pokeholes off sleeve column `k` (1 wide, 3 high, 5 long, owner),
+ * their caves sealed. `sleeveLen`: how far the sleeve is dug (its own).
+ */
+async function digPokesAt(base: Vec3, way: DirectionType, k: number, sleeveLen: number): Promise<"ok" | "no_tool" | "hurt" | "stopped"> {
+  const cell = base.plus(STEP[way].scaled(k));
+  for (const sd of POKE_SIDES) {
+    if (isCommandCancelled()) return "stopped";
+    const across = sd === 1 ? RIGHT[way] : LEFT[way];
+    if (!(await goToStep(cell)).ok) break;
+    // A cave met on the way: the pokehole ends there, plugged (a finished pokehole)
+    await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT, caveHooks("poke", across, POKE_HEIGHT));
+    if (tunnelStopReason() === "no_tool") return "no_tool";
+    // Its tip (and floor) where it opened into a cave: sealed (owner)
+    // (as far as it really goes: one that stopped at a cave ends at its plug)
+    const pokeCells: Vec3[] = [];
+    for (let q = 1; q <= POKE_LENGTH; q++) {
+      const c = cell.plus(STEP[across].scaled(q));
+      if (bot.blockAt(c)?.boundingBox !== "empty") break;
+      for (let dy = 0; dy < POKE_HEIGHT; dy++) pokeCells.push(c.offset(0, dy, 0));
+    }
+    const sleeveCells: Vec3[] = [];
+    for (let q = 1; q <= sleeveLen; q++) for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) sleeveCells.push(base.plus(STEP[way].scaled(q)).offset(0, dy, 0));
+    await sealPokeCaves(pokeCells, sleeveCells);
+    if (hurtInTheMine()) return "hurt";
+  }
+  return "ok";
+}
+
 export async function branchMine(wants: OreWant[], chunksThisTrip = 12): Promise<ActionResult> {
   return withScaffoldingTakenDown(() => branchMineSteps(wants, chunksThisTrip));
 }
@@ -2388,6 +2449,26 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     // The floor's sleeves go by the way its stairs came in (owner's plan)
     const way = armDirection(arm, arrive);
     const base = sleeveBase(hub, arrive, arm);
+    // The sleeve dug its whole length first, then its pokeholes, from the far
+    // end back toward the room (owner, 2026-11-28: more productive)
+    if (sleeveFinished(arms[arm])) {
+      for (const k of pokesTodo(arms[arm]).slice(0, POKES_PER_PASS)) {
+        if (isCommandCancelled()) return fail("aborted", "stopped");
+        const r = await digPokesAt(base, way, k, arms[arm].dug);
+        if (r === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+        if (r === "stopped") return fail("aborted", "stopped");
+        arms = { ...arms, [arm]: armPokedAt(arms[arm], k) };
+        await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
+        if (r === "hurt") return leaveHurt();
+      }
+      if (pokesTodo(arms[arm]).length === 0) chatter(`My ${arm} tunnel's pokeholes are dug; on with the next one.`, "mining");
+      await mendFloor(hub, arrive, level, side);
+      await lookAfterFloors();
+      if (hurtInTheMine()) return leaveHurt();
+      await mineOresInSight(wants);
+      await mendFloor(hub, arrive, level, side);
+      continue;
+    }
     const end = base.plus(STEP[way].scaled(arms[arm].dug));
     let there = await goToStep(end);
     // Gravel or sand fallen into the tunnel: dug out (a walk can't dig a block
@@ -2406,7 +2487,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       }
       if (!atHub.ok) return there;
       console.log(`Mine: can't get to the end of my ${arm} tunnel (${there.detail}); it's done.`);
-      arms = { ...arms, [arm]: { dug: arms[arm].dug, blocked: true } };
+      arms = { ...arms, [arm]: { ...arms[arm], blocked: true } };
       await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest });
       continue;
     }
@@ -2415,38 +2496,6 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const stop = dug ? null : tunnelStopReason();
     // A big cave ahead: the sleeve ends at it (its face plugged), as far as it got
     const got = dug ? length : stop === "cave" ? tunnelColumns() : 0;
-    // Pokeholes off the stretch just dug: 1 wide, 3 high, 5 long, every 3, both sides (owner)
-    if (got > 0) {
-      for (let k = arms[arm].dug + 1; k <= arms[arm].dug + got; k++) {
-        if (k % POKE_EVERY !== 0 || isCommandCancelled()) continue;
-        const cell = base.plus(STEP[way].scaled(k));
-        for (const sd of POKE_SIDES) {
-          const across = sd === 1 ? RIGHT[way] : LEFT[way];
-          if (!(await goToStep(cell)).ok) break;
-          // A cave met on the way: the pokehole ends there, plugged (a finished pokehole)
-          await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT, caveHooks("poke", across, POKE_HEIGHT));
-          if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
-          // Its tip (and floor) where it opened into a cave: sealed (owner)
-          // (as far as it really goes: one that stopped at a cave ends at its plug)
-          const pokeCells: Vec3[] = [];
-          for (let q = 1; q <= POKE_LENGTH; q++) {
-            const c = cell.plus(STEP[across].scaled(q));
-            if (bot.blockAt(c)?.boundingBox !== "empty") break;
-            for (let dy = 0; dy < POKE_HEIGHT; dy++) pokeCells.push(c.offset(0, dy, 0));
-          }
-          // (the sleeve it leaves is its own too: its record hasn't this stretch yet)
-          const sleeveCells: Vec3[] = [];
-          for (let q = 1; q <= arms[arm].dug + got; q++) for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) sleeveCells.push(base.plus(STEP[way].scaled(q)).offset(0, dy, 0));
-          await sealPokeCaves(pokeCells, sleeveCells);
-          if (hurtInTheMine()) {
-            // This stretch kept in its record first (architect review: it
-            // was lost, and the ore pass with it)
-            await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms: { ...arms, [arm]: { dug: arms[arm].dug + got, blocked: false } }, deepest: rec.deepest });
-            return leaveHurt();
-          }
-        }
-      }
-    }
     if (stop === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
     if (isCommandCancelled()) return fail("aborted", "stopped");
     // Nothing to build a floor or a plug with: stone from the tunnel walls,
@@ -2457,7 +2506,8 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       console.log(`Mine: out of blocks to build with; took ${got} stone from the walls.`);
       if (got > 0) continue;
     }
-    arms = { ...arms, [arm]: dug ? { dug: arms[arm].dug + length, blocked: false } : { dug: arms[arm].dug + got, blocked: true } };
+    // Its pokeholes wait for the whole sleeve (owner, 2026-11-28)
+    arms = { ...arms, [arm]: dug ? armAfterStretch(arms[arm], arms[arm].dug + length, false) : armAfterStretch(arms[arm], arms[arm].dug + got, true) };
     // A tunnel stopped by water, lava or something built: new stairs never
     // turn that way from this hub (owner: they'd dig into the same water)
     let tried = rec.tried;
@@ -2466,8 +2516,9 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       tried = { ...rec.tried, [h]: [...new Set([...(rec.tried[h] ?? []), way])] };
     }
     const what = stop === "cave" ? "a big cave (its way in plugged)" : stop === "drop" ? "a drop I couldn't build a floor over" : stop === "no_filler" ? "a hole I had nothing to fill" : "water, lava or something it mustn't dig";
-    if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; on with the next one.`, "mining");
-    else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; on with the next one.`, "mining");
+    const then = pokesTodo(arms[arm]).length > 0 ? "now its pokeholes, from the far end back" : "on with the next one";
+    if (!dug) chatter(`My ${arm} tunnel ${level ? `${level + 1} levels down ` : ""}hit ${what}; ${then}.`, "mining");
+    else if (arms[arm].dug >= ARM_LENGTH) chatter(`My ${arm} tunnel is ${ARM_LENGTH} blocks long; ${then}.`, "mining");
     await saveMine(start, dir, Math.max(rec.stairs, hubStep(level) + 1), rec.branches, rec.bottom, { level, arms, deepest: rec.deepest, tried });
     // The stretch secured first (owner: every ore seen mined at once, but
     // only once the area is secured): its floor mended, a way out to the sky

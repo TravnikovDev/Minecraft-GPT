@@ -641,3 +641,30 @@ test("cave openings: an air pocket under 100 blocks is left open, a bigger one (
   // Small, but it runs into the unknown (unloaded): plugged
   expect(openingsToPlug(holes, own, (p: P) => (p.x === 4 ? null : world(small)(p)))).toEqual(holes);
 });
+
+test("the whole sleeve first, then its pokeholes from the far end back (owner, 2026-11-28)", async () => {
+  const { pokesTodo, armAfterStretch, armPokedAt, sleeveFinished, goDeeperEarly } = await import(`${ROOT}/src/skills/mine.ts`);
+  const fresh = { dug: 0, blocked: false };
+  // Stretches of 5: no pokeholes yet, the sleeve goes on
+  let a = armAfterStretch(fresh, 5, false);
+  a = armAfterStretch(a, 10, false);
+  expect(sleeveFinished(a)).toBe(false);
+  expect(nextArm({ forward: a, right: fresh, left: fresh, back: fresh })).toBe("forward");
+  for (let d = 15; d <= ARM_LENGTH; d += 5) a = armAfterStretch(a, d, false);
+  expect(sleeveFinished(a)).toBe(true);
+  // Its full length: the pokeholes still keep this sleeve next, far end first
+  expect(pokesTodo(a).slice(0, 3)).toEqual([48, 45, 42]);
+  expect(nextArm({ forward: a, right: fresh, left: fresh, back: fresh })).toBe("forward");
+  expect(goDeeperEarly({ forward: a, right: fresh, left: fresh, back: fresh }, 0, 5, 0)).toBe(false);
+  for (const k of pokesTodo(a)) a = armPokedAt(a, k);
+  expect(pokesTodo(a)).toEqual([]);
+  expect(nextArm({ forward: a, right: fresh, left: fresh, back: fresh })).toBe("right");
+  expect(goDeeperEarly({ forward: a, right: fresh, left: fresh, back: fresh }, 0, 5, 0)).toBe(true);
+  // An arm from before (pokeholes dug along the way to 15): only the new stretch's wait
+  let old = armAfterStretch({ dug: 15, blocked: false }, 20, true);
+  expect(pokesTodo(old)).toEqual([18]);
+  old = armPokedAt(old, 18);
+  expect(pokesTodo(old)).toEqual([]);
+  // Stopped (a cave) at 7: its pokeholes at 6 and 3 still come
+  expect(pokesTodo(armAfterStretch(fresh, 7, true))).toEqual([6, 3]);
+});
