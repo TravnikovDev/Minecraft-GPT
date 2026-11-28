@@ -583,7 +583,9 @@ export const MILESTONES: Milestone[] = [
     tier: 1,
     optional: true,
     requires: ["shelter", "stone_tools"],
-    done: () => shelter() === null || homeCleared(),
+    // (no home yet: not done, it waits for the shelter; game test: "done:
+    // a clearing round my home" before it had one)
+    done: () => shelter() !== null && homeCleared(),
     achieve: clearAroundHome,
   },
   // Owner (2026-11-27): after stone tools, at least 20 logs on hand (planks,

@@ -119,6 +119,10 @@ export function greetOwner(): void {
 /** The owner turns it on ("go live your life") or off ("stay with me"). */
 export async function setAutonomy(on: boolean): Promise<void> {
   await updateMemory({ autonomy: { on, since: Date.now() } });
+  // The owner said so: no more waiting out the 30 seconds after joining
+  // (game test: "go live your life" in them got "I'll look after myself ...
+  // I'm waiting for your orders", and nothing started till they were over)
+  ownLifeFrom = 0;
   if (on) {
     void considerNextStep();
     return;
