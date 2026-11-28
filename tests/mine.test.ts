@@ -459,3 +459,23 @@ test("a step over a cavern: its floor, both walls the full height and its roof a
   // A torch or a sign on the wall isn't a hole
   expect(shellHoles(rec, 5, walkSet, tunnels, () => ({ name: "wall_torch", boundingBox: "empty" }))).toEqual([]);
 });
+
+test("a pokehole open into a cavern: its tip, and its floor over the cave, are openings to seal; its own cells and the sleeve aren't (owner)", async () => {
+  const { caveOpenings } = await import(`${ROOT}/src/skills/mine.ts`);
+  const key = (p: any) => `(${p.x}, ${p.y}, ${p.z})`;
+  // A pokehole going east from the sleeve at x=0: cells x 1..5, y 10..12, z 0
+  const poke: any[] = [];
+  for (let x = 1; x <= 5; x++) for (let y = 10; y <= 12; y++) poke.push({ x, y, z: 0 });
+  const sleeve = [0, 1, 2].map((dy) => ({ x: 0, y: 10 + dy, z: 0 }));
+  const own = new Set([...poke, ...sleeve].map(key));
+  // A cavern beyond its tip (x 6..) and under its last cell (5, 9, 0)
+  const cave = (p: any) => p.x >= 6 || (p.x === 5 && p.y === 9 && p.z === 0);
+  const open = (p: any) => own.has(key(p)) || cave(p);
+  const holes = caveOpenings(poke, own, open).map(key);
+  for (const y of [10, 11, 12]) expect(holes).toContain(key({ x: 6, y, z: 0 })); // the tip
+  expect(holes).toContain(key({ x: 5, y: 9, z: 0 })); // the floor over the cave
+  expect(holes).not.toContain(key({ x: 0, y: 10, z: 0 })); // the sleeve is its own
+  expect(holes.length).toBe(4);
+  // In solid rock: nothing to seal
+  expect(caveOpenings(poke, own, (p: any) => own.has(key(p)))).toEqual([]);
+});

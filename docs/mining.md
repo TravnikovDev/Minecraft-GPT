@@ -8,6 +8,7 @@ How the bot's mine is laid out and dug (the owner's design). Code: `src/skills/m
 - Every step is a closed tube: floor, both side walls (the full 5 high) and a roof are kept solid. Where the stairs cross a cave, the gaps are filled with dirt or cobblestone: a cave under a new step gets its floor before the step is dug, and each new step is closed in before the next.
 - **The stairs come first** (owner: "the most important thing in this mine"): every trip starts by checking every step's floor, walls and roof and filling what's open (cobblestone from its chests when it's at home, stone from the walls round it when it's down there). Stairs still open after a second go: no mining below them that trip.
 - Into the mine from up top: in by the shelter and down its own stairs, never a shaft dug down from the grass.
+- **No way home up its stairs** (blown apart, filled in): it puts them back as planned from where it is, step by step upward: each step's walking space cleared, its floor, walls and roof filled, then up onto it. Only if that fails does it fall back on getting unstuck.
 - Once there are 200 cobblestone, the steps get cobblestone stair blocks (made at home, one per bare step plus 10%). The flat part across a floor's room gets none.
 - Blocked going down (water or lava at the next step, something built, a drop it can't floor), the stairs **turn**: right, then left, from the floor they came down from, then one floor higher.
 - The stairs go down to just over bedrock: no floor below y -54.
@@ -47,7 +48,7 @@ Every tunnel (sleeve or pokehole) is dug from inside itself: it steps back into 
 
 ## Caves its tunnels meet
 
-- A **pokehole** that meets a cave (ahead, beside, above or below) ends at that block; the opening is filled with cobblestone. It counts as a finished pokehole, and the sleeve goes on.
+- A **pokehole** that meets a cave (ahead, beside, above or below) ends at that block; the opening is filled with cobblestone. It counts as a finished pokehole, and the sleeve goes on. Its tip and floor are checked too once it's dug (the tip used to be left open), and every trip seals any pokehole found open to a cave.
 - A **sleeve** crosses a short gap (under 7 blocks of cave) as a closed tube: floor, both walls and the roof built as it goes. At a big cave the sleeve ends at the cave's edge, its face plugged, and it's done.
 - Before plugging, the ore it can see in the cave within reach is mined from inside the tunnel; it never steps into the cave.
 - Every plug it puts in a cave's opening is remembered; each trip puts back any that were broken.

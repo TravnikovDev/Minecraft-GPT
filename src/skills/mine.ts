@@ -319,8 +319,15 @@ export async function climbMineStairs(): Promise<boolean> {
   // Along its tunnels and up its stairs, never a new way dug: digging is
   // made too dear to choose (only if there's no other way at all)
   const walkNoDig = (g: InstanceType<typeof pf.goals.GoalNear>) => pathing.withRules({ digCost: 100 }, () => goTo(g));
+  // Its stairs put back as planned when the way up is broken (owner), once
+  let restored = false;
   while (!(await walkNoDig(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
     if (isCommandCancelled()) return false;
+    if (!restored) {
+      restored = true;
+      if (await restoreStairsUp()) return true;
+      continue;
+    }
     // Off its stairs (in a cave beside them): a way in through their wall,
     // once; building itself up out there does nothing (game test: it
     // stacked blocks in a flooded cave for minutes, its sealed stairs
@@ -338,6 +345,11 @@ export async function climbMineStairs(): Promise<boolean> {
     if (isCommandCancelled()) return false;
     const s = standAt(stepAt(rec.start, rec.direction, j, rec.turns));
     if (!(await walkNoDig(new pf.goals.GoalNear(s.x, s.y, s.z, 1))).ok) {
+      if (!restored) {
+        restored = true;
+        if (await restoreStairsUp()) return true;
+        continue;
+      }
       if (unsticks >= MAX_UNSTICKS || !(await unstickOnStairs())) return false;
       unsticks++;
       continue;
@@ -345,6 +357,67 @@ export async function climbMineStairs(): Promise<boolean> {
     if (j === 0) return true;
     j = Math.max(0, j - 8);
   }
+}
+
+/**
+ * Its stairs put back as planned, from where it is up to its shelter
+ * (owner: "fix the stairs repair from inside the mine; they should be as
+ * planned"; game test: creepers had blown its stairs apart, no way home,
+ * and it pillared up a shaft beside them instead): step by step upward,
+ * each step's walking space cleared of whatever fills it (fallen gravel,
+ * blocks it put down when stuck), its floor, walls and roof filled, then up
+ * onto it. True when it got to the top.
+ */
+export async function restoreStairsUp(): Promise<boolean> {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return false;
+  const here = bot.entity.position;
+  const floorHere = floorAtHeight(rec, here.y);
+  const i0 = floorHere !== null ? hubStep(floorHere) : nearestStairStep(here, rec.start, rec.direction, rec.stairs, rec.turns);
+  if (i0 === null || i0 < 1) return false;
+  const { walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
+  const tunnels = hubTunnelCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
+  const walkSet = new Set(walk.map((c) => c.toString()));
+  const keepClear = (p: Vec3): boolean => walkSet.has(p.toString()) || tunnels.has(p.toString());
+  report(`My stairs home are broken; putting them back as planned, from step ${i0} up.`);
+  await stockStairsFillers(allShellHoles(rec, walkSet, tunnels).length);
+  const { breakBlock } = await import("../core/primitives");
+  const step = (i: number): Vec3 => stepAt(rec.start, rec.direction, i, rec.turns);
+  // A step's walking space emptied, top down (gravel over it falls in again: a few goes)
+  const clearStep = async (i: number): Promise<number> => {
+    const st = step(i);
+    let n = 0;
+    for (let dy = stepHeadroom(i, st.y) - 1; dy >= 0; dy--) {
+      const c = st.offset(0, dy, 0);
+      for (let k = 0; k < 8 && !isCommandCancelled(); k++) {
+        const b = bot.blockAt(c);
+        if (!b || b.boundingBox !== "block" || /_stairs$|torch|_door$|_sign$/.test(b.name) || holdsBackLiquid(c)) break;
+        if (!(await breakBlock(c, { allowWithoutHarvest: true })).ok) break;
+        n++;
+      }
+    }
+    return n;
+  };
+  let cleared = await clearStep(i0);
+  let filled = 0;
+  const start = standAt(step(i0));
+  if (!(await goTo(new pf.goals.GoalNear(start.x, start.y, start.z, 1))).ok) {
+    console.log(`Mine: can't get onto step ${i0} of my stairs to put them back.`);
+    return false;
+  }
+  for (let i = i0; i >= 1; i--) {
+    if (isCommandCancelled()) return false;
+    filled += await fillFromSolid(shellHoles(rec, i, walkSet, tunnels), keepClear);
+    cleared += await clearStep(i - 1);
+    const up = standAt(step(i - 1));
+    const moved = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(up.x, up.y, up.z)));
+    if (!moved.ok) {
+      console.log(`Mine: putting my stairs back, can't get onto step ${i - 1} (${moved.ok ? "" : moved.detail ?? moved.reason}).`);
+      return false;
+    }
+  }
+  console.log(`Mine: my stairs put back from step ${i0} up: ${cleared} blocks cleared out of them, ${filled} holes in their floor, walls and roof filled.`);
+  return true;
 }
 
 /**
@@ -767,6 +840,84 @@ function floorsAsDug(rec: MineRecord): Vec3[] {
   return out;
 }
 
+/**
+ * The cells of its pokeholes as really dug: each pokehole from its sleeve
+ * out, up to its first column that isn't open (one that stopped at a cave
+ * ends at its plug: the cave beyond isn't the pokehole). `open`: an open
+ * cell at a column's feet.
+ */
+function pokeCellsAsDug(rec: MineRecord, open: (p: Pos) => boolean): Vec3[] {
+  const out: Vec3[] = [];
+  for (let l = 0; l <= rec.level && hubStep(l) < rec.stairs; l++) {
+    const h = hubStep(l);
+    const hub = stepAt(rec.start, rec.direction, h, rec.turns);
+    const arrive = dirAt(rec.direction, h, rec.turns);
+    for (const arm of ARMS) {
+      const way = armDirection(arm, arrive);
+      const base = sleeveBase(hub, arrive, arm);
+      const last = l === rec.level ? rec.arms[arm].dug : openRun(base, way);
+      for (let k = POKE_EVERY; k <= last; k += POKE_EVERY) {
+        const cell = base.plus(STEP[way].scaled(k));
+        for (const sd of POKE_SIDES) {
+          const across = STEP[sd === 1 ? RIGHT[way] : LEFT[way]];
+          for (let q = 1; q <= POKE_LENGTH; q++) {
+            const c = cell.plus(across.scaled(q));
+            if (!open(c)) break;
+            for (let dy = 0; dy < POKE_HEIGHT; dy++) out.push(c.offset(0, dy, 0));
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+const SIX: readonly Pos[] = [
+  { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
+];
+
+/**
+ * Where tunnel cells (`cells`, the open ones) touch open cave: any open
+ * neighbour (tip, sides, roof, floor) that isn't one of its own dug cells
+ * (`own`), nor water, lava or a torch. Pure over `open`.
+ */
+export function caveOpenings(cells: Pos[], own: Set<string>, open: (p: Pos) => boolean): Pos[] {
+  const key = (p: Pos): string => `(${p.x}, ${p.y}, ${p.z})`;
+  const seen = new Set<string>();
+  const out: Pos[] = [];
+  for (const c of cells) {
+    if (!open(c)) continue; // not dug (yet): nothing open there
+    for (const d of SIX) {
+      const n = { x: c.x + d.x, y: c.y + d.y, z: c.z + d.z };
+      const k = key(n);
+      if (seen.has(k) || own.has(k)) continue;
+      seen.add(k);
+      if (open(n)) out.push(n);
+    }
+  }
+  return out;
+}
+
+/**
+ * Its pokeholes sealed off from the caves they opened into (owner: a
+ * pokehole that reveals a cavern has its tip sealed; the tip was never
+ * checked, only the face ahead before each next column), here `cells` or,
+ * with none given, every pokehole it has dug. How many openings it plugged.
+ */
+async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
+  const rec = mineRecord();
+  if (!rec || !bot.entity) return 0;
+  const own = new Set<string>([...floorsAsDug(rec), ...mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk].map((c) => c.toString()));
+  const open = (p: Pos): boolean => {
+    const b = bot.blockAt(new Vec3(p.x, p.y, p.z));
+    return b !== null && b.boundingBox === "empty" && !/water|lava|torch/.test(b.name);
+  };
+  const near = (p: Pos): boolean => bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= LOOK_AFTER_RANGE;
+  const holes = caveOpenings((cells ?? pokeCellsAsDug(rec, open)).filter(near), own, open);
+  if (holes.length === 0) return 0;
+  return plugCave(holes, `my pokeholes open into a cave (${holes.length} openings)`);
+}
+
 const FALLS = /^(gravel|sand|red_sand|suspicious_gravel|suspicious_sand)$/;
 
 /**
@@ -1054,6 +1205,8 @@ async function clearLeftovers(): Promise<number> {
  */
 export async function lookAfterFloors(): Promise<void> {
   await recheckCavePlugs();
+  if (isCommandCancelled()) return;
+  await sealPokeCaves();
   if (isCommandCancelled()) return;
   await sealMineFromOutside();
   if (isCommandCancelled()) return;
@@ -1862,6 +2015,15 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
           // A cave met on the way: the pokehole ends there, plugged (a finished pokehole)
           await digStraightTunnel(across, POKE_LENGTH, cell, 1, POKE_HEIGHT, caveHooks("poke", across, POKE_HEIGHT));
           if (tunnelStopReason() === "no_tool") return fail("no_tool", "my pickaxe wore out in the mine");
+          // Its tip (and floor) where it opened into a cave: sealed (owner)
+          // (as far as it really goes: one that stopped at a cave ends at its plug)
+          const pokeCells: Vec3[] = [];
+          for (let q = 1; q <= POKE_LENGTH; q++) {
+            const c = cell.plus(STEP[across].scaled(q));
+            if (bot.blockAt(c)?.boundingBox !== "empty") break;
+            for (let dy = 0; dy < POKE_HEIGHT; dy++) pokeCells.push(c.offset(0, dy, 0));
+          }
+          await sealPokeCaves(pokeCells);
           if (hurtInTheMine()) return leaveHurt();
         }
       }
