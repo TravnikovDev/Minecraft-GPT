@@ -548,7 +548,11 @@ async function planStepProposed(): Promise<boolean> {
   const next = nextStep();
   if (!next) {
     void planDay("idle");
-    return false;
+    // The call started just now (planDay sets it before its first wait):
+    // the fallback milestone below must not start in this same pass (game
+    // test: "milestone: diamonds" started 0.1 s after "planning the day
+    // (idle)", and the new plan sat behind it). A guard said no: the fallback
+    return thinkingItOver();
   }
   // A step that waits for the morning doesn't hold the night up: the night
   // milestones go on meanwhile (game test: the plan's "resting at home" step
