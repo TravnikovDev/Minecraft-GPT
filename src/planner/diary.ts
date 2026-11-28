@@ -2,8 +2,9 @@
 // The bot's diary (Phase 7), written by code, never by the model: each thing
 // worth remembering becomes one short line under the game day and the time
 // of day it happened. The day planner reads it; the owner can ask for it
-// ("what did you do today?"). Raw days are kept until the planner's day
-// summary replaces them, so a long life never makes the planning request grow.
+// ("what did you do today?"). The last few days are kept line by line; older
+// ones live on as the planner's day summaries (the last 30), so a long life
+// never makes the planning request grow past that.
 
 import { bot } from "../core/body";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
@@ -14,9 +15,10 @@ export type DiaryDay = { day: number; lines: DiaryLine[]; gains?: Record<string,
 // Raw days kept (older ones are dropped once summarised, or past this)
 const RAW_DAYS = 3;
 // Lines a day keeps (the oldest go first; a busy day stays readable)
-const LINES_PER_DAY = 60;
-// Day summaries kept for the planner's memory
-const SUMMARIES = 10;
+const LINES_PER_DAY = 100;
+// Day summaries kept for the planner's memory (about a real day's play: the
+// planner reads them all, and its weekly lessons are written from them)
+const SUMMARIES = 30;
 
 /** The part of the day a time (ticks, 0-23999) falls in. Pure. */
 export function partOfDay(timeOfDay: number): string {

@@ -16,7 +16,7 @@ const PRICES: Record<string, { input: number; output: number }> = {
 // An unknown model is priced high, so the cap errs on the safe side
 const UNKNOWN_PRICE = { input: 2, output: 8 };
 
-export type Purpose = "chat" | "plan";
+export type Purpose = "chat" | "plan" | "lessons";
 export type MonthUsage = { month: string; calls: number; inputTokens: number; outputTokens: number; usd: number; byPurpose: Record<string, number> };
 
 // USAGE_PATH: the tests' throwaway file (tests/setup.ts)

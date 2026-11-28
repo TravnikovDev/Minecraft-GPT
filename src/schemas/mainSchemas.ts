@@ -176,6 +176,8 @@ export const MemorySchema = z.object({
   // still in the Nether)
   dayCount: z.object({ day: z.number() }).optional(),
   daySummaries: z.array(z.object({ day: z.number(), text: z.string(), at: z.number().optional() })).optional(),
+  // What it has learned, written again by the model once a game week (planner/lessons)
+  lessons: z.object({ day: z.number(), items: z.array(z.string()) }).optional(),
   // The day plan the model made (validated), and how far it got
   plan: z
     .object({
