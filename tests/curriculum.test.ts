@@ -533,3 +533,14 @@ test("an iron job is all in its bag (then the nearest furnace and table, not hom
   expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_planks", 5)])).toBe(false);
   expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_log", 2)])).toBe(true);
 });
+
+test("its first 3 diamonds: a diamond pickaxe at once; at the nearest table when it carries the wood for the sticks", () => {
+  expect(M.diamondPickaxeDue(3, 3)).toBe(true); // an iron pickaxe and 3 diamonds
+  expect(M.diamondPickaxeDue(2, 3)).toBe(false);
+  expect(M.diamondPickaxeDue(5, 4)).toBe(false); // a diamond pickaxe already
+  const it = (name: string, count: number) => ({ name, count });
+  expect(M.sticksCarried([it("stick", 2)])).toBe(true);
+  expect(M.sticksCarried([it("oak_planks", 2)])).toBe(true);
+  expect(M.sticksCarried([it("acacia_log", 1)])).toBe(true);
+  expect(M.sticksCarried([it("stick", 1), it("cobblestone", 64)])).toBe(false); // home for wood
+});

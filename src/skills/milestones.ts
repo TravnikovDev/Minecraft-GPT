@@ -919,16 +919,39 @@ export const MILESTONES: Milestone[] = [
     tier: 3,
     requires: ["diamonds"],
     done: () => toolTier("pickaxe") >= TIER.diamond,
-    achieve: async () => {
-      await enterShelter(); // its table
-      return acquire("diamond_pickaxe", 1, liveWorld);
-    },
+    achieve: () => makeDiamondPickaxe(),
   },
   // Phase 9: the Nether and the End (skills/endgame)
   ...ENDGAME_MILESTONES,
 ];
 
 const DIAMONDS = 3;
+
+/** True when it carries the diamonds for a diamond pickaxe and has none yet. Pure. */
+export function diamondPickaxeDue(diamonds: number, pickaxeTier: number): boolean {
+  return diamonds >= DIAMONDS && pickaxeTier < TIER.diamond;
+}
+
+/** True when it carries the wood for the pickaxe's 2 sticks (sticks, planks or a log). Pure. */
+export function sticksCarried(items: Array<{ name: string; count: number }>): boolean {
+  const n = (re: RegExp): number => items.filter((i) => re.test(i.name)).reduce((c, i) => c + i.count, 0);
+  return n(/^stick$/) >= 2 || n(/_planks$/) >= 2 || n(/(_log|_stem|_wood|_hyphae)$/) >= 1;
+}
+
+/**
+ * A diamond pickaxe, as soon as it has the diamonds: at the nearest crafting
+ * table (a floor of its mine has one) when it carries the wood for the
+ * sticks, else at home, where its chests have wood.
+ */
+export async function makeDiamondPickaxe(): Promise<ActionResult> {
+  if (toolTier("pickaxe") >= TIER.diamond) return ok();
+  if (carriedOf(["diamond"]) < DIAMONDS) return fail("missing_items", `I need ${DIAMONDS} diamonds for a diamond pickaxe`);
+  if (sticksCarried(bot.inventory.items())) console.log("Diamond pickaxe: everything for it is in my bag; at the nearest crafting table.");
+  else await enterShelter(); // its table and the wood in its chests
+  const made = await acquire("diamond_pickaxe", 1, liveWorld);
+  if (made.ok) report("Made a diamond pickaxe!");
+  return made;
+}
 const TORCHES = 16;
 const TORCHES_LOW = 8;
 const PAVE_AFTER = 200;
