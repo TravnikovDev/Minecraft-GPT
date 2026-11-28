@@ -672,6 +672,28 @@ export function hubTunnelCells(start: Pos, dir: DirectionType, stairs: number, l
 }
 
 /**
+ * Its floors' planned pokehole cells (every floor down to `level`), as
+ * Vec3 strings. Open, one is its own digging, never a cave: a pass cut off
+ * before its record was saved digs that stretch again (game test: the 3rd
+ * floor's pokeholes, dug at 16:39 and the pass cut off by an ore it saw,
+ * were taken for caves on the next pass, plugged, dug through and plugged
+ * again). Pure.
+ */
+export function pokePlanCells(start: Pos, dir: DirectionType, stairs: number, level: number, turns: Turn[] = [], sideFrom = 0): Set<string> {
+  const out = new Set<string>();
+  for (let l = 0; l <= level; l++) {
+    const h = hubStep(l);
+    if (h >= stairs) break;
+    const hub = stepAt(start, dir, h, turns);
+    const arrive = dirAt(dir, h, turns);
+    const side = roomBeside(l, sideFrom);
+    const noPokes = new Set(floorCells(hub, arrive, l, side, undefined, false).map((c) => c.toString()));
+    for (const c of floorCells(hub, arrive, l, side)) if (!noPokes.has(c.toString())) out.add(c.toString());
+  }
+  return out;
+}
+
+/**
  * Every open cell of a floor (owner's layout): its 3 by 3 room, 3 high, its
  * four sleeves (2 high, ARM_LENGTH long) and their pokeholes (1 wide,
  * POKE_HEIGHT high, POKE_LENGTH long, every POKE_EVERY blocks). Pure.
@@ -1150,6 +1172,7 @@ function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number):
   if (rec) {
     for (const c of floorsAsDug(rec)) dugCells.add(c.toString());
     for (const c of mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk) dugCells.add(c.toString());
+    for (const c of pokePlanCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom)) dugCells.add(c);
   }
   const open = (p: Pos): boolean => {
     const c = new Vec3(p.x, p.y, p.z);
@@ -1333,6 +1356,7 @@ async function recheckCavePlugs(): Promise<number> {
   // it, and this pass would have sealed the stairs again), and it's no
   // longer a plug at all
   const tunnels = new Set(floorsAsDug(rec).map((c) => c.toString()));
+  for (const c of pokePlanCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom)) tunnels.add(c);
   const stairs = new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString()));
   const plugs = plugsOutsideStairs(rec.cavePlugs, stairs);
   if (plugs.length < rec.cavePlugs.length) {

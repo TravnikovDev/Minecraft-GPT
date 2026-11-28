@@ -588,3 +588,15 @@ test("cave plugs in its stairs' cells (the next flight dug through them) aren't 
   const after = new Set(cells(exit, "north", 57, 3).walk.map((c: { toString(): string }) => c.toString()));
   expect(plugsOutsideStairs(plugs, after)).toEqual([{ x: 85, y: 20, z: -90 }]);
 });
+
+test("its pokeholes' planned cells are its own, never a cave (game test: a pass cut off, its pokeholes plugged on the next)", async () => {
+  const { pokePlanCells } = await import(`${ROOT}/src/skills/mine.ts`);
+  const pokes: Set<string> = pokePlanCells({ x: 83, y: 59, z: -43 }, "north", 45, 2);
+  // The 3rd floor's right sleeve runs east along z -88; a pokehole every 3, both sides
+  expect(pokes.has("(90, 19, -87)")).toBe(true);
+  expect(pokes.has("(90, 21, -86)")).toBe(true);
+  expect(pokes.has("(90, 19, -89)")).toBe(true);
+  expect(pokes.has("(90, 19, -88)")).toBe(false); // the sleeve itself
+  expect(pokes.has("(84, 19, -88)")).toBe(false); // the room
+  expect(pokes.has("(91, 19, -87)")).toBe(false); // between pokeholes: a cave there is still a cave
+});
