@@ -1,47 +1,26 @@
-// Path: src/actions/SetBasement.ts
+// Path: src/commands/SetBasement.ts
+// The owner asking for its shelter, or for a spot for it: the same shelter
+// its own life makes (owner, 2026-11-28: "make them the same"), the
+// standard room and stairs its mine is planned from, at a spot it looks for
+// itself: underground, then the most ore its mine will reach. With a shelter
+// already, it's checked and mended. "Set base here" (SetBase) is the one
+// that builds where the owner stands.
 
 import { z } from "zod";
-import { bot } from "../core/body";
-import { buildShelter } from "../actions/building";
+import { describeFailure } from "../core/result";
+import { report } from "../core/narrator";
 
-export const description = `When the user asks the bot to set up a basement, the bot will dig a diagonal tunnel down and 
-create a room at the end of the tunnel. Example: "Set up a basement with a room size of 3x3x4",
-"Please build a basement", "Let's build a basement".
-If no parameters are provided, the bot will use default values 3x3x4 for room size.`;
+export const description = `Finds a spot for the bot's home and digs its underground shelter there (a diagonal
+tunnel down to a room), the same shelter it makes on its own: it looks round for a good place first (biome, trees,
+animals, a dry way down for its mine, underground, and the most ore its mine will reach). With a shelter already, it
+checks it and mends it. Use this for finding a home spot too. Example: "Build a shelter", "Set up a basement",
+"Search a spot for the shelter", "Find a place for our home".`;
 
-// Define parameters for SetBasement action
-export const parameters = z.object({
-  roomSize: z
-    .object({
-      width: z.number(),
-      height: z.number(),
-      length: z.number(),
-    })
-    .nullable()
-    .describe("Dimensions of the basement room"),
-});
+export const parameters = z.object({});
 
-// Implement the SetBasement action
-export async function execute(args: any) {
-  console.log(`Executing SetBasement with args:`, args);
-
-  // Validate arguments
-  const parsed = parameters.safeParse(args);
-  if (!parsed.success) {
-    console.error(`Invalid parameters for SetBasement:`, parsed.error);
-    return;
-  }
-
-  let { roomSize } = parsed.data;
-
-  // Default values for room size
-  roomSize = roomSize || { width: 3, height: 3, length: 4 };
-  const tunnelDepth = 6; // Adjust as needed
-
-  try {
-    await buildShelter(roomSize, tunnelDepth);
-    bot.chat("Shelter setup complete ⾕");
-  } catch (error) {
-    bot.chat(`Error during up basement: ${error}`);
-  }
+export async function execute(): Promise<void> {
+  const { buildShelter } = await import("../actions/building");
+  const result = await buildShelter();
+  if (result.ok) report("My shelter is ready.");
+  else if (result.reason !== "aborted") report(`No shelter yet: ${describeFailure(result)}.`);
 }

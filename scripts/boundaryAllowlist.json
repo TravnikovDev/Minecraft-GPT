@@ -27,7 +27,6 @@
   "src/commands/RecoverItems.ts": 1,
   "src/commands/ReturnToBase.ts": 4,
   "src/commands/SetBase.ts": 6,
-  "src/commands/SetBasement.ts": 2,
   "src/commands/ShowMeBase.ts": 4,
   "src/commands/Sleep.ts": 6,
   "src/commands/StarterKit.ts": 1,
