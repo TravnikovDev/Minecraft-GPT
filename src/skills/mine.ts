@@ -2250,18 +2250,20 @@ export async function paveMineStairs(): Promise<ActionResult> {
   return withScaffoldingTakenDown(paveSteps);
 }
 
-async function paveSteps(): Promise<ActionResult> {
+async function paveSteps(fromBag = false): Promise<ActionResult> {
   const rec = mineRecord();
   if (!rec?.bottom) return fail("not_found", "no mine yet");
   const steps = unpavedSteps();
   if (steps.length === 0) return ok();
+  if (fromBag && carried(["cobblestone_stairs"]) === 0) return ok();
   // Counted first: every bare step plus 10% spare (a stair placed wrong, a
   // step that breaks), all made at home before it goes down (owner; game
   // test: it tried crafting them down in the mine, where it couldn't reach a
   // table, and paved nothing)
   const want = stairsToMake(steps.length);
   const have = carried(["cobblestone_stairs"]);
-  if (have < want) {
+  // On its way down with the blocks its home chores made: paved with those, no trip back for more
+  if (have < want && !fromBag) {
     // Deep down: not a climb home just for them (game test: from the bottom
     // of its mine it climbed into flooded steps for them and drowned); its
     // home chores make them, and the stairs are paved next time
@@ -2465,6 +2467,13 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     const open = await lookAfterStairs();
     if (isCommandCancelled()) return fail("aborted", "stopped");
     if (open > 0) return fail("refused", `my mine's stairs aren't whole yet (${open} open blocks of floor, wall or roof); no mining below them till they are`);
+  }
+  // Its stairs paved on the way down with the stair blocks it carries: its
+  // home chores make them, and the paving milestone, among the last of its
+  // own life, never comes up while it has plans
+  if (carried(["cobblestone_stairs"]) > 0 && unpavedSteps().length > 0) {
+    await withScaffoldingTakenDown(() => paveSteps(true));
+    if (isCommandCancelled()) return fail("aborted", "stopped");
   }
   await lookAfterFloors(); // ways in from outside blocked, leftovers out, uncovered ore mined
   leftSaid = new Set(); // ore it can't mine yet: said again on this trip
