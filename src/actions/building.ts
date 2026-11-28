@@ -274,30 +274,32 @@ export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: 
   // always be a perfect spot); for its first home, the most ore its mine
   // reaches, less a little for each block it has to build
   let best: { start: Vec3; dir: DirectionType; gaps: number; worth: number; score: number } | null = null;
-  let valid = 0;
   for (const c of candidates) {
+    // Sorted by ore: once even no building at all can't beat the best, none of the rest can
+    if (value && best && c.worth <= best.score) break;
     if (!c.plan.cells.every((cell) => tunnelBlocked(cell) === null)) continue;
-    // (and, for a first home, a dry way down for its mine from the exit)
-    if (!accept(c.plan.exit, c.dir)) continue;
     const gaps = shellGaps(c.plan.shell, c.plan.roomStart.y + room.height, (p) => bot.blockAt(p));
     const score = value ? c.worth - gaps * GAP_COST : -gaps;
-    if (!best || score > best.score) best = { start: c.start, dir: c.dir, gaps, worth: c.worth, score };
-    valid++;
+    if (best && score <= best.score) continue;
+    // (and, for a first home, a dry way down for its mine from the exit)
+    if (!accept(c.plan.exit, c.dir)) continue;
+    best = { start: c.start, dir: c.dir, gaps, worth: c.worth, score };
     if (!value && best.gaps === 0) break; // can't do better than solid ground all round
-    // Sorted by ore: past the first few that pass, the rest can't catch up much
-    if (value && valid >= SITE_KEEP) break;
   }
   if (best && value) console.log(`Shelter site at ${best.start} going ${best.dir}: its mine's plan reaches ore worth ${best.worth} (${candidates.length} spots and ways weighed, ${best.gaps} blocks to build).`);
   else if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
   return best ? { start: best.start, dir: best.dir } : null;
 }
 
-// Its first home's spot search: this far round, on a grid this fine; the
-// best of the first few that pass; a block to build costs this much ore worth
+// Its first home's spot search: this far round, on a grid this fine. A
+// block of wall or roof to build costs this much ore worth (about a dozen
+// iron): its home is underground, dug into solid ground all round (owner,
+// 2026-11-28: "I want this shelter underground; outside we'll build a house
+// later"; at 0.5 the ore won and it built 52 blocks of dirt wall up on a
+// slope), and the ore decides between spots that are as well buried
 const SITE_REACH = 15;
 const SITE_GRID = 3;
-const SITE_KEEP = 12;
-const GAP_COST = 0.5;
+const GAP_COST = 50;
 
 /** The latest shelter place in this dimension (finished or not). */
 function shelterPlace(includeUnfinished: boolean) {
@@ -388,7 +390,9 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
       if (site) {
         const plan = shelterPlan(site.start, site.dir, roomSize, tunnelDepth);
         const got = oreValue(plan.exit, site.dir, ores);
-        if (got.count > 0) chatter(`Picked my home's spot so my mine's tunnels pass ${got.count} ore blocks (of ${ores.length} I can see round here).`, "home");
+        // The numbers stay in its log (owner: "it shouldn't reveal such info; it just found a good spot")
+        console.log(`Shelter site: its mine's tunnels pass ${got.count} ore blocks (of ${ores.length} known round here).`);
+        chatter("Found a good spot for my home.", "home");
       }
       if (!site) console.log("Shelter site: no spot here with a dry way down for my mine; the best I can dig instead.");
     }
