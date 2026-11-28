@@ -154,15 +154,13 @@ test("the path round a field's fence: banks and tall grass above the field dug o
   expect(columnWork(middle, 5, 0, 3, world({ 1: { name: "jungle_log", solid: true } }))).toBeNull();
 });
 
-test("a field's gate faces along the way in: east or west on an east or west side, north or south on the others (owner: it stood sideways)", async () => {
-  const { gateFacing, fenceRing } = await import(`${ROOT}/src/skills/farm.ts`);
+test("a field's opening (no gate: owner) is in the middle of the side facing home", async () => {
+  const { fenceRing } = await import(`${ROOT}/src/skills/farm.ts`);
   const middle = { x: 0, y: 63, z: 0 };
-  const east = fenceRing(middle, 3, { x: 30, z: 2 }).gate;
-  expect(east).toEqual({ x: 4, z: 0 });
-  expect(gateFacing(middle, east)).toEqual(["east", "west"]);
-  const north = fenceRing(middle, 3, { x: 1, z: -30 }).gate;
-  expect(north).toEqual({ x: 0, z: -4 });
-  expect(gateFacing(middle, north)).toEqual(["north", "south"]);
+  const east = fenceRing(middle, 3, { x: 30, z: 2 });
+  expect(east.gate).toEqual({ x: 4, z: 0 });
+  expect(east.posts.some((p: any) => p.x === 4 && p.z === 0)).toBe(false); // no post in the opening
+  expect(fenceRing(middle, 3, { x: 1, z: -30 }).gate).toEqual({ x: 0, z: -4 });
 });
 
 test("fields keep off the way its mine's stairs go from the shelter's back door (game test: a field's gate right above the stairs' first steps)", async () => {

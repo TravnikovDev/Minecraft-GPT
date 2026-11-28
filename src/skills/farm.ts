@@ -637,15 +637,6 @@ export function fenceRing(middle: P3, reserve: number, home: { x: number; z: num
   return { posts: posts.filter((p) => p.x !== gate.x || p.z !== gate.z), gate };
 }
 
-/**
- * The ways a field's gate may face: along the way in through its side (a
- * gate on the east or west side faces east or west, so it lines up with
- * the fence running north-south). Pure.
- */
-export function gateFacing(middle: { x: number; z: number }, gate: { x: number; z: number }): string[] {
-  return gate.x !== middle.x ? ["east", "west"] : ["north", "south"];
-}
-
 /** The wood it builds fences from: the planks it carries most of ("spruce"), or null. */
 function fenceWood(): string | null {
   const planks = bot.inventory.items().filter((i) => i.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
@@ -667,8 +658,9 @@ function postCell(x: number, z: number, y: number): Vec3 | null {
 
 /**
  * Fences its field in (owner: mobs walked on it; fences round it and torches
- * on top of them): posts all round the ground kept for it, a gate on the
- * side facing home, torches on the corner and middle posts. What's missing
+ * on top of them): posts all round the ground kept for it, an opening (no
+ * gate: it couldn't get through one) on the side facing home, torches on
+ * the corner and middle posts. What's missing
  * is put up when it tends the field. How many blocks it placed.
  */
 async function fenceField(middle: P3, reserve: number): Promise<number> {
@@ -676,7 +668,6 @@ async function fenceField(middle: P3, reserve: number): Promise<number> {
   const wood = fenceWood();
   if (!home || !wood) return lightFarm(middle, reserve);
   const fence = `${wood}_fence`;
-  const gateName = `${wood}_fence_gate`;
   const { posts, gate } = fenceRing(middle, reserve, home);
   const cells = posts.map((p) => postCell(p.x, p.z, middle.y + 1)).filter((c): c is Vec3 => c !== null);
   const missing = cells.filter((c) => !/_fence$/.test(knownBlock(c)?.name ?? ""));
@@ -684,7 +675,6 @@ async function fenceField(middle: P3, reserve: number): Promise<number> {
   const { liveWorld } = await import("./world");
   if (missing.length > 0 && count(fence) < missing.length) await acquire(fence, missing.length, liveWorld);
   const gateCell = postCell(gate.x, gate.z, middle.y + 1);
-  if (gateCell && !/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "") && count(gateName) === 0) await acquire(gateName, 1, liveWorld);
   const { placeBlockResult } = await import("../actions/blockPlacing");
   const { breakBlock } = await import("../core/primitives");
   let placed = 0;
@@ -696,27 +686,17 @@ async function fenceField(middle: P3, reserve: number): Promise<number> {
     if ((await placeBlockResult(name, at.x, at.y, at.z, "bottom")).ok) placed++;
   };
   for (const c of missing) await put(fence, c);
-  if (gateCell) {
-    // The gate turned across the way in (owner: it stood sideways in the
-    // fence): one facing the wrong way taken out and put back, placed while
-    // the bot stands in line with the way in, looking along it
-    const want = gateFacing(middle, gate);
-    const now = knownBlock(gateCell);
-    if (now && /_fence_gate$/.test(now.name) && !want.includes(String(now.getProperties()["facing"]))) {
-      await goTo(new pf.goals.GoalNear(gateCell.x, gateCell.y, gateCell.z, 3));
-      if ((await breakBlock(gateCell)).ok) {
-        const { pickupNearbyItems } = await import("../actions/pickup");
-        await pickupNearbyItems(bot, 4);
-      }
-    }
-    if (!/_fence_gate$/.test(knownBlock(gateCell)?.name ?? "") && count(gateName) > 0 && !isCommandCancelled()) {
-      const out = { x: Math.sign(gate.x - middle.x), z: Math.sign(gate.z - middle.z) };
-      const stand = new Vec3(gateCell.x + out.x * 2, gateCell.y, gateCell.z + out.z * 2);
-      await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z));
-      await put(gateName, gateCell);
+  // No gate: an opening (owner: the bot couldn't get through its gate, so
+  // none at all); a gate from before is taken out, a fence post there too
+  if (gateCell && /_fence(_gate)?$/.test(knownBlock(gateCell)?.name ?? "") && !isCommandCancelled()) {
+    await goTo(new pf.goals.GoalNear(gateCell.x, gateCell.y, gateCell.z, 3));
+    if ((await breakBlock(gateCell)).ok) {
+      const { pickupNearbyItems } = await import("../actions/pickup");
+      await pickupNearbyItems(bot, 4);
+      console.log(`Farm: the gate of the field at ${middle.x}, ${middle.z} taken out; an opening there instead.`);
     }
   }
-  if (placed > 0) console.log(`Farm: ${placed} fence posts and gate round the field at ${middle.x}, ${middle.z}.`);
+  if (placed > 0) console.log(`Farm: ${placed} fence posts round the field at ${middle.x}, ${middle.z}.`);
   return placed + (await lightFarm(middle, reserve));
 }
 

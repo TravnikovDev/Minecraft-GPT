@@ -343,7 +343,7 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] Its bag full and something it needs in its chests: it makes room (cheap stuff into the chests) and takes it, never off to the trees or the rock instead
 - [ ] Stairs blown open or crossing a cave: "Mine: looked after my stairs: N holes filled" fills floor, both walls (5 high) and roof; "step N closed in" after each new step; with stairs still open: "my mine's stairs aren't whole yet", no mining below
 - [ ] A spider in its mine or a cave by day is fought ("Combat reflex: fighting spider"); one that bites it in the light is fought back too
-- [ ] A field's path: the ring outside its fence dug down to the field's level (banks, tall grass), its gate facing along the way in (one facing sideways replaced), torches on the corner and middle posts (made from coal it has)
+- [ ] A field's path: the ring outside its fence dug down to the field's level (banks, tall grass), an opening on the side facing home (no gate: one from before taken out), torches on the corner and middle posts (made from coal it has)
 - [ ] With a lot of wood (64 planks' worth beyond its 20 logs, bag and chests): its furnaces burn planks (workshop, cooking, smelting ore), coal kept for torches
 - [ ] At night it works on (milestones, trees, chores); a mob hurts it: "Attacked at night (zombie): off to my shelter", the night routine, in its shelter till morning
 - [ ] A new field never on the way of its mine's stairs (34 ahead of the shelter's back door, 2 either side); walks never go over its bed
