@@ -914,7 +914,7 @@ export function caveOpenings(cells: Pos[], own: Set<string>, open: (p: Pos) => b
 const SEAL_RETRY_MS = 5 * 60_000;
 let sealIdleUntil = 0;
 
-async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
+async function sealPokeCaves(cells?: Vec3[], alsoOwn: Vec3[] = []): Promise<number> {
   const rec = mineRecord();
   if (!rec || !bot.entity) return 0;
   if (!cells && Date.now() < sealIdleUntil) return 0;
@@ -925,6 +925,10 @@ async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
   };
   const near = (p: Pos): boolean => bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= LOOK_AFTER_RANGE;
   const pokes = (cells ?? pokeCellsAsDug(rec, open)).filter(near);
+  // Its pokeholes' own cells are never openings, however far its record has
+  // got (game test: right after digging one, its record didn't have that
+  // stretch yet, and it filled the new pokehole itself with cobblestone)
+  for (const c of [...(cells ?? pokeCellsAsDug(rec, open)), ...alsoOwn]) own.add(c.toString());
   const holes = caveOpenings(pokes, own, open);
   if (holes.length === 0) return 0;
   const plugged = await plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
@@ -2093,7 +2097,10 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
             if (bot.blockAt(c)?.boundingBox !== "empty") break;
             for (let dy = 0; dy < POKE_HEIGHT; dy++) pokeCells.push(c.offset(0, dy, 0));
           }
-          await sealPokeCaves(pokeCells);
+          // (the sleeve it leaves is its own too: its record hasn't this stretch yet)
+          const sleeveCells: Vec3[] = [];
+          for (let q = 1; q <= arms[arm].dug + got; q++) for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) sleeveCells.push(base.plus(STEP[way].scaled(q)).offset(0, dy, 0));
+          await sealPokeCaves(pokeCells, sleeveCells);
           if (hurtInTheMine()) return leaveHurt();
         }
       }
