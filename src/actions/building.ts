@@ -7,7 +7,7 @@ import { placeBlock, placeBlockResult } from "./blockPlacing";
 import { pickupNearbyItems } from "./pickup";
 import { goTo, knownBlock, useBlock, withinReach } from "../core/primitives";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
-import { report } from "../core/narrator";
+import { chatter, report } from "../core/narrator";
 import { isCommandCancelled } from "../core/commandContext";
 import { catalog } from "../core/catalog";
 import { isNatural, isWoodenDoor, protectCells, setOwnPassages } from "../core/movements";
@@ -241,14 +241,17 @@ function underRoof(p: Vec3): boolean {
 }
 
 /** The first spot and direction where the whole shelter can be dug (natural ground, no water or lava). */
-export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: (exit: Vec3, dir: DirectionType) => boolean = () => true): { start: Vec3; dir: DirectionType } | null {
+export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: (exit: Vec3, dir: DirectionType) => boolean = () => true, value?: (exit: Vec3, dir: DirectionType) => number): { start: Vec3; dir: DirectionType } | null {
   const spots = [around];
-  for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
-  // Any spot it can dig (no water, lava or buildings) will do: missing walls,
-  // roof and floor get built (patchShell). Among them, the one with the least
-  // to build, preferring the closest when it's a tie (owner: there won't
-  // always be a perfect spot)
-  let best: { start: Vec3; dir: DirectionType; gaps: number } | null = null;
+  if (value) {
+    // Its first home, placed for its mine's ore (owner: "5 blocks further it
+    // would get more ore"): every spot on a grid round here, SITE_GRID apart
+    for (let dx = -SITE_REACH; dx <= SITE_REACH; dx += SITE_GRID) for (let dz = -SITE_REACH; dz <= SITE_REACH; dz += SITE_GRID) if (dx !== 0 || dz !== 0) spots.push(around.offset(dx, 0, dz));
+  } else {
+    for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
+  }
+  // Every spot it can dig and every way its stairs could go: the shelter's plan
+  const candidates: Array<{ start: Vec3; dir: DirectionType; plan: ReturnType<typeof shelterPlan>; worth: number }> = [];
   for (const spot of spots) {
     let start: Vec3 | null = null;
     for (let dy = 4; dy >= -4 && !start; dy--) {
@@ -260,17 +263,41 @@ export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: 
     if (!start || underRoof(start)) continue;
     for (const dir of DIRECTIONS) {
       const plan = shelterPlan(start, dir, room, depth);
-      if (!plan.cells.every((c) => tunnelBlocked(c) === null)) continue;
-      // (and, for a first home, a dry way down for its mine from the exit)
-      if (!accept(plan.exit, dir)) continue;
-      const gaps = shellGaps(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
-      if (!best || gaps < best.gaps) best = { start, dir, gaps };
+      candidates.push({ start, dir, plan, worth: value ? value(plan.exit, dir) : 0 });
     }
-    if (best?.gaps === 0) break; // can't do better than solid ground all round
   }
-  if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
+  // The most ore first (a stable sort: otherwise the nearest first)
+  if (value) candidates.sort((a, b) => b.worth - a.worth);
+  // Any spot it can dig (no water, lava or buildings) will do: missing walls,
+  // roof and floor get built (patchShell). Among them, the one with the least
+  // to build, preferring the closest when it's a tie (owner: there won't
+  // always be a perfect spot); for its first home, the most ore its mine
+  // reaches, less a little for each block it has to build
+  let best: { start: Vec3; dir: DirectionType; gaps: number; worth: number; score: number } | null = null;
+  let valid = 0;
+  for (const c of candidates) {
+    if (!c.plan.cells.every((cell) => tunnelBlocked(cell) === null)) continue;
+    // (and, for a first home, a dry way down for its mine from the exit)
+    if (!accept(c.plan.exit, c.dir)) continue;
+    const gaps = shellGaps(c.plan.shell, c.plan.roomStart.y + room.height, (p) => bot.blockAt(p));
+    const score = value ? c.worth - gaps * GAP_COST : -gaps;
+    if (!best || score > best.score) best = { start: c.start, dir: c.dir, gaps, worth: c.worth, score };
+    valid++;
+    if (!value && best.gaps === 0) break; // can't do better than solid ground all round
+    // Sorted by ore: past the first few that pass, the rest can't catch up much
+    if (value && valid >= SITE_KEEP) break;
+  }
+  if (best && value) console.log(`Shelter site at ${best.start} going ${best.dir}: its mine's plan reaches ore worth ${best.worth} (${candidates.length} spots and ways weighed, ${best.gaps} blocks to build).`);
+  else if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
   return best ? { start: best.start, dir: best.dir } : null;
 }
+
+// Its first home's spot search: this far round, on a grid this fine; the
+// best of the first few that pass; a block to build costs this much ore worth
+const SITE_REACH = 15;
+const SITE_GRID = 3;
+const SITE_KEEP = 12;
+const GAP_COST = 0.5;
 
 /** The latest shelter place in this dimension (finished or not). */
 function shelterPlace(includeUnfinished: boolean) {
@@ -354,7 +381,15 @@ export async function buildShelter(roomSize: RoomSize = DEFAULT_ROOM, tunnelDept
       const { findHomeArea, mineWayDry } = await import("../skills/homeSite");
       const dry = (exit: Vec3, d: DirectionType): boolean => mineWayDry(exit, d);
       await findHomeArea(() => chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry) !== null);
-      site = chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry);
+      // The spot whose mine reaches the most ore (owner: "it must be the result of deep analysis")
+      const { oresAround, oreValue } = await import("../skills/siteOres");
+      const ores = oresAround(bot.entity.position.floored());
+      site = chooseSite(bot.entity.position.floored(), roomSize, tunnelDepth, dry, (exit, d) => oreValue(exit, d, ores).worth);
+      if (site) {
+        const plan = shelterPlan(site.start, site.dir, roomSize, tunnelDepth);
+        const got = oreValue(plan.exit, site.dir, ores);
+        if (got.count > 0) chatter(`Picked my home's spot so my mine's tunnels pass ${got.count} ore blocks (of ${ores.length} I can see round here).`, "home");
+      }
       if (!site) console.log("Shelter site: no spot here with a dry way down for my mine; the best I can dig instead.");
     }
     site ??= chooseSite(baseHere ? new Vec3(base.x, base.y, base.z).floored() : bot.entity.position.floored(), roomSize, tunnelDepth);
