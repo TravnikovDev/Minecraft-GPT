@@ -297,8 +297,12 @@ export function safeMovements(bot: Bot): pf.Movements {
       // Never in an area it must keep out of, its own scaffolding included
       if (block?.position && forbiddenAt(block.position)) return false;
       // Walled in: its own fillers beside its passages, unless protected
-      const wallIn = !!block?.position && walledIn() && WALL_FILLERS.has(block.name) && nearOwnPassage(block.position);
-      if (wallIn && this.exclusionBreak(block as never) >= 100) return false;
+      // (and its own field's fence or gate: game test, shut in its field by a
+      // gate that opened onto its shelter's ground, 9 minutes; the fence is
+      // put back when the field is tended)
+      const ownFence = !!block?.position && walledIn() && /_fence(_gate)?$/.test(block.name) && protectedBy(block.position) === "farm";
+      const wallIn = ownFence || (!!block?.position && walledIn() && WALL_FILLERS.has(block.name) && nearOwnPassage(block.position));
+      if (wallIn && !ownFence && this.exclusionBreak(block as never) >= 100) return false;
       if (block?.position && (wallIn || isOwnBlock(block.position, block.name))) {
         // Only "built" is waived: next to water or lava, or under sand and
         // gravel, its own scaffolding stays too (same checks as for any block)
