@@ -1203,8 +1203,15 @@ async function plugFromInside(holes: Pos[], ownCells: Vec3[], why: string): Prom
   }
   // Enough to plug them all with first (game test: "nothing to fill the hole" after 5)
   await stockStairsFillers(holes.length);
+  // Nothing to plug with: no walking from opening to opening for nothing
+  if (!CAVE_FILL.some((n) => bot.inventory.items().some((i) => i.name === n))) {
+    console.log(`Mine: ${why}; nothing to plug them with, so they wait.`);
+    return 0;
+  }
   const placed: Pos[] = [];
   let skipped = 0;
+  // Stands it couldn't get to: the other openings by them aren't tried again this pass
+  const unreachable = new Set<string>();
   const sorted = [...holes].sort((a, b) => bot.entity.position.distanceTo(new Vec3(a.x, a.y, a.z)) - bot.entity.position.distanceTo(new Vec3(b.x, b.y, b.z)));
   for (const h of sorted) {
     if (isCommandCancelled()) break;
@@ -1222,7 +1229,12 @@ async function plugFromInside(holes: Pos[], ownCells: Vec3[], why: string): Prom
       skipped++;
       continue;
     }
+    if (unreachable.has(stand.toString())) {
+      skipped++;
+      continue;
+    }
     if (!bot.entity.position.floored().equals(stand) && !(await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z)))).ok) {
+      unreachable.add(stand.toString());
       skipped++;
       continue;
     }
@@ -1905,8 +1917,13 @@ async function stockStairsFillers(holes: number): Promise<void> {
     }
   }
   if (have() < holes) {
-    const got = await collectBlock("stone", want - have(), ORE_REACH, { seenOnly: true });
-    console.log(`Mine: ${holes} open blocks in my stairs; took ${got} stone to build them with.`);
+    // Stone, and deepslate down where there's no stone (it drops cobbled deepslate)
+    let got = 0;
+    for (const rock of ["stone", "deepslate"]) {
+      if (have() >= holes || isCommandCancelled()) break;
+      got += await collectBlock(rock, want - have(), ORE_REACH, { seenOnly: true });
+    }
+    console.log(`Mine: ${holes} open blocks in my stairs; took ${got} stone or deepslate to build them with.`);
   }
 }
 
