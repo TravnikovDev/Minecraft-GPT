@@ -396,6 +396,13 @@ export async function climbMineStairs(): Promise<boolean> {
     // once; building itself up out there does nothing (game test: it
     // stacked blocks in a flooded cave for minutes, its sealed stairs
     // beside it, until drowned zombies killed it)
+    // In a pit right under its step (a shaft dug down from its floor): up
+    // onto it a block at a time, a block put under itself each time
+    const feet = bot.entity.position;
+    if (!onMyStairs() && step.y - feet.y >= 2 && Math.hypot(step.x + 0.5 - feet.x, step.z + 0.5 - feet.z) <= 2.5 && unsticks < MAX_UNSTICKS) {
+      unsticks++;
+      if (await unstickOnStairs()) continue;
+    }
     if (!onMyStairs()) {
       if (openedWayIn || !(await openWayIn(stepAt(rec.start, rec.direction, i, rec.turns), dirAt(rec.direction, i, rec.turns)))) return false;
       openedWayIn = true;

@@ -157,7 +157,9 @@ export async function collectDrops(
     // 1-high hole it left) is a block's dig away at most: the usual cost
     // (game test: with digging that dear, working out the way timed out and
     // it gave up on every raw copper, 20 seconds each, "no progress")
-    const near = p.distanceTo(bot.entity.position) <= NEAR_DROP;
+    // Never dug down to: a drop below its feet is walked to, not tunnelled to
+    // (one after another they took it a shaft down through its mine's floors)
+    const near = p.distanceTo(bot.entity.position) <= NEAR_DROP && p.y >= bot.entity.position.y - 1;
     const walked = near
       ? await goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1))
       : await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(p.x, p.y, p.z, 1)));
