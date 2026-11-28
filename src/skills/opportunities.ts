@@ -141,9 +141,11 @@ const alreadyOnIt = (kind: string): boolean => {
 export function considerOpportunities(): void {
   if (!bot.entity || areChoresMuted()) return;
   const running = currentTask();
-  if (running && running.bucket < Bucket.Self) return; // the owner's command, a threat, upkeep: not now
-  // Diamonds enough for its next diamond piece: made at once, before anything else
+  // Diamonds enough for its next diamond piece: made at once, before anything
+  // but the owner's orders and threats (the walk to the shelter at night too)
+  if (running && running.bucket < Bucket.Upkeep) return;
   if (diamondGearNow()) return;
+  if (running && running.bucket < Bucket.Self) return; // upkeep, the night routine: not now
   // Not off after ore hurt or without food, like a mining trip (game test: at
   // 0 food it followed iron and diamonds down to y -44, burned in lava with
   // nothing to heal with, and died with 514 items)
@@ -170,6 +172,31 @@ const GEAR_RETRY_MS = 5 * 60_000;
 let gearTriedAt = 0;
 
 /**
+ * The task making a diamond piece: at the upkeep level, so the night's walk
+ * to the shelter doesn't cut it off (it may cut in on that walk: it goes
+ * home for the diamonds anyway when they're in its chests). Cut off by an
+ * order or a fight, it's back afterwards; only a try that didn't make the
+ * piece (no table, no wood) waits GEAR_RETRY_MS before the next.
+ */
+function gearTask(piece: string): TaskSpec {
+  const what = piece.replace(/_/g, " ");
+  return {
+    name: `making a ${what}`,
+    bucket: Bucket.Upkeep,
+    interrupts: true,
+    run: async () => {
+      const { makeDiamondGear } = await import("./milestones");
+      const made = await makeDiamondGear(piece);
+      if (!made.ok && made.reason !== "aborted" && !isCommandCancelled()) {
+        gearTriedAt = Date.now();
+        console.log(`Diamond gear: no ${what} yet (${made.detail ?? made.reason}).`);
+      }
+    },
+    resume: () => (diamondPieceDue()?.[0] === piece ? gearTask(piece) : null),
+  };
+}
+
+/**
  * Owning the diamonds (bag and chests) for its next diamond piece (the
  * pickaxe, the sword, then the armour): making it cuts in ahead of whatever
  * it's doing (that carries on afterwards), at the nearest crafting table, or
@@ -184,21 +211,8 @@ function diamondGearNow(): boolean {
   const what = piece.replace(/_/g, " ");
   const onIt = (name: string): boolean => name.startsWith(GEAR_TASK_PREFIX) || name.endsWith(what) || /diamond (armour|sword|chestplate|pickaxe)$/.test(name);
   if ((currentTask() && onIt(currentTask()!.name)) || pendingTasks().some((t) => onIt(t.name))) return false;
-  gearTriedAt = Date.now();
   console.log(`Diamond gear: I have the diamonds for a ${what}; making it now, then back to what I was doing.`);
-  propose(
-    {
-      name: `making a ${what}`,
-      bucket: Bucket.Self,
-      interrupts: true,
-      run: async () => {
-        const { makeDiamondGear } = await import("./milestones");
-        const made = await makeDiamondGear(piece);
-        if (!made.ok) console.log(`Diamond gear: no ${what} yet (${made.detail ?? made.reason}).`);
-      },
-    },
-    { front: true }
-  );
+  propose(gearTask(piece), { front: true });
   return true;
 }
 
