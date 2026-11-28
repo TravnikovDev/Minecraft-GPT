@@ -170,7 +170,22 @@ export const GOALS: Goal[] = [
       const item = String(a["item"]);
       const missing = Number(a["count"]) - carriedFor(item);
       if (missing <= 0) return ok();
-      return mineFor(item, missing);
+      if (item !== "coal") return mineFor(item, missing);
+      // Coal: the same as the coal milestone (skills/coalDrought): charcoal
+      // when its mine has been dry of it and wood is plenty; otherwise a mine
+      // trip, counted dry or not (game test: the plan's coal step went
+      // straight down the mine, past the charcoal fallback)
+      const { makeCharcoalNow, makeCharcoal, coalTripStart, coalTripEnd } = await import("../skills/coalDrought");
+      if (makeCharcoalNow()) {
+        const made = await makeCharcoal(missing);
+        if (made.ok) return made;
+      }
+      const start = coalTripStart();
+      try {
+        return await mineFor(item, missing);
+      } finally {
+        await coalTripEnd(start);
+      }
     },
     describe: (a) => `mining for ${String(a["count"])} ${words(String(a["item"]))}`,
   },

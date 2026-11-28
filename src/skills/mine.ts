@@ -941,6 +941,8 @@ async function plugFromInside(holes: Pos[], ownCells: Vec3[], why: string): Prom
     const k = `${c.x},${c.z}`;
     columns.set(k, Math.min(columns.get(k) ?? c.y, c.y));
   }
+  // Enough to plug them all with first (game test: "nothing to fill the hole" after 5)
+  await stockStairsFillers(holes.length);
   const placed: Pos[] = [];
   let skipped = 0;
   const sorted = [...holes].sort((a, b) => bot.entity.position.distanceTo(new Vec3(a.x, a.y, a.z)) - bot.entity.position.distanceTo(new Vec3(b.x, b.y, b.z)));
