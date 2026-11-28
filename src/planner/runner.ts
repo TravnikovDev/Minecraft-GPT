@@ -91,21 +91,26 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
       // with its detail, or where it got stuck
       const why = threw ? "something went wrong (an error in my code, see the log)" : cancelled ? (reason === "stuck" ? await stuckReason() : reason) : result && !result.ok ? describeFailure(result) : "";
       await markStep(planId, index, status, status === "failed" ? why : undefined);
-      if (currentPlanId() !== planId) return; // a new plan came while it worked: nothing to write here
+      // A new plan came while it worked (its own plans let the running step
+      // finish): the work is real, so it goes in the diary and a failure is
+      // remembered for the next plan, but nothing is asked of the model now
+      const replaced = currentPlanId() !== planId;
       if (status === "done") {
         noteProgress();
-        await note(`Done from my plan: ${what}.`);
+        await note(`Done from my ${replaced ? "earlier " : ""}plan: ${what}.`);
       }
       if (status === "failed") {
-        await note(`${cancelled ? "Gave up on" : "Couldn't do"} ${what}: ${why}.`);
         // A wait (hurt, hungry, refused at night) is no failure of the job:
         // written down for the next plan, the plan goes on with its next
         // step. A real failure is thought over at once (the planner waits
         // longer each time in a row that nothing got done); its own life
         // waits for the answer
         const wait = !threw && !cancelled && result !== null && !result.ok && (await waitNotFailure(result.reason));
-        noteFailure("plan step", failureKey(step.goal, step.args), what, why, wait);
-        if (!wait) planAgain("blocked");
+        const failed = noteFailure("plan step", failureKey(step.goal, step.args), what, why, wait);
+        // The diary keeps the place too (its weekly lessons are written from
+        // the diary: with no place in it there was nothing to learn)
+        await note(`${cancelled ? "Gave up on" : "Couldn't do"} ${what}: ${why}${/stuck at /.test(why) ? "" : ` (at ${failed.where})`}.`);
+        if (!wait && !replaced) planAgain("blocked");
       }
     },
     // After a cut-in: on with it, if it's still the plan, still wanted and allowed now (night)

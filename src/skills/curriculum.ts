@@ -538,9 +538,10 @@ const nightStep = (goal: string, args: Record<string, unknown>): boolean =>
 async function planStepProposed(): Promise<boolean> {
   const { planningOn, planDay, thinkingItOver } = await import("../planner/planner");
   if (!planningOn(autonomyOn())) return false;
-  // Something just failed and the model is thinking it over (seconds):
-  // nothing new of its own until the answer, like a player who stops to
-  // think (the next job started and called off again otherwise)
+  // Something just failed, or its plan ran out, and the model is thinking
+  // it over (seconds): nothing new of its own until the answer, like a
+  // player who stops to think (otherwise the next job, or the fallback
+  // milestone, started and the new plan waited behind it)
   if (thinkingItOver()) return true;
   const { nextStep } = await import("../planner/plan");
   const { planStepTask } = await import("../planner/runner");

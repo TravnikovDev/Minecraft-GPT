@@ -89,7 +89,8 @@ Rules:
 - At night you work on as by day until a mob attacks you; from then until morning only work under ground runs (mineFor, mendMine, the mine's milestones) and the other steps wait. Fishing always waits for daylight.
 - A failure marked as a wait (you were hurt or hungry, or it was refused at night) is no failure of the job: plan food or rest first if that's the cause, and the job again after.
 - daySummary: the whole of today so far in 2-4 sentences, for your long-term memory.
-- ownerMessage: only if the owner is online and you have news or a suggestion for them; else null. Never a question: living your own life you decide for yourself, the owner won't answer.
+- ownerMessage: only if the owner is online and you have real news for them that your narrative doesn't already say (something found, lost, finished, or a danger); else null. Never the plan again, never a question: living your own life you decide for yourself, the owner won't answer.
+- A step marked "running" in your last plan is being done right now and is finished before your new plan starts: leave it out unless you want more of the same after it.
 - narrative: one or two sentences in character, shown to the owner.`;
 
 /** What it carries, by name, the most first (a short list). */
@@ -195,6 +196,15 @@ export function planningOn(autonomy: boolean): boolean {
   return autonomy && tier1Reached() && !overBudget();
 }
 
+/**
+ * Whether a new plan stops the old plan's step that's running: only when the
+ * owner asked for the plan ("skip mining today" means now). Its own plans
+ * (dusk, the owner joining) let the step finish first (game test: the dusk
+ * plan called it home from 51 steps down its mine, in the middle of a trip
+ * for 24 raw iron). Pure.
+ */
+export const stopsRunningStep = (trigger: Trigger): boolean => trigger === "owner asked";
+
 // A new connection starts a new generation: a call still in flight from the
 // old one is let finish, but its answer is dropped (it must not save a plan
 // or cancel a task in the new session, or end the new session's hold)
@@ -294,10 +304,16 @@ async function makePlan(trigger: Trigger, ownerRequest: string | null, mine: num
     const forDay = trigger === "dusk" || (bot.time?.timeOfDay ?? 0) >= 12000 ? today + 1 : today;
     const stored: StoredPlan = { id, madeAt: id, day: forDay, narrative: plan.narrative.trim(), steps: accepted };
     await savePlan(stored);
-    // The old plan's step stops now (owner: "skip mining today" means now)
+    // The old plan's steps still waiting are dropped. The one running stops
+    // only for the owner's request; for its own plans it finishes first and
+    // the new plan starts after it (the step knows its plan is gone: it
+    // writes nothing in the new one, and isn't resumed if something cuts in)
     dropPending((t) => t.name.startsWith(PLAN_PREFIX));
     const running = currentTask();
-    if (running?.name.startsWith(PLAN_PREFIX)) await cancelRunning("a new plan", false);
+    if (running?.name.startsWith(PLAN_PREFIX)) {
+      if (stopsRunningStep(trigger)) await cancelRunning("a new plan", false);
+      else console.log(`Planner: ${running.name.slice(PLAN_PREFIX.length)} is finished first; the new plan starts after it.`);
+    }
     await note(`Planned: ${accepted.map((s) => goalNamed(s.goal)?.describe(s.args) ?? s.goal).join(", ")}.`);
     // Said only when it changed (an idle re-plan of the same steps stays quiet)
     const sig = (p: StoredPlan | null): string => JSON.stringify(p?.steps.filter((x) => x.status === "pending").map((x) => [x.goal, x.args]) ?? []);
@@ -315,11 +331,14 @@ async function makePlan(trigger: Trigger, ownerRequest: string | null, mine: num
 }
 
 /**
- * True while it thinks over a failure (the call is in flight, seconds):
- * its own life starts nothing new till the answer, like a player who stops
- * to think, rather than walking off to the next job and being called back.
+ * True while it thinks over a failure, or what to do now its plan has run
+ * out (the call is in flight, seconds): its own life starts nothing new till
+ * the answer, like a player who stops to think, rather than walking off to
+ * the next job. Game test, 2026-11-28: with its plan done, the fallback
+ * milestone (diamonds) started in the 10 seconds the model took, and the new
+ * plan then waited behind it for the rest of the day.
  */
-export const thinkingItOver = (): boolean => inFlight && planningFor === "blocked";
+export const thinkingItOver = (): boolean => inFlight && (planningFor === "blocked" || planningFor === "idle");
 
 // The plan the owner has heard about (told when they're online)
 let sharedPlanId: number | null = null;

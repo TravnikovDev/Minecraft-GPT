@@ -77,7 +77,9 @@ export function noteMilestone(title: string): void {
   void note(`Reached a milestone: ${title}.`);
 }
 
-/** A milestone it couldn't get, and why. */
+/** A milestone it couldn't get, why, and where it stood (its weekly lessons are written from the diary). */
 export function noteMilestoneFailed(title: string, why: string): void {
-  void note(`Couldn't get ${title}: ${why}.`);
+  const p = bot.entity?.position;
+  const where = p ? ` (at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)})` : "";
+  void note(`Couldn't get ${title}: ${why}${where}.`);
 }

@@ -23,7 +23,12 @@ export const FIRST_LESSONS_AFTER_DAYS = 3;
 export const MAX_LESSONS = 12;
 const MAX_LESSON_CHARS = 200;
 
-export type Lessons = { day: number; items: string[] };
+// The version of the instructions below: lessons written under older ones are
+// written again at the next dusk (game test, 2026-11-28: the first list was
+// advice with no place or number in it, "make sure a path exists...")
+export const LESSONS_VERSION = 2;
+
+export type Lessons = { day: number; items: string[]; v?: number };
 
 export const LessonsSchema = z.object({
   lessons: z.array(z.string()).describe(`up to ${MAX_LESSONS} lessons, the most useful first, each one short sentence with the concrete fact (a place, a number, a cause)`),
@@ -35,9 +40,15 @@ Once a week you look back and write down what you have learned, for your own lat
 
 Rules:
 - Answer by calling submitLessons once, with the whole list written again: keep the lessons that are still true, drop the ones the diary proved wrong or that no longer matter, add new ones.
-- A lesson is something that will change a later plan: where things are (coordinates, directions from home), what keeps failing and why, what worked instead, what to do first before a kind of job, what kills you.
-- Only what the diary and summaries show. Never general Minecraft knowledge, never a guess.
-- Concrete and short: one sentence each, with the place, number or cause. At most ${MAX_LESSONS}.`;
+- A lesson is a fact about THIS world that will change a later plan: where something is, what keeps failing at a place and why, what worked instead, what killed you and where.
+- Every lesson must carry something concrete taken from the diary or the summaries: coordinates, a direction and distance from home, a count, a time of day, or the name of the thing (the mob, the item, the step of your stairs). Copy the numbers as written.
+- A sentence that would be just as true in any Minecraft world is advice, not a lesson: leave it out. Also drop any old lesson like that.
+- Only what the diary and summaries show. Never general Minecraft knowledge, never a guess, never a routine you already follow (going home at night, putting things away, checking the furnace).
+- Never where you stand in your progress either: which milestones are done or not, what you own or carry, what a plan had in it or left unfinished. Every plan is told those anyway, and they are out of date in a day.
+- Fewer is better: three real lessons beat ten thin ones, and an empty list is right when nothing concrete has happened yet. At most ${MAX_LESSONS}, one short sentence each.
+
+Good: "No path from my mine's stairs at 12, 40, -28 to the tunnel at 12, 30, -40: mend the stairs before going for iron." "Sheep are about 120 blocks east of home, by the river." "Died twice to creepers on my mine stairs near step 30 at night." "Two coal trips of 60 blocks found none below level 20; charcoal from logs worked."
+Bad (never write these): "Make sure a path exists before traveling." "Prioritize shelter when mobs are near." "Check the furnace after mining." "Keep enough food." "The iron armor milestone is done; skip it." "Mending the mine still needs doing."`;
 
 /** The lessons it has now (none before the first week). */
 export function lessons(): Lessons | null {
@@ -46,11 +57,12 @@ export function lessons(): Lessons | null {
 
 /**
  * True when it's time to write its lessons again: a game week since the
- * last time, or, the first time, once a few days have a summary. Pure.
+ * last time; the first time, once a few days have a summary; or at once
+ * when the list was written under older instructions (`current` false). Pure.
  */
-export function lessonsDue(day: number, lastDay: number | null, summarisedDays: number): boolean {
+export function lessonsDue(day: number, lastDay: number | null, summarisedDays: number, current = true): boolean {
   if (lastDay === null) return summarisedDays >= FIRST_LESSONS_AFTER_DAYS;
-  return day - lastDay >= LESSONS_EVERY_DAYS;
+  return !current || day - lastDay >= LESSONS_EVERY_DAYS;
 }
 
 /** The model's list tidied: trimmed, no empty or repeated ones, each cut to a sentence's length, at most 12. Pure. */
@@ -99,7 +111,8 @@ let inFlight = false;
  */
 export async function writeLessonsIfDue(): Promise<boolean> {
   const day = gameDay();
-  if (inFlight || overBudget() || !lessonsDue(day, lessons()?.day ?? null, summaries().length)) return false;
+  const had = lessons();
+  if (inFlight || overBudget() || !lessonsDue(day, had?.day ?? null, summaries().length, (had?.v ?? 1) >= LESSONS_VERSION)) return false;
   inFlight = true;
   try {
     console.log("Lessons: looking back at what I've learned.");
@@ -127,8 +140,9 @@ export async function writeLessonsIfDue(): Promise<boolean> {
       return false;
     }
     const items = cleanLessons(parsed.data.lessons);
-    // An empty list keeps the old one (and the day: asked again next week)
-    await updateMemory({ lessons: { day, items: items.length > 0 ? items : (lessons()?.items ?? []) } });
+    // The list as the model wrote it again, an empty one too (nothing
+    // concrete yet beats advice that fits any world): asked again next week
+    await updateMemory({ lessons: { day, items, v: LESSONS_VERSION } });
     await note(`Looked back at what I've learned: ${items.length} lesson${items.length === 1 ? "" : "s"} written down.`);
     return items.length > 0;
   } catch (error) {

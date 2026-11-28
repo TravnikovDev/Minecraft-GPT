@@ -12,7 +12,7 @@ const { planningAllowance, planningSpent, PLAN_SHARE } = await import(`${ROOT}/s
 const { setMilestoneAside } = await import(`${ROOT}/src/planner/names.ts`);
 const { lessonsDue, cleanLessons, MAX_LESSONS, LESSONS_EVERY_DAYS, FIRST_LESSONS_AFTER_DAYS, LessonsSchema } = await import(`${ROOT}/src/planner/lessons.ts`);
 const { validateSteps } = await import(`${ROOT}/src/planner/plan.ts`);
-const { hourlyRoom, PLANS_PER_HOUR } = await import(`${ROOT}/src/planner/planner.ts`);
+const { hourlyRoom, PLANS_PER_HOUR, stopsRunningStep } = await import(`${ROOT}/src/planner/planner.ts`);
 const { describeGiveUp } = await import(`${ROOT}/src/managers/stuckWatch.ts`);
 const { GOALS, goalNamed, worksInTheMine, needsDaylight, deepOreBehind } = await import(`${ROOT}/src/planner/goals.ts`);
 const { zodResponsesFunction } = await import("openai/helpers/zod");
@@ -139,6 +139,12 @@ test("lessons: first once three days are summarised, then every game week", () =
   expect(lessonsDue(3, null, FIRST_LESSONS_AFTER_DAYS)).toBe(true);
   expect(lessonsDue(9, 3, 30)).toBe(false);
   expect(lessonsDue(3 + LESSONS_EVERY_DAYS, 3, 30)).toBe(true);
+  // Written under older instructions: again at the next dusk, not in a week
+  expect(lessonsDue(4, 3, 30, false)).toBe(true);
+});
+
+test("only the owner's request stops the step that's running; its own plans let it finish", () => {
+  expect(["owner asked", "dusk", "owner joined", "idle", "blocked", "death"].map(stopsRunningStep)).toEqual([true, false, false, false, false, false]);
 });
 
 test("lessons are tidied: trimmed, no empty or repeated ones, cut to a sentence, at most 12", () => {
