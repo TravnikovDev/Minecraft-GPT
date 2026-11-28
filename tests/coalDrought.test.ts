@@ -29,3 +29,13 @@ test("looking for coal finds charcoal too (it stands in for coal)", async () => 
   expect(m("charcoal")).toBe(true);
   expect(m("coal_block")).toBe(false);
 });
+
+test("with no torches, coal or charcoal at all, one dry trip is enough (its dark mine filled with mobs: owner)", async () => {
+  const { charcoalInstead, noLightAtAll } = await import(`${ROOT}/src/skills/coalDrought.ts`);
+  expect(charcoalInstead(1, true, 0, true)).toBe(true);
+  expect(charcoalInstead(1, false, 0, true)).toBe(false); // still only with plenty of wood
+  expect(charcoalInstead(1, true, 0, false)).toBe(false); // some light left: two trips
+  expect(noLightAtAll(() => 0)).toBe(true);
+  expect(noLightAtAll((n: string) => (n === "torch" ? 3 : 0))).toBe(false);
+  expect(noLightAtAll((n: string) => (n === "charcoal" ? 1 : 0))).toBe(false);
+});

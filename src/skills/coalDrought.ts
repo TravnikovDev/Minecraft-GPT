@@ -16,7 +16,7 @@ import { catalog } from "../core/catalog";
 import { digTally } from "../core/digTally";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
 import { woodNow, woodPlenty } from "../actions/fuel";
-import { CARRIED_LOGS } from "../actions/storage";
+import { CARRIED_LOGS, storedNear } from "../actions/storage";
 import { workingTime } from "../core/daylight";
 import { fail, ok, type ActionResult } from "../core/result";
 import { chatter } from "../core/narrator";
@@ -42,8 +42,15 @@ export function tripWasDry(dug: number, coalOre: number): boolean {
  * to make it from (logs in its bag and chests beyond its stock, or trees
  * round its home). Pure.
  */
-export function charcoalInstead(dryTrips: number, woodIsPlenty: boolean, treeLogs: number): boolean {
-  return dryTrips >= DRY_TRIPS && (woodIsPlenty || treeLogs >= TREE_LOGS_PLENTY);
+export function charcoalInstead(dryTrips: number, woodIsPlenty: boolean, treeLogs: number, noLight = false): boolean {
+  // With no torches, coal or charcoal at all, one dry trip is enough (owner:
+  // its tunnels stayed dark, mobs spawned in its own mine and killed it)
+  return dryTrips >= (noLight ? 1 : DRY_TRIPS) && (woodIsPlenty || treeLogs >= TREE_LOGS_PLENTY);
+}
+
+/** True with no torches, coal or charcoal at all: carried or in its chests. Pure over `owned`. */
+export function noLightAtAll(owned: (item: string) => number): boolean {
+  return ["torch", "coal", "charcoal"].every((n) => owned(n) === 0);
 }
 
 /** Dry coal trips in a row now (0 once forgotten). */
@@ -86,8 +93,10 @@ function treeLogsNearHome(): number {
 /** The live decision: make charcoal now instead of going down its mine for coal. */
 export function makeCharcoalNow(): boolean {
   const trips = dryCoalTrips();
-  if (trips < DRY_TRIPS) return false;
-  return charcoalInstead(trips, woodPlenty(woodNow()), treeLogsNearHome());
+  if (trips === 0) return false;
+  const noLight = noLightAtAll((n) => carriedOf((name) => name === n) + storedNear(n));
+  if (trips < (noLight ? 1 : DRY_TRIPS)) return false;
+  return charcoalInstead(trips, woodPlenty(woodNow()), treeLogsNearHome(), noLight);
 }
 
 const carriedOf = (test: (name: string) => boolean): number => bot.inventory.items().filter((i) => test(i.name)).reduce((n, i) => n + i.count, 0);
