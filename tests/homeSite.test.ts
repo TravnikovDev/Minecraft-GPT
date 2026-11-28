@@ -43,3 +43,16 @@ test("the way down for its mine: water, lava or a cave down to the 2nd floor rul
   const trees = (x: number, y: number, z: number): string => (y >= 70 && y <= 72 ? "oak_leaves" : ground(x, y, z));
   expect(mineWayProblem(exit, "south", trees)).toBeNull();
 });
+
+test("the search never walks out over the sea (owner: walking on the water like Jesus to find a place)", async () => {
+  const { legOverWater, surfaceAt } = await import(`${ROOT}/src/skills/homeSite.ts`);
+  // Land west of x 20 (grass at 63), sea east of it (water at 62, sand under)
+  const world = (x: number, y: number, z: number): string => (x < 20 ? (y <= 63 ? "grass_block" : "air") : y <= 55 ? "sand" : y <= 62 ? "water" : "air");
+  const from = { x: 0, y: 64, z: 0 };
+  expect(surfaceAt(30, 64, 0, world)).toBe("water");
+  expect(legOverWater(from, 1, 0, world)).toBe(true); // east: out to sea
+  expect(legOverWater(from, -1, 0, world)).toBe(false); // west: land
+  expect(legOverWater(from, 0, 1, world)).toBe(false); // south along the shore
+  // Ground it can't see yet isn't water
+  expect(legOverWater(from, 1, 0, () => null)).toBe(false);
+});

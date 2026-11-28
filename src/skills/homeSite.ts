@@ -110,6 +110,27 @@ export function mineWayDry(exit: { x: number; y: number; z: number }, dir: Direc
   return mineWayProblem(exit, dir, (x, y, z) => bot.blockAt(new Vec3(x, y, z))?.name ?? null) === null;
 }
 
+// Where along a leg it looks for water (blocks from the start)
+const LEG_LOOKS = [12, 24, 36, 48];
+
+/** The top block of a column near `y` (looking 24 up and down), or null when not loaded. Pure over `look`. */
+export function surfaceAt(x: number, y: number, z: number, look: SiteLook): string | null {
+  for (let yy = y + 24; yy >= y - 24; yy--) {
+    const name = look(x, yy, z);
+    if (name === null) return null;
+    if (!/^(air|cave_air|void_air)$/.test(name)) return name;
+  }
+  return null;
+}
+
+/** True when a leg from `from` going (sx, sz) runs over water at any of its look points (unknown ground isn't water). Pure over `look`. */
+export function legOverWater(from: { x: number; y: number; z: number }, sx: number, sz: number, look: SiteLook): boolean {
+  return LEG_LOOKS.some((k) => {
+    const top = surfaceAt(Math.floor(from.x + sx * k), Math.floor(from.y), Math.floor(from.z + sz * k), look);
+    return top !== null && /^(water|bubble_column|seagrass|tall_seagrass|kelp|kelp_plant|ice)$/.test(top);
+  });
+}
+
 function biomeHere(): string {
   try {
     const id = bot.world.getBiome(bot.entity.position.floored());
@@ -145,10 +166,21 @@ export async function findHomeArea(dryMine: () => boolean): Promise<void> {
   let walked = 0;
   let d = 0;
   let sinceBetter = 0;
+  let wetInARow = 0;
   while (walked < SEARCH_MAX && workingTime() && !isCommandCancelled()) {
     const [sx, sz] = STEPS[ORDER[d % ORDER.length]!]!;
     const from = bot.entity.position.clone();
     const to = from.offset(sx * LEG, 0, sz * LEG);
+    // Never out over the sea or a lake (owner: "walking on the water like
+    // Jesus to find a place"): a leg that ends or runs over water is skipped,
+    // unless every way is water
+    const look: SiteLook = (x, y, z) => bot.blockAt(new Vec3(x, y, z))?.name ?? null;
+    if (wetInARow < ORDER.length && legOverWater(from, sx, sz, look)) {
+      d++;
+      wetInARow++;
+      continue;
+    }
+    wetInARow = 0;
     const went = await goTo(new pf.goals.GoalNearXZ(Math.floor(to.x), Math.floor(to.z), 6));
     const moved = bot.entity.position.distanceTo(from);
     walked += moved;
