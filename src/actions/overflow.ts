@@ -84,7 +84,9 @@ export async function makeRoom(why: string, keep: string[] = []): Promise<boolea
     // Its chests at home and it down in its mine: up its own stairs first,
     // never the walk's own way up (game test: from the 4th floor it came up
     // a shaft dug from the grass, and in by the front door)
-    if (chest && chest.position.y > bot.entity.position.y + 3) {
+    const { shelter } = await import("../skills/capabilities");
+    const home = shelter();
+    if (chest && home && chest.position.y >= home.y - 3 && chest.position.y > bot.entity.position.y + 3) {
       const { upFromTheMine } = await import("../skills/mine");
       await upFromTheMine();
     }

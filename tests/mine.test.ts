@@ -684,3 +684,8 @@ test("a small air pocket left open: its cells known, so the ore in its walls is 
   const ore = veinFrom(pockets[0].cells.map((c: P) => new Vec3(c.x, c.y, c.z)), (p: P) => nameAt(p), () => true, 24);
   expect(ore.map((o: P) => `${o.x},${o.y},${o.z}`).sort()).toEqual(["1,2,0", "1,3,0"]);
 });
+
+test("every floor a crafting table; a furnace and a chest on every second floor (the 2nd, the 4th...)", async () => {
+  const { floorHasStore, floorName } = await import(`${ROOT}/src/skills/mine.ts`);
+  expect([0, 1, 2, 3, 4, 5].filter(floorHasStore).map(floorName)).toEqual(["2nd floor", "4th floor", "6th floor"]);
+});

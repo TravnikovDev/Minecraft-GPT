@@ -1216,7 +1216,8 @@ async function toNearestFurnace(): Promise<boolean> {
   const me = bot.entity.position;
   const near = bot
     .findBlocks({ matching: [id], maxDistance: 64, count: 16 })
-    .filter((p) => Math.abs(p.y - me.y) <= 3)
+    // On its own level, or (down in its mine) a floor up or down: never the home one through the rock
+    .filter((p) => Math.abs(p.y - me.y) <= (shelter() && me.y < shelter()!.y - 12 ? 12 : 3))
     .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0];
   if (!near) return false;
   if (near.distanceTo(me) <= 16) return true;

@@ -22,6 +22,11 @@ export async function putAwayHaul(): Promise<number> {
   const { enterShelter } = await import("../actions/building");
   const home = await enterShelter();
   if (!home.ok || isCommandCancelled()) return 0;
+  return putAwayHere();
+}
+
+/** Its haul put away in the nearest of its chests (at home, or a floor of its mine), as putAwayHaul. How many. */
+export async function putAwayHere(): Promise<number> {
   const { toolTier, TIER } = await import("../skills/capabilities");
   // Its seeds stay on it for its fields (owner: they sat in its chests while the fields stood bare)
   const { SEED_NAMES } = await import("./farm");
@@ -29,7 +34,7 @@ export async function putAwayHaul(): Promise<number> {
   const { storeItems } = await import("../actions/storage");
   const stored = await storeItems("half", [], keep);
   const n = stored ? [...stored.stored.values()].reduce((a, b) => a + b, 0) : 0;
-  if (n > 0) report(`Put ${n} things away in my chests at home.`);
+  if (n > 0) report(`Put ${n} things away in my chests${stored?.chestAt ? ` at ${stored.chestAt}` : ""}.`);
   if (stored?.problem) console.log(`Home: couldn't put everything away (${stored.problem}).`);
   else if (stored && stored.leftOver.size > 0) console.log(`Home: my chests are full; ${[...stored.leftOver.values()].reduce((a, b) => a + b, 0)} things stay on me.`);
   return n;

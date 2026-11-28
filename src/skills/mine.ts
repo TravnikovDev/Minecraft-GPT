@@ -774,6 +774,8 @@ function stepShell(start: Pos, dir: DirectionType, i: number, level: number, tur
 
 // Slots in use (of 36) that make a bag heavy enough to take home after a trip
 const HEAVY_SLOTS = 24;
+// A chest of its mine this near is used instead of the ones at home
+const NEAR_CHEST = 40;
 
 /**
  * Its haul put away at home (owner: it must go to its shelter and keep its
@@ -783,6 +785,16 @@ const HEAVY_SLOTS = 24;
  */
 export async function haulHomeIfHeavy(): Promise<void> {
   if (bot.inventory.items().length < HEAVY_SLOTS || isCommandCancelled()) return;
+  // A chest of its mine near (on every second floor): it goes in there, no climb home
+  const { chooseChest } = await import("../actions/storage");
+  const chest = await chooseChest(undefined, true);
+  const home = shelter();
+  if (chest && home && chest.position.y < home.y - 3 && chest.position.distanceTo(bot.entity.position) <= NEAR_CHEST) {
+    console.log(`Mine: my bag is heavy (${bot.inventory.items().length} slots); into my mine's chest at ${chest.position}.`);
+    const { putAwayHere } = await import("./homeChores");
+    await putAwayHere();
+    return;
+  }
   console.log(`Mine: my bag is heavy (${bot.inventory.items().length} slots); taking it home.`);
   await upFromTheMine();
   const { putAwayHaul } = await import("./homeChores");
@@ -2795,11 +2807,15 @@ const furnishedSeen = new Set<number>();
  */
 async function furnishFloor(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
   const put: string[] = [];
+  const even = floorHasStore(level);
   // Never in its stairs (turned through the room): moved to the room's forward middle
   const rec = mineRecord();
   const stairs = rec ? new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString())) : new Set<string>();
   const inStairs = (p: Vec3): boolean => stairs.has(p.toString());
-  for (const [item, usual] of [["crafting_table", floorTableSpot(hub, arrive)], ["furnace", floorFurnaceSpot(hub, arrive)]] as const) {
+  // A table on every floor; a furnace (and a chest, below) on every second one
+  const furniture: Array<readonly ["crafting_table" | "furnace", Vec3]> = [["crafting_table", floorTableSpot(hub, arrive)]];
+  if (even) furniture.push(["furnace", floorFurnaceSpot(hub, arrive)]);
+  for (const [item, usual] of furniture) {
     if (isCommandCancelled()) return;
     const spot = furnitureSpot(usual, hub, arrive, inStairs);
     if (!spot) continue;
@@ -2823,7 +2839,31 @@ async function furnishFloor(hub: Vec3, arrive: DirectionType, level: number): Pr
     await (item === "crafting_table" ? saveCraftingTableLocation(spot) : saveFurnaceLocation(spot));
     put.push(item === "crafting_table" ? "a crafting table" : "a furnace");
   }
-  if (put.length > 0) chatter(`Put ${put.join(" and ")} in the ${floorName(level)}'s room of my mine.`, "mining");
+  // The chest: in a niche dug into the room's wall (a chest won't open under
+  // a block, and placed against the table or furnace it would open them)
+  if (even && !isCommandCancelled() && !(await chestNear(hub))) {
+    let have = bot.inventory.items().some((i) => i.name === "chest");
+    if (!have) {
+      const { acquire } = await import("./acquire");
+      const { liveWorld } = await import("./world");
+      have = (await acquire("chest", 1, liveWorld)).ok;
+    }
+    if (have && (await goToStep(hub)).ok) {
+      const { placeChestOutOfTheWay } = await import("../actions/placement");
+      if (await placeChestOutOfTheWay()) put.push("a chest");
+    } else if (!have) console.log(`Mine: no chest for the ${floorName(level)}.`);
+  }
+  if (put.length > 0) chatter(`Put ${put.join(", ")} in the ${floorName(level)}'s room of my mine.`, "mining");
+}
+
+/** True for the floors that get a furnace and a chest: every second one (the 2nd, the 4th...). Pure. */
+export const floorHasStore = (level: number): boolean => level % 2 === 1;
+
+/** True when a chest it knows is in or by a floor's room (`hub`). */
+async function chestNear(hub: Vec3): Promise<boolean> {
+  const id = bot.registry.blocksByName["chest"]?.id;
+  if (id === undefined) return false;
+  return bot.findBlocks({ matching: [id], point: hub, maxDistance: 5, count: 1 }).length > 0;
 }
 
 // Side routes off the lowest level's tunnels (owner): every 3 blocks, 10 long
