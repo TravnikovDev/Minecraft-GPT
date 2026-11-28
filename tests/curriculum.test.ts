@@ -506,3 +506,12 @@ test("stone tools count as night work in the shelter only when the bag holds wha
     bag([]);
   }
 });
+
+test("its bed's cells: the foot, the head on from where it's placed, and that stand (the table's spot)", () => {
+  expect(M.bedCells({ x: 82, y: 59, z: -41 }, { x: 82, y: 59, z: -40 })).toEqual([
+    { x: 82, y: 59, z: -41 },
+    { x: 82, y: 59, z: -42 },
+    { x: 82, y: 59, z: -40 },
+  ]);
+  expect(M.bedCells({ x: 0, y: 64, z: 0 }, null)).toEqual([{ x: 0, y: 64, z: 0 }]);
+});

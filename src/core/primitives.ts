@@ -590,6 +590,17 @@ export function bodyReaches(pos: Pos, cells: Pos[], halfWidth = 0.3, height = 1.
   );
 }
 
+/**
+ * Who (a player or a mob, never itself, an item or an orb) has a body in
+ * any of `cells`: its name, or null when they're all free.
+ */
+export function someoneIn(cells: Pos[]): string | null {
+  const e = Object.values(bot.entities).find(
+    (e) => e !== bot.entity && e.name !== "item" && e.name !== "experience_orb" && e.name !== "arrow" && bodyReaches(e.position, cells, (e.width ?? 0.6) / 2, e.height ?? 1.8)
+  );
+  return e ? (e.username ?? `a ${(e.name ?? "mob").replace(/_/g, " ")}`) : null;
+}
+
 /** The cells a placed block takes up: a door is two tall. */
 const cellsTaken = (itemName: string, at: Vec3): Vec3[] => (itemName.endsWith("_door") ? [at, at.offset(0, 1, 0)] : [at]);
 
@@ -646,13 +657,10 @@ async function placeBlockAtNow(itemName: string, pos: Pos, options: PlaceOptions
   // Only the server undoing it counts toward a protected area (not a mob standing in the spot)
   // A living thing in the spot (a dropped item or an orb never blocks a
   // block: counting them hid why a bed didn't go down, fresh-world test)
-  const taken = cellsTaken(itemName, at);
-  const blocker = Object.values(bot.entities).find(
-    (e) => e !== bot.entity && e.name !== "item" && e.name !== "experience_orb" && e.name !== "arrow" && bodyReaches(e.position, taken, (e.width ?? 0.6) / 2, e.height ?? 1.8)
-  );
+  const blocker = someoneIn(cellsTaken(itemName, at));
   if (!blocker) await noteRevert(at); // twice close together: a protected area
   const why = placed.ok ? "" : ` (${describeFailure(placed)})`;
-  return fail(blocker ? "occupied" : "reverted", blocker ? `${blocker.username ?? `a ${(blocker.name ?? "mob").replace(/_/g, " ")}`} is standing at ${at}` : `${itemName} at ${at} didn't stay${why}`);
+  return fail(blocker ? "occupied" : "reverted", blocker ? `${blocker} is standing at ${at}` : `${itemName} at ${at} didn't stay${why}`);
 }
 
 // --- Hands and inventory ---------------------------------------------------------

@@ -303,3 +303,17 @@ test("gravel falling into the gap isn't the server putting a block back", async 
   expect(await P.breakBlock({ x: 1, y: 64, z: 1 })).toMatchObject({ ok: true });
   expect(F.forbiddenAt({ x: 1, y: 64, z: 0 })).toBeNull(); // no "protected area" in a gravel column
 });
+
+test("someone in a spot: a player or a mob counts, itself and a dropped item don't", () => {
+  const spot = [{ x: 3, y: 64, z: 0 }];
+  fake.entities = {
+    1: fake.entity,
+    2: { name: "item", position: new Vec3(3.5, 64, 0.5) },
+  };
+  expect(P.someoneIn(spot)).toBeNull();
+  fake.entities[3] = { name: "player", username: "Travnikov", position: new Vec3(3.5, 64, 0.5), width: 0.6, height: 1.8 };
+  expect(P.someoneIn(spot)).toBe("Travnikov");
+  fake.entities[3] = { name: "zombie", position: new Vec3(5.5, 64, 0.5), width: 0.6, height: 1.95 };
+  expect(P.someoneIn(spot)).toBeNull();
+  fake.entities = {};
+});

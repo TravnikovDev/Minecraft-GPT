@@ -23,7 +23,7 @@ import { homeLit, homeLitSeen, lightUpHome } from "./lighting";
 import { farmRipe, FIELDS_WANTED, makeFarm, myFarm, myFarms, nextFieldWaits, tendFarm } from "./farm";
 import { reinforceShelter, shelterSeen, shelterWeakCells } from "./reinforce";
 import { dimensionNow } from "./endgame/state";
-import { goTo, knownBlock } from "../core/primitives";
+import { goTo, knownBlock, someoneIn } from "../core/primitives";
 import pf from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 import { catalog } from "../core/catalog";
@@ -437,6 +437,19 @@ async function cookTheMeat(cookIt: (only: string | null, limit: number, leave: b
   if ((await acquire("furnace", 1, liveWorld)).ok) await cookFood();
 }
 
+type Cell = { x: number; y: number; z: number };
+
+/**
+ * The cells its bed needs free: the foot (its slot), the head one further on
+ * from where it's placed from, and that stand (the table's spot), where it
+ * stands to place it. Pure.
+ */
+export function bedCells(slot: Cell, stand: Cell | null): Cell[] {
+  if (!stand) return [slot];
+  const head = { x: 2 * slot.x - stand.x, y: slot.y, z: 2 * slot.z - stand.z };
+  return [slot, head, stand];
+}
+
 /** A bed: 3 wool of one colour (from sheep), crafted, put in its slot in the shelter, used (spawn point). */
 async function getBed(): Promise<ActionResult> {
   if (!bot.inventory.items().some((i) => i.name.endsWith("_bed"))) {
@@ -468,7 +481,13 @@ async function getBed(): Promise<ActionResult> {
     const bedItem = bot.inventory.items().find((i) => i.name.endsWith("_bed"));
     if (!bedItem) return fail("missing_items", "no bed to put down");
     // Placed facing on from the cell behind it (the table's spot), so the
-    // head goes along the wall; a table already there is moved for a moment
+    // head goes along the wall; a table already there is moved for a moment.
+    // Someone in the bed's two cells or the table's spot first: nothing is
+    // touched (overnight test: the owner's AFK character stood on the bed's
+    // spot, the table was broken for nothing and dropped by the owner, who
+    // picked it up, and the shelter stood unfurnished for hours)
+    const blocker = someoneIn(bedCells(slot, slots?.bedStand ?? null));
+    if (blocker) return fail("occupied", `${blocker} is standing where my bed goes`);
     let tableMoved = false;
     if (slots?.bedStand) {
       if (knownBlock(slots.bedStand)?.name === "crafting_table") {
@@ -480,9 +499,10 @@ async function getBed(): Promise<ActionResult> {
     }
     const placed = await placeBlockResult(bedItem.name, slot.x, slot.y, slot.z);
     if (tableMoved && slots?.bedStand) {
-      // Back in its spot (stepping out of it first)
-      await goTo(new pf.goals.GoalBlock(slots.stand.x, slots.stand.y, slots.stand.z));
-      await placeBlockResult("crafting_table", slots.bedStand.x, slots.bedStand.y, slots.bedStand.z);
+      // Back in its spot, from its row, whether the bed went down or not;
+      // a table made again if the dropped one is gone (picked up by someone)
+      const back = await placeShelterTable();
+      if (!back.ok) console.log(`Couldn't put the shelter's table back (${describeFailure(back)}); the shelter set-up will.`);
     }
     if (!placed.ok) return placed;
   }
