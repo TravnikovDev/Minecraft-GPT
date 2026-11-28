@@ -76,3 +76,20 @@ test("what's left of a half-cut giant is still a giant, and a trunk up in the ai
   expect(leftStanding(floating, grass)).toBe(false);
   expect(leftStanding(floating)).toBe(false); // nothing known under it
 });
+
+test("it cuts a tree standing on dry ground beside it, never in the water (owner: it stood in the water to chop, 15 s a log)", async () => {
+  const { dryStandSpot } = await import(`${ROOT}/src/actions/gatherWood.ts`);
+  const { Vec3 } = await import("vec3");
+  const base = { x: 0, y: 64, z: 0 };
+  // Water all round at feet height, ground under it; one dry grass cell at x 2
+  const world = (dryAt: Array<[number, number]>) => (p: { x: number; y: number; z: number }) => {
+    if (p.x === 0 && p.z === 0 && p.y >= 64) return { name: "oak_log", boundingBox: "block" };
+    if (p.y < 64) return { name: "dirt", boundingBox: "block" };
+    if (p.y === 64 && !dryAt.some(([x, z]) => x === p.x && z === p.z)) return { name: "water", boundingBox: "empty" };
+    return { name: "air", boundingBox: "empty" };
+  };
+  expect(dryStandSpot(base, { x: -5, y: 64, z: 0 }, world([]))).toBeNull();
+  expect(dryStandSpot(base, { x: -5, y: 64, z: 0 }, world([[2, 1]]))?.toString()).toBe(new Vec3(2, 64, 1).toString());
+  // Of two dry cells, the nearer to where it is
+  expect(dryStandSpot(base, { x: -5, y: 64, z: 0 }, world([[2, 1], [-1, 0]]))?.toString()).toBe(new Vec3(-1, 64, 0).toString());
+});

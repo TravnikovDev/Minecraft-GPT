@@ -42,6 +42,10 @@ export async function gatherWood(
     // Logs it couldn't walk to (up a jungle trunk, behind leaves); without
     // this the nearest-log search returns the same one until it gives up
     const unreachable = new Set<string>();
+    // Trees with nothing dry beside them (owner: it stood in the water to
+    // chop, 15 s a log): only once there's no other tree
+    const wet = new Set<string>();
+    let wetOk = false;
     console.log(`I currently have ${logsCount} logs.`);
 
     while (logsCount < targetLogs) {
@@ -68,11 +72,16 @@ export async function gatherWood(
       const woodBlock = bot.findBlock({
         matching: (block) => catalog().isTreeLog(block.name), // nether stems too, never stripped logs in builds
         // Not one it couldn't reach, nor one in an area it must keep out of
-        useExtraInfo: (block) => !unreachable.has(block.position.toString()) && !forbiddenAt(block.position),
+        useExtraInfo: (block) => !unreachable.has(block.position.toString()) && (wetOk || !wet.has(block.position.toString())) && !forbiddenAt(block.position),
         maxDistance,
       });
 
       if (woodBlock) recordSighting(woodBlock.name, woodBlock.position);
+      if (!woodBlock && wet.size > 0 && !wetOk) {
+        console.log("Only trees in the water left near: chopping those.");
+        wetOk = true;
+        continue;
+      }
       if (!woodBlock) {
         console.log("No wood blocks found nearby.");
         failedAttempts++;
@@ -89,12 +98,17 @@ export async function gatherWood(
         continue;
       }
 
-      const destinationReached = await goToPosition(
-        woodBlock.position.x,
-        woodBlock.position.y,
-        woodBlock.position.z,
-        2
-      );
+      // Dry ground beside the trunk to stand on: digging in water is 5 times slower
+      const base = seen[0]?.position ?? woodBlock.position;
+      const stand = dryStandSpot(base, bot.entity.position, (p: Vec3) => bot.blockAt(p));
+      if (!stand && !wetOk) {
+        for (const log of seen) wet.add(log.position.toString());
+        console.log(`The ${woodBlock.name} tree at ${base} has only water beside it; another tree first.`);
+        continue;
+      }
+      const destinationReached = stand
+        ? (await goTo(new pf.goals.GoalBlock(stand.x, stand.y, stand.z))).ok
+        : await goToPosition(woodBlock.position.x, woodBlock.position.y, woodBlock.position.z, 2);
 
       if (!destinationReached) {
         // The whole tree, not just this log: from where it got stuck the
@@ -290,6 +304,35 @@ export async function fellTree(trunk: Block[]): Promise<boolean> {
     await breakBlockAt(aLog.position.x, aLog.position.y, aLog.position.z);
   }
   return true;
+}
+
+const WATERY = /^(water|bubble_column|seagrass|tall_seagrass|kelp|kelp_plant)$/;
+
+/**
+ * Where to stand to cut a tree from the ground: a cell beside its trunk's
+ * foot (within 2 across, a block up or down) with dry feet and head, solid
+ * ground under it, nearest to `from`; null when every one is in water
+ * (owner: it stood in the water to chop, 15 s a log). Pure over `blockAt`.
+ */
+export function dryStandSpot(base: { x: number; y: number; z: number }, from: { x: number; y: number; z: number }, blockAt: (p: Vec3) => { name: string; boundingBox: string; getProperties?: () => Record<string, unknown> } | null): Vec3 | null {
+  const dry = (b: { name: string; boundingBox: string; getProperties?: () => Record<string, unknown> } | null): boolean =>
+    b !== null && b.boundingBox === "empty" && !WATERY.test(b.name) && b.getProperties?.()["waterlogged"] !== true;
+  const spots: Vec3[] = [];
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (dx === 0 && dz === 0) continue;
+      for (const dy of [0, 1, -1]) {
+        const feet = new Vec3(base.x + dx, base.y + dy, base.z + dz);
+        const under = blockAt(feet.offset(0, -1, 0));
+        if (!under || under.boundingBox !== "block" || WATERY.test(under.name)) continue;
+        if (!dry(blockAt(feet)) || !dry(blockAt(feet.offset(0, 1, 0)))) continue;
+        spots.push(feet);
+        break;
+      }
+    }
+  }
+  const d = (p: Vec3): number => Math.hypot(p.x - from.x, p.y - from.y, p.z - from.z);
+  return spots.sort((a, b) => d(a) - d(b))[0] ?? null;
 }
 
 // Jungle trees taller than this (one trunk) are left standing (owner)
