@@ -909,9 +909,15 @@ export function caveOpenings(cells: Pos[], own: Set<string>, open: (p: Pos) => b
  * checked, only the face ahead before each next column), here `cells` or,
  * with none given, every pokehole it has dug. How many openings it plugged.
  */
+// After a pass that plugged nothing, the next waits this long (game test:
+// three passes in 90 s, two of them plugging nothing)
+const SEAL_RETRY_MS = 5 * 60_000;
+let sealIdleUntil = 0;
+
 async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
   const rec = mineRecord();
   if (!rec || !bot.entity) return 0;
+  if (!cells && Date.now() < sealIdleUntil) return 0;
   const own = new Set<string>([...floorsAsDug(rec), ...mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk].map((c) => c.toString()));
   const open = (p: Pos): boolean => {
     const b = bot.blockAt(new Vec3(p.x, p.y, p.z));
@@ -921,7 +927,9 @@ async function sealPokeCaves(cells?: Vec3[]): Promise<number> {
   const pokes = (cells ?? pokeCellsAsDug(rec, open)).filter(near);
   const holes = caveOpenings(pokes, own, open);
   if (holes.length === 0) return 0;
-  return plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
+  const plugged = await plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
+  if (!cells && plugged === 0) sealIdleUntil = Date.now() + SEAL_RETRY_MS;
+  return plugged;
 }
 
 // Health under this, or a hostile mob this near: no more sealing this time
