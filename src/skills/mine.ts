@@ -13,7 +13,7 @@ import { oreCapped } from "./oreCaps";
 import { Vec3 } from "vec3";
 import pf from "mineflayer-pathfinder";
 import { bot } from "../core/body";
-import { isNatural, protectCells, setOwnPassages, whileGathering } from "../core/movements";
+import { isNatural, protectCells, setNoDig, setOwnPassages, whileGathering } from "../core/movements";
 import { goTo, withinReach } from "../core/primitives";
 import { pathing } from "../core/plugins";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
@@ -566,6 +566,7 @@ export async function protectMine(): Promise<void> {
   if (!rec) {
     protectCells([], "mine");
     setOwnPassages([], "mine");
+    setNoDig([], "mine");
     return;
   }
   const { keep, walk } = mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom);
@@ -573,7 +574,12 @@ export async function protectMine(): Promise<void> {
   // home dug down into them from the grass): only protected, never "mended"
   const surface = (shelter()?.details?.["start"] as Pos | undefined)?.y ?? rec.start.y + 6;
   const { overburden } = await import("../actions/building");
-  const above = overburden(walk.filter((c) => c.y > stepAt(rec.start, rec.direction, hubStep(0), rec.turns).y), keep, surface + 3);
+  const shallow = walk.filter((c) => c.y > stepAt(rec.start, rec.direction, hubStep(0), rec.turns).y);
+  const above = overburden(shallow, keep, surface + 3);
+  // And the ground beside them, GROUND_BAND either side: never dug by a walk
+  // (owner: shortcuts dug from the grass into the stairs, 2 blocks off them;
+  // the way in is through the shelter)
+  setNoDig(mineGroundBand(shallow, surface + 3), "mine");
   // Its caps over stairs it gave up (blocked going down): never dug through
   const seals = rec.seals.map((p) => new Vec3(p.x, p.y, p.z));
   protectCells([...keep, ...above, ...seals], "mine");
@@ -585,6 +591,34 @@ export async function protectMine(): Promise<void> {
     floors.push(...floorCells(stepAt(rec.start, rec.direction, hubStep(l), rec.turns), dirAt(rec.direction, hubStep(l), rec.turns), l, roomBeside(l, rec.sideFrom)));
   }
   setOwnPassages([...walk, ...floors], "mine");
+}
+
+// How far either side of its shallow stairs the ground is never dug by a walk
+export const GROUND_BAND = 3;
+
+/**
+ * The ground beside and over its shallow stairs (`open`: their walking
+ * cells), GROUND_BAND either side, from each step's level up to `top`, but
+ * the stairs' own open cells. Pure.
+ */
+export function mineGroundBand(open: Array<{ x: number; y: number; z: number }>, top: number): Vec3[] {
+  const openSet = new Set(open.map((c) => `${c.x},${c.y},${c.z}`));
+  // The lowest step under each column of the band
+  const lowest = new Map<string, number>();
+  for (const c of open) {
+    for (let dx = -GROUND_BAND; dx <= GROUND_BAND; dx++) {
+      for (let dz = -GROUND_BAND; dz <= GROUND_BAND; dz++) {
+        const k = `${c.x + dx},${c.z + dz}`;
+        if (!lowest.has(k) || lowest.get(k)! > c.y) lowest.set(k, c.y);
+      }
+    }
+  }
+  const cells: Vec3[] = [];
+  for (const [k, y0] of lowest) {
+    const [x, z] = k.split(",").map(Number) as [number, number];
+    for (let y = y0; y <= top; y++) if (!openSet.has(`${x},${y},${z}`)) cells.push(new Vec3(x, y, z));
+  }
+  return cells;
 }
 
 /** The stairs' protected cells (floors, roofs, side walls but the hubs') and walking cells (each step's open space). Pure. */

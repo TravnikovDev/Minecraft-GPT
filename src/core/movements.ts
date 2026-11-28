@@ -148,6 +148,24 @@ export async function whileGathering<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+// The ground beside its shallow mine stairs, up to over the surface: no walk
+// digs it (owner, 2026-11-28: "the bot again cut an alternative tunnel into
+// its mine; to get to the mine it goes to the shelter first, then the mine").
+// Only walks: torches, fields and ore it gathers there are not affected.
+const noDigCells = new Map<string, Set<string>>();
+
+/** Cells no walk digs through, for one owner ("mine"); replaces that owner's previous set. */
+export function setNoDig(cells: Array<{ x: number; y: number; z: number }>, owner = "mine"): void {
+  noDigCells.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
+}
+
+/** True for a cell no walk digs through. */
+export function noDig(p: { x: number; y: number; z: number }): boolean {
+  const key = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+  for (const cells of noDigCells.values()) if (cells.has(key)) return true;
+  return false;
+}
+
 /** The cells of its own passages (shelter, mine stairs): stalls there are never held against them. */
 export function setOwnPassages(cells: Array<{ x: number; y: number; z: number }>, owner = "shelter"): void {
   ownPassages.set(owner, new Set(cells.map((c) => `${c.x},${c.y},${c.z}`)));
@@ -368,7 +386,12 @@ export function safeMovements(bot: Bot): pf.Movements {
   // fell into a one-block water shaft)
   const waterUnder = (p: { x: number; y: number; z: number }): boolean => LIQUID.test(look(p.x, p.y - 1, p.z) ?? "");
   const floods = (block: { position?: { x: number; y: number; z: number } }): number => (block.position && (liquidBehind(block.position, look) || waterUnder(block.position)) ? 10_000 : 0);
-  moves.exclusionAreasBreak = [keepOut, floods, mineShell] as unknown as typeof moves.exclusionAreasBreak;
+  // The ground beside its mine's stairs: walks come in through the shelter
+  // and down the stairs, never a shortcut dug from the grass (walled in, its
+  // own fillers there may go)
+  const mineGround = (block: { position?: { x: number; y: number; z: number }; name?: string }): number =>
+    block.position && noDig(block.position) && !(walledIn() && WALL_FILLERS.has(block.name ?? "")) ? 10_000 : 0;
+  moves.exclusionAreasBreak = [keepOut, floods, mineShell, mineGround] as unknown as typeof moves.exclusionAreasBreak;
   // Never a scaffold block in its own shelter's stairs, doorways or room (a
   // walk out of it put dirt in a furniture spot, fresh-world test)
   const ownSpace = (block: { position?: { x: number; y: number; z: number } }): number =>

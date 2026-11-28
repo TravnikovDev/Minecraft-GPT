@@ -508,3 +508,33 @@ test("the ore a tunnel column uncovers, and the vein behind it, within reach, at
   const big = (p: any) => (p.x >= 1 ? "iron_ore" : "stone");
   expect(veinFrom(column, big, () => true).length).toBe(VEIN_MAX);
 });
+
+test("the ground beside its shallow stairs is never dug by a walk (owner: shortcuts dug from the grass into the stairs; the way in is through the shelter)", async () => {
+  const { mineGroundBand, GROUND_BAND } = await import(`${ROOT}/src/skills/mine.ts`);
+  const movements = await import(`${ROOT}/src/core/movements.ts`);
+  expect(GROUND_BAND).toBe(3);
+  // Two steps going south and down, open 2 high
+  const open = [
+    { x: 124, y: 61, z: -100 },
+    { x: 124, y: 62, z: -100 },
+    { x: 124, y: 60, z: -99 },
+    { x: 124, y: 61, z: -99 },
+  ];
+  const band = mineGroundBand(open, 66);
+  const has = (x: number, y: number, z: number) => band.some((c: { x: number; y: number; z: number }) => c.x === x && c.y === y && c.z === z);
+  // The game test's trench, 2 off the stairs, from the grass down
+  expect(has(126, 66, -99)).toBe(true);
+  expect(has(126, 63, -100)).toBe(true);
+  expect(has(127, 61, -99)).toBe(true);
+  // The stairs' own open cells are not in it; past the band and above the top it ends
+  expect(has(124, 61, -100)).toBe(false);
+  expect(has(128, 63, -100)).toBe(false);
+  expect(has(126, 67, -100)).toBe(false);
+  // Under the lowest step of a column: not in it
+  expect(has(124, 59, -99)).toBe(false);
+  // The walking rules: no walk digs there
+  movements.setNoDig(band, "mine");
+  expect(movements.noDig({ x: 126.4, y: 64.2, z: -100.7 })).toBe(true);
+  expect(movements.noDig({ x: 130, y: 64, z: -100 })).toBe(false);
+  movements.setNoDig([], "mine");
+});
