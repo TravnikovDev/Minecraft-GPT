@@ -689,3 +689,18 @@ test("every floor a crafting table; a furnace and a chest on every second floor 
   const { floorHasStore, floorName } = await import(`${ROOT}/src/skills/mine.ts`);
   expect([0, 1, 2, 3, 4, 5].filter(floorHasStore).map(floorName)).toEqual(["2nd floor", "4th floor", "6th floor"]);
 });
+
+test("a lone water spring (one or two joined sources) is sealed; a lake's many sources are left", async () => {
+  const { loneSprings } = await import(`${ROOT}/src/skills/mine.ts`);
+  type P = { x: number; y: number; z: number };
+  const k = (p: P) => `${p.x},${p.y},${p.z}`;
+  const set = (ps: P[]) => new Set(ps.map(k));
+  // One source in a wall, its flow running down (flowing water isn't a source)
+  const spring = set([{ x: 0, y: 0, z: 0 }]);
+  expect(loneSprings([{ x: 0, y: 0, z: 0 }], (p: P) => spring.has(k(p)))).toEqual([{ x: 0, y: 0, z: 0 }]);
+  // A lake: 3 x 3 sources
+  const lake: P[] = [];
+  for (let x = 10; x < 13; x++) for (let z = 0; z < 3; z++) lake.push({ x, y: 0, z });
+  const lakeSet = set(lake);
+  expect(loneSprings(lake, (p: P) => lakeSet.has(k(p)))).toEqual([]);
+});

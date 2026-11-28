@@ -1711,6 +1711,70 @@ async function clearLeftovers(): Promise<number> {
   return cleared;
 }
 
+// A group of joined water sources this small is a lone spring to seal (a
+// lake, a river or an underground sea has many more)
+export const SPRING_MAX = 2;
+// How near it looks for springs while it works in its mine
+const SPRING_LOOK = 10;
+
+/**
+ * The lone springs among water `sources`: those in a group of joined source
+ * blocks (face to face) of SPRING_MAX or fewer. Pure over `isSource`.
+ */
+export function loneSprings(sources: Pos[], isSource: (p: Pos) => boolean, max = SPRING_MAX): Pos[] {
+  const key = (p: Pos): string => `${p.x},${p.y},${p.z}`;
+  const out: Pos[] = [];
+  const decided = new Map<string, boolean>();
+  for (const s of sources) {
+    if (decided.has(key(s))) {
+      if (decided.get(key(s))) out.push(s);
+      continue;
+    }
+    const group = new Map<string, Pos>([[key(s), s]]);
+    const queue = [s];
+    while (queue.length > 0 && group.size <= max) {
+      const c = queue.shift()!;
+      for (const d of SIX) {
+        const n = { x: c.x + d.x, y: c.y + d.y, z: c.z + d.z };
+        if (group.has(key(n)) || !isSource(n)) continue;
+        group.set(key(n), n);
+        queue.push(n);
+      }
+    }
+    const lone = group.size <= max;
+    for (const k of group.keys()) decided.set(k, lone);
+    if (lone) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Lone water springs near it in its mine sealed: a block put in each source
+ * (the water it fed drains away). A lake or an underground sea is left be.
+ * How many it sealed.
+ */
+async function sealSprings(): Promise<number> {
+  const id = bot.registry.blocksByName["water"]?.id;
+  if (id === undefined || !bot.entity) return 0;
+  const isSource = (p: Pos): boolean => {
+    const b = bot.blockAt(new Vec3(p.x, p.y, p.z));
+    return b !== null && b.name === "water" && Number(b.getProperties()["level"] ?? 0) === 0;
+  };
+  const sources = bot.findBlocks({ matching: [id], maxDistance: SPRING_LOOK, count: 128 }).filter(isSource);
+  const springs = loneSprings(sources, isSource).slice(0, 4);
+  if (springs.length === 0) return 0;
+  await stockStairsFillers(springs.length);
+  let sealed = 0;
+  for (const p of springs) {
+    if (isCommandCancelled() || hurtInTheMine()) break;
+    const c = new Vec3(p.x, p.y, p.z);
+    if (!withinReach(c) && !(await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 3)))).ok) continue;
+    if (await ensureBlock(c, () => false, CAVE_FILL)) sealed++;
+  }
+  if (sealed > 0) console.log(`Mine: sealed ${sealed} water spring${sealed === 1 ? "" : "s"} near my tunnels.`);
+  return sealed;
+}
+
 /**
  * Its floors looked after on a trip (owner): every way in from outside
  * blocked, the blocks it left in the tunnels taken out, every ore the
@@ -1722,6 +1786,8 @@ export async function lookAfterFloors(): Promise<void> {
   await sealPokeCaves();
   if (isCommandCancelled()) return;
   await sealMineFromOutside();
+  if (isCommandCancelled()) return;
+  await sealSprings();
   if (isCommandCancelled()) return;
   await clearLeftovers();
   if (isCommandCancelled()) return;
