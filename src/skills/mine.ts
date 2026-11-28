@@ -982,6 +982,60 @@ export function caveOpenings(cells: Pos[], own: Set<string>, open: (p: Pos) => b
   return out;
 }
 
+// An air pocket this big or more is a cave to seal; smaller ones are left
+// open (owner, 2026-11-28: "small air pockets aren't the problem, mobs won't
+// spawn there; under 100 air blocks")
+export const SMALL_POCKET = 100;
+
+/**
+ * The cave openings to plug: those whose air pocket (the air joined to them,
+ * not its own tunnel cells, `own`) has SMALL_POCKET cells or more. A pocket
+ * that meets water or lava, or runs out of what it knows (unloaded), counts
+ * as big. Openings into one pocket share its size. Pure over `nameAt`.
+ */
+export function openingsToPlug(holes: Pos[], own: Set<string>, nameAt: (p: Pos) => string | null, limit = SMALL_POCKET): Pos[] {
+  const key = (p: Pos): string => `(${p.x}, ${p.y}, ${p.z})`;
+  const pocketOf = new Map<string, boolean>(); // opening -> its pocket is big
+  for (const h of holes) {
+    if (pocketOf.has(key(h))) continue;
+    const seen = new Set<string>([key(h)]);
+    const queue: Pos[] = [h];
+    let big = false;
+    while (queue.length > 0 && !big) {
+      const c = queue.shift()!;
+      for (const d of SIX) {
+        const n = { x: c.x + d.x, y: c.y + d.y, z: c.z + d.z };
+        const k = key(n);
+        if (seen.has(k) || own.has(k)) continue;
+        const name = nameAt(n);
+        if (name === null || /water|lava/.test(name)) {
+          big = true;
+          break;
+        }
+        if (!/^(air|cave_air)$/.test(name) && !/torch/.test(name)) continue;
+        seen.add(k);
+        if (seen.size >= limit) {
+          big = true;
+          break;
+        }
+        queue.push(n);
+      }
+    }
+    // Every opening of this pocket gets its answer
+    for (const o of holes) if (seen.has(key(o))) pocketOf.set(key(o), big);
+    pocketOf.set(key(h), big);
+  }
+  return holes.filter((h) => pocketOf.get(key(h)));
+}
+
+/** The openings to plug, live: small pockets left open (logged). */
+function bigCaveOpenings(holes: Pos[], own: Set<string>): Pos[] {
+  if (holes.length === 0) return holes;
+  const big = openingsToPlug(holes, own, (p) => bot.blockAt(new Vec3(p.x, p.y, p.z))?.name ?? null);
+  if (big.length < holes.length) console.log(`Mine: ${holes.length - big.length} opening(s) into a small air pocket (under ${SMALL_POCKET} blocks) left open.`);
+  return big;
+}
+
 /**
  * Its pokeholes sealed off from the caves they opened into (owner: a
  * pokehole that reveals a cavern has its tip sealed; the tip was never
@@ -1009,7 +1063,7 @@ async function sealPokeCaves(cells?: Vec3[], alsoOwn: Vec3[] = []): Promise<numb
   // stretch yet, and it filled the new pokehole itself with cobblestone)
   for (const c of [...(cells ?? pokeCellsAsDug(rec, open)), ...alsoOwn]) own.add(c.toString());
   for (const k of minedOre) own.add(k);
-  const holes = caveOpenings(pokes, own, open);
+  const holes = bigCaveOpenings(caveOpenings(pokes, own, open), own);
   if (holes.length === 0) return 0;
   const plugged = await plugFromInside(holes, pokes, `my pokeholes open into a cave (${holes.length} openings)`);
   if (!cells && plugged === 0) sealIdleUntil = Date.now() + SEAL_RETRY_MS;
@@ -1035,7 +1089,7 @@ async function sealRoomCaves(hub: Vec3, arrive: DirectionType, level: number): P
   };
   const own = new Set<string>([...floorsAsDug(rec), ...mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk, ...room].map((c) => c.toString()));
   for (const k of minedOre) own.add(k);
-  const holes = caveOpenings(room, own, open);
+  const holes = bigCaveOpenings(caveOpenings(room, own, open), own);
   if (holes.length === 0) return 0;
   return plugFromInside(holes, room, `my ${floorName(level)}'s room opens into a cave (${holes.length} openings)`);
 }
@@ -1186,6 +1240,8 @@ function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number):
     before: async (col) => {
       const cave = caveAt(kind, col, ahead, across, height, open);
       if (!cave.stopBefore) return "go";
+      // A pokehole meeting a small air pocket digs on through it
+      if (kind === "poke" && bigCaveOpenings(cave.before, dugCells).length === 0) return "go";
       await oreFromTheOpening();
       await plugCave(cave.before, `my ${what} meets ${kind === "sleeve" ? "a big cave" : "a cave"} at ${col}`);
       return "stop";
@@ -1199,12 +1255,14 @@ function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number):
       // mine this out immediately"; architect review: per column, cave
       // first, ore holes counted as its own so they're never "a cave")
       const cave = caveAt(kind, col, ahead, across, height, open);
-      if (cave.around.length > 0) {
+      // Small air pockets beside it are left open; only a real cave is plugged
+      const around = bigCaveOpenings(cave.around, dugCells);
+      if (around.length > 0) {
         await oreFromTheOpening();
-        await plugCave(cave.around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
+        await plugCave(around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
       }
       await mineOreAround(column, dugCells);
-      return cave.around.length > 0 && cave.stopAfter ? "stop" : "go";
+      return around.length > 0 && cave.stopAfter ? "stop" : "go";
     },
   };
 }

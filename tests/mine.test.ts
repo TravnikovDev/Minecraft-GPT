@@ -615,3 +615,29 @@ test("the ground beside its shelter: a shaft dug from the grass is a hole to fil
   // Nothing over the surface is filled
   expect(shelterGroundHoles(band(open, 65), 62, () => "air").every((h: { y: number }) => h.y <= 62)).toBe(true);
 });
+
+test("cave openings: an air pocket under 100 blocks is left open, a bigger one (or one with water, or running off what it knows) is plugged", async () => {
+  const { openingsToPlug, SMALL_POCKET } = await import(`${ROOT}/src/skills/mine.ts`);
+  expect(SMALL_POCKET).toBe(100);
+  type P = { x: number; y: number; z: number };
+  const k = (p: P) => `${p.x},${p.y},${p.z}`;
+  // Its tunnel: x 0, y 0..1, z 0..9 (its own cells)
+  const own = new Set<string>();
+  for (let z = 0; z < 10; z++) for (let y = 0; y < 2; y++) own.add(`(0, ${y}, ${z})`);
+  const box = (x0: number, x1: number, y1: number, z1: number) => {
+    const s = new Set<string>();
+    for (let x = x0; x <= x1; x++) for (let y = 0; y <= y1; y++) for (let z = 0; z <= z1; z++) s.add(`${x},${y},${z}`);
+    return s;
+  };
+  const world = (air: Set<string>, extra: Record<string, string> = {}) => (p: P) => extra[k(p)] ?? (air.has(k(p)) || own.has(`(${p.x}, ${p.y}, ${p.z})`) ? "air" : "stone");
+  // A small pocket beside it: x 1..3, y 0..2, z 0..3 = 36 cells; two openings into it
+  const small = box(1, 3, 2, 3);
+  const holes = [{ x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 2 }];
+  expect(openingsToPlug(holes, own, world(small))).toEqual([]);
+  // A big one: x 1..6, y 0..4, z 0..9 = 300 cells
+  expect(openingsToPlug(holes, own, world(box(1, 6, 4, 9)))).toEqual(holes);
+  // Small, but water in it: plugged
+  expect(openingsToPlug(holes, own, world(small, { "3,0,3": "water" })).length).toBe(2);
+  // Small, but it runs into the unknown (unloaded): plugged
+  expect(openingsToPlug(holes, own, (p: P) => (p.x === 4 ? null : world(small)(p)))).toEqual(holes);
+});
