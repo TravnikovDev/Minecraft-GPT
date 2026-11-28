@@ -35,3 +35,16 @@ test("a site is worth the ore its mine's plan would uncover: in a tunnel or agai
   expect(moved.worth).toBeLessThan(v.worth);
   expect(planTouch("south").size).toBeGreaterThan(ARM_LENGTH * 4 * 3);
 });
+
+test("underground first, then the most ore (owner: both, an underground shelter plus the most ore in its tunnels)", async () => {
+  const { pickOrder, BURIED_GAPS } = await import(`${ROOT}/src/actions/building.ts`);
+  expect(BURIED_GAPS).toBe(3);
+  const buried = [
+    { id: "a", gaps: 0, worth: 900 },
+    { id: "b", gaps: 2, worth: 1400 },
+    { id: "c", gaps: 0, worth: 1400 },
+  ];
+  // A slope spot with far more ore still comes after every buried one
+  const rest = [{ id: "slope", gaps: 52, worth: 0 }];
+  expect(pickOrder(buried, rest).map((c: { id: string }) => c.id)).toEqual(["c", "b", "a", "slope"]);
+});

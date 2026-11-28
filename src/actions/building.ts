@@ -242,64 +242,89 @@ function underRoof(p: Vec3): boolean {
 
 /** The first spot and direction where the whole shelter can be dug (natural ground, no water or lava). */
 export function chooseSite(around: Vec3, room: RoomSize, depth: number, accept: (exit: Vec3, dir: DirectionType) => boolean = () => true, value?: (exit: Vec3, dir: DirectionType) => number): { start: Vec3; dir: DirectionType } | null {
+  if (value) return chooseFirstHome(around, room, depth, accept, value);
   const spots = [around];
-  if (value) {
-    // Its first home, placed for its mine's ore (owner: "5 blocks further it
-    // would get more ore"): every spot on a grid round here, SITE_GRID apart
-    for (let dx = -SITE_REACH; dx <= SITE_REACH; dx += SITE_GRID) for (let dz = -SITE_REACH; dz <= SITE_REACH; dz += SITE_GRID) if (dx !== 0 || dz !== 0) spots.push(around.offset(dx, 0, dz));
-  } else {
-    for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
-  }
-  // Every spot it can dig and every way its stairs could go: the shelter's plan
-  const candidates: Array<{ start: Vec3; dir: DirectionType; plan: ReturnType<typeof shelterPlan>; worth: number }> = [];
-  for (const spot of spots) {
-    let start: Vec3 | null = null;
-    for (let dy = 4; dy >= -4 && !start; dy--) {
-      const p = spot.offset(0, dy, 0);
-      const here = bot.blockAt(p);
-      const below = bot.blockAt(p.offset(0, -1, 0));
-      if (here && below && here.boundingBox === "empty" && below.boundingBox === "block") start = p;
-    }
-    if (!start || underRoof(start)) continue;
-    for (const dir of DIRECTIONS) {
-      const plan = shelterPlan(start, dir, room, depth);
-      candidates.push({ start, dir, plan, worth: value ? value(plan.exit, dir) : 0 });
-    }
-  }
-  // The most ore first (a stable sort: otherwise the nearest first)
-  if (value) candidates.sort((a, b) => b.worth - a.worth);
+  for (const r of [6, 10, 16]) for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) spots.push(around.offset(dx!, 0, dz!));
   // Any spot it can dig (no water, lava or buildings) will do: missing walls,
   // roof and floor get built (patchShell). Among them, the one with the least
   // to build, preferring the closest when it's a tie (owner: there won't
-  // always be a perfect spot); for its first home, the most ore its mine
-  // reaches, less a little for each block it has to build
-  let best: { start: Vec3; dir: DirectionType; gaps: number; worth: number; score: number } | null = null;
-  for (const c of candidates) {
-    // Sorted by ore: once even no building at all can't beat the best, none of the rest can
-    if (value && best && c.worth <= best.score) break;
-    if (!c.plan.cells.every((cell) => tunnelBlocked(cell) === null)) continue;
-    const gaps = shellGaps(c.plan.shell, c.plan.roomStart.y + room.height, (p) => bot.blockAt(p));
-    const score = value ? c.worth - gaps * GAP_COST : -gaps;
-    if (best && score <= best.score) continue;
-    // (and, for a first home, a dry way down for its mine from the exit)
-    if (!accept(c.plan.exit, c.dir)) continue;
-    best = { start: c.start, dir: c.dir, gaps, worth: c.worth, score };
-    if (!value && best.gaps === 0) break; // can't do better than solid ground all round
+  // always be a perfect spot)
+  let best: { start: Vec3; dir: DirectionType; gaps: number } | null = null;
+  for (const spot of spots) {
+    const start = standSpot(spot);
+    if (!start) continue;
+    for (const dir of DIRECTIONS) {
+      const plan = shelterPlan(start, dir, room, depth);
+      if (!plan.cells.every((c) => tunnelBlocked(c) === null)) continue;
+      if (!accept(plan.exit, dir)) continue;
+      const gaps = shellGaps(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p));
+      if (!best || gaps < best.gaps) best = { start, dir, gaps };
+    }
+    if (best?.gaps === 0) break; // can't do better than solid ground all round
   }
-  if (best && value) console.log(`Shelter site at ${best.start} going ${best.dir}: its mine's plan reaches ore worth ${best.worth} (${candidates.length} spots and ways weighed, ${best.gaps} blocks to build).`);
-  else if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
+  if (best && best.gaps > 0) console.log(`Shelter site at ${best.start} going ${best.dir}: ${best.gaps} blocks of wall, roof or floor to build.`);
   return best ? { start: best.start, dir: best.dir } : null;
 }
 
-// Its first home's spot search: this far round, on a grid this fine. A
-// block of wall or roof to build costs this much ore worth (about a dozen
-// iron): its home is underground, dug into solid ground all round (owner,
-// 2026-11-28: "I want this shelter underground; outside we'll build a house
-// later"; at 0.5 the ore won and it built 52 blocks of dirt wall up on a
-// slope), and the ore decides between spots that are as well buried
-const SITE_REACH = 15;
-const SITE_GRID = 3;
-const GAP_COST = 50;
+/** Where a shelter would start at a spot: open ground with solid under it, within 4 up or down, not under a roof. */
+function standSpot(spot: Vec3): Vec3 | null {
+  for (let dy = 4; dy >= -4; dy--) {
+    const p = spot.offset(0, dy, 0);
+    const here = bot.blockAt(p);
+    const below = bot.blockAt(p.offset(0, -1, 0));
+    if (here && below && here.boundingBox === "empty" && below.boundingBox === "block") return underRoof(p) ? null : p;
+  }
+  return null;
+}
+
+// Its first home's spot search: every spot on a grid this fine this far
+// round. Buried: at most this many blocks of wall or roof to build
+const SITE_REACH = 24;
+const SITE_GRID = 2;
+export const BURIED_GAPS = 3;
+
+/**
+ * Its first home (owner, 2026-11-28: both, "an underground shelter as usual,
+ * plus the most ore in its tunnels; there are dozens of possible
+ * placements"): every spot on a grid round here and every way its stairs
+ * could go. Underground first: only the spots dug into solid ground all
+ * round (BURIED_GAPS or fewer blocks to build; with none, the best buried
+ * there is); among those, the one whose mine's plan reaches the most ore,
+ * and passes the checks (diggable, no water, lava or caves on the way down).
+ */
+function chooseFirstHome(around: Vec3, room: RoomSize, depth: number, accept: (exit: Vec3, dir: DirectionType) => boolean, value: (exit: Vec3, dir: DirectionType) => number): { start: Vec3; dir: DirectionType } | null {
+  const candidates: Array<{ start: Vec3; dir: DirectionType; plan: ReturnType<typeof shelterPlan>; gaps: number; worth: number }> = [];
+  for (let dx = -SITE_REACH; dx <= SITE_REACH; dx += SITE_GRID) {
+    for (let dz = -SITE_REACH; dz <= SITE_REACH; dz += SITE_GRID) {
+      const start = standSpot(around.offset(dx, 0, dz));
+      if (!start) continue;
+      for (const dir of DIRECTIONS) {
+        const plan = shelterPlan(start, dir, room, depth);
+        candidates.push({ start, dir, plan, gaps: shellGaps(plan.shell, plan.roomStart.y + room.height, (p) => bot.blockAt(p)), worth: 0 });
+      }
+    }
+  }
+  if (candidates.length === 0) return null;
+  const cut = Math.max(BURIED_GAPS, Math.min(...candidates.map((c) => c.gaps)));
+  const buried = candidates.filter((c) => c.gaps <= cut);
+  // The ore only for the buried ones (the expensive part)
+  for (const c of buried) c.worth = value(c.plan.exit, c.dir);
+  for (const c of pickOrder(buried, candidates.filter((c) => c.gaps > cut))) {
+    if (!c.plan.cells.every((cell) => tunnelBlocked(cell) === null)) continue;
+    if (!accept(c.plan.exit, c.dir)) continue;
+    console.log(`Shelter site at ${c.start} going ${c.dir}: ${c.gaps} blocks to build, its mine's plan reaches ore worth ${c.worth} (best of ${buried.length} buried spots and ways, ${candidates.length} weighed).`);
+    return { start: c.start, dir: c.dir };
+  }
+  return null;
+}
+
+/**
+ * The order to try sites in: the buried ones by ore (most first, then the
+ * least to build), then the rest by the least to build. Pure.
+ */
+export function pickOrder<T extends { gaps: number; worth: number }>(buried: T[], rest: T[]): T[] {
+  return [...[...buried].sort((a, b) => b.worth - a.worth || a.gaps - b.gaps), ...[...rest].sort((a, b) => a.gaps - b.gaps)];
+}
 
 /** The latest shelter place in this dimension (finished or not). */
 function shelterPlace(includeUnfinished: boolean) {
