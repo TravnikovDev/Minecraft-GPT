@@ -96,6 +96,16 @@ export async function clearAroundHome(): Promise<ActionResult> {
     for (const l of trunk) skip.add(l.position.toString());
   }
   if (felled > 0) chatter(`Cut down ${felled} tree${felled === 1 ? "" : "s"} round my home (no shade for mobs to hide in).`, "clearing");
+  // Its logs piling up: charcoal in its home furnace for torches, and torches
+  // made (owner, 2026-11-28: "after the clearing chore, if there's a lot of
+  // wood, make charcoal: we need a lot of torches")
+  if (felled > 0 && !isCommandCancelled()) {
+    try {
+      await (await import("./workshop")).workshop();
+    } catch (error) {
+      console.log(`Clearing: the workshop failed: ${(error as Error).message}`);
+    }
+  }
   const left = treesNearHome().length;
   return left < CLEARED_BELOW ? ok() : fail("not_found", `${left} logs of trees round my home still standing`);
 }

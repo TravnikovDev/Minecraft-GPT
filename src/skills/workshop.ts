@@ -16,6 +16,8 @@ import { goTo, knownBlock } from "../core/primitives";
 import { fail, ok, type ActionResult } from "../core/result";
 import { isCommandCancelled } from "../core/commandContext";
 import { chatter } from "../core/narrator";
+import { catalog } from "../core/catalog";
+import { CARRIED_LOGS } from "../actions/storage";
 
 // What it smelts, first first: raw ores always; the rest only past a pile
 export const SMELT_JOBS: Array<{ input: string; output: string; above: number }> = [
@@ -48,8 +50,25 @@ async function makePlanks(want: number): Promise<void> {
   const name = woodPlanksName();
   await acquire(name, carried(name) + want, liveWorld);
 }
-// Torches kept on hand and in its chests
-const TORCH_STOCK = 32;
+// Torches kept on hand and in its chests (owner, 2026-11-28: "we need a lot of torches")
+const TORCH_STOCK = 64;
+// Charcoal from spare logs (owner, 2026-11-28: "after the clearing chore, if
+// there's a lot, make charcoal: we need a lot of torches"): while its light
+// (torches, and coal and charcoal at 4 torches each; bag and chests) is under
+// LIGHT_WANTED and it has CHARCOAL_LOGS spare logs (beyond its 20) or more
+export const LIGHT_WANTED = 128;
+export const CHARCOAL_LOGS = 32;
+
+/**
+ * How many logs to smelt into charcoal now: what its light is short of, at
+ * most a stack, and only what its spare logs cover with the planks to burn
+ * (a log makes 4 planks, a plank smelts 1.5: a log of fuel for 6). 0 when its
+ * light is enough or its spare logs are few. Pure.
+ */
+export function charcoalBatch(light: number, spareLogs: number): number {
+  if (light >= LIGHT_WANTED || spareLogs < CHARCOAL_LOGS) return 0;
+  return Math.max(0, Math.min(BATCH, Math.ceil((LIGHT_WANTED - light) / 4), Math.floor((spareLogs * 6) / 7)));
+}
 // What it keeps carrying for its own work: the workshop never takes the
 // carried stock below this (review: it burned the coal it carried, the coal
 // milestone reopened and sent it down the mine; it smelted the cobblestone
@@ -71,8 +90,13 @@ export function pickSmeltJob(
 }
 
 const carried = (name: string): number => bot.inventory.items().filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
-/** What it carries beyond what it keeps for its own work. */
-const spare = (name: string): number => Math.max(0, carried(name) - (KEEP_CARRIED[name] ?? 0));
+const isLog = (name: string): boolean => catalog().isLog(name);
+const carriedLogs = (): number => bot.inventory.items().filter((i) => isLog(i.name)).reduce((n, i) => n + i.count, 0);
+/** What it carries beyond what it keeps for its own work (logs: beyond its 20, whatever the kind). */
+const spare = (name: string): number => {
+  if (isLog(name)) return Math.max(0, Math.min(carried(name), carriedLogs() - CARRIED_LOGS));
+  return Math.max(0, carried(name) - (KEEP_CARRIED[name] ?? 0));
+};
 
 /**
  * Brings `want` spare of `name` from its chests: what it keeps carrying is
@@ -136,6 +160,21 @@ export async function takeFromHomeFurnace(names: string[]): Promise<number> {
   return took;
 }
 
+/** Its light now, in torches: torches, coal and charcoal (4 each), carried and in its chests. */
+async function lightOwned(): Promise<number> {
+  const { storedNear } = await import("../actions/storage");
+  // (looking for coal in its chests finds charcoal too)
+  return carried("torch") + storedNear("torch", 32) + 4 * (carried("coal") + carried("charcoal") + storedNear("coal", 32));
+}
+
+/** Charcoal from spare logs while its light is short (see charcoalBatch), or null. */
+async function charcoalJob(): Promise<{ input: string; output: string; count: number } | null> {
+  const { storedNear } = await import("../actions/storage");
+  const spareLogs = Math.max(0, carriedLogs() - CARRIED_LOGS) + storedNear("logs", 32);
+  const count = charcoalBatch(await lightOwned(), spareLogs);
+  return count > 0 ? { input: "logs", output: "charcoal", count } : null;
+}
+
 /**
  * One visit to its home furnace: what's done taken out, the next batch and
  * fuel (from its chests, and what it carries beyond its own stock) put in,
@@ -173,16 +212,30 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
     const n = spare(name) + storedNear(name, 32);
     return name === "stone" ? Math.min(n, smooth) : n;
   };
-  const job = pickSmeltJob(have, (j) => (j.input === "cobblestone" && smooth > 0 ? 0 : j.above));
+  let job = pickSmeltJob(have, (j) => (j.input === "cobblestone" && smooth > 0 ? 0 : j.above));
+  // Raw ores first; then charcoal from spare logs while its light is short
+  if (!job || !job.input.startsWith("raw_")) job = (await charcoalJob()) ?? job;
   if (!job) return ok(done.concat("nothing to smelt").join("; "));
   // The batch from the chests (what it carries beyond its stock counts too)
-  if (storedNear(job.input, 32) > 0) await fetchSpare(job.input, job.count);
+  if (job.input === "logs") {
+    // Logs of any kind from its chests (its own 20 kept), then the kind it has most of
+    const short = job.count + Math.ceil(job.count / 6) - Math.max(0, carriedLogs() - CARRIED_LOGS);
+    if (short > 0 && storedNear("logs", 32) > 0) {
+      const { takeItems } = await import("../actions/storage");
+      await takeItems([{ name: "logs", count: short + Math.max(0, CARRIED_LOGS - carriedLogs()) }], true);
+    }
+    const kinds = [...new Set(bot.inventory.items().filter((i) => isLog(i.name)).map((i) => i.name))].sort((a, b) => carried(b) - carried(a));
+    if (!kinds[0]) return ok(done.concat("no spare logs for charcoal").join("; "));
+    job = { ...job, input: kinds[0] };
+  } else if (storedNear(job.input, 32) > 0) await fetchSpare(job.input, job.count);
   const n = Math.min(spare(job.input), job.count);
   if (n === 0) return ok(done.concat("nothing to smelt").join("; "));
   // With a lot of wood about, planks burn and the coal is kept for torches
   // (owner); else coal, then charcoal
   const { woodPlenty, woodNow } = await import("../actions/fuel");
   const planksName = woodPlenty(woodNow()) ? woodPlanksName() : null;
+  // Charcoal burns planks, never the coal it's there to save
+  if (job.output === "charcoal" && !planksName) return ok(done.concat("not enough wood to burn for charcoal").join("; "));
   const fuelNeeded = fueled ? 0 : Math.ceil(n / (planksName ? PER_PLANK : PER_FUEL));
   // (looking for coal in its chests finds charcoal too: what it has in hand decides)
   let fuelName = planksName ?? "coal";
@@ -202,6 +255,9 @@ export async function tendFurnace(): Promise<ActionResult<string>> {
     const loaded = await windowStep(`putting ${job.input} in`, () => window!.putInput(bot.registry.itemsByName[job.input]!.id, null, Math.min(n, spare(job.input))));
     if (!loaded.ok) return loaded;
     done.push(`left ${n} ${job.input.replace(/_/g, " ")} smelting into ${job.output.replace(/_/g, " ")}`);
+    // Checked between its tasks once it should be done (cooking's furnaces left cooking)
+    const inIt = window.inputItem();
+    if (inIt) (await import("../actions/cooking")).noteOvenLeft(furnace, inIt.name, inIt.count);
   } finally {
     closeWindow(window);
   }
@@ -219,7 +275,11 @@ export async function topUpTorches(): Promise<void> {
   const torches = carried("torch") + storedNear("torch", 32);
   if (torches >= TORCH_STOCK) return;
   const coalWanted = Math.ceil((TORCH_STOCK - torches) / 4);
-  if (storedNear("coal", 32) > 0) await fetchSpare("coal", coalWanted);
+  // (coal from its chests finds charcoal too: whichever it takes is spare)
+  if (storedNear("coal", 32) > 0) {
+    await fetchSpare("coal", coalWanted);
+    if (spare("coal") + spare("charcoal") < coalWanted) await fetchSpare("charcoal", coalWanted - spare("coal"));
+  }
   const { catalog } = await import("../core/catalog");
   const items = bot.inventory.items();
   const planks = items.filter((i) => i.name.endsWith("_planks")).reduce((n, i) => n + i.count, 0);

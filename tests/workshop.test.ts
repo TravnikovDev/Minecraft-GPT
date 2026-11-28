@@ -26,3 +26,17 @@ test("smooth stone only while the shelter wants it: stone smelted, and cobblesto
   expect(pickSmeltJob(stock({ stone: 20, cobblestone: 200 }), wanted)).toEqual({ input: "stone", output: "smooth_stone", count: 20 });
   expect(pickSmeltJob(stock({ cobblestone: 200 }), wanted)).toEqual({ input: "cobblestone", output: "stone", count: 64 });
 });
+
+test("charcoal from spare logs (owner: lots of wood after the clearing, and torches wanted): only while its light is short and it has 32+ spare logs", () => {
+  const { charcoalBatch, LIGHT_WANTED, CHARCOAL_LOGS } = require(`${ROOT}/src/skills/workshop.ts`);
+  expect(LIGHT_WANTED).toBe(128);
+  expect(CHARCOAL_LOGS).toBe(32);
+  // Light enough, or few spare logs: none
+  expect(charcoalBatch(128, 200)).toBe(0);
+  expect(charcoalBatch(0, 31)).toBe(0);
+  // Short by 128 torches: 32 charcoal; its 40 spare logs cover 34 with the planks to burn
+  expect(charcoalBatch(0, 40)).toBe(32);
+  expect(charcoalBatch(0, 35)).toBe(30);
+  // Nearly enough light: only what's short (4 torches a charcoal)
+  expect(charcoalBatch(120, 100)).toBe(2);
+});

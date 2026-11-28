@@ -189,6 +189,9 @@ function noteLeft(oven: Block, input: string, count: number): void {
   leftOvens.push({ x: p.x, y: p.y, z: p.z, oven: oven.name, input, count, readyAt: Date.now() + count * (OVEN_ITEM_MS[oven.name] ?? 10_000), tries: 0 });
 }
 
+/** A furnace it loaded and left elsewhere (the workshop's batch): checked between its tasks too. */
+export const noteOvenLeft = (oven: Block, input: string, count: number): void => noteLeft(oven, input, count);
+
 /** The furnaces it left cooking (a copy). */
 export const ovensLeft = (): LeftOven[] => leftOvens.map((o) => ({ ...o }));
 
