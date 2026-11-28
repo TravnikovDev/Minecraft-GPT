@@ -173,3 +173,16 @@ test("fields keep off the way its mine's stairs go from the shelter's back door 
   expect(onMineWay({ x: -63, z: 30 }, way)).toBe(false); // past the stairs' way
   expect(onMineWay({ x: -63, z: -11 }, null)).toBe(false); // no shelter yet
 });
+
+test("a field by water: its cells within 4 of a river stay moist (owner: the field by the river grew faster)", async () => {
+  const { hydratedCells } = await import(`${ROOT}/src/skills/farm.ts`);
+  const middle = { x: 0, y: 64, z: 0 };
+  // No water near: none
+  expect(hydratedCells(middle, 4, () => false)).toBe(0);
+  // A deep river along x 6 (beyond the field's edge at 4 and its fence at 5): the 3 columns nearest it, all 9 rows
+  const river = (x: number, y: number) => x >= 6 && x <= 9 && y <= 64 && y >= 60;
+  expect(hydratedCells(middle, 4, (x: number, y: number) => river(x, y))).toBe(3 * 9);
+  // A shallow pond in the same place: levelling fills the part in the field's area, so less of it counts
+  const pond = (x: number, y: number) => x >= 6 && x <= 9 && y === 64;
+  expect(hydratedCells(middle, 4, (x: number, y: number) => pond(x, y))).toBeLessThan(3 * 9);
+});

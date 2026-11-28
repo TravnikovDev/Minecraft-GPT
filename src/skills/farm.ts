@@ -363,12 +363,54 @@ export function onMineWay(p: { x: number; z: number }, way: { exit: { x: number;
   return along >= -1 && along <= MINE_WAY_LENGTH && across <= MINE_WAY_HALF_WIDTH;
 }
 
+// How far water keeps farmland moist (blocks across, the game's rule)
+const HYDRATE_REACH = 4;
+
+/**
+ * How many of a plot's cells (all but its middle) natural water would keep
+ * moist: water within HYDRATE_REACH across, at the farmland's level or one
+ * up. Pure over `isWater`.
+ */
+export function hydratedCells(middle: P3, half: number, isWater: (x: number, y: number, z: number) => boolean): number {
+  let n = 0;
+  for (let dx = -half; dx <= half; dx++) {
+    for (let dz = -half; dz <= half; dz++) {
+      if (dx === 0 && dz === 0) continue;
+      const x = middle.x + dx;
+      const z = middle.z + dz;
+      let wet = false;
+      for (let wx = -HYDRATE_REACH; wx <= HYDRATE_REACH && !wet; wx++) {
+        for (let wz = -HYDRATE_REACH; wz <= HYDRATE_REACH && !wet; wz++) {
+          // Shallow water inside the plot, its fence's ring or the path round
+          // it doesn't count: levelling fills it with dirt (a deep river stays)
+          const inArea = Math.abs(dx + wx) <= half + 2 && Math.abs(dz + wz) <= half + 2;
+          if (inArea && !isWater(x + wx, middle.y - MAX_DIP, z + wz)) continue;
+          if (isWater(x + wx, middle.y, z + wz) || isWater(x + wx, middle.y + 1, z + wz)) wet = true;
+        }
+      }
+      if (wet) n++;
+    }
+  }
+  return n;
+}
+
 /**
  * A plot by its home (owner: a field by the shelter, levelled with dirt,
  * not a flat one far off): the biggest size whose levelling fits its
  * budget, the least work of that size, nearest on a tie.
  */
 function findPlot(home: P3): { middle: P3; half: number } | null {
+  // Water blocks it can see (looked up once each)
+  const wetSeen = new Map<string, boolean>();
+  const isWater = (x: number, y: number, z: number): boolean => {
+    const k = `${x},${y},${z}`;
+    let w = wetSeen.get(k);
+    if (w === undefined) {
+      w = /^(water|bubble_column)$/.test(bot.blockAt(new Vec3(x, y, z))?.name ?? "") || knownBlock(new Vec3(x, y, z))?.getProperties?.()["waterlogged"] === true;
+      wetSeen.set(k, w);
+    }
+    return w;
+  };
   // Never on another of its fields (or right against one: a path between)
   const fields = myFarms();
   const mineWay = shelterExitWay();
@@ -378,7 +420,7 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
     // (both fences and a path between them)
     const onField = (p: P3): boolean => fields.some((f) => Math.max(Math.abs(p.x - f.x), Math.abs(p.z - f.z)) <= f.reserve + half + 3);
     const kept = (p: P3): boolean => isProtected(p) || nearOwnPassage(p) || forbiddenAt(new Vec3(p.x, p.y, p.z)) !== null || onMineWay(p, mineWay);
-    let best: { middle: P3; cost: number; r: number } | null = null;
+    let best: { middle: P3; cost: number; r: number; wet: number } | null = null;
     for (let r = half + 3; r <= NEAR_HOME; r++) {
       for (let dx = -r; dx <= r; dx++) {
         for (let dz = -r; dz <= r; dz++) {
@@ -394,11 +436,17 @@ function findPlot(home: P3): { middle: P3; half: number } | null {
           if (cost === null) continue;
           if (cheapest === null || cost < cheapest) cheapest = cost;
           if (cost > LEVEL_BUDGET[half]!) continue;
-          if (!best || cost < best.cost) best = { middle, cost, r };
+          // By water first (owner: the field by the river grew faster: its
+          // farmland stays moist without a bucket), then the least work
+          const wet = hydratedCells(middle, half, isWater);
+          if (!best || wet > best.wet || (wet === best.wet && cost < best.cost)) best = { middle, cost, r, wet };
         }
       }
     }
-    if (best) return { middle: best.middle, half };
+    if (best) {
+      if (best.wet > 0) console.log(`Farm: a spot by water at ${best.middle.x}, ${best.middle.z}: ${best.wet} of its ${(2 * half + 1) ** 2 - 1} cells kept moist by it.`);
+      return { middle: best.middle, half };
+    }
   }
   // Why not, for the log
   console.log(`Farm: no spot by home: ${checked} checked, ${cheapest === null ? "none levellable (hills, trunks, a roof or kept ground)" : `the cheapest needs ${cheapest} blocks moved`}.`);
