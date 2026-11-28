@@ -265,15 +265,20 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const { lastTouchedLavaAt } = await import("./actions/lavaReflex");
   const lastDeathAt = deaths.at(-1)?.at ?? 0;
   const inLava = lastTouchedLavaAt() > 0 && Math.abs(lastDeathAt - lastTouchedLavaAt()) < LAVA_DEATH_MS;
-  // Died at night: its things are left (back out in the dark it would die
-  // again, and they're gone five minutes after the death)
+  // Died out in the open at night: its things are left (back out in the
+  // dark it would die again). Under ground the time of day changes nothing:
+  // it goes back for them as by day
   const { mobsOut } = await import("./core/daylight");
-  const atNight = mobsOut();
+  const { getLastDeath } = await import("./actions/recovery");
+  const { shelter } = await import("./skills/capabilities");
+  const died = getLastDeath();
+  const underground = died !== null && died.position.y < (shelter()?.y ?? 63) - 6;
+  const atNight = mobsOut() && !underground;
   const steps: Array<{ command: BotCommands; args: object }> = again || inLava || atNight ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
   if (atNight && !again && !inLava) {
     const { clearLastDeath } = await import("./actions/recovery");
     clearLastDeath();
-    reply("I died in the night; I won't go back out in the dark for my things.");
+    reply("I died out in the open in the night; I won't go back out in the dark for my things.");
   }
   if (inLava && !again) {
     const { clearLastDeath } = await import("./actions/recovery");
