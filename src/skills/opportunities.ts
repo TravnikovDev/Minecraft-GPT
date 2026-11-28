@@ -116,7 +116,7 @@ export function bestOreInSight(): Block | null {
     .filter((b) => catalog().canHarvest(b.name, pickaxe))
     .filter((b) => (failed.get(keyOf(b)) ?? 0) < now && !forbiddenAt(b.position) && tunnelBlocked(b.position) === null && mayWanderTo(b.position))
     .filter((b) => allowedNow(b))
-    // Plenty of it already (owner: no more copper past 64)
+    // Plenty of it already (owner: no more copper past 40)
     .filter((b) => !oreCapped(b.name))
     // Down in its mine, only ore its own tunnels opened up (the floor's
     // pass mines those); never a side trip dug to ore seen in a cave (owner:

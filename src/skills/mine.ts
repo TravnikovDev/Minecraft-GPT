@@ -1328,7 +1328,7 @@ async function mineExposedOresNow(): Promise<number> {
     for (const ore of ores) {
       if (isCommandCancelled() || hurtInTheMine()) break;
       if (!/_ore$/.test(bot.blockAt(ore)?.name ?? "")) continue;
-      // Plenty of it already: left in the wall (owner: no more copper past 64)
+      // Plenty of it already: left in the wall (owner: no more copper past 40)
       if (oreCapped(bot.blockAt(ore)?.name ?? "")) continue;
       // One its pickaxe can't mine: left for a better one (no walking to it for nothing)
       const pick = bestPickaxe();
@@ -2596,7 +2596,7 @@ async function mineOresInSight(wants: OreWant[]): Promise<void> {
   await whileGathering(async () => {
     for (const item of STRIP_ORES) {
       if (isCommandCancelled()) return;
-      if (oreCapped(item)) continue; // plenty of it (owner: copper past 64)
+      if (oreCapped(item)) continue; // plenty of it (owner: copper past 40)
       await collectBlock(item, 16, ORE_REACH, { seenOnly: true });
     }
   });

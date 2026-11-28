@@ -347,7 +347,7 @@ Every action now checks the world afterwards and says why it failed: *I can't fi
 - [ ] With a lot of wood (64 planks' worth beyond its 20 logs, bag and chests): its furnaces burn planks (workshop, cooking, smelting ore), coal kept for torches
 - [ ] At night it works on (milestones, trees, chores); a mob hurts it: "Attacked at night (zombie): off to my shelter", the night routine, in its shelter till morning
 - [ ] A new field never on the way of its mine's stairs (34 ahead of the shelter's back door, 2 either side); walks never go over its bed
-- [ ] With 64 copper (raw, ingots, blocks; bag and chests): copper ore in sight and in its tunnels' walls is left
+- [ ] With 40 copper (raw, ingots, blocks; chests and bag): copper ore in sight and in its tunnels' walls is left
 - [ ] Taking down scaffolding: walks to it never place blocks; a pillar too tall to reach from the ground gets a column of its own beside it, then both come down on the way back (no loop)
 - [ ] Coal drought: two coal trips that dug 60+ blocks and no coal ore ("Coal: a dry trip … 2 in a row"); with plenty of wood (bag+chests or 40 tree logs by home) the next coal goes "made N charcoal from spare wood" (logs from chests first, its 20 kept); torches use it too; at night with no spare logs, a mine trip instead; coal ore dug ends it
 - [ ] Hurt and backing off: a mob right on it (any kind) is fought ("cornered by cave_spider"); spiders and cave spiders within 4 are fought, not run from

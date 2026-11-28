@@ -1,13 +1,14 @@
 // Path: src/skills/oreCaps.ts
 // Ores it stops mining once it owns plenty (owner, 2026-11-28: "make the bot
-// stop digging copper if it has more than 64"). Counted in raw ore, ingots and
-// blocks (9 each), carried and in its own chests.
+// stop digging copper if it has more than 64"; 2026-11-28 later: "max 40
+// copper in chests, then stop"). Counted in raw ore, ingots and blocks (9
+// each), in its own chests and carried (what it carries goes in them).
 
 import { bot } from "../core/body";
 import { storedNear } from "../actions/storage";
 
 /** Owned this many or more: that ore is left in the walls. */
-export const ORE_CAPS: Record<string, number> = { copper: 64 };
+export const ORE_CAPS: Record<string, number> = { copper: 40 };
 
 // What counts as owning some of each capped ore, and how many each is worth
 const OWNED_AS: Record<string, Array<[string, number]>> = {
