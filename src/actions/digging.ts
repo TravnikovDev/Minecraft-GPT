@@ -335,17 +335,52 @@ export async function torchReady(): Promise<true | string> {
   return getItemCount("torch") > 0 ? true : "I couldn't craft torches";
 }
 
-/** Puts a torch on a wall beside `spot` (air inside the tunnel). */
-async function placeTunnelTorch(spot: Vec3, direction: DirectionType): Promise<boolean> {
-  for (const side of WALLS[direction]) {
-    const wall = bot.blockAt(spot.plus(SIDE_DIRS[side]));
-    if (wall?.boundingBox !== "block") continue;
-    if (await placeBlock("torch", spot.x, spot.y, spot.z, side)) {
-      console.log(`Placed a torch at ${spot} on the ${side} wall.`);
-      return true;
+// Where a torch goes, in cells over where one stands: the 3rd block over the
+// ground first, higher up in tall stairs; never on the ground or at head
+// height, where it's in the way and walked into
+export const TORCH_HEIGHTS = [2, 3, 4];
+
+/** Where one stands in the open column at `spot`: down to the cell over solid ground (at most 4). */
+function standOf(spot: Vec3): Vec3 {
+  let s = spot;
+  for (let k = 0; k < 4; k++) {
+    const below = bot.blockAt(s.offset(0, -1, 0));
+    if (!below || below.boundingBox === "block") break;
+    s = s.offset(0, -1, 0);
+  }
+  return s;
+}
+
+/**
+ * Puts a torch on a wall of the open column at `spot`, at a TORCH_HEIGHTS
+ * cell over where one stands there, on one of `sides`. True when one went up.
+ */
+export async function placeWallTorch(spot: Vec3, sides: string[] = Object.keys(SIDE_DIRS)): Promise<boolean> {
+  const stand = standOf(spot);
+  // A tunnel only 2 high (a way dug to an ore) has no 3rd block: head height
+  // there, on the wall (better than leaving it dark), never the ground
+  const roof = bot.blockAt(stand.offset(0, TORCH_HEIGHTS[0]!, 0));
+  const heights = roof && roof.boundingBox === "block" ? [1] : TORCH_HEIGHTS;
+  for (const h of heights) {
+    const cell = stand.offset(0, h, 0);
+    const here = bot.blockAt(cell);
+    if (!here || here.boundingBox === "block") break; // the roof: no higher
+    if (here.name !== "air" && here.name !== "cave_air") continue;
+    for (const side of sides) {
+      const wall = bot.blockAt(cell.plus(SIDE_DIRS[side]!));
+      if (wall?.boundingBox !== "block") continue;
+      if (await placeBlock("torch", cell.x, cell.y, cell.z, side)) {
+        console.log(`Placed a torch at ${cell} on the ${side} wall.`);
+        return true;
+      }
     }
   }
   return false;
+}
+
+/** Puts a torch on a wall beside `spot` (air inside the tunnel), up at TORCH_HEIGHTS. */
+async function placeTunnelTorch(spot: Vec3, direction: DirectionType): Promise<boolean> {
+  return placeWallTorch(spot, WALLS[direction]);
 }
 
 /**

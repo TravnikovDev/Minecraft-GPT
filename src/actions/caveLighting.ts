@@ -4,7 +4,7 @@
 // a dark cave after ore and the owner had to light it for it). Mobs spawn
 // only in the dark: underground, in an open cave (not its own narrow tunnels,
 // which get a torch every few blocks as they're dug), with no torch near,
-// it puts one down at its feet between the task's actions.
+// it puts one on a wall beside it, up off the ground, between the task's actions.
 
 import { Vec3 } from "vec3";
 import type { Block } from "prismarine-block";
@@ -34,7 +34,7 @@ export function isCave(feet: { x: number; y: number; z: number }, open: (x: numb
   return n > threshold;
 }
 
-/** Called every few seconds: in a dark cave with a torch to spare, puts one down at its feet. */
+/** Called every few seconds: in a dark cave with a torch to spare, puts one on a wall beside it, up off the ground. */
 export async function lightTheWay(): Promise<void> {
   if (busy || !bot.entity || !(bot.health > 0) || bot.vehicle) return;
   if (!bot.inventory.items().some((i) => i.name === "torch")) return;
@@ -63,11 +63,17 @@ export async function lightTheWay(): Promise<void> {
     // bridge), and a torch swapped in there breaks the dig or bridges with a
     // torch (review)
     await borrow(holder, ["hands"], async () => {
-      const { placeBlockResult } = await import("./blockPlacing");
       const here = bot.entity.position.floored();
       if (!here.equals(feet)) return; // it moved on: the next check decides there
-      const placed = await placeBlockResult("torch", feet.x, feet.y, feet.z, "bottom");
-      if (placed.ok) console.log(`Lit the cave at ${feet}.`);
+      // On a wall, up off the ground (never at its feet): here, or a column beside
+      const { placeWallTorch } = await import("./digging");
+      for (const c of [feet, ...[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => feet.offset(dx!, 0, dz!))]) {
+        if (!open(c.x, c.y, c.z)) continue;
+        if (await placeWallTorch(c)) {
+          console.log(`Lit the cave at ${feet}.`);
+          return;
+        }
+      }
     }, 5_000, bodyAtRest);
   } finally {
     busy = false;
