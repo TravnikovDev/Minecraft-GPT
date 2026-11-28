@@ -14,6 +14,7 @@ import { setHurry, walkingRules } from "../core/movements";
 import vec3 from "vec3";
 import { fighting, pathing } from "../core/plugins";
 import { mobsOut } from "../core/daylight";
+import { mobCanReachMe } from "./airReach";
 
 // Mob types with threat levels
 export enum ThreatLevel {
@@ -134,6 +135,9 @@ export function getPriorityTargets(range = 16): Entity[] {
       entity.name !== "creeper" &&
       entity.position.distanceTo(bot.entity.position) <= range &&
       isHostile(entity) &&
+      // Behind the rock (its tunnel's wall, a plugged cave) it can't get at
+      // it: not a target (owner: in its mine, never mind zombies behind the walls)
+      mobCanReachMe(entity) &&
       mayAttackFirst(entity.name ?? "", night, (provoked.get(entity.id) ?? 0) > now, strongNow(), dark)
   );
 

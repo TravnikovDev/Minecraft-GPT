@@ -15,6 +15,7 @@ import { bot } from "../core/body";
 import { OWNER_USERNAME } from "../config/env";
 import { loadOwnerPosition } from "../core/session";
 import { getPriorityTargets } from "./combat";
+import { mobCanReachMe } from "./airReach";
 
 export type Known<T> = { known: true; value: T; at: number; source: string } | { known: false; why: string; since?: number };
 
@@ -55,7 +56,7 @@ export function threats(range = 16): Known<Threat[]> {
   if (!bot.entity) return unknown("not in the world");
   const mobs = getPriorityTargets(range).map((e) => ({ name: e.name ?? "mob", distance: e.position.distanceTo(bot.entity.position) }));
   const creepers = Object.values(bot.entities)
-    .filter((e) => e.name === "creeper" && e.position.distanceTo(bot.entity.position) <= range)
+    .filter((e) => e.name === "creeper" && e.position.distanceTo(bot.entity.position) <= range && mobCanReachMe(e))
     .map((e) => ({ name: "creeper", distance: e.position.distanceTo(bot.entity.position) }));
   return known([...creepers, ...mobs], "seen");
 }

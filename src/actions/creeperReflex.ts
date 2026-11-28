@@ -18,6 +18,7 @@ import { areReflexesMuted, asReflex, isAnyReflexActive, registerReflexStopper, s
 import { isDrowningReflexActive } from "./drowningReflex";
 import { isLavaReflexActive } from "./lavaReflex";
 import { mobsOut } from "../core/daylight";
+import { mobCanReachMe } from "./airReach";
 
 const CHECK_MS = 150;
 const DAY_RADIUS = 9;
@@ -199,6 +200,8 @@ async function tick(): Promise<void> {
     if (e.name !== "creeper") return false;
     const d = e.position.distanceTo(bot.entity.position);
     if (d > range) return false;
+    // In the rock or a cave shut off from it: left be (hissing, it counts: a blast goes through walls)
+    if (!isFusing(e) && !mobCanReachMe(e)) return false;
     const visible = canSeePoint(bot.world as unknown as SightWorld, eyes, e.position.offset(0, 0.85, 0), d + 1);
     // Left be: unless it's hissing, or in sight and either near or nearer
     // than when it was left (it came round the wall). Behind a wall, however

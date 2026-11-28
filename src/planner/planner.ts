@@ -16,6 +16,7 @@ import OpenAI from "openai";
 import { zodResponsesFunction } from "openai/helpers/zod";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
+import { mobCanReachMe } from "../actions/airReach";
 import { report } from "../core/narrator";
 import { OPENAI_API_KEY, OWNER_USERNAME } from "../config/env";
 import { recentConversation } from "../core/session";
@@ -135,7 +136,13 @@ export async function planningContext(trigger: Trigger, ownerRequest: string | n
   const lastPlan = plan
     ? plan.steps.map((s) => `${s.goal} ${JSON.stringify(s.args)}: ${s.status}${s.reason ? ` (${s.reason})` : ""}`).join("\n")
     : "none";
-  const hostile = Object.values(bot.entities ?? {}).filter((e) => e.name && catalog().isHostile(e.name) && e.position.distanceTo(p) < 24).length;
+  // Only mobs that can get at it through open air count as near (owner,
+  // 2026-11-28; game test: "3 hostile mobs near", all behind the stone of
+  // its mine, and the model planned "resting at home" first from the 4th
+  // floor). The ones behind rock are told as what they are
+  const hostiles = Object.values(bot.entities ?? {}).filter((e) => e.name && catalog().isHostile(e.name) && e.position.distanceTo(p) < 24);
+  const hostile = hostiles.filter((e) => mobCanReachMe(e)).length;
+  const walledOff = hostiles.length - hostile;
   const timeOfDay = bot.time?.timeOfDay ?? 0;
   return [
     `Why you're planning now: ${trigger}${trigger === "blocked" ? " (something just failed: decide what to do about it)" : ""}.`,
@@ -143,7 +150,7 @@ export async function planningContext(trigger: Trigger, ownerRequest: string | n
     failed.length > (failure ? 1 : 0) ? `Everything that failed today:\n${failed.map((f) => `- ${failureLine(f)}`).join("\n")}` : "",
     ownerRequest ? `The owner asks: "${ownerRequest}". Plan around it.` : "",
     `Owner (${OWNER_USERNAME}): ${ownerOnline ? "online" : "offline"}${lastOwner ? `; last said: "${lastOwner.text}"` : ""}.`,
-    `State: day ${day}, the ${partOfDay(timeOfDay)} (${timeOfDay} ticks); at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} in the ${(bot.game as { dimension?: string }).dimension ?? "overworld"}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20, food carried ${foodPoints()} points; ${hostile} hostile mobs near.`,
+    `State: day ${day}, the ${partOfDay(timeOfDay)} (${timeOfDay} ticks); at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} in the ${(bot.game as { dimension?: string }).dimension ?? "overworld"}; health ${Math.round(bot.health ?? 0)}/20, food ${bot.food ?? 0}/20, food carried ${foodPoints()} points; ${hostile} hostile mobs near that can get at you${walledOff > 0 ? ` (${walledOff} more behind rock or walls, which can't: no reason to change your plan)` : ""}.`,
     `Tools: ${tiers}. Home: ${shelter() ? "a shelter" : "no shelter"}${hasBed() ? " with a bed" : ""}.`,
     `Your job for the owner: ${describeRole(currentRole())} (it runs on its own, ahead of your plan: plan around it).`,
     `Carrying: ${inventoryLine()}.`,
