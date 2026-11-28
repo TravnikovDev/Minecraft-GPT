@@ -591,7 +591,7 @@ setMilestoneAside((id) => isBlocked(id));
 // for a shield or a bucket comes from the mine). Game test: the shield and
 // the bucket were missing here, so the night after its iron pickaxe it had
 // "no mine work" and stood by a bed it couldn't use (monsters outside) all night
-const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", ...ENDGAME_NIGHT_OK]);
+const UNDERGROUND = new Set(["mine", "coal", "torches", "iron", "iron_pickaxe", "iron_sword", "shield", "bucket", "iron_armor", "iron_tools", "paved_stairs", "diamonds", "diamond_pickaxe", "diamond_sword", "diamond_chestplate", "diamond_armor", ...ENDGAME_NIGHT_OK]);
 
 /** True when a milestone is worked on at night (under ground or at home). */
 export const worksAtNight = (id: string): boolean => UNDERGROUND.has(id) || (INDOORS[id]?.() ?? false);

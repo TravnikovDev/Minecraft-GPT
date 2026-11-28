@@ -161,6 +161,11 @@ test("a step that finished under a newer plan isn't run again as that plan's fir
   expect(await markDoneIfNext("gatherWood", { count: 8 })).toBe(true);
 });
 
+test("the diamond gear milestones are mine work: by night too, and never in a keep-out mine", async () => {
+  const { worksAtNight } = await import(`${ROOT}/src/skills/curriculum.ts`);
+  expect(["diamonds", "diamond_pickaxe", "diamond_sword", "diamond_chestplate", "diamond_armor"].map(worksAtNight)).toEqual([true, true, true, true, true]);
+});
+
 test("only the owner's request stops the step that's running; its own plans let it finish", () => {
   expect(["owner asked", "dusk", "owner joined", "idle", "blocked", "death"].map(stopsRunningStep)).toEqual([true, false, false, false, false, false]);
 });

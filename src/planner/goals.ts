@@ -249,7 +249,11 @@ export const GOALS: Goal[] = [
     menu: () => {
       const tier = toolTier("pickaxe");
       const can = MINEABLE.filter((i) => tier >= (PICKAXE_FOR[i] ?? TIER.stone) && heldFor(i).length === 0);
-      return can.length ? `possible for: ${can.join(", ")}` : "not yet: no pickaxe";
+      if (can.length === 0) return "not yet: no pickaxe";
+      // A diamond gear milestone mines exactly what its piece takes: better
+      // than a guessed count here
+      const gear = can.includes("diamond") ? " (for diamond gear plan its milestone instead: it mines the diamonds the piece takes)" : "";
+      return `possible for: ${can.join(", ")}${gear}`;
     },
     // The plan's count is what it should carry, not that many more (game
     // test: with 17 raw iron, "mining for 12 raw iron" went for 29)
@@ -416,7 +420,8 @@ export const GOALS: Goal[] = [
 ];
 
 // Goals that work in its mine, and the milestones that do
-const MINE_MILESTONES = new Set(["mine", "coal", "iron", "diamonds", "paved_stairs"]);
+// (the diamond gear milestones mine the diamonds a piece takes when it has too few)
+const MINE_MILESTONES = new Set(["mine", "coal", "iron", "diamonds", "paved_stairs", "diamond_pickaxe", "diamond_sword", "diamond_chestplate", "diamond_armor"]);
 
 /**
  * The owner's and the server's rules for a step (the validator's policy
