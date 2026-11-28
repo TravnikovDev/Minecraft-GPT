@@ -1023,11 +1023,24 @@ export const SMALL_POCKET = 100;
  * as big. Openings into one pocket share its size. Pure over `nameAt`.
  */
 export function openingsToPlug(holes: Pos[], own: Set<string>, nameAt: (p: Pos) => string | null, limit = SMALL_POCKET): Pos[] {
+  return airPockets(holes, own, nameAt, limit).filter((p) => p.big).flatMap((p) => p.holes);
+}
+
+/** An air pocket behind cave openings: its openings, its air cells (all of them when small) and whether it's big. */
+export type AirPocket = { holes: Pos[]; cells: Pos[]; big: boolean };
+
+/**
+ * The air pockets behind these openings (see openingsToPlug): the air
+ * joined to each opening, not its own tunnel cells (`own`), counted up to
+ * `limit`. Openings into one pocket share it. Pure over `nameAt`.
+ */
+export function airPockets(holes: Pos[], own: Set<string>, nameAt: (p: Pos) => string | null, limit = SMALL_POCKET): AirPocket[] {
   const key = (p: Pos): string => `(${p.x}, ${p.y}, ${p.z})`;
-  const pocketOf = new Map<string, boolean>(); // opening -> its pocket is big
+  const done = new Set<string>();
+  const out: AirPocket[] = [];
   for (const h of holes) {
-    if (pocketOf.has(key(h))) continue;
-    const seen = new Set<string>([key(h)]);
+    if (done.has(key(h))) continue;
+    const seen = new Map<string, Pos>([[key(h), h]]);
     const queue: Pos[] = [h];
     let big = false;
     while (queue.length > 0 && !big) {
@@ -1042,7 +1055,7 @@ export function openingsToPlug(holes: Pos[], own: Set<string>, nameAt: (p: Pos) 
           break;
         }
         if (!/^(air|cave_air)$/.test(name) && !/torch/.test(name)) continue;
-        seen.add(k);
+        seen.set(k, n);
         if (seen.size >= limit) {
           big = true;
           break;
@@ -1050,19 +1063,67 @@ export function openingsToPlug(holes: Pos[], own: Set<string>, nameAt: (p: Pos) 
         queue.push(n);
       }
     }
-    // Every opening of this pocket gets its answer
-    for (const o of holes) if (seen.has(key(o))) pocketOf.set(key(o), big);
-    pocketOf.set(key(h), big);
+    const mine = holes.filter((o) => seen.has(key(o)));
+    for (const o of mine) done.add(key(o));
+    done.add(key(h));
+    out.push({ holes: mine.length > 0 ? mine : [h], cells: [...seen.values()], big });
   }
-  return holes.filter((h) => pocketOf.get(key(h)));
+  return out;
 }
+
+// Small pockets it left open lately: the ore in their walls is mined next
+let pocketsLeft: Pos[] = [];
 
 /** The openings to plug, live: small pockets left open (logged). */
 function bigCaveOpenings(holes: Pos[], own: Set<string>): Pos[] {
   if (holes.length === 0) return holes;
-  const big = openingsToPlug(holes, own, (p) => bot.blockAt(new Vec3(p.x, p.y, p.z))?.name ?? null);
-  if (big.length < holes.length) console.log(`Mine: ${holes.length - big.length} opening(s) into a small air pocket (under ${SMALL_POCKET} blocks) left open.`);
-  return big;
+  const pockets = airPockets(holes, own, (p) => bot.blockAt(new Vec3(p.x, p.y, p.z))?.name ?? null);
+  const small = pockets.filter((p) => !p.big);
+  if (small.length > 0) {
+    console.log(`Mine: ${small.reduce((n, p) => n + p.holes.length, 0)} opening(s) into a small air pocket (under ${SMALL_POCKET} blocks) left open.`);
+    // Its ore is mined next (owner: "if there is the ore, mine it")
+    pocketsLeft.push(...small.flatMap((p) => p.cells));
+  }
+  return pockets.filter((p) => p.big).flatMap((p) => p.holes);
+}
+
+// Ore blocks taken out of one pocket's walls at most (the vein behind them included)
+const POCKET_ORE_MAX = 24;
+
+/**
+ * The ore in the walls of the small air pockets it left open (owner,
+ * 2026-11-28: the coal in a pocket's roof was left as it dug on): each
+ * walked to (into the pocket: under 100 blocks, nothing spawns there) and
+ * mined, with the vein behind it. How many blocks.
+ */
+async function minePocketsLeft(): Promise<number> {
+  if (pocketsLeft.length === 0 || !bot.entity) return 0;
+  const cells = [...new Map(pocketsLeft.map((p) => [`${p.x},${p.y},${p.z}`, new Vec3(p.x, p.y, p.z)])).values()];
+  pocketsLeft = [];
+  const nameAt = (p: Vec3): string | null => bot.blockAt(p)?.name ?? null;
+  const pickaxe = bestPickaxe();
+  const ores = veinFrom(cells, nameAt, () => true, POCKET_ORE_MAX).filter((o) => {
+    const name = nameAt(o) ?? "";
+    return pickaxe !== null && catalog().canHarvest(name, pickaxe) && !oreCapped(name);
+  });
+  if (ores.length === 0) return 0;
+  const { breakBlock } = await import("../core/primitives");
+  const { pickupNearbyItems } = await import("../actions/pickup");
+  let got = 0;
+  for (const o of ores) {
+    if (isCommandCancelled() || hurtInTheMine() || bot.inventory.emptySlotCount() === 0) break;
+    if (!/_ore$/.test(nameAt(o) ?? "")) continue;
+    if (!withinReach(o) && !(await whileGathering(() => goTo(new pf.goals.GoalNear(o.x, o.y, o.z, 2)))).ok) continue;
+    if ((await breakBlock(o)).ok) {
+      got++;
+      minedOre.add(o.toString());
+    }
+  }
+  if (got > 0) {
+    await pickupNearbyItems(bot, 4);
+    console.log(`Mine: mined ${got} ore in the small air pocket${got === 1 ? "" : "s"} I left open.`);
+  }
+  return got;
 }
 
 /**
@@ -1291,6 +1352,7 @@ function caveHooks(kind: "poke" | "sleeve", way: DirectionType, height: number):
         await plugCave(around, kind === "poke" ? `my pokehole opens into a cave at ${col}` : `my sleeve crosses a cave at ${col}: walls and roof`);
       }
       await mineOreAround(column, dugCells);
+      await minePocketsLeft();
       return around.length > 0 && cave.stopAfter ? "stop" : "go";
     },
   };
@@ -2289,6 +2351,7 @@ async function digPokesAt(base: Vec3, way: DirectionType, k: number, sleeveLen: 
     const sleeveCells: Vec3[] = [];
     for (let q = 1; q <= sleeveLen; q++) for (let dy = 0; dy < SLEEVE_HEIGHT; dy++) sleeveCells.push(base.plus(STEP[way].scaled(q)).offset(0, dy, 0));
     await sealPokeCaves(pokeCells, sleeveCells);
+    await minePocketsLeft();
     if (hurtInTheMine()) return "hurt";
   }
   return "ok";
@@ -2464,6 +2527,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
       if (pokesTodo(arms[arm]).length === 0) chatter(`My ${arm} tunnel's pokeholes are dug; on with the next one.`, "mining");
       await mendFloor(hub, arrive, level, side);
       await lookAfterFloors();
+      await minePocketsLeft();
       if (hurtInTheMine()) return leaveHurt();
       await mineOresInSight(wants);
       await mendFloor(hub, arrive, level, side);
@@ -2525,6 +2589,7 @@ async function branchMineSteps(wants: OreWant[], tripChunks: number): Promise<Ac
     // blocked; then the ore it uncovered and the ore in sight
     await mendFloor(hub, arrive, level, side);
     await lookAfterFloors();
+    await minePocketsLeft();
     if (hurtInTheMine()) return leaveHurt();
     await mineOresInSight(wants);
     await mendFloor(hub, arrive, level, side);

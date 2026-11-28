@@ -668,3 +668,19 @@ test("the whole sleeve first, then its pokeholes from the far end back (owner, 2
   // Stopped (a cave) at 7: its pokeholes at 6 and 3 still come
   expect(pokesTodo(armAfterStretch(fresh, 7, true))).toEqual([6, 3]);
 });
+
+test("a small air pocket left open: its cells known, so the ore in its walls is mined (owner: coal in a pocket's roof was left)", async () => {
+  const { airPockets, veinFrom } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = await import("vec3");
+  type P = { x: number; y: number; z: number };
+  const own = new Set<string>(["(0, 0, 0)", "(0, 1, 0)"]);
+  // A pocket 2x2x2 beside the tunnel (x 1..2, y 0..1, z 0..1), coal over it at (1, 2, 0) and its vein at (1, 3, 0)
+  const air = (p: P) => p.x >= 1 && p.x <= 2 && p.y >= 0 && p.y <= 1 && p.z >= 0 && p.z <= 1;
+  const nameAt = (p: P) => (air(p) || own.has(`(${p.x}, ${p.y}, ${p.z})`) ? "air" : p.x === 1 && p.z === 0 && (p.y === 2 || p.y === 3) ? "coal_ore" : "stone");
+  const pockets = airPockets([{ x: 1, y: 0, z: 0 }], own, nameAt);
+  expect(pockets).toHaveLength(1);
+  expect(pockets[0].big).toBe(false);
+  expect(pockets[0].cells).toHaveLength(8);
+  const ore = veinFrom(pockets[0].cells.map((c: P) => new Vec3(c.x, c.y, c.z)), (p: P) => nameAt(p), () => true, 24);
+  expect(ore.map((o: P) => `${o.x},${o.y},${o.z}`).sort()).toEqual(["1,2,0", "1,3,0"]);
+});
