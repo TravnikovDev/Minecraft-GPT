@@ -7,11 +7,12 @@
 //   (beaches and mountains are fine);
 // - trees (about 24 logs; it replants) and animals near;
 // - the way down for its mine, the diagonal to the 2nd floor (about 30
-//   blocks), free of water and lava.
+//   blocks), free of water, lava and caves.
 // Not good: it walks on, checking as it goes, as far as it takes (owner),
 // by day; at dusk it settles for the best place it saw near.
 
 import pf from "mineflayer-pathfinder";
+import { Vec3 } from "vec3";
 import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { workingTime } from "../core/daylight";
@@ -54,28 +55,59 @@ export function areaIssues(a: AreaCheck): string {
   if (!a.goodBiome) out.push(`${a.biome.replace(/_/g, " ")} is a hard place to live`);
   if (a.logs < LOGS_WANTED) out.push(`only ${a.logs} logs near`);
   if (a.animals < ANIMALS_WANTED) out.push(`${a.animals} animals near`);
-  if (!a.dryMine) out.push("water or lava on the way down for my mine");
+  if (!a.dryMine) out.push("water, lava or a cave on the way down for my mine");
   return out.join(", ");
 }
 
 const WET = /^(water|lava|bubble_column)$/;
+const OPEN = /^(air|cave_air)$/;
+// Blocks over an open cell that make it a cave (a roof of ground, not a tree's leaves)
+const NOT_A_ROOF = /^(air|cave_air|void_air)$|_leaves$|_log$|_wood$|vine|short_grass|tall_grass|fern|snow$/;
+// How far up it looks for a roof over an open cell
+const ROOF_LOOK = 16;
+
+/** A block as the site check sees it (null: not loaded). */
+export type SiteLook = (x: number, y: number, z: number) => string | null;
 
 /**
- * True when its mine's diagonal from `exit` going `dir`, down to the 2nd
- * floor, has no water or lava in it or beside it (what's loaded; unknown
- * blocks don't count against it).
+ * What's wrong with its mine's diagonal from `exit` going `dir`, down to the
+ * 2nd floor, or null: water or lava in it or beside it, or a cave (an open
+ * cell with ground over it) in it or beside it (owner, 2026-11-28: "pick a
+ * place where the diagonal tunnel won't hit any cave until the second
+ * floor"). Unknown blocks don't count against it. Pure over `look`.
  */
-export function mineWayDry(exit: { x: number; y: number; z: number }, dir: DirectionType): boolean {
+export function mineWayProblem(exit: { x: number; y: number; z: number }, dir: DirectionType, look: SiteLook): "water" | "cave" | null {
   const last = hubStep(1);
+  let cave = false;
   for (let i = 1; i <= last; i++) {
     const s = stepAt(exit, dir, i);
     for (let dy = -1; dy <= 5; dy++) {
       for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        if (WET.test(bot.blockAt(s.offset(dx, dy, dz))?.name ?? "")) return false;
+        const x = s.x + dx;
+        const y = s.y + dy;
+        const z = s.z + dz;
+        const name = look(x, y, z);
+        if (name && WET.test(name)) return "water";
+        // Open with ground somewhere over it: a cave, not the open air the first steps come out of
+        if (!cave && name && OPEN.test(name)) {
+          for (let up = 1; up <= ROOF_LOOK; up++) {
+            const over = look(x, y + up, z);
+            if (over === null) break;
+            if (!NOT_A_ROOF.test(over)) {
+              cave = true;
+              break;
+            }
+          }
+        }
       }
     }
   }
-  return true;
+  return cave ? "cave" : null;
+}
+
+/** The live check: true when the way down is dry and has no cave. */
+export function mineWayDry(exit: { x: number; y: number; z: number }, dir: DirectionType): boolean {
+  return mineWayProblem(exit, dir, (x, y, z) => bot.blockAt(new Vec3(x, y, z))?.name ?? null) === null;
 }
 
 function biomeHere(): string {
@@ -106,7 +138,7 @@ const ORDER = ["n", "e", "s", "w", "ne", "se", "sw", "nw"];
  */
 export async function findHomeArea(dryMine: () => boolean): Promise<void> {
   let here = checkArea(dryMine);
-  console.log(`Home site: ${here.biome}, ${here.logs} logs, ${here.animals} animals, mine way ${here.dryMine ? "dry" : "wet"}.`);
+  console.log(`Home site: ${here.biome}, ${here.logs} logs, ${here.animals} animals, mine way ${here.dryMine ? "clear" : "not clear"}.`);
   if (areaGood(here)) return;
   let best = { pos: bot.entity.position.clone(), check: here, score: areaScore(here) };
   report(`This isn't a good place for my home (${areaIssues(here)}); I'll look for a better one.`);
@@ -127,7 +159,7 @@ export async function findHomeArea(dryMine: () => boolean): Promise<void> {
     }
     here = checkArea(dryMine);
     const score = areaScore(here);
-    console.log(`Home site at ${bot.entity.position.floored()}: ${here.biome}, ${here.logs} logs, ${here.animals} animals, mine way ${here.dryMine ? "dry" : "wet"} (score ${score}).`);
+    console.log(`Home site at ${bot.entity.position.floored()}: ${here.biome}, ${here.logs} logs, ${here.animals} animals, mine way ${here.dryMine ? "clear" : "not clear"} (score ${score}).`);
     if (score > best.score) {
       best = { pos: bot.entity.position.clone(), check: here, score };
       sinceBetter = 0;

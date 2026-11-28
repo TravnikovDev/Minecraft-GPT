@@ -538,3 +538,26 @@ test("the ground beside its shallow stairs is never dug by a walk (owner: shortc
   expect(movements.noDig({ x: 130, y: 64, z: -100 })).toBe(false);
   movements.setNoDig([], "mine");
 });
+
+test("a floor's furnace or table never stays in its stairs: turned through the room, it goes to the room's forward middle", async () => {
+  const { furnitureSpot, floorFurnaceSpot, mineStairCells, hubStep, stepAt, MOVED_CELL } = await import(`${ROOT}/src/skills/mine.ts`);
+  const { Vec3 } = await import("vec3");
+  expect(MOVED_CELL).toEqual([0, 2]);
+  const start = { x: 0, y: 64, z: 0 };
+  const h = hubStep(0);
+  const hub = stepAt(start, "south", h);
+  const usual = floorFurnaceSpot(hub, "south");
+  const walkOf = (turns: Array<{ at: number; dir: string }>, stairs: number) => {
+    const cells = new Set(mineStairCells(start, "south", stairs, 0, turns).walk.map((c: { toString(): string }) => c.toString()));
+    return (p: { toString(): string }) => cells.has(p.toString());
+  };
+  // Straight on down: the usual spot
+  expect(furnitureSpot(usual, hub, "south", walkOf([], h + 6)).toString()).toBe(usual.toString());
+  // Turned toward the furnace's side at that hub: moved to the forward middle, out of the new stairs
+  const furnaceSide = usual.x > hub.x ? "east" : usual.x < hub.x ? "west" : usual.z > hub.z ? "south" : "north";
+  const turned = walkOf([{ at: h, dir: furnaceSide }], h + 6);
+  expect(turned(usual)).toBe(true);
+  const moved = furnitureSpot(usual, hub, "south", turned);
+  expect(moved.toString()).toBe(new Vec3(hub.x, hub.y, hub.z + 2).toString());
+  expect(turned(moved)).toBe(false);
+});

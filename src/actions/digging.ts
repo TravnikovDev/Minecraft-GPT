@@ -120,8 +120,18 @@ const flooredFirst = new Set<string>();
 async function floorFirst(step: Vec3, keepClear: (p: Vec3) => boolean): Promise<"filled" | "lava" | "none"> {
   const floor = step.offset(0, -1, 0);
   if (keepClear(floor) || !isHoleBlock(bot.blockAt(floor))) return "none";
-  if (bot.blockAt(step)?.boundingBox !== "block") return "none";
   if (lavaBelow(floor)) return "lava";
+  // The step itself already open (the stairs run into a cave): its floor
+  // built from the step above, with supports, before it ever steps in (game
+  // test: every cell of the step was cave air, it stepped in, fell into the
+  // cave, and the stairs were given up; owner: "it's fine to build stairs,
+  // paths, walls")
+  if (bot.blockAt(step)?.boundingBox !== "block") {
+    if (!(await ensureBlock(floor, keepClear))) return "none";
+    console.log(`Cave through the step at ${step}: its floor built first.`);
+    flooredFirst.add(step.toString());
+    return "filled";
+  }
   const filler = FLOOR_FILLERS.find((n) => getItemCount(n) > 0);
   if (!filler) return "none";
   const placed = await placeBlockResult(filler, floor.x, floor.y, floor.z, "top");
@@ -742,7 +752,10 @@ export async function ensureBlock(position: Vec3, keepClear: (p: Vec3) => boolea
     const cleared = await breakBlockAtResult(position.x, position.y, position.z);
     if (!cleared.ok) return false;
   }
-  const supports = supportChain(position, (p) => bot.blockAt(p), keepClear) ?? [];
+  // Never a support where it stands (game test: "I'm standing there", and the stairs stopped)
+  const feet = bot.entity.position.floored();
+  const clear = (p: Vec3): boolean => keepClear(p) || (p.x === feet.x && p.z === feet.z && (p.y === feet.y || p.y === feet.y + 1));
+  const supports = supportChain(position, (p) => bot.blockAt(p), clear) ?? [];
   for (const support of supports) {
     if (!filler()) return false;
     const propped = await placeBlockResult(filler()!, support.x, support.y, support.z, "side");

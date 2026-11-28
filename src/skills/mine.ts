@@ -122,6 +122,24 @@ export function floorFurnaceSpot(hub: Vec3, arrive: DirectionType): Vec3 {
   return roomCell(hub, arrive, FURNACE_CELL);
 }
 
+// Where a floor's table or furnace goes instead when its stairs turned
+// through its spot: the room's forward middle, free once the old stairs on
+// down from there were capped (game test: stairs turned right at the 1st
+// floor dug through the furnace there)
+export const MOVED_CELL: readonly [number, number] = [0, 2];
+
+/**
+ * A floor's table or furnace spot, given the cells its stairs walk through
+ * (`inStairs`): the usual one, or the moved one when the stairs turned
+ * through it; null when both are stairs. Pure.
+ */
+export function furnitureSpot(usual: Vec3, hub: Vec3, arrive: DirectionType, inStairs: (p: Vec3) => boolean): Vec3 | null {
+  const free = (p: Vec3): boolean => !inStairs(p) && !inStairs(p.offset(0, 1, 0));
+  if (free(usual)) return usual;
+  const moved = roomCell(hub, arrive, MOVED_CELL);
+  return free(moved) ? moved : null;
+}
+
 /** A sleeve's start cell for a hub (the stairs' end) the stairs arrive at going `arrive`. Pure. */
 export function sleeveBase(hub: Vec3, arrive: DirectionType, arm: ArmName): Vec3 {
   const [a, b] = sleeveStart(arm);
@@ -2395,8 +2413,14 @@ const furnishedSeen = new Set<number>();
  */
 async function furnishFloor(hub: Vec3, arrive: DirectionType, level: number): Promise<void> {
   const put: string[] = [];
-  for (const [item, spot] of [["crafting_table", floorTableSpot(hub, arrive)], ["furnace", floorFurnaceSpot(hub, arrive)]] as const) {
+  // Never in its stairs (turned through the room): moved to the room's forward middle
+  const rec = mineRecord();
+  const stairs = rec ? new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString())) : new Set<string>();
+  const inStairs = (p: Vec3): boolean => stairs.has(p.toString());
+  for (const [item, usual] of [["crafting_table", floorTableSpot(hub, arrive)], ["furnace", floorFurnaceSpot(hub, arrive)]] as const) {
     if (isCommandCancelled()) return;
+    const spot = furnitureSpot(usual, hub, arrive, inStairs);
+    if (!spot) continue;
     const there = bot.blockAt(spot);
     if (!there || there.name === item) continue;
     // Something else it or the owner put there: left alone
