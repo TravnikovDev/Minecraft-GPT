@@ -792,6 +792,9 @@ export function shelterSlots(): {
 }
 
 /** Walks into its shelter's room, the way a player goes home (by the top of its stairs). */
+// Deeper than this under its home, home is only by its mine's stairs
+const DEEP_BELOW_HOME = 12;
+
 async function walkHome(room: { x: number; y: number; z: number; details?: Record<string, unknown> }): Promise<ActionResult> {
   // The way a player goes home: to the top of its stairs first (from far off
   // in legs), then down them and in. One path search straight into the
@@ -808,8 +811,13 @@ async function walkHome(room: { x: number; y: number; z: number; details?: Recor
   // test: 54 blocks out it never tried them and a plain walk found no path;
   // the climb itself checks it's near its stairs)
   if (here.y < room.y - 2) {
-    const { climbMineStairs } = await import("../skills/mine");
-    await climbMineStairs();
+    const { byMyStairs, climbMineStairs } = await import("../skills/mine");
+    const up = await climbMineStairs();
+    // Deep down by its mine and its stairs out of reach: no new way dug home
+    // through the rock (it digs for minutes toward the shelter and can come
+    // out anywhere); far from its mine (a cave elsewhere), the plain way home
+    const p = bot.entity.position;
+    if (!up && p.y < room.y - DEEP_BELOW_HOME && byMyStairs(p)) return fail("unreachable", "I can't get back onto my mine's stairs from here");
   }
   if (top && !inside) {
     const atTop = (): boolean => bot.entity.position.distanceTo(new Vec3(top.x + 0.5, top.y, top.z + 0.5)) <= 1.5;

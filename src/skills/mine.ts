@@ -337,6 +337,14 @@ export async function upFromTheMine(): Promise<void> {
  * through the rock to under the shelter, then a new way to the surface
  * beside its entrance stairs, instead of taking the stairs it had dug.
  */
+/** True when `p` is down by its mine's stairs (within reach of its tunnels), where home is only up those stairs. */
+export function byMyStairs(p: Vec3): boolean {
+  const rec = mineRecord();
+  if (!rec || rec.stairs < 2) return false;
+  const i = nearestStairStep(p, rec.start, rec.direction, rec.stairs, rec.turns);
+  return i !== null && stepAt(rec.start, rec.direction, i, rec.turns).distanceTo(p) <= ARM_LENGTH + 8;
+}
+
 export async function climbMineStairs(): Promise<boolean> {
   const rec = mineRecord();
   if (!rec || rec.stairs < 2) return false;
@@ -369,8 +377,16 @@ export async function climbMineStairs(): Promise<boolean> {
   const walkNoDig = (g: InstanceType<typeof pf.goals.GoalNear>) => pathing.withRules({ digCost: 100 }, () => goTo(g));
   // Its stairs put back as planned when the way up is broken (owner), once
   let restored = false;
+  // Lost off its tunnels (a cave it fought in): to the nearest of its own
+  // tunnel cells first, then on along them, never a way of its own through
+  // the rock toward home
+  let regained = false;
   while (!(await walkNoDig(new pf.goals.GoalNear(step.x, step.y, step.z, 1))).ok) {
     if (isCommandCancelled()) return false;
+    if (!regained && !onMyStairs()) {
+      regained = true;
+      if (await backToMyTunnels(rec, walk)) continue;
+    }
     if (!restored) {
       restored = true;
       if (await restoreStairsUp()) return true;
@@ -473,6 +489,30 @@ export async function restoreStairsUp(): Promise<boolean> {
   return true;
 }
 
+// How far off its tunnels it goes back to them on its own (further: lost for real)
+const REGAIN_RANGE = 40;
+
+/**
+ * Back to the nearest of its own tunnel cells (stairs and floors) from off
+ * them, within REGAIN_RANGE: digging only as a last resort. True when it's
+ * in its tunnels again.
+ */
+async function backToMyTunnels(rec: MineRecord, walk: Vec3[]): Promise<boolean> {
+  const here = bot.entity.position;
+  const open = (c: Vec3): boolean => bot.blockAt(c)?.boundingBox === "empty";
+  const cells = [...walk, ...floorsAsDug(rec)].filter((c) => c.distanceTo(here) <= REGAIN_RANGE && open(c) && bot.blockAt(c.offset(0, -1, 0))?.boundingBox === "block");
+  cells.sort((a, b) => a.distanceTo(here) - b.distanceTo(here));
+  for (const c of cells.slice(0, 3)) {
+    if (isCommandCancelled()) return false;
+    const there = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalNear(c.x, c.y, c.z, 1)));
+    if (there.ok) {
+      console.log(`Mine: back in my tunnels at ${c}.`);
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * A way into its stairs from beside them: the wall of step `s` on the side
  * nearer the bot, 2 high, dug out (it's mended on the next trip down). True
@@ -481,7 +521,16 @@ export async function restoreStairsUp(): Promise<boolean> {
 async function openWayIn(s: Vec3, way: DirectionType): Promise<boolean> {
   const here = bot.entity.position;
   const sides = [STEP[armDirection("right", way)], STEP[armDirection("left", way)]];
-  const side = sides.sort((a, b) => s.plus(a).distanceTo(here) - s.plus(b).distanceTo(here))[0]!;
+  // Through rock only: never its own furnace, table, chest, sign or torch
+  // (the step's wall in a floor's room is where they stand)
+  const rockOrOpen = (c: Vec3): boolean => {
+    const b = bot.blockAt(c);
+    return b !== null && (b.boundingBox !== "block" || isNatural(b.name));
+  };
+  const side = sides
+    .filter((d) => rockOrOpen(s.plus(d)) && rockOrOpen(s.plus(d).offset(0, 1, 0)))
+    .sort((a, b) => s.plus(a).distanceTo(here) - s.plus(b).distanceTo(here))[0];
+  if (!side) return false;
   const cells = [s.plus(side), s.plus(side).offset(0, 1, 0)];
   if (!(await goTo(new pf.goals.GoalNear(cells[0]!.x, cells[0]!.y, cells[0]!.z, 2))).ok) return false;
   const { breakBlock } = await import("../core/primitives");

@@ -265,7 +265,16 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const { lastTouchedLavaAt } = await import("./actions/lavaReflex");
   const lastDeathAt = deaths.at(-1)?.at ?? 0;
   const inLava = lastTouchedLavaAt() > 0 && Math.abs(lastDeathAt - lastTouchedLavaAt()) < LAVA_DEATH_MS;
-  const steps: Array<{ command: BotCommands; args: object }> = again || inLava ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
+  // Died at night: its things are left (back out in the dark it would die
+  // again, and they're gone five minutes after the death)
+  const { mobsOut } = await import("./core/daylight");
+  const atNight = mobsOut();
+  const steps: Array<{ command: BotCommands; args: object }> = again || inLava || atNight ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
+  if (atNight && !again && !inLava) {
+    const { clearLastDeath } = await import("./actions/recovery");
+    clearLastDeath();
+    reply("I died in the night; I won't go back out in the dark for my things.");
+  }
   if (inLava && !again) {
     const { clearLastDeath } = await import("./actions/recovery");
     clearLastDeath();
