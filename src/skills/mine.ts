@@ -1317,15 +1317,29 @@ async function plugCave(cells: Pos[], why: string): Promise<number> {
   return plugged;
 }
 
+/** Its cave plugs but those in its stairs' walking cells (`stairs`: Vec3 strings). Pure. */
+export function plugsOutsideStairs(plugs: Pos[], stairs: Set<string>): Pos[] {
+  return plugs.filter((p) => !stairs.has(`(${p.x}, ${p.y}, ${p.z})`));
+}
+
 /** Its cave plugs near it put back where they've been broken (a creeper, a player). */
 async function recheckCavePlugs(): Promise<number> {
   const rec = mineRecord();
   if (!rec || rec.cavePlugs.length === 0 || !bot.entity) return 0;
   // A plug in its own tunnels' cells (a sleeve's wall where a pokehole
   // starts, dug through by it) stays open (game test: 12 put back, the
-  // pokeholes' entrances sealed)
+  // pokeholes' entrances sealed); so does one in its stairs, dug deeper
+  // through it (game test: a sleeve plugged the next flight's cells beside
+  // it, and this pass would have sealed the stairs again), and it's no
+  // longer a plug at all
   const tunnels = new Set(floorsAsDug(rec).map((c) => c.toString()));
-  const broken = rec.cavePlugs
+  const stairs = new Set(mineStairCells(rec.start, rec.direction, rec.stairs, rec.level, rec.turns, rec.sideFrom).walk.map((c) => c.toString()));
+  const plugs = plugsOutsideStairs(rec.cavePlugs, stairs);
+  if (plugs.length < rec.cavePlugs.length) {
+    console.log(`Mine: ${rec.cavePlugs.length - plugs.length} cave plug(s) now in my stairs; not plugs any more.`);
+    await saveMine(rec.start, rec.direction, rec.stairs, rec.branches, rec.bottom, { level: rec.level, arms: rec.arms, deepest: rec.deepest, cavePlugs: plugs });
+  }
+  const broken = plugs
     .map((p) => new Vec3(p.x, p.y, p.z))
     .filter((c) => !tunnels.has(c.toString()))
     .filter((c) => {

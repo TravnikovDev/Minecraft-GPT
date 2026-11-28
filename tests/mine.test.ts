@@ -576,3 +576,15 @@ test("stairs blocked above the first floor turn aside from the step before, righ
   const s6 = stepAt(start, "north", 6, [{ at: 5, dir: "east" }]);
   expect([s6.x - s5.x, s6.y - s5.y, s6.z - s5.z]).toEqual([1, -1, 0]);
 });
+
+test("cave plugs in its stairs' cells (the next flight dug through them) aren't plugs any more", async () => {
+  const { plugsOutsideStairs, mineStairCells: cells } = await import(`${ROOT}/src/skills/mine.ts`);
+  const exit = { x: 83, y: 59, z: -43 };
+  // Game test: the 3rd floor's sleeve plugged (83, 19..21, -90): the next
+  // flight's step 47 at (83, 18, -90), 4 high
+  const plugs = [{ x: 83, y: 19, z: -90 }, { x: 83, y: 21, z: -90 }, { x: 85, y: 20, z: -90 }];
+  const before = new Set(cells(exit, "north", 45, 2).walk.map((c: { toString(): string }) => c.toString()));
+  expect(plugsOutsideStairs(plugs, before)).toEqual(plugs); // not dug yet: still plugs
+  const after = new Set(cells(exit, "north", 57, 3).walk.map((c: { toString(): string }) => c.toString()));
+  expect(plugsOutsideStairs(plugs, after)).toEqual([{ x: 85, y: 20, z: -90 }]);
+});
