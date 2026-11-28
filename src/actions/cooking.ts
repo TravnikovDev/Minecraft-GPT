@@ -213,6 +213,13 @@ async function cookInOven(oven: Block, foods: string[], limit: number): Promise<
         // Waiting at the furnace on purpose: not "stuck" (game test: nudged
         // every 45 s while smelting smooth stone for its shelter)
         (await import("../managers/stuckWatch")).holdPosition(20_000);
+        // Out of fuel with some still to smelt: more in (game test: one plank
+        // for 16 logs, a charcoal a round, 40 s each)
+        if (!window.fuelItem() && window.inputItem()) {
+          const more = pickFuel(n - done, food);
+          if (!more) break;
+          if (!(await windowStep("more fuel", () => window.putFuel(bot.registry.itemsByName[more.name]!.id, null, more.amount))).ok) break;
+        }
         await sleep(oven.name === "smoker" ? 5000 : 10_000);
         const output = window.outputItem();
         if (output && (await windowStep("taking the food out", () => window.takeOutput())).ok) {

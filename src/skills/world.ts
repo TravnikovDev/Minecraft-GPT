@@ -154,7 +154,8 @@ export const SOURCES: Source[] = [
         if (!logs[0]) return fail("missing_items", "no logs to make charcoal");
         input = logs[0].name;
         const planks = catalog().planksFor(input);
-        if (!hasFuel(input) && planks) await craftNow(planks, 4 * Math.ceil(count / 6));
+        // Fuel for the whole batch, not just some (a plank smelts 1.5): planks made from a log
+        if (planks && fuelSmelts(input) < count) await craftNow(planks, 4 * Math.ceil((count - fuelSmelts(input)) / 6));
       }
       const { smelt } = await import("../actions/cooking");
       const made = await smelt(input, count);
@@ -169,6 +170,16 @@ function furnaceNear(): boolean {
   if (carried("furnace") > 0) return true;
   const id = bot.registry.blocksByName["furnace"]?.id;
   return id !== undefined && bot.findBlock({ matching: id, maxDistance: 24 }) !== null;
+}
+
+/** How many smelts the fuel it carries (other than `input`) is good for. */
+function fuelSmelts(input: string): number {
+  return bot.inventory.items().reduce((n, i) => {
+    if (i.name === input) return n;
+    if (/^(coal|charcoal)$/.test(i.name)) return n + 8 * i.count;
+    if (catalog().isPlanks(i.name)) return n + 1.5 * i.count;
+    return n;
+  }, 0);
 }
 
 /** Fuel it carries other than `input` itself: coal, charcoal, planks, or a different log. */
