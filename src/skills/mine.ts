@@ -408,11 +408,16 @@ export async function restoreStairsUp(): Promise<boolean> {
   for (let i = i0; i >= 1; i--) {
     if (isCommandCancelled()) return false;
     filled += await fillFromSolid(shellHoles(rec, i, walkSet, tunnels), keepClear);
+    // The next step up: its floor first (it can't be stood on without one),
+    // then its walking space emptied, then up onto it
+    if (i - 1 >= 1) filled += await fillFromSolid(shellHoles(rec, i - 1, walkSet, tunnels).filter((h) => h.y < step(i - 1).y), keepClear);
     cleared += await clearStep(i - 1);
     const up = standAt(step(i - 1));
-    const moved = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(up.x, up.y, up.z)));
+    let moved = await pathing.withRules({ digCost: 100 }, () => goTo(new pf.goals.GoalBlock(up.x, up.y, up.z)));
+    if (!moved.ok) moved = await goTo(new pf.goals.GoalNear(up.x, up.y, up.z, 1));
     if (!moved.ok) {
-      console.log(`Mine: putting my stairs back, can't get onto step ${i - 1} (${moved.ok ? "" : moved.detail ?? moved.reason}).`);
+      const at = (dy: number): string => bot.blockAt(up.offset(0, dy, 0))?.name ?? "?";
+      console.log(`Mine: putting my stairs back, can't get onto step ${i - 1} at ${up} (${moved.detail ?? moved.reason}; floor ${at(-1)}, feet ${at(0)}, head ${at(1)}; I'm at ${bot.entity.position.floored()}).`);
       return false;
     }
   }
