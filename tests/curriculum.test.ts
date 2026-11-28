@@ -515,3 +515,21 @@ test("its bed's cells: the foot, the head on from where it's placed, and that st
   ]);
   expect(M.bedCells({ x: 0, y: 64, z: 0 }, null)).toEqual([{ x: 0, y: 64, z: 0 }]);
 });
+
+test("an iron job is all in its bag (then the nearest furnace and table, not home): iron, fuel for the raw, wood for sticks", () => {
+  const it = (name: string, count: number) => ({ name, count });
+  // Leggings: 7 iron, all raw: 7 to smelt, one coal does 8
+  expect(M.ironJobCarried([["iron_leggings", 7]], [it("raw_iron", 7), it("coal", 1)])).toBe(true);
+  expect(M.ironJobCarried([["iron_leggings", 7]], [it("raw_iron", 7)])).toBe(false); // no fuel: home, to its chests
+  expect(M.ironJobCarried([["iron_leggings", 7]], [it("raw_iron", 6), it("coal", 1)])).toBe(false); // short of iron
+  expect(M.ironJobCarried([["iron_leggings", 7]], [it("iron_ingot", 7)])).toBe(true); // nothing to smelt
+  // A pickaxe needs 2 sticks: none and no wood is short; a log is enough
+  expect(M.ironJobCarried([["iron_pickaxe", 3]], [it("iron_ingot", 3)])).toBe(false);
+  expect(M.ironJobCarried([["iron_pickaxe", 3]], [it("iron_ingot", 3), it("oak_log", 1)])).toBe(true);
+  // The wood for the sticks isn't counted as fuel too
+  expect(M.ironJobCarried([["iron_pickaxe", 3]], [it("raw_iron", 3), it("oak_planks", 2)])).toBe(false);
+  expect(M.ironJobCarried([["iron_pickaxe", 3]], [it("raw_iron", 3), it("oak_planks", 4)])).toBe(true);
+  // A shield: 6 planks and 1 iron
+  expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_planks", 5)])).toBe(false);
+  expect(M.ironJobCarried([["shield", 1]], [it("iron_ingot", 1), it("oak_log", 2)])).toBe(true);
+});

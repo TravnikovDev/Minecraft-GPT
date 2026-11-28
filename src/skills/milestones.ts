@@ -1010,33 +1010,100 @@ async function makeFromIron(things: Array<[string, number]>): Promise<ActionResu
     const mined = await branchMine([{ item: "raw_iron", enough: ingots - carriedOf(["iron_ingot"]), counts: ["raw_iron"] }], 20);
     if (!mined.ok && have() < ingots) return mined;
   }
-  // Home: the furnace for the raw iron, the table for the crafting
-  const home = await enterShelter();
-  if (!home.ok) console.log(`Couldn't get home to smelt (${describeFailure(home)}); smelting where I am.`);
-  const raw = carriedOf(["raw_iron"]);
-  if (raw > 0) {
-    const { smelt } = await import("../actions/cooking");
-    const made = await smelt("raw_iron", raw);
-    if (made !== null && made > 0) report(`Smelted ${made} iron ingots.`);
-  }
-  return getAll(missing.map(([item]) => item));
+  return smeltAndCraft(missing, "raw_iron", () => getAll(missing.map(([item]) => item)));
 }
 
 /**
- * Owner: with its raw iron it goes home, smelts it in the shelter's furnace
- * and makes an iron pickaxe at the shelter's table.
+ * Smelts its raw iron and makes the things. Everything carried (iron,
+ * fuel, wood for sticks and planks): at the nearest furnace and table, down
+ * in its mine its floor's; something short: home, where its chests are
+ * (owner, 2026-11-28: "use the nearest first if the bot has everything for
+ * that in its inventory; in case it needs something from the chest, go to
+ * the shelter"; it had climbed 44 steps home for every armor piece).
  */
-export async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
-  const home = await enterShelter(); // the furnace and the table are there
-  if (!home.ok) console.log(`Couldn't get home to smelt (${describeFailure(home)}); smelting where I am.`);
-  const raw = carriedOf(["raw_iron"]);
-  if (raw > 0) {
+async function smeltAndCraft(things: Array<[string, number]>, raw: string, make: () => Promise<ActionResult>): Promise<ActionResult> {
+  const carried = (): boolean => ironJobCarried(things, bot.inventory.items());
+  let home = false;
+  const goHome = async (): Promise<void> => {
+    home = true;
+    const there = await enterShelter(); // the furnace, the table and the chests are there
+    if (!there.ok) console.log(`Couldn't get home to smelt (${describeFailure(there)}); smelting where I am.`);
+    if (!carried()) await takeForIronJob(things);
+  };
+  if (!carried() || !(await toNearestFurnace())) await goHome();
+  else console.log(`Everything for ${things.map(([t]) => t).join(", ")} is in my bag: smelting and crafting at the nearest furnace and table.`);
+  if (carriedOf([raw]) > 0) {
     const { smelt } = await import("../actions/cooking");
-    const made = await smelt("raw_iron", raw);
+    let made = await smelt(raw, carriedOf([raw]));
+    if (made === null && !home) {
+      await goHome();
+      made = await smelt(raw, carriedOf([raw]));
+    }
     if (made === null) console.log("No furnace or fuel to smelt my iron.");
     else if (made > 0) report(`Smelted ${made} iron ingots.`);
   }
-  return acquire("iron_pickaxe", 1, liveWorld);
+  return make();
+}
+
+// Sticks and planks each iron thing takes (the rest is iron)
+const IRON_JOB_STICKS: Record<string, number> = { iron_sword: 1, iron_pickaxe: 2, iron_axe: 2, iron_shovel: 1, iron_hoe: 2 };
+const IRON_JOB_PLANKS: Record<string, number> = { shield: 6 };
+
+/**
+ * True when it carries all an iron job needs: the iron (ingots and raw),
+ * fuel for the raw (coal or charcoal 8 each, planks and logs 1.5), and wood
+ * for the sticks and planks (a log is 4 planks, 2 planks 4 sticks). Pure.
+ */
+export function ironJobCarried(things: Array<[string, number]>, items: Array<{ name: string; count: number }>): boolean {
+  const count = (re: RegExp): number => items.filter((i) => re.test(i.name)).reduce((n, i) => n + i.count, 0);
+  const iron = things.reduce((n, [, cost]) => n + cost, 0);
+  const ingots = count(/^iron_ingot$/);
+  if (ingots + count(/^raw_iron$/) < iron) return false;
+  const sticksShort = Math.max(0, things.reduce((n, [t]) => n + (IRON_JOB_STICKS[t] ?? 0), 0) - count(/^stick$/));
+  const planksNeeded = Math.ceil(sticksShort / 4) * 2 + things.reduce((n, [t]) => n + (IRON_JOB_PLANKS[t] ?? 0), 0);
+  let planks = count(/_planks$/);
+  let logs = count(/(_log|_stem|_wood|_hyphae)$/);
+  const fromPlanks = Math.min(planks, planksNeeded);
+  planks -= fromPlanks;
+  const logsCut = Math.ceil((planksNeeded - fromPlanks) / 4);
+  if (logsCut > logs) return false;
+  logs -= logsCut;
+  const fuel = 8 * count(/^(coal|charcoal)$/) + 80 * count(/^coal_block$/) + 1.5 * (planks + logs);
+  return fuel >= Math.max(0, iron - ingots);
+}
+
+/** At home: coal and wood from its chests for an iron job it's short for (best effort). */
+async function takeForIronJob(things: Array<[string, number]>): Promise<void> {
+  const { storedNear, takeItems } = await import("../actions/storage");
+  for (const [name, n] of [["coal", 8], ["charcoal", 8], ["logs", 4]] as const) {
+    if (ironJobCarried(things, bot.inventory.items())) return;
+    if (storedNear(name, 32) > 0) await takeItems([{ name, count: n }], true);
+  }
+}
+
+/**
+ * Near the nearest furnace on its own level (its floor's, down in its mine;
+ * never the home one through the rock). False when there's none.
+ */
+async function toNearestFurnace(): Promise<boolean> {
+  const id = bot.registry.blocksByName["furnace"]?.id;
+  if (id === undefined || !bot.entity) return false;
+  const me = bot.entity.position;
+  const near = bot
+    .findBlocks({ matching: [id], maxDistance: 64, count: 16 })
+    .filter((p) => Math.abs(p.y - me.y) <= 3)
+    .sort((a, b) => a.distanceTo(me) - b.distanceTo(me))[0];
+  if (!near) return false;
+  if (near.distanceTo(me) <= 16) return true;
+  return (await goTo(new pf.goals.GoalNear(near.x, near.y, near.z, 2))).ok;
+}
+
+/**
+ * With its raw iron it smelts it and makes an iron pickaxe: at the nearest
+ * furnace and table when it carries everything, else at home (owner).
+ */
+export async function smeltIronAndMakePickaxe(): Promise<ActionResult> {
+  return smeltAndCraft([["iron_pickaxe", 3]], "raw_iron", () => acquire("iron_pickaxe", 1, liveWorld));
 }
 
 const carriedOf = (names: string[]): number => bot.inventory.items().filter((i) => names.includes(i.name)).reduce((n, i) => n + i.count, 0);
