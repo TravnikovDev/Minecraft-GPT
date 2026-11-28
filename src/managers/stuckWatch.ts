@@ -26,6 +26,19 @@ let lastInventory = "";
 let level = 0; // 0 fine, 1 nudged, 2 replanned
 let busy = false;
 
+/** The last time it gave up on a task as stuck: which task, where it stood, where it was walking to. */
+export type GiveUp = { task: string; at: number; where: { x: number; y: number; z: number }; goal: { x: number; y: number; z: number } | null };
+let lastGiveUpNote: GiveUp | null = null;
+
+/** Where it last gave up as stuck (for the plan's failure reason), or null. */
+export const lastGiveUp = (): GiveUp | null => lastGiveUpNote;
+
+/** "stuck at 10, 64, -3 on the way to 40, 12, 8", for the diary and the planner. Pure. */
+export function describeGiveUp(g: GiveUp): string {
+  const at = (p: { x: number; y: number; z: number }): string => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
+  return `stuck at ${at(g.where)}${g.goal ? ` on the way to ${at(g.goal)}` : ", not walking anywhere"}: no progress for over two minutes after a nudge and a new route`;
+}
+
 const inventorySignature = (): string =>
   bot.inventory
     .items()
@@ -104,6 +117,8 @@ export async function checkProgress(): Promise<void> {
       // Blame the place only if it's walking there right now
       const goal = pathing.isMoving() ? lastWalkGoal() : null;
       if (goal) rememberFailure(placeKey(goal), `got stuck going there`, FORGET_AFTER_MS);
+      const here = bot.entity.position;
+      lastGiveUpNote = { task: task.name, at: Date.now(), where: { x: here.x, y: here.y, z: here.z }, goal: goal ? { x: goal.x, y: goal.y, z: goal.z } : null };
       console.log(`Still stuck on ${task.name}: giving up${goal ? ` (${goal.x}, ${goal.y}, ${goal.z} unreachable for a while)` : ""}.`);
       if (task.bucket < 6) bot.chat(`I'm stuck, so I gave up on ${task.name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}.`);
       level = 0;

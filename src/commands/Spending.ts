@@ -12,6 +12,6 @@ export const parameters = z.object({});
 
 export async function execute(): Promise<void> {
   const m = thisMonth();
-  const parts = Object.entries(m.byPurpose).map(([purpose, usd]) => `${purpose === "plan" ? "day plans" : "chat"} $${usd.toFixed(3)}`);
+  const parts = Object.entries(m.byPurpose).map(([purpose, usd]) => `${purpose === "plan" ? "day plans" : purpose === "lessons" ? "lessons" : "chat"} $${usd.toFixed(3)}`);
   reply(`This month (${m.month}): $${m.usd.toFixed(3)} of $${monthlyCap()} in ${m.calls} calls${parts.length ? ` (${parts.join(", ")})` : ""}.`);
 }

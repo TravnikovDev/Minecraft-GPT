@@ -78,5 +78,30 @@ export function overBudget(): boolean {
   return thisMonth().usd >= LLM_MONTHLY_CAP_USD;
 }
 
+// Its own planning (day plans and lessons) may use this share of the cap, a
+// day's worth at a time; the rest is always there for the owner's chat. A
+// bot left running day and night, or a day when everything fails, then never
+// spends the month's money in its first week and goes quiet on the owner
+export const PLAN_SHARE = 0.8;
+
+/**
+ * What its own planning may have spent by now this month: its share of the
+ * cap, in proportion to the days gone (today included), so days it spent
+ * little carry over. Pure.
+ */
+export function planningAllowance(cap: number, at: number): number {
+  const d = new Date(at);
+  const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  return cap * PLAN_SHARE * (d.getUTCDate() / daysInMonth);
+}
+
+/** What day plans and lessons have cost this month. Pure. */
+export const planningSpent = (usage: MonthUsage): number => (usage.byPurpose["plan"] ?? 0) + (usage.byPurpose["lessons"] ?? 0);
+
+/** True when its own planning has used up its share so far this month: no more plans of its own till tomorrow. */
+export function planningPaced(now = Date.now()): boolean {
+  return planningSpent(thisMonth()) >= planningAllowance(LLM_MONTHLY_CAP_USD, now);
+}
+
 /** The cap, for chat ("$0.42 of $10 this month"). */
 export const monthlyCap = (): number => LLM_MONTHLY_CAP_USD;

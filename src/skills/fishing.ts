@@ -81,6 +81,9 @@ function fishingSpot(): { water: Block; stand: P3 } | null {
   return null;
 }
 
+/** True when there's open water with a shore to fish from within reach of where it stands. */
+export const fishingWaterNear = (): boolean => !!bot.entity && fishingSpot() !== null;
+
 /** Nothing hostile close by (it stands still with its eyes on the float). */
 function safeHere(): boolean {
   return !bot.nearestEntity((e) => !!e.name && catalog().isHostile(e.name) && e.position.distanceTo(bot.entity.position) <= SAFE_RANGE);

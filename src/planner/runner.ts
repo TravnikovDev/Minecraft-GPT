@@ -1,8 +1,9 @@
 // Path: src/planner/runner.ts
 // Runs the day plan (Phase 7) in bucket B5, one step at a time: each step is
 // checked again when it starts (a plan made at dusk can be stale by noon),
-// its outcome goes in the diary, and two failures in a row ask for a new
-// plan. Owner commands and reflexes cut in as usual; a step cut off goes on
+// its outcome goes in the diary, and a failure asks for a new plan at once,
+// with its exact reason (planner/failures), so the model decides what to do
+// about it. Owner commands and reflexes cut in as usual; a step cut off goes on
 // later. A step belongs to one plan: once that plan is replaced it is never
 // run or marked again. Without a plan step the curriculum's next milestone
 // is the fallback.
@@ -12,9 +13,29 @@ import { currentSignal, isCommandCancelled } from "../core/commandContext";
 import { on } from "../core/events";
 import { describeFailure, type ActionResult } from "../core/result";
 import { note } from "./diary";
-import { goalNamed, policy } from "./goals";
+import { failureKey, isWait, noteFailure, noteProgress } from "./failures";
+import { goalNamed, policy, worksInTheMine } from "./goals";
 import { PLAN_PREFIX, stepAllowedNow } from "./names";
-import { currentPlan, currentPlanId, failuresInARow, markStep, stepStatusAfter } from "./plan";
+import { currentPlan, currentPlanId, markStep, stepStatusAfter } from "./plan";
+
+// A give-up by the stuck watcher this recent is this step's
+const GIVE_UP_FRESH_MS = 30_000;
+
+/** True when a failed result was a wait (hurt, too hungry, refused outside working time), as things stand now. */
+async function waitNotFailure(reason: string): Promise<boolean> {
+  const { bot } = await import("../core/body");
+  const { foodPoints } = await import("../skills/capabilities");
+  const { fitForTheMine } = await import("../skills/mine");
+  const { workingTime } = await import("../core/daylight");
+  return isWait({ reason, unfit: !fitForTheMine(bot.health ?? 20, foodPoints()).ok, workingTime: workingTime() });
+}
+
+/** Why a step cut off as stuck stopped: where it stood and where it was going, when the watcher said. */
+async function stuckReason(): Promise<string> {
+  const { lastGiveUp, describeGiveUp } = await import("../managers/stuckWatch");
+  const g = lastGiveUp();
+  return g && Date.now() - g.at < GIVE_UP_FRESH_MS ? describeGiveUp(g) : "stuck";
+}
 
 // Long goals (a milestone, a mining trip) get as long as a milestone task
 const STEP_MAX_MS = 15 * 60_000;
@@ -48,8 +69,16 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
       let threw = false;
       try {
         // Anything but mine work starts out of its mine by its own stairs
-        const mineWork = step.goal === "mineFor" || (step.goal === "reachMilestone" && (await import("../skills/curriculum")).worksAtNight(String(step.args["milestone"])));
+        const mineWork = worksInTheMine(step.goal) || (step.goal === "reachMilestone" && (await import("../skills/curriculum")).worksAtNight(String(step.args["milestone"])));
         if (!mineWork) await (await import("../skills/mine")).upFromTheMine();
+        // Ready right here (animals known, water in reach, fit for the mine)?
+        // If not, skipped with why: no failure, no new plan
+        const ready = goal.ready?.(step.args) ?? { ok: true as const };
+        if (!ready.ok && !isCommandCancelled()) {
+          await markStep(planId, index, "skipped", ready.why);
+          await note(`Skipped ${what} from my plan: ${ready.why}.`);
+          return;
+        }
         result = await goal.run(step.args);
       } catch (error) {
         threw = true;
@@ -58,13 +87,25 @@ export function planStepTask(planId: number, index: number): TaskSpec | null {
       const cancelled = isCommandCancelled();
       const reason = String(currentSignal()?.reason ?? "");
       const status = stepStatusAfter({ threw, cancelled, reason, ok: result?.ok ?? false });
-      const why = threw ? "something went wrong" : cancelled ? reason : result && !result.ok ? describeFailure(result) : "";
+      // The exact reason, for the diary and for the model: the typed reason
+      // with its detail, or where it got stuck
+      const why = threw ? "something went wrong (an error in my code, see the log)" : cancelled ? (reason === "stuck" ? await stuckReason() : reason) : result && !result.ok ? describeFailure(result) : "";
       await markStep(planId, index, status, status === "failed" ? why : undefined);
       if (currentPlanId() !== planId) return; // a new plan came while it worked: nothing to write here
-      if (status === "done") await note(`Done from my plan: ${what}.`);
+      if (status === "done") {
+        noteProgress();
+        await note(`Done from my plan: ${what}.`);
+      }
       if (status === "failed") {
         await note(`${cancelled ? "Gave up on" : "Couldn't do"} ${what}: ${why}.`);
-        if (failuresInARow() >= 2) planAgain("blocked");
+        // A wait (hurt, hungry, refused at night) is no failure of the job:
+        // written down for the next plan, the plan goes on with its next
+        // step. A real failure is thought over at once (the planner waits
+        // longer each time in a row that nothing got done); its own life
+        // waits for the answer
+        const wait = !threw && !cancelled && result !== null && !result.ok && (await waitNotFailure(result.reason));
+        noteFailure("plan step", failureKey(step.goal, step.args), what, why, wait);
+        if (!wait) planAgain("blocked");
       }
     },
     // After a cut-in: on with it, if it's still the plan, still wanted and allowed now (night)

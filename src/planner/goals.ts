@@ -11,10 +11,18 @@ import { bot } from "../core/body";
 import { catalog } from "../core/catalog";
 import { describeFailure, fail, ok, type ActionResult } from "../core/result";
 import { MILESTONES, heldBy, milestoneHere } from "../skills/milestones";
-import { shelter, TIER, toolTier } from "../skills/capabilities";
+import { foodPoints, shelter, TIER, toolTier } from "../skills/capabilities";
 import { liveWorld } from "../skills/world";
 import { forbiddenAt } from "../core/forbidden";
-import { myMine } from "../skills/mine";
+import { fitForTheMine, myMine } from "../skills/mine";
+import { farmRipe, myFarms } from "../skills/farm";
+import { isGame, knownAnimals } from "../actions/hunting";
+import { smeltedFrom } from "../skills/techTree";
+import { oreCapped } from "../skills/oreCaps";
+import { storedNear } from "../actions/storage";
+import { daylight } from "../core/daylight";
+import { needsDaylight, worksInTheMine } from "./names";
+import { fishingWaterNear } from "../skills/fishing";
 
 /** A goal's check: possible now, or why not. */
 export type Feasible = { ok: true } | { ok: false; why: string };
@@ -29,6 +37,13 @@ export type Goal = {
   defaults?: Record<string, unknown>;
   /** Possible now with these arguments (checked again when the step starts). */
   feasible: (args: Record<string, unknown>) => Feasible;
+  /**
+   * Ready right where it stands when the step starts (never checked when the
+   * plan is made: "explore, then hunt" must stay a plan): animals known,
+   * water in reach, fit for the mine. Not ready: the step is skipped with
+   * why, which is no failure and costs no new plan.
+   */
+  ready?: (args: Record<string, unknown>) => Feasible;
   /** What can be asked of it right now, for the menu ("open milestones: coal, iron"). */
   menu: () => string;
   /** Does it. */
@@ -61,7 +76,11 @@ function craftable(item: string, count: number): Feasible {
   try {
     const plan = liveWorld.plan(item, count);
     const noWay = plan.missing.filter((m) => !liveWorld.sources.some((src) => src.gets(m.name)));
-    return noWay.length === 0 ? yes : no(`no way to get ${noWay.map((m) => words(m.name)).join(", ")}`);
+    if (noWay.length > 0) return no(`no way to get ${noWay.map((m) => words(m.name)).join(", ")}`);
+    // What it's made of comes from deep down (gold, redstone, diamonds): the
+    // diamonds milestone's safety order holds for a craft too (what its
+    // chests hold already is no trip down)
+    return deepHeld(plan.missing.filter((m) => storedNear(m.name) < m.count).map((m) => m.name));
   } catch (error) {
     return no(`couldn't work out how to make it (${(error as Error).message})`);
   }
@@ -80,6 +99,75 @@ function heldFor(item: string): string[] {
   const diamonds = MILESTONES.find((m) => m.id === "diamonds");
   return diamonds ? heldBy(diamonds) : [];
 }
+
+// Ores its own mine can reach, by the item they give. Deep ones (lava, more
+// mobs) wait for the diamonds milestone's safety order, like diamonds
+const MINE_ORE_ITEMS = new Set(["coal", "raw_iron", "raw_copper", "raw_gold", "redstone", "lapis_lazuli", "diamond", "emerald"]);
+const DEEP_ORE_ITEMS = new Set(["raw_gold", "redstone", "lapis_lazuli", "diamond", "emerald"]);
+
+/** The deep ore an item is, or is smelted from ("gold_ingot" -> "raw_gold"), or null. Pure. */
+export function deepOreBehind(item: string): string | null {
+  if (DEEP_ORE_ITEMS.has(item)) return item;
+  const raw = smeltedFrom(item);
+  return raw && DEEP_ORE_ITEMS.has(raw) ? raw : null;
+}
+
+/**
+ * Whether getting these materials would send it deep down before the
+ * diamonds milestone's safety order is met (a shield, a water bucket, iron
+ * armour): the deep ores among them, and what's smelted from one.
+ */
+function deepHeld(materials: string[]): Feasible {
+  const deep = [...new Set(materials.map(deepOreBehind).filter((m): m is string => m !== null))];
+  if (deep.length === 0) return yes;
+  const held = heldFor("diamond");
+  return held.length ? no(`${deep.map(words).join(", ")} is deep down: ${held.map(words).join(", ")} first`) : yes;
+}
+
+/**
+ * Whether `item` can be collected: a real item with a source the item
+ * planner knows (its chests, gravel, sheep, an ore of its mine, the
+ * furnace); deep ores (and what's smelted from them) only once the diamonds
+ * milestone's safety order is met; an ore it has its fill of (copper) not at all.
+ */
+function collectable(item: string, count: number): Feasible {
+  if (!catalog().isItem(item)) return no(`"${item}" isn't a Minecraft item`);
+  const isOre = catalog().oresFor(item).length > 0;
+  if (isOre && !MINE_ORE_ITEMS.has(item)) return no(`${words(item)} isn't found in its mine`);
+  try {
+    const raw = smeltedFrom(item) ?? item;
+    // Its fill of an ore: mining leaves the rest in the walls (skills/oreCaps)
+    if (oreCapped(raw)) return no(`it has its fill of ${words(raw)}; more is left in the walls`);
+    // (enough of it in its chests already is no trip down)
+    const deep = storedNear(item) >= count ? yes : deepHeld([item]);
+    if (!deep.ok) return deep;
+    return liveWorld.sources.some((src) => src.gets(item)) ? yes : no(`it knows no place ${words(item)} comes from (craftable things: use craft)`);
+  } catch (error) {
+    return no(`couldn't work out where ${words(item)} comes from (${(error as Error).message})`);
+  }
+}
+
+/** The animals it hunts, as the plan names them. */
+export const GAME_ANIMAL_NAMES = ["cow", "pig", "sheep", "chicken", "rabbit"] as const;
+// What a hunt brings in (to tell a hunt that got something from one that found none)
+const HUNT_DROPS = /^(beef|porkchop|mutton|chicken|rabbit|leather|feather|rabbit_hide|rabbit_foot|.*_wool)$/;
+const carriedDrops = (): number => (bot.inventory?.items() ?? []).filter((i) => HUNT_DROPS.test(i.name)).reduce((n, i) => n + i.count, 0);
+
+/** The animals it knows are about now, by kind ("3 cow, 2 sheep"), for the menu. */
+function animalsKnown(): string {
+  if (!bot.entity) return "";
+  const counts = new Map<string, number>();
+  for (const p of knownAnimals()) if (isGame(p, null)) counts.set(p.name, (counts.get(p.name) ?? 0) + 1);
+  return [...counts.entries()].map(([name, n]) => `${n} ${name}`).join(", ");
+}
+
+/** A rod it carries, or the 2 string to make one. */
+const canFish = (): boolean => {
+  const have = (name: string): number => (bot.inventory?.items() ?? []).filter((i) => i.name === name).reduce((n, i) => n + i.count, 0);
+  return have("fishing_rod") > 0 || have("string") >= 2;
+};
+
+export { needsDaylight, worksInTheMine };
 
 export const GOALS: Goal[] = [
   {
@@ -243,6 +331,88 @@ export const GOALS: Goal[] = [
     },
     describe: () => "planting trees",
   },
+  {
+    name: "tendFarm",
+    about: "look after its fields: harvest what's ripe, sow the bare ground again, mend the plot, bake the wheat into bread",
+    args: z.object({}),
+    feasible: () => (myFarms().length > 0 ? yes : no("it has no field yet (the farm milestone makes the first)")),
+    menu: () => {
+      const n = myFarms().length;
+      return n > 0 ? `possible (${n} field${n === 1 ? "" : "s"}, ${farmRipe()} ripe crops in sight)` : "not yet: no field";
+    },
+    run: async () => {
+      const { tendFarm } = await import("../skills/farm");
+      await tendFarm();
+      return ok(); // nothing ripe yet is no failure: the field was sown and mended
+    },
+    describe: () => "looking after my fields",
+  },
+  {
+    name: "goFishing",
+    about: "fish for food by day from the shore of open water within 24 blocks (with a fishing rod it carries, or makes from 3 sticks and 2 string)",
+    args: z.object({}),
+    feasible: () => (canFish() ? yes : no("it has no fishing rod, and not the 2 string to make one")),
+    menu: () => (canFish() ? "possible by day (it has a rod or the string for one)" : "not now: no fishing rod, and no 2 string to make one"),
+    // By daylight (the step waits for it) and with water in reach of where it stands then
+    ready: () => (!daylight() ? no("it's dark; fishing is for the day") : (fishingWaterNear() ? yes : no("no open water with a shore within 24 blocks of here"))),
+    run: async () => {
+      const { goFishing } = await import("../skills/fishing");
+      return (await goFishing()) > 0 ? ok() : fail("not_found", "caught no fish (no open water with a shore within 24 blocks, it got dark, or mobs came close)");
+    },
+    describe: () => "fishing for food",
+  },
+  {
+    name: "hunt",
+    about: "hunt one kind of animal for its meat and drops (cow: beef and leather for armour; sheep: mutton and wool; chicken: chicken and feathers; pig; rabbit), never babies or named pets; it walks to ones it knows of up to 200 blocks away",
+    args: z.object({ animal: z.enum(GAME_ANIMAL_NAMES), count: z.number().int().min(1).max(8) }),
+    defaults: { count: 3 },
+    feasible: () => yes,
+    menu: () => `possible once that animal is about; animals it knows of now: ${animalsKnown() || "none (explore for animals first)"}`,
+    // None of that kind known when the step starts: skipped, not walked out for and failed
+    ready: (a) => (knownAnimals().some((p) => isGame(p, String(a["animal"]))) ? yes : no(`no ${String(a["animal"])} it could take is known within 200 blocks`)),
+    run: async (a) => {
+      const animal = String(a["animal"]);
+      const before = carriedDrops();
+      // Loaded when used: the command modules reach back to the registry
+      const { execute: hunt } = await import("../commands/Hunting");
+      await hunt({ maxDistance: 60, mobType: animal, count: Number(a["count"]), upTo: null, walkFar: true });
+      return carriedDrops() > before ? ok() : fail("not_found", `found no ${animal} to take within 200 blocks`);
+    },
+    describe: (a) => `hunting ${String(a["animal"])} (up to ${String(a["count"])})`,
+  },
+  {
+    name: "collect",
+    about: "get a raw material from where it comes from, its chests first: flint (gravel), wool (sheep), another ore's item from its mine (raw_copper, raw_gold, redstone, lapis_lazuli), or something smelted (iron_ingot, stone, smooth_stone, glass, charcoal), until it carries `count`",
+    args: z.object({ item: z.string(), count: z.number().int().min(1).max(64) }),
+    defaults: { count: 4 },
+    feasible: (a) => collectable(String(a["item"]), Number(a["count"] ?? 1)),
+    menu: () => "any item with a source it knows (things with a recipe: use craft)",
+    run: async (a) => {
+      const { acquire } = await import("../skills/acquire");
+      const { liveWorld } = await import("../skills/world");
+      return acquire(String(a["item"]), Number(a["count"]), liveWorld);
+    },
+    describe: (a) => `collecting ${String(a["count"])} ${words(String(a["item"]))}`,
+  },
+  {
+    name: "mendMine",
+    about: "go over its mine like at the start of a mining trip: fill the holes in its stairs' floor, walls and roof, clear what fell into them, light the dark stretches, block the ways in from caves and from outside, mine the ores its tunnels uncovered",
+    args: z.object({}),
+    feasible: () => (!myMine() ? no("it has no mine yet") : toolTier("pickaxe") < TIER.stone ? no("its mine is worked with a stone pickaxe, and it has none") : yes),
+    menu: () => (!myMine() ? "not yet: no mine" : toolTier("pickaxe") < TIER.stone ? "not now: no stone pickaxe" : "possible (it has a mine)"),
+    // Hurt or with too little food it stays out of its mine, like a mining trip (skills/mine fitForTheMine)
+    ready: () => {
+      const fit = fitForTheMine(bot.health ?? 20, foodPoints());
+      return fit.ok ? yes : no(fit.detail);
+    },
+    run: async () => {
+      const mine = await import("../skills/mine");
+      const left = await mine.lookAfterStairs();
+      await mine.lookAfterFloors();
+      return left === 0 ? ok() : fail("missing_items", `${left} hole${left === 1 ? "" : "s"} in my mine stairs still open (nothing to fill them with, or no way to them)`);
+    },
+    describe: () => "mending my mine",
+  },
 ];
 
 // Goals that work in its mine, and the milestones that do
@@ -255,7 +425,7 @@ const MINE_MILESTONES = new Set(["mine", "coal", "iron", "diamonds", "paved_stai
  */
 export function policy(goal: string, args: Record<string, unknown>): Feasible {
   const mine = myMine();
-  const usesMine = goal === "mineFor" || (goal === "reachMilestone" && MINE_MILESTONES.has(String(args["milestone"])));
+  const usesMine = worksInTheMine(goal) || (goal === "reachMilestone" && MINE_MILESTONES.has(String(args["milestone"])));
   if (usesMine && mine) {
     const area = forbiddenAt(mine.start) ?? forbiddenAt(mine.bottom);
     if (area) return no(`my mine is in a keep-out area (${area.reason})`);

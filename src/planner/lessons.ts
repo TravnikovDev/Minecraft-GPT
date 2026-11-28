@@ -29,7 +29,8 @@ export const LessonsSchema = z.object({
   lessons: z.array(z.string()).describe(`up to ${MAX_LESSONS} lessons, the most useful first, each one short sentence with the concrete fact (a place, a number, a cause)`),
 });
 
-const SYSTEM = `You are MinecraftGPT, a Minecraft bot living its own life in a survival world. Your code does every action; you choose what to do each day.
+/** The standing instructions for the weekly look back (exported for the live check). */
+export const SYSTEM = `You are MinecraftGPT, a Minecraft bot living its own life in a survival world. Your code does every action; you choose what to do each day.
 Once a week you look back and write down what you have learned, for your own later plans.
 
 Rules:

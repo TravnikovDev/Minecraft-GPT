@@ -5,7 +5,9 @@
 
 import { z } from "zod";
 import { getMemory, updateMemory } from "../managers/persistenceManager";
-import { GOALS, goalNamed, openMilestones, policy, type Feasible } from "./goals";
+import { failedToday, failureKey, struckOut } from "./failures";
+import { milestoneSetAside } from "./names";
+import { GAME_ANIMAL_NAMES, GOALS, goalNamed, openMilestones, policy, type Feasible } from "./goals";
 
 /** The step count the plan must have, enforced in code (the model gave 2 when asked for 3-5). */
 export const MIN_STEPS = 3;
@@ -16,9 +18,10 @@ export const MAX_STEPS = 8;
 export const StepSchema = z.object({
   goal: z.enum(GOALS.map((g) => g.name) as [string, ...string[]]),
   milestone: z.string().nullable().describe("reachMilestone: the milestone id"),
-  item: z.string().nullable().describe("mineFor or craft: the exact Minecraft item id"),
-  count: z.number().int().nullable().describe("gatherWood, mineFor, craft: how many"),
+  item: z.string().nullable().describe("mineFor, craft or collect: the exact Minecraft item id"),
+  count: z.number().int().nullable().describe("gatherWood, mineFor, craft, collect, hunt: how many"),
   lookFor: z.enum(["animals", "sheep"]).nullable().describe("explore: what to look for"),
+  animal: z.enum(GAME_ANIMAL_NAMES).nullable().describe("hunt: which animal"),
   why: z.string().describe("one short reason, in character"),
 });
 export type RawStep = z.infer<typeof StepSchema>;
@@ -76,7 +79,16 @@ export function validateSteps(
   feasible: (goal: string, args: Record<string, unknown>) => Feasible = (goal, args) => {
     const allowed = policy(goal, args);
     if (!allowed.ok) return allowed;
-    return goalNamed(goal)?.feasible(args) ?? { ok: false, why: "unknown goal" };
+    const g = goalNamed(goal);
+    if (!g) return { ok: false, why: "unknown goal" };
+    // Failed again and again today: not today any more, whatever the model
+    // says and whatever count it asks for this time (the job, not its wording)
+    const key = failureKey(goal, args);
+    if (struckOut(key)) {
+      const failed = failedToday(key);
+      return { ok: false, why: `it failed ${failed.times} times today (${failed.reason}); tomorrow again` };
+    }
+    return g.feasible(args);
   },
   open: () => string[] = openMilestones
 ): { accepted: PlanStep[]; rejected: { step: string; why: string }[] } {
@@ -85,7 +97,7 @@ export function validateSteps(
   const seen = new Set<string>();
   for (const step of raw) {
     const goal = goalNamed(step.goal);
-    const label = `${step.goal}${step.milestone ? ` ${step.milestone}` : ""}${step.item ? ` ${step.item}` : ""}`;
+    const label = `${step.goal}${step.milestone ? ` ${step.milestone}` : ""}${step.item ? ` ${step.item}` : ""}${step.animal ? ` ${step.animal}` : ""}`;
     if (!goal) {
       rejected.push({ step: label, why: "not a goal it knows" });
       continue;
@@ -110,11 +122,15 @@ export function validateSteps(
     seen.add(key);
     accepted.push({ goal: step.goal, args, why: step.why, status: "pending" });
   }
-  // Too short: the next open milestones fill it up (code's own plan)
+  // Too short: the next open milestones fill it up (code's own plan), but
+  // never one that failed too often today or that the curriculum has set
+  // aside after a failure (review: the top-up put the failing milestone
+  // straight back in, past both)
   for (const id of open()) {
     if (accepted.length >= MIN_STEPS) break;
     const key = `reachMilestone:${JSON.stringify({ milestone: id })}`;
     if (seen.has(key)) continue;
+    if (struckOut(failureKey("reachMilestone", { milestone: id })) || milestoneSetAside(id)) continue;
     seen.add(key);
     accepted.push({ goal: "reachMilestone", args: { milestone: id }, why: "next on my list", status: "pending" });
   }
@@ -154,17 +170,6 @@ export async function markStep(planId: number, index: number, status: PlanStep["
   if (!plan || !step || planIdOf(plan) !== planId) return;
   const steps = plan.steps.map((s, i) => (i === index ? { ...s, status, ...(reason ? { reason } : {}) } : s));
   await savePlan({ ...plan, steps });
-}
-
-/** Failed steps at the end of the plan's done part, in a row (two or more: the plan is blocked). */
-export function failuresInARow(plan: StoredPlan | null = currentPlan()): number {
-  if (!plan) return 0;
-  let n = 0;
-  for (const s of plan.steps) {
-    if (s.status === "failed") n++;
-    else if (s.status === "done") n = 0;
-  }
-  return n;
 }
 
 /** The plan as one chat line: "Today: coal, then iron tools (2 of 4 done)." */

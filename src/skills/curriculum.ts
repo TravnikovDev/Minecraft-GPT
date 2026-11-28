@@ -11,9 +11,10 @@
 // The owner's "stop" pauses all of it (the same quiet minute as the chores).
 
 import { noteMilestone, noteMilestoneFailed } from "../planner/diaryHooks";
+import { failureKey, isWait, noteFailure, noteProgress } from "../planner/failures";
 import { automationAllowed } from "../config/serverProfile";
 import { ENDGAME_NIGHT_OK } from "./endgame/milestones";
-import { PLAN_PREFIX, setStepGate, stepAllowedNow } from "../planner/names";
+import { needsDaylight, PLAN_PREFIX, setMilestoneAside, setStepGate, stepAllowedNow, worksInTheMine } from "../planner/names";
 import { bot, isOnline } from "../core/body";
 import { Bucket, cancelRunning, type TaskSpec, currentTask, dropPending, onTaskEnd, onTaskStart, pendingTasks, propose } from "../core/arbiter";
 import { areChoresMuted } from "../core/chores";
@@ -28,7 +29,7 @@ import { Vec3 } from "vec3";
 import { fitForTheMine } from "./mine";
 import { buildShelter, enterShelter, leaveShelter, shelterIntact } from "../actions/building";
 import { clearDemotions } from "./acquire";
-import { attackedTonight } from "../core/daylight";
+import { attackedTonight, daylight, workingTime } from "../core/daylight";
 
 // A milestone that failed waits a little (10 minutes left it idle in a field)
 const BLOCKED_FOR_MS = 2 * 60_000;
@@ -185,11 +186,23 @@ function milestoneTask(m: Milestone): TaskSpec {
         result = await m.achieve();
       }
       if (result.ok && !m.done() && !isCommandCancelled()) result = fail("missing_items", `${m.title} still isn't done: something I made wore out or got used up on the way`);
-      if (m.done()) failuresInRow.delete(m.id);
+      if (m.done()) {
+        failuresInRow.delete(m.id);
+        noteProgress();
+      }
       if (!result.ok && !isCommandCancelled()) {
         const ms = setAside(m.id, result.reason === "unreachable" && /no path/i.test(result.detail ?? ""));
         const why = describeFailure(result);
         noteMilestoneFailed(m.title, why);
+        // Past its first day the model thinks a real failure over at once,
+        // with the exact reason (failure advice); its own life waits for the
+        // answer. A wait (hurt, hungry, refused at night) is only written
+        // down: code's own short wait above is the answer to it. Counted
+        // under the same name as the plan's step for this milestone
+        const wait = isWait({ reason: result.reason, unfit: !fitForTheMine(bot.health ?? 20, foodPoints()).ok, workingTime: workingTime() });
+        noteFailure("milestone", failureKey("reachMilestone", { milestone: m.id }), m.title, why, wait);
+        const { planningOn, planDay } = await import("../planner/planner");
+        if (!wait && planningOn(autonomyOn())) void planDay("blocked");
         if (why === lastFailureSaid.why && Date.now() - lastFailureSaid.at < MAX_BLOCKED_MS) {
           console.log(`Couldn't get ${m.title} either: ${why} (again in ${Math.round(ms / 60_000)} min).`);
         } else {
@@ -515,7 +528,7 @@ function storeTask(): TaskSpec {
 
 /** Plan steps that make sense at night: under ground, like its night milestones. */
 const nightStep = (goal: string, args: Record<string, unknown>): boolean =>
-  goal === "mineFor" || (goal === "reachMilestone" && UNDERGROUND.has(String(args["milestone"])));
+  worksInTheMine(goal) || (goal === "reachMilestone" && UNDERGROUND.has(String(args["milestone"])));
 
 /**
  * The day plan's part in choosing what's next: plans at dusk (once a game
@@ -523,8 +536,12 @@ const nightStep = (goal: string, args: Record<string, unknown>): boolean =>
  * it proposed one.
  */
 async function planStepProposed(): Promise<boolean> {
-  const { planningOn, planDay } = await import("../planner/planner");
+  const { planningOn, planDay, thinkingItOver } = await import("../planner/planner");
   if (!planningOn(autonomyOn())) return false;
+  // Something just failed and the model is thinking it over (seconds):
+  // nothing new of its own until the answer, like a player who stops to
+  // think (the next job started and called off again otherwise)
+  if (thinkingItOver()) return true;
   const { nextStep } = await import("../planner/plan");
   const { planStepTask } = await import("../planner/runner");
   const next = nextStep();
@@ -545,17 +562,21 @@ async function planStepProposed(): Promise<boolean> {
 
 /** Dusk: plan tomorrow, once per game day, whatever it's doing. */
 async function planAtDusk(): Promise<void> {
-  const { planningOn, planDay, duskDue, markDuskPlanned, sharePlanIfQuiet } = await import("../planner/planner");
+  const { planningOn, planDay, duskDue, sharePlanIfQuiet } = await import("../planner/planner");
   if (!planningOn(autonomyOn())) return;
   sharePlanIfQuiet(); // the owner online but quiet: tell them the plan once
-  if (!duskDue()) return;
-  markDuskPlanned();
-  void planDay("dusk");
+  // Asked for all through dusk until a call really starts (planDay marks the
+  // day then): a plan in flight or made a moment ago must not cost the day
+  // its dusk plan, and the weekly lessons with it (review)
+  if (duskDue()) void planDay("dusk");
 }
 
 // At night a plan step runs only under ground, and only once it's home (the
 // night routine ran), like its night milestones; resumed steps are checked too
-setStepGate((step) => !isNight() || (nightStep(step.goal, step.args) && nightOf === (bot.time?.day ?? 0)));
+// (a step that needs daylight, fishing, waits for the day whatever else)
+setStepGate((step) => (!needsDaylight(step.goal) || daylight()) && (!isNight() || (nightStep(step.goal, step.args) && nightOf === (bot.time?.day ?? 0))));
+// A short plan is never topped up with a milestone set aside after a failure
+setMilestoneAside((id) => isBlocked(id));
 
 /** Milestones done in the mine or inside the shelter (smelting, the iron pickaxe), where night doesn't matter. */
 // Worked on at night: in its mine, or at home (crafting, smelting: the iron

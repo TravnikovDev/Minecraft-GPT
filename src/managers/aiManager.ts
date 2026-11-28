@@ -7,6 +7,7 @@ import { reply } from "../core/narrator";
 import { BotCommands } from "../commands/types";
 import { overBudget, recordCall } from "../planner/cost";
 import { gameDay, summaries, today } from "../planner/diary";
+import { lessons } from "../planner/lessons";
 import { currentRole, describeRole } from "../roles/role";
 import { executeTool, tools } from "./toolManager";
 import { getCurrentCommandName, queueCommand, stopEverything } from "./actionManager";
@@ -68,9 +69,11 @@ function stateLine(): string {
 function friendLine(): string {
   const lines = today().split("\n").filter(Boolean).slice(-6);
   const yesterday = summaries().filter((s) => s.day < gameDay()).at(-1);
+  const learned = (lessons()?.items ?? []).slice(0, 6);
   const parts = [
     lines.length ? `today so far: ${lines.join("; ")}` : "",
     yesterday ? `yesterday: ${yesterday.text}` : "",
+    learned.length ? `what you've learned: ${learned.join("; ")}` : "",
     `job: ${describeRole(currentRole())}`,
   ].filter(Boolean);
   return `[your day: ${parts.join(" | ")}]`;
@@ -89,7 +92,7 @@ How to respond:
 - When you just talk, reply in plain text: one or two short sentences.
 - Never put JSON, code or markdown in your reply; it is shown as-is in Minecraft chat.
 - If a request is unclear or no tool fits, ask a short clarifying question.
-- The [your day: ...] line is your diary and your job: when the player asks about your day, what you've been doing or how you are, answer from it like a friend, briefly.
+- The [your day: ...] line is your diary, what you've learned and your job: when the player asks about your day, what you've been doing, what you've learned or how you are, answer from it like a friend, briefly.
 - Earlier messages are your recent conversation with the player (your past replies include results like "Crafted 1 stone pickaxe"). Use them to understand follow-ups such as "do that again", "no, the other one" or "let's start from the beginning".`;
 
 // Argument names that hold Minecraft item, block or mob IDs

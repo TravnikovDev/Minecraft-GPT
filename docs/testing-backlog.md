@@ -4,6 +4,25 @@ Everything built or fixed that **has not yet been seen working in the real game*
 
 How to read a row: **do this** in the game, **expect** this in chat or in the log (`Owner says` / `Bot says` lines and the reason the bot gives).
 
+## More for the model to do: deeper plans, failure advice, a wider goal menu (2026-11-28, not yet run)
+
+Past its first day, living its own life. Watch the log for `Planner:`, `Lessons:` and `LLM plan:` lines.
+
+- [ ] A day plan takes 10 to 20 seconds now (medium reasoning) and costs about $0.001 to $0.003 (`LLM plan: … in, … out, $…`); it still arrives, and the bot carries on meanwhile
+- [ ] A plan step fails (send it for iron with its mine walled off, or hunting with no animals near) → at once `Planner: planning the day (blocked)`, the bot stands still for those seconds (no new job started and called off), then a new plan in chat that deals with the failure: another way, something first, or not today
+- [ ] The same job failing 3 times in a day, whatever count the model asks for (10 raw iron, then 8), and a milestone failing as the fallback too → the diary says "Left out of my plan: … (it failed 3 times today (…); tomorrow again)"; a short plan is not topped up with it either
+- [ ] Hurt or hungry before a mine step, or a job refused at night after an attack → "Couldn't do …" in the diary, no new plan for it, the plan goes on with its next step, and the job is not counted as failed
+- [ ] A hunt step with none of that animal known, fishing with no water near, mending the mine while hurt → "Skipped … from my plan: …", no new plan; a fishing step in the dark waits for the day
+- [ ] Left running for hours: "how much have you spent?" stays under about a thirtieth of 80% of the cap per day; past it the log says "my plans have used their share of the month's budget so far" once an hour, chat still answers, "make a new plan" still works
+- [ ] Reconnect while a plan is being made → "Planner: reconnected while planning; that answer is dropped", and planning works again at once
+- [ ] "what's your plan? make a new one" while it is thinking over a failure → it waits for that answer, then plans around your request (no "I couldn't make a plan just now")
+- [ ] Stuck on a plan step → the diary line gives the place: "Gave up on …: stuck at X, Y, Z on the way to X, Y, Z: …"
+- [ ] Nothing works for a while (every step fails) → new plans come less and less often (1, 2, 4, 8, 15 minutes apart), never more than 20 in an hour; one step done and the next failure is planned for at once again
+- [ ] A milestone failing at night (its mine work) → a new plan too, with mine work in it
+- [ ] The third dusk with day summaries → `Lessons: looking back at what I've learned.`, the diary "Looked back at what I've learned: N lessons written down", `lessons` in `db.json`; then again every 7 game days; "what have you learned?" in chat answers from them; "how much have you spent?" lists lessons
+- [ ] Plans use the new goals when they fit: "looking after my fields" (harvest, sow, bread), "fishing for food" (with a rod or 2 string, by open water), "hunting cow (up to 3)" (leather armour after), "collecting 4 flint" / "collecting 8 raw copper" / "collecting 8 iron ingot" (chests first, then gravel, the mine, the furnace), "mending my mine" (stairs and floors gone over, by night too)
+- [ ] Collecting a deep ore (redstone, gold, lapis) or what's smelted from one (gold ingots), or crafting something made of them, before its shield, bucket and iron armour → left out of the plan with those named; copper once it has 32 → left out ("it has its fill")
+
 ## Architect review fixes (2026-11-26, not yet run)
 
 - [ ] Pave the stairs, then send it mining: the paving is still there after the trip (stair care no longer digs it out)
@@ -72,7 +91,7 @@ Past its first day, living its own life ("go live your life"), the bot plans its
 - [ ] "skip mining today, get food instead" → "Okay, let me plan my day around that.", the running step stops, a new plan with food first
 - [ ] "what did you do today?" → the last lines of today's diary (in code); "what happened yesterday?" → yesterday's summary
 - [ ] "how much have you spent?" → "This month (…): $… of $10 in N calls (chat …, day plans …)"; `usage.json` grows
-- [ ] A step it can't do any more when it starts → "Skipped … from my plan: …" in the diary; two failures in a row → a new plan
+- [ ] A step it can't do any more when it starts → "Skipped … from my plan: …" in the diary; a step that fails → a new plan at once (see the 2026-11-28 section)
 - [ ] "stay with me" while a plan step runs → it stops, nothing new starts
 - [ ] Network off (or `LLM_MONTHLY_CAP_USD=0`) → no plan; it follows its milestones as before; "what's your plan?" says why
 - [ ] Restart while a plan step runs → the step is done again, not skipped
