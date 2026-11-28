@@ -6,7 +6,7 @@ import { tunnelTo } from "../actions/digging";
 import { bot } from "../core/body";
 import { goToPosition, LONG_TRIP_BLOCKS, travelTo } from "../actions/movement";
 import { pickupNearbyItems } from "../actions/pickup";
-import { canReachBeforeDespawn, clearLastDeath, getLastDeath } from "../actions/recovery";
+import { clearLastDeath, getLastDeath } from "../actions/recovery";
 import { isCommandCancelled } from "../core/commandContext";
 import { describeFailure } from "../core/result";
 import { tellOwner } from "../managers/ownerDialog";
@@ -34,16 +34,6 @@ export function drownedUnderCeiling(look: (dy: number) => WetCell): boolean {
     if (!c.water) return false; // air above: it can come up for breath
   }
   return true;
-}
-
-/** The live check at where it died. */
-function underWaterThere(p: { x: number; y: number; z: number }): boolean {
-  const at = new Vec3(p.x, p.y, p.z).floored();
-  return drownedUnderCeiling((dy) => {
-    const b = bot.blockAt(at.offset(0, dy, 0));
-    if (!b) return null;
-    return { water: b.name === "water" || b.name === "bubble_column", solid: b.boundingBox === "block" };
-  });
 }
 
 // Within this of where it died: it got there
@@ -91,24 +81,57 @@ export async function execute(): Promise<void> {
       }
     }
   }
-  if (!canReachBeforeDespawn(death)) {
-    tellOwner(`My things at ${where} are too far away to reach before they disappear.`);
-    clearLastDeath();
-    return;
-  }
-
-  // Under water with no air over it (it drowned there): left, not dived for
-  // (game test: it drowned in its flooded mine, went back for its things,
-  // and drowned again in the same water a minute later)
-  if (underWaterThere(p)) {
-    tellOwner(`My things at ${where} are under water where I drowned; I'm leaving them rather than drown again.`);
-    clearLastDeath();
-    return;
-  }
-
+  // Always back for them, whatever the time, the water or the distance:
+  // what it carried is hours of work (items on the ground only age while
+  // their chunk is loaded, so far off they wait for it)
   const before = totalItems();
   const distance = Math.round(bot.entity.position.distanceTo(p));
   tellOwner(`I died at ${where}. Going back for my things (${distance} blocks).`);
+  // Not empty-handed back into whatever killed it: a sword, a pickaxe (to
+  // dig down to its things) and food from its chests, when they hold them
+  await armFromChests();
+  for (let attempt = 1; attempt <= RECOVERY_TRIES; attempt++) {
+    if (isCommandCancelled()) return;
+    if (await goBackOnce(p)) break;
+    if (attempt < RECOVERY_TRIES) tellOwner(`Couldn't get to my things at ${where} yet; trying again (${attempt + 1} of ${RECOVERY_TRIES}).`);
+  }
+  if (isCommandCancelled()) return;
+  await finishRecovery(death, where, before);
+}
+
+// Best first: what it takes from its chests for the trip back, one of each kind
+const KIT: string[][] = [
+  ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"],
+  ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe"],
+  ["shield"],
+];
+const KIT_FOOD = ["cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken", "bread", "baked_potato", "cooked_cod", "cooked_salmon"];
+
+/** A sword, a pickaxe, a shield and some food from its chests near, for what it lacks. */
+async function armFromChests(): Promise<void> {
+  const { storedNear, takeItems } = await import("../actions/storage");
+  const carries = (name: string): boolean => bot.inventory.items().some((i) => i.name === name);
+  const wanted: Array<{ name: string; count: number }> = [];
+  for (const kind of KIT) {
+    if (kind.some(carries)) continue;
+    const stored = kind.find((n) => storedNear(n, 32) > 0);
+    if (stored) wanted.push({ name: stored, count: 1 });
+  }
+  if (!KIT_FOOD.some(carries)) {
+    const food = KIT_FOOD.find((n) => storedNear(n, 32) > 0);
+    if (food) wanted.push({ name: food, count: 8 });
+  }
+  if (wanted.length === 0) return;
+  await takeItems(wanted, true);
+  console.log(`Recovery: took ${wanted.map((w) => w.name.replace(/_/g, " ")).join(", ")} from my chests for the trip back.`);
+}
+
+// Goes back this many times before it says it couldn't get there
+const RECOVERY_TRIES = 4;
+
+/** One go at getting to where it died and picking up what's there. True when it got there. */
+async function goBackOnce(p: { x: number; y: number; z: number }): Promise<boolean> {
+  const distance = Math.round(bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)));
 
   const arrived =
     distance > LONG_TRIP_BLOCKS
@@ -117,7 +140,7 @@ export async function execute(): Promise<void> {
           onProgress: (percent) => tellOwner(`Going back for my things: ${percent}%.`),
         })
       : await goToPosition(p.x, p.y, p.z, 2);
-  if (isCommandCancelled()) return;
+  if (isCommandCancelled()) return false;
 
   // The long trip stops above the spot (it measures across, not down): died
   // in a cave below, so walk down to it, or tunnel down like a miner
@@ -132,29 +155,34 @@ export async function execute(): Promise<void> {
       await pickaxeToDig();
       reached = await tunnelTo(below, "place where I died");
     }
-    if (isCommandCancelled()) return;
+    if (isCommandCancelled()) return false;
   }
 
   // A few passes: items scatter and some land a few blocks away
   for (let pass = 0; pass < 3; pass++) {
     await pickupNearbyItems(bot, 12);
-    if (isCommandCancelled()) return;
+    if (isCommandCancelled()) return false;
     await sleep(800);
   }
+  return bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= THERE;
+}
 
+/** What it says (and whether it keeps the death) once it's done trying. */
+async function finishRecovery(death: { position: { x: number; y: number; z: number } }, where: string, before: number): Promise<void> {
+  const p = death.position;
   const gained = totalItems() - before;
   // Only there counts (game test: 79 blocks above its things it picked up 3
   // stray items, said "got my things back" and never went for them)
   const there = bot.entity.position.distanceTo(new Vec3(p.x, p.y, p.z)) <= THERE;
   if (!there && !isCommandCancelled()) {
-    tellOwner(`I couldn't get to my things at ${where} yet${gained > 0 ? ` (picked up ${gained} on the way)` : ""}; I'll try again.`);
-    if (!canReachBeforeDespawn(death)) clearLastDeath();
+    // Kept: asked again ("go get your stuff back"), it goes back for them
+    tellOwner(`I couldn't get to my things at ${where}${gained > 0 ? ` (picked up ${gained} on the way)` : ""}; they're still there, and I'll go for them when I can.`);
     return;
   }
   clearLastDeath();
   if (gained > 0) {
     tellOwner(`Got my things back (${gained} items).`);
-  } else if (reached) {
+  } else if (there) {
     tellOwner("I couldn't find my things here; they may have burned or despawned.");
   } else {
     tellOwner("I couldn't get back to where I died.");

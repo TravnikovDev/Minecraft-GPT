@@ -243,11 +243,6 @@ onBotCreated((currentBot) => {
   });
 });
 
-// A death this soon after the last one: the things are let go
-const REPEAT_DEATH_MS = 5 * 60_000;
-// Lava touched this close to the death: it died in lava (its things burned)
-const LAVA_DEATH_MS = 5_000;
-
 /**
  * After a death: go back for the dropped items, get basic gear if still empty
  * handed, then home to its chores when it has a shelter and a bed, otherwise
@@ -255,40 +250,10 @@ const LAVA_DEATH_MS = 5_000;
  * else in the queue, without asking the owner.
  */
 async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
-  // Died again within minutes of the last death (going back for its things,
-  // unarmed, into the same cave at night): those things are let go, not a
-  // third death (fresh-world test: two deaths in a minute in one cave)
-  const { loadDeaths } = await import("./core/session");
-  const deaths = loadDeaths();
-  const again = deaths.length >= 2 && deaths.at(-1)!.at - deaths.at(-2)!.at < REPEAT_DEATH_MS;
-  // Died in lava: its things burned there, and going back walks into it again
-  const { lastTouchedLavaAt } = await import("./actions/lavaReflex");
-  const lastDeathAt = deaths.at(-1)?.at ?? 0;
-  const inLava = lastTouchedLavaAt() > 0 && Math.abs(lastDeathAt - lastTouchedLavaAt()) < LAVA_DEATH_MS;
-  // Died out in the open at night: its things are left (back out in the
-  // dark it would die again). Under ground the time of day changes nothing:
-  // it goes back for them as by day
-  const { mobsOut } = await import("./core/daylight");
-  const { getLastDeath } = await import("./actions/recovery");
-  const { shelter } = await import("./skills/capabilities");
-  const died = getLastDeath();
-  const underground = died !== null && died.position.y < (shelter()?.y ?? 63) - 6;
-  const atNight = mobsOut() && !underground;
-  const steps: Array<{ command: BotCommands; args: object }> = again || inLava || atNight ? [] : [{ command: BotCommands.RecoverItems, args: {} }];
-  if (atNight && !again && !inLava) {
-    const { clearLastDeath } = await import("./actions/recovery");
-    clearLastDeath();
-    reply("I died out in the open in the night; I won't go back out in the dark for my things.");
-  }
-  if (inLava && !again) {
-    const { clearLastDeath } = await import("./actions/recovery");
-    clearLastDeath();
-    reply("I died in lava; my things burned, so I won't go back for them.");
-  }
-  if (again) {
-    const { clearLastDeath } = await import("./actions/recovery");
-    clearLastDeath();
-  }
+  // Always back for its things, whatever happened: what it carried is
+  // hours of work (an earlier death's things it was going back for are let
+  // go only when a newer death takes their place)
+  const steps: Array<{ command: BotCommands; args: object }> = [{ command: BotCommands.RecoverItems, args: {} }];
   // Living its own life, its milestones get the gear back; otherwise a starter kit
   if (!autonomyOn()) steps.push({ command: BotCommands.StarterKit, args: {} });
   const ownerOnline = Object.keys(currentBot.players).some(
@@ -300,7 +265,6 @@ async function startRecovery(currentBot: mineflayer.Bot): Promise<void> {
   const home = await hasHome();
   // Said as it is: it may not have been going back for them, and with no bed
   // of its own it goes to the owner, not home (game test)
-  if (again) reply(`I died again soon after the last time; I'll leave my things there and ${home ? "go home" : ownerOnline ? "come to you" : "stay safe"}.`);
   if (home) {
     steps.push({ command: BotCommands.HomeChores, args: {} });
   } else if (ownerOnline) {
